@@ -1,20 +1,30 @@
 # ===========================
-# Minecraft Instance
+# Packwiz mod metadata (root level)
+# Keep .pw.toml files, block any stray jars
+# ===========================
+mods/*.jar
+mods/*.jar.disabled
+mods/*.zip
+mods/*.disabled
+mods/*.litemod
+
+# ===========================
+# Minecraft instance
 # Ignore everything, whitelist what matters
 # ===========================
 minecraft/*
 
-# --- Core pack files ---
+# --- Packwiz mod index ---
 !minecraft/mods/
 minecraft/mods/*
-!minecraft/mods/*.pw.toml
 !minecraft/mods/.index
 !minecraft/mods/index.toml
+!minecraft/mods/*.pw.toml
 
+# --- Config & scripts ---
 !minecraft/config/
 !minecraft/defaultconfigs/
 !minecraft/kubejs/
-!minecraft/scripts/
 !minecraft/resources/
 
 # --- FTB Quests (nested whitelist) ---
@@ -24,6 +34,33 @@ minecraft/local/*
 minecraft/local/ftbquests/*
 !minecraft/local/ftbquests/quests/
 
+# --- Journeymap config only (not map data) ---
+!minecraft/journeymap/
+minecraft/journeymap/*
+!minecraft/journeymap/config/
+
+# --- Coremods (NeoForge needs these) ---
+!minecraft/coremods/
+
+# --- Cobblenav settings ---
+!minecraft/cobblenav/
+minecraft/cobblenav/*
+!minecraft/cobblenav/settings/
+
+# ===========================
+# Root level resource packs
+# ===========================
+resourcepacks/*
+!resourcepacks/CUSTOM_*.zip
+!resourcepacks/README.md
+
+# ===========================
+# Release folder (keep exports)
+# ===========================
+release/*
+!release/*.mrpack
+!release/README.md
+
 # ===========================
 # Prism Launcher
 # ===========================
@@ -32,20 +69,17 @@ mmc-pack.json
 lastlaunch
 .curseclient
 .ccinstances
-release/
 
 # ===========================
-# Packwiz
+# Packwiz root files (keep)
 # ===========================
 packwiz-installer*
 .packwiz/
-
-# Keep packwiz root files
 !pack.toml
 !index.toml
 
 # ===========================
-# Manifests
+# Manifests (keep)
 # ===========================
 !manifest.json
 !modrinth.index.json
