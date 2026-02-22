@@ -1,0 +1,16 @@
+filename = 'ColdSweat-2.4-b06f.jar'
+name = 'Cold Sweat'
+side = 'both'
+x-prismlauncher-loaders = [ 'neoforge' ]
+x-prismlauncher-mc-versions = [ '1.21.1' ]
+x-prismlauncher-release-type = 'beta'
+
+[download]
+hash = '21844ac1e0a8aeb6f5d9e8b219959d7114d1e273795175f4843c4902099c72495717d2de669e577055d9a22bea382abcaf8dd8ed32e06d4f6041f99b71547a05'
+hash-format = 'sha512'
+mode = 'url'
+url = 'https://cdn.modrinth.com/data/uXhSmPjd/versions/Y7AdLIJd/ColdSweat-2.4-b06f.jar'
+
+[update.modrinth]
+mod-id = 'uXhSmPjd'
+version = 'Y7AdLIJd'

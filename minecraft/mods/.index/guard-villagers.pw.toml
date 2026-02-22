@@ -1,0 +1,16 @@
+filename = 'guardvillagers-2.4.5-1.21.1.jar'
+name = 'Guard Villagers'
+side = 'both'
+x-prismlauncher-loaders = [ 'neoforge' ]
+x-prismlauncher-mc-versions = [ '1.21.1' ]
+x-prismlauncher-release-type = 'release'
+
+[download]
+hash = '91bdffbd43ce97f58201182b16a76e08a14334005960ff370f9c335b263b8b49beae7c3014d6df5e6c74d7c5b0ad1b7d9e743399d5ddc9d4e407ebeda9df5615'
+hash-format = 'sha512'
+mode = 'url'
+url = 'https://cdn.modrinth.com/data/H1sntfo8/versions/Ny0tyzZ5/guardvillagers-2.4.5-1.21.1.jar'
+
+[update.modrinth]
+mod-id = 'H1sntfo8'
+version = 'Ny0tyzZ5'

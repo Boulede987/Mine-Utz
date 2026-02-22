@@ -1,0 +1,16 @@
+filename = 'jupiter-2.3.5-1.21.1-neoforge.jar'
+name = 'Jupiter'
+side = 'both'
+x-prismlauncher-loaders = [ 'neoforge' ]
+x-prismlauncher-mc-versions = [ '1.21', '1.21.1' ]
+x-prismlauncher-release-type = 'release'
+
+[download]
+hash = '362294ccafaf181d37bbfc2643f59b6921e5143260b7f8b7c64ea538bfb89ee09bce16123d9894e6d6c7f1f2e92244d7b3fd6c065b3eaad5d11f9aefcd5c7a70'
+hash-format = 'sha512'
+mode = 'url'
+url = 'https://cdn.modrinth.com/data/XbiLGMMU/versions/zXyrNnQs/jupiter-2.3.5-1.21.1-neoforge.jar'
+
+[update.modrinth]
+mod-id = 'XbiLGMMU'
+version = 'zXyrNnQs'

@@ -1,0 +1,16 @@
+filename = 'undergroundworlds-neoforge-21.1.0.jar'
+name = 'Underground Worlds'
+side = 'both'
+x-prismlauncher-loaders = [ 'neoforge' ]
+x-prismlauncher-mc-versions = [ '1.21.1' ]
+x-prismlauncher-release-type = 'release'
+
+[download]
+hash = '8070e5236a448b481e61bfd59de2015c53cab90601ed70b1de914b68b1fa114fe9329edb6cd45f1992ed4a158296f17d4f3c6ae52fc0a0eefbaf8a14d3a38a04'
+hash-format = 'sha512'
+mode = 'url'
+url = 'https://cdn.modrinth.com/data/g9fDJQZe/versions/2oFutdYP/undergroundworlds-neoforge-21.1.0.jar'
+
+[update.modrinth]
+mod-id = 'g9fDJQZe'
+version = '2oFutdYP'

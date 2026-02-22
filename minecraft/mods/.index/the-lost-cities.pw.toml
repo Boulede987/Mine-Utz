@@ -1,0 +1,16 @@
+filename = 'lostcities-1.21-8.3.8.jar'
+name = 'LostCities'
+side = 'both'
+x-prismlauncher-loaders = [ 'neoforge' ]
+x-prismlauncher-mc-versions = [ '1.21.1' ]
+x-prismlauncher-release-type = 'beta'
+
+[download]
+hash = 'b524fd3c6cc5802c84774b46b5e2bed6c351232dd124b5867b1d1f5f695cb1bf41e40c99bb97ee135706ca1756c4b4777408f183146041ae3cf50e974b69c1e8'
+hash-format = 'sha512'
+mode = 'url'
+url = 'https://cdn.modrinth.com/data/8VDCUS3b/versions/cRpeD1yr/lostcities-1.21-8.3.8.jar'
+
+[update.modrinth]
+mod-id = '8VDCUS3b'
+version = 'cRpeD1yr'

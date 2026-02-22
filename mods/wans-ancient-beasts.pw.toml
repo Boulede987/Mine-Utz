@@ -1,0 +1,13 @@
+name = "Wan's Ancient Beasts"
+filename = "wab-1.21.1-1.3.2.jar"
+side = "both"
+
+[download]
+hash-format = "sha1"
+hash = "67feffa9d6b8a74c4cac1e3858653fcbf33f69c8"
+mode = "metadata:curseforge"
+
+[update]
+[update.curseforge]
+file-id = 7023610
+project-id = 1108604

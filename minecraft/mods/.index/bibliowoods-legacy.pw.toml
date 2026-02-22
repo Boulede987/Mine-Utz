@@ -1,0 +1,16 @@
+filename = 'bibliowoods-1.21.1-1.6.2.jar'
+name = 'Bibliowoods Legacy'
+side = 'both'
+x-prismlauncher-loaders = [ 'neoforge' ]
+x-prismlauncher-mc-versions = [ '1.21.1' ]
+x-prismlauncher-release-type = 'release'
+
+[download]
+hash = '6b5f4dc2f3cff55502b96db0ac5e1a3735e7b97fb664970b4ed4b4e67646a6b575514016a92c8ab8adeb723a5239ccb9eb179d4c31acc563d41812f35acb0eee'
+hash-format = 'sha512'
+mode = 'url'
+url = 'https://cdn.modrinth.com/data/KhRMZgX2/versions/7AU6LE50/bibliowoods-1.21.1-1.6.2.jar'
+
+[update.modrinth]
+mod-id = 'KhRMZgX2'
+version = '7AU6LE50'

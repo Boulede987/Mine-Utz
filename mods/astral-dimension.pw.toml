@@ -1,0 +1,13 @@
+name = "Astral Dimension"
+filename = "Astral_1.9.2.1_1.21.1_NeoForge.jar"
+side = "both"
+
+[download]
+hash-format = "sha1"
+hash = "dc442320de840bfe31c4aed1082fe6c25ad281c4"
+mode = "metadata:curseforge"
+
+[update]
+[update.curseforge]
+file-id = 7034286
+project-id = 645743

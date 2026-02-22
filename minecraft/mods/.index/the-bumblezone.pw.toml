@@ -1,0 +1,16 @@
+filename = 'the_bumblezone-7.11.9+1.21.1-neoforge.jar'
+name = 'The Bumblezone'
+side = 'both'
+x-prismlauncher-loaders = [ 'neoforge' ]
+x-prismlauncher-mc-versions = [ '1.21.1' ]
+x-prismlauncher-release-type = 'release'
+
+[download]
+hash = '9fc9b4fb1715bfaea70f5959b660f92fef8d62d3f4215a4f915b6802e32fc39be7e53d56ad2fbfaf2f03885f53c4c927360e8654c66978d943ffe965713458f4'
+hash-format = 'sha512'
+mode = 'url'
+url = 'https://cdn.modrinth.com/data/38tpSycf/versions/f71iS4kt/the_bumblezone-7.11.9%2B1.21.1-neoforge.jar'
+
+[update.modrinth]
+mod-id = '38tpSycf'
+version = 'f71iS4kt'

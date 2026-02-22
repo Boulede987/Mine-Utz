@@ -1,0 +1,13 @@
+name = "LUMINOUS: OVERWORLD"
+filename = "Luminous Overworld V1.5.3 - NeoForge 1.21.1.jar"
+side = "both"
+
+[download]
+hash-format = "sha1"
+hash = "ff1f4d7fbc15ff0ab4c31b62eb7ec045ecc09603"
+mode = "metadata:curseforge"
+
+[update]
+[update.curseforge]
+file-id = 7101481
+project-id = 909107

@@ -1,0 +1,16 @@
+filename = 'dragons_eggs-neoforge-1.21-1.2.5.jar'
+name = "Dragon's Egg(S)"
+side = 'both'
+x-prismlauncher-loaders = [ 'neoforge' ]
+x-prismlauncher-mc-versions = [ '1.21', '1.21.1' ]
+x-prismlauncher-release-type = 'release'
+
+[download]
+hash = '767b8e9775b8432faffa8170480201523da7997ebb948d9ee7785e114f53d98fc53f269fa016a9d6675e928dd24e65ccf2f619531206660e40949cd58d5ade74'
+hash-format = 'sha512'
+mode = 'url'
+url = 'https://cdn.modrinth.com/data/Msg6LrSS/versions/jkFzoHEV/dragons_eggs-neoforge-1.21-1.2.5.jar'
+
+[update.modrinth]
+mod-id = 'Msg6LrSS'
+version = 'jkFzoHEV'

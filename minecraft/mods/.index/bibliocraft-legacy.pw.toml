@@ -1,0 +1,16 @@
+filename = 'bibliocraft-1.21.1-1.6.4.jar'
+name = 'Bibliocraft Legacy'
+side = 'both'
+x-prismlauncher-loaders = [ 'neoforge' ]
+x-prismlauncher-mc-versions = [ '1.21.1' ]
+x-prismlauncher-release-type = 'release'
+
+[download]
+hash = '8c466fa5e0edbfd0b2ec9d98b6301860ad31480dc11bca4a003dc74a741602b1e4c280c8eabc0c1048681a558faf139e571c90d90a27aaa768f2805fea4ce570'
+hash-format = 'sha512'
+mode = 'url'
+url = 'https://cdn.modrinth.com/data/eiXYWB7J/versions/96q6pY35/bibliocraft-1.21.1-1.6.4.jar'
+
+[update.modrinth]
+mod-id = 'eiXYWB7J'
+version = '96q6pY35'

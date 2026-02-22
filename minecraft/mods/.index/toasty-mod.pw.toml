@@ -1,0 +1,16 @@
+filename = 'toasty-neoforge-1.21.1-1.0.0.jar'
+name = 'Toasty'
+side = 'client'
+x-prismlauncher-loaders = [ 'neoforge' ]
+x-prismlauncher-mc-versions = [ '1.21.1' ]
+x-prismlauncher-release-type = 'release'
+
+[download]
+hash = '6f4ed6dcede75cbe33123d3f3388f060fb4d7e4e6b2fb6a44e8936d07c8f005b163521315194b73765e32313d4842bd3b53aad0e6fbbb9d92daa3f76463840d5'
+hash-format = 'sha512'
+mode = 'url'
+url = 'https://cdn.modrinth.com/data/zvkKyJfr/versions/lcy0fBPv/toasty-neoforge-1.21.1-1.0.0.jar'
+
+[update.modrinth]
+mod-id = 'zvkKyJfr'
+version = 'lcy0fBPv'

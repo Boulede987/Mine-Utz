@@ -1,0 +1,16 @@
+filename = 'ParCool-1.21.1-3.4.3.2-NF.jar'
+name = 'ParCool!'
+side = 'both'
+x-prismlauncher-loaders = [ 'neoforge' ]
+x-prismlauncher-mc-versions = [ '1.21.1' ]
+x-prismlauncher-release-type = 'beta'
+
+[download]
+hash = '55302b6086e7e6c322e78f40edd716b26d240d986f8e13c4864ada2d1c1b20ec490e40022786b3008a8303a73c794f5a3aa3b03a1c056ade4fd81a698033d78c'
+hash-format = 'sha512'
+mode = 'url'
+url = 'https://cdn.modrinth.com/data/Fsvx2bdR/versions/ig7tpQwG/ParCool-1.21.1-3.4.3.2-NF.jar'
+
+[update.modrinth]
+mod-id = 'Fsvx2bdR'
+version = 'ig7tpQwG'

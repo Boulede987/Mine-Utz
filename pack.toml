@@ -1,0 +1,13 @@
+name = "MineUtz"
+author = "Flacidusexx"
+version = "0.0.1"
+pack-format = "packwiz:1.1.0"
+
+[index]
+file = "index.toml"
+hash-format = "sha256"
+hash = "ebaa69affd5f6901c2763dfc15616a0365fd1cc810e11423c2099287ed254b6b"
+
+[versions]
+minecraft = "1.21.1"
+neoforge = "21.1.219"

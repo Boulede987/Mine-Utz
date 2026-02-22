@@ -1,0 +1,16 @@
+filename = 'customcredits-1.21.1-1.7.jar'
+name = 'Custom Credits'
+side = 'client'
+x-prismlauncher-loaders = [ 'neoforge', 'forge', 'quilt', 'fabric' ]
+x-prismlauncher-mc-versions = [ '1.21', '1.21.1' ]
+x-prismlauncher-release-type = 'release'
+
+[download]
+hash = '8a40bb890d6b840536b7d2f85120f2ccdf5cf57474841963248dd4e87fe800fa7ea3540964606c19d8e2287030ac42fc5c2469bd3607309c22db910049f72047'
+hash-format = 'sha512'
+mode = 'url'
+url = 'https://cdn.modrinth.com/data/GhWh8CAU/versions/Bf5QnXI2/customcredits-1.21.1-1.7.jar'
+
+[update.modrinth]
+mod-id = 'GhWh8CAU'
+version = 'Bf5QnXI2'

@@ -1,0 +1,7 @@
+[
+  {"version":2},
+  {"ingredient":{"id":"born_in_chaos_v1:fire_dust"},"type":"item_stack","bookmarkType":"INGREDIENT"},
+  {"ingredient":{"id":"mutantmonsters:mutant_skeleton_limb"},"type":"item_stack","bookmarkType":"INGREDIENT"},
+  {"ingredient":{"id":"mutantmonsters:mutant_skeleton_rib"},"type":"item_stack","bookmarkType":"INGREDIENT"},
+  {"ingredient":{"id":"mutantmonsters:mutant_skeleton_chestplate","components":{"cold_sweat:armor_insulation":{"insulation":[]}}},"type":"item_stack","bookmarkType":"INGREDIENT"}
+]

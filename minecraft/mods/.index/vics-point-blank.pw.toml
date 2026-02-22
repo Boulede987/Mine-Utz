@@ -1,0 +1,16 @@
+filename = 'pointblank-neoforge-1.21-1.10.0.jar'
+name = 'Point Blank'
+side = 'both'
+x-prismlauncher-loaders = [ 'neoforge' ]
+x-prismlauncher-mc-versions = [ '1.21', '1.21.1' ]
+x-prismlauncher-release-type = 'release'
+
+[download]
+hash = 'a9f86e0c0fb85b682ce96b92b47563985015fb63bdec50e14e3f65301893213c5079acff6ba3e0ae30d6b2c343814dddf700dc809b99c7ef3ebb85c2cecf422a'
+hash-format = 'sha512'
+mode = 'url'
+url = 'https://cdn.modrinth.com/data/og4KPYmA/versions/rJ6uNgC0/pointblank-neoforge-1.21-1.10.0.jar'
+
+[update.modrinth]
+mod-id = 'og4KPYmA'
+version = 'rJ6uNgC0'

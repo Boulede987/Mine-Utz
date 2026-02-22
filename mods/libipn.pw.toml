@@ -1,0 +1,13 @@
+name = "libIPN"
+filename = "libIPN-neoforge-1.21-6.6.0.jar"
+side = "both"
+
+[download]
+hash-format = "sha1"
+hash = "948e3b2c3f0d41446e6c311a9f66289878032711"
+mode = "metadata:curseforge"
+
+[update]
+[update.curseforge]
+file-id = 7070731
+project-id = 679177

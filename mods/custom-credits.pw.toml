@@ -1,0 +1,13 @@
+name = "Custom Credits"
+filename = "customcredits-1.21.1-1.7.jar"
+side = "both"
+
+[download]
+hash-format = "sha1"
+hash = "e0f3d98d85c134c8c0faff38d387178ecd1f042c"
+mode = "metadata:curseforge"
+
+[update]
+[update.curseforge]
+file-id = 6186247
+project-id = 888150

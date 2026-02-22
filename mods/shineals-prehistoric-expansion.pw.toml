@@ -1,0 +1,13 @@
+name = "ShineaL's Prehistoric Expansion"
+filename = "shineals_prehistoric_expansion-1.4.2-neoforge-1.21.1.jar"
+side = "both"
+
+[download]
+hash-format = "sha1"
+hash = "ace2e1e52900c4117a7aacdf91099cf7188ea3c9"
+mode = "metadata:curseforge"
+
+[update]
+[update.curseforge]
+file-id = 6670697
+project-id = 909176

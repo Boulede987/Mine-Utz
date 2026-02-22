@@ -1,0 +1,13 @@
+name = "Potions Description"
+filename = "potions-description-1.0.jar"
+side = "both"
+
+[download]
+hash-format = "sha1"
+hash = "a2f92e59a89178c3893800d03239acae9d4fb165"
+mode = "metadata:curseforge"
+
+[update]
+[update.curseforge]
+file-id = 6633859
+project-id = 1283500

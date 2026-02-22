@@ -1,0 +1,16 @@
+filename = 'hardcorerevival-neoforge-1.21.1-21.1.13.jar'
+name = 'Hardcore Revival'
+side = 'both'
+x-prismlauncher-loaders = [ 'neoforge' ]
+x-prismlauncher-mc-versions = [ '1.21.1' ]
+x-prismlauncher-release-type = 'release'
+
+[download]
+hash = 'db9e1d19e609290b6767ddf1cfa249f59eeacee79cc15756bb8d8709327396f5f647677d7c95b344027b378cc544a4fc654a4721383fb19cb6b7bb1d3fc9b311'
+hash-format = 'sha512'
+mode = 'url'
+url = 'https://cdn.modrinth.com/data/HqKoXaXz/versions/TjnZlO72/hardcorerevival-neoforge-1.21.1-21.1.13.jar'
+
+[update.modrinth]
+mod-id = 'HqKoXaXz'
+version = 'TjnZlO72'

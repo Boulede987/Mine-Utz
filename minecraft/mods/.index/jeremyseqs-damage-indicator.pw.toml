@@ -1,0 +1,16 @@
+filename = 'jeremyseqsdamageindicators-2.2.1-1.21.1-neo.jar'
+name = "JeremySeq's Damage Indicator"
+side = 'client'
+x-prismlauncher-loaders = [ 'neoforge' ]
+x-prismlauncher-mc-versions = [ '1.21.1' ]
+x-prismlauncher-release-type = 'release'
+
+[download]
+hash = 'ddff1207f56072e6b1a570bcd0bdaa7b7c0a115cd4c76edf396b46da379457275844ac8751aff761a8e7c26e18f808970d1ce551c174c1026a2b9cf9c9f40173'
+hash-format = 'sha512'
+mode = 'url'
+url = 'https://cdn.modrinth.com/data/SGJfwZzw/versions/dI93WDeZ/jeremyseqsdamageindicators-2.2.1-1.21.1-neo.jar'
+
+[update.modrinth]
+mod-id = 'SGJfwZzw'
+version = 'dI93WDeZ'

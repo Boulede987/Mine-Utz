@@ -1,0 +1,16 @@
+filename = 'UndergroundBunkers-1.0.4-1.21.x-neoforge.jar'
+name = 'Underground Bunkers'
+side = 'server'
+x-prismlauncher-loaders = [ 'neoforge' ]
+x-prismlauncher-mc-versions = [ '1.21', '1.21.1' ]
+x-prismlauncher-release-type = 'release'
+
+[download]
+hash = '04775162e8bd18a907fc4ae67e05b650b6aeb44e0825c6208ce6f4948152e84c21bac5f5970b6fd2a548add707b907c6b0155aaf9ee6a4d741bead2e79060b40'
+hash-format = 'sha512'
+mode = 'url'
+url = 'https://cdn.modrinth.com/data/MRK4tULJ/versions/zcaE2RVm/UndergroundBunkers-1.0.4-1.21.x-neoforge.jar'
+
+[update.modrinth]
+mod-id = 'MRK4tULJ'
+version = 'zcaE2RVm'

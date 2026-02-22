@@ -1,0 +1,20 @@
+{
+	chapter.72FCDE06C0ED2D6B.title: "Where we begin"
+	quest.18A2583A5A32AE67.title: "Eternal Starlight"
+	quest.1F44F7F6C5A6E5F3.title: "The bumblezone"
+	quest.2868DA2B24541604.title: "Macabre"
+	quest.2A521897D9E99574.title: "The Aether"
+	quest.2B5C05ED1876E4F1.title: "Welcome!"
+	quest.2C5A013D083F9510.title: "Tools of the trade"
+	quest.381E3C16B5349F2E.title: "The Undergarden"
+	quest.3E6B55932BA20BBD.title: "The Twilight Forest"
+	quest.44F287964E568E58.title: "Classic..."
+	quest.4A6B257E6ABD57FE.quest_desc: ["{image:the_bumblezone:textures/advancements/background.png width:100 height:100 align:center}"]
+	quest.4A6B257E6ABD57FE.title: "Astral Dimension"
+	quest.5FDF5B747B9CA214.title: "Atlantis"
+	quest.6D2720EE041EDCF7.title: "The Nether"
+	quest.73DFBEAAA46CC414.title: "The End"
+	task.0E0446E5E3295B25.title: "Any #c:player_workstations/crafting_tables"
+	task.389AE98FFAA16A4B.title: "Any #minecraft:logs"
+	task.646D38661C09E9BB.title: "Any #minecraft:planks"
+}

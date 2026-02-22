@@ -1,0 +1,16 @@
+filename = 'gunsmithlib-1.21.1-5.1.6-neoforge-modular.jar'
+name = 'GunsmithLib'
+side = 'both'
+x-prismlauncher-loaders = [ 'neoforge' ]
+x-prismlauncher-mc-versions = [ '1.21.1' ]
+x-prismlauncher-release-type = 'release'
+
+[download]
+hash = '970475e2ac5948a3d9e8ad09a3c9613309bd488e'
+hash-format = 'sha1'
+mode = 'metadata:curseforge'
+url = ''
+
+[update.curseforge]
+file-id = 7657532
+project-id = 1264058
