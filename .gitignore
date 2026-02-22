@@ -32,6 +32,7 @@ mmc-pack.json
 lastlaunch
 .curseclient
 .ccinstances
+release/
 
 # ===========================
 # Packwiz
