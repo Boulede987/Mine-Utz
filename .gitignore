@@ -1,151 +1,53 @@
 # ===========================
-# Mod JARs and ZIPs - track metadata only
+# Minecraft Instance
+# Ignore everything, whitelist what matters
 # ===========================
-minecraft/mods/*.jar
-minecraft/mods/*.jar.disabled
-minecraft/mods/*.zip
-minecraft/mods/*.litemod
-minecraft/mods/*.disabled
+minecraft/*
 
-# Keep Packwiz metadata
-!minecraft/mods/*.toml
+# --- Core pack files ---
+!minecraft/mods/
+minecraft/mods/*
 !minecraft/mods/*.pw.toml
 !minecraft/mods/.index
 !minecraft/mods/index.toml
-!minecraft/mods/mod-list.md
-!minecraft/mods/README.md
+
+!minecraft/config/
+!minecraft/defaultconfigs/
+!minecraft/kubejs/
+!minecraft/scripts/
+!minecraft/resources/
+
+# --- FTB Quests (nested whitelist) ---
+!minecraft/local/
+minecraft/local/*
+!minecraft/local/ftbquests/
+minecraft/local/ftbquests/*
+!minecraft/local/ftbquests/quests/
 
 # ===========================
-# World and Save Data
-# ===========================
-minecraft/saves/
-minecraft/backups/
-minecraft/world/
-minecraft/server/
-**/*.dat
-**/*.dat_old
-**/*.mca
-**/*.mcr
-minecraft/simplebackups/
-
-# ===========================
-# Logs and Crash Reports
-# ===========================
-minecraft/logs/
-minecraft/crash-reports/
-minecraft/debug/
-**/*.log
-**/*.log.*
-**/hs_err_*.log
-
-# ===========================
-# Resource Files (Downloaded)
-# ===========================
-minecraft/resourcepacks/*.zip
-minecraft/shaderpacks/*.zip
-minecraft/server-resource-packs/
-minecraft/downloads/
-
-# Keep custom resources
-!minecraft/resourcepacks/CUSTOM_*.zip
-!minecraft/resourcepacks/README.md
-
-# ===========================
-# Prism Launcher Specific
+# Prism Launcher
 # ===========================
 instance.cfg
 mmc-pack.json
+lastlaunch
 .curseclient
 .ccinstances
-lastlaunch
 
 # ===========================
-# Libraries and Natives
+# Packwiz
 # ===========================
-minecraft/libraries/
-minecraft/natives/
-minecraft/versions/
-minecraft/assets/
-minecraft/.fabric/
-minecraft/.mixin.out/
+packwiz-installer*
+.packwiz/
 
-# ===========================
-# Runtime Generated Files
-# ===========================
-minecraft/screenshots/
-minecraft/replay_recordings/
-minecraft/replay_videos/
-minecraft/usercache.json
-minecraft/usernamecache.json
-minecraft/servers.dat
-minecraft/servers.dat_old
-minecraft/options.txt
-minecraft/optionsof.txt
-minecraft/optionsshaders.txt
-minecraft/realms_persistence.json
-minecraft/data/
-minecraft/stats/
-minecraft/dynamic-resource-pack-cache/
-minecraft/dynamic-data-pack-cache/
-
-Set up structure chest loot tables.
-
-Status: Open.
-#7 In Boulede987/MineUtze;· Boulede987 opened 29 minutes ago
-Set up mob spawn rules
-
-Status: Open.
-#6 In Boulede987/MineUtze;· Boulede987 opened 32 minutes ago
-Set up Structure generation rules
-
-Status: Open.
-#5 In Boulede987/MineUtze;· Boulede987 opened 33 minutes ago
-Set up Biom generation rules
-
-Status: Open.
-#4 In Boulede987/MineUtze;· Boulede987 opened 34 minutes ago
-Establish the starter gear
-
-Status: Open.
-#3 In Boulede987/MineUtze;· Boulede987 opened 1 hour ago
-Zombie dimension
-
-Status: Open.
-#2 In Boulede987/MineUtze;· Boulede987 opened 1 hour ago
-Pokemon dimension
-
-Status: Open.
-#1 In Boulede987/MineUtze;· Boulede987 opened 1 hour ago
+# Keep packwiz root files
+!pack.toml
+!index.toml
 
 # ===========================
-# Mod-Specific Runtime Data
+# Manifests
 # ===========================
-minecraft/journeymap/*.zip
-minecraft/journeymap/data/
-minecraft/journeymap/icon/
-minecraft/XaeroWaypoints*/
-minecraft/XaeroWorldMap*/
-minecraft/ae2/
-minecraft/ae2guide/
-minecraft/patchouli_books/
-minecraft/local/crash_assistant/
-minecraft/showdown/
-minecraft/tacz/
-minecraft/tacz_backup/
-minecraft/toasty/
-
-# Keep these if customizing
-# minecraft/local/ftbquests/
-
-# ===========================
-# Development Files
-# ===========================
-.vscode/
-.idea/
-*.iml
-.project
-.classpath
-.settings/
+!manifest.json
+!modrinth.index.json
 
 # ===========================
 # OS Files
@@ -159,66 +61,29 @@ desktop.ini
 .directory
 
 # ===========================
-# Temporary Files
+# Development Files
+# ===========================
+.vscode/
+.idea/
+*.iml
+.project
+.classpath
+.settings/
+
+# ===========================
+# Temporary & Performance Files
 # ===========================
 *.tmp
 *.temp
 *.bak
 *.backup
-.cache/
-minecraft/cache/
+*.hprof
+*.prof
 
 # ===========================
-# Keep These Important Files
-# ===========================
-!minecraft/config/
-!minecraft/defaultconfigs/
-!minecraft/kubejs/
-!minecraft/scripts/
-!minecraft/local/ftbquests/quests/
-!minecraft/config/ftbquests/
-!minecraft/resources/
-
-# Packwiz files (keep)
-!pack.toml
-!index.toml
-
-# Manifests (keep)
-!manifest.json
-!modrinth.index.json
-
 # Documentation (keep)
+# ===========================
 !README.md
 !CONTRIBUTING.md
 !CHANGELOG.md
 !LICENSE
-
-# ===========================
-# Server Files (if applicable)
-# ===========================
-minecraft/server.properties
-minecraft/eula.txt
-minecraft/banned-ips.json
-minecraft/banned-players.json
-minecraft/ops.json
-minecraft/whitelist.json
-
-# ===========================
-# Performance Files
-# ===========================
-**/*.hprof
-**/*.prof
-
-# ===========================
-# Packwiz Specific
-# ===========================
-packwiz-installer*
-
-#chatgpt said
-
-minecraft/config/*.bak
-.packwiz/
-minecraft/.curseforge/
-minecraft/.packwiz-cache/
-minecraft/minimap/
-minecraft/XaeroWorldMap/
