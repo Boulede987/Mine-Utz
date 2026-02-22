@@ -1,0 +1,20 @@
+TODO:
+	- Check Enemies and bosses from mods
+		to make progression
+
+	- quests should be more like a list of things you can find, first showing up per dimension, perhapse later meshed up for 'endgame'?
+	- regrouping per theme is perhapse better.
+	- this modpack is really more of an adventure thing.
+	- are bosses important? I don't think they should be.
+	- Choose the stronger bosses. Doing things in "precpective" : this sword does x% zombie health, x% BOSS 1 health, x% BOSS 4 health??
+	- Linear? Dimension -> Dimension -> Dimension
+	- Semi linear? 
+		need y from Dim1 and z from Dim2 to make x and summon y to get z and go to Dim3
+		take x from Dim3, bring to Dim1 to summon stronger foe and get stuff?
+
+	- motivation
+		Loot
+		Exploration
+		Story
+		Mechanics
+		Collection

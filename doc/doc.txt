@@ -1,0 +1,25 @@
+Item oblitarator:
+	remove items
+	recipes
+	functionnality
+
+blockswap:
+	swap blocks, replaces placed blocks
+
+KubeJS:
+	https://kubejs.com
+	https://www.youtube.com/channel/UCJnyYEZtRG8gvBgHFKCKI7Q
+
+FTB quests:
+	make quests
+	https://www.youtube.com/watch?v=qVY3wZ9rEn0
+
+attribute setter:
+
+suggestion tweaker:
+
+Biom Replacer:
+
+World Edit:
+
+Change item durability:

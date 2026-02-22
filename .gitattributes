@@ -1,0 +1,36 @@
+# Disable line ending conversion for Packwiz
+# This prevents hash mismatches when files are committed
+* -text
+
+# But allow these common text files to have normalized endings
+*.md text eol=lf
+*.sh text eol=lf
+README text eol=lf
+LICENSE text eol=lf
+
+# Binary files - never convert
+*.jar binary
+*.zip binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.mo binary
+*.pdf binary
+*.class binary
+*.exe binary
+```
+
+## `.packwizignore`
+```
+.git/
+.gitattributes
+.gitignore
+README.md
+CONTRIBUTING.md
+CHANGELOG.md
+LICENSE
+docs/
+.vscode/
+.idea/

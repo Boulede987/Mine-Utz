@@ -1,0 +1,3 @@
+command:
+	/wits
+	-> gives the current structure
