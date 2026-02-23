@@ -3,6 +3,7 @@
   "maxPokemonLevel": 100,
   "maxPokemonFriendship": 255,
   "announceDropItems": true,
+  "defaultDropItemMethod": "on-entity",
   "dropAfterDeathAnimation": false,
   "ambientPokemonCryTicks": 1080,
   "defaultKeyItems": [],

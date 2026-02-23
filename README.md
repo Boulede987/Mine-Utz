@@ -172,3 +172,16 @@ A release is a single `.mrpack` file that bundles the mod list *and* all configs
    ```
 
 > **Note on CurseForge mods:** Mods sourced from CurseForge cannot be bundled directly in the `.mrpack` due to their distribution policy. They will be listed as external downloads. Players using Prism will be prompted to download them automatically; players on other launchers may need a CurseForge account.
+
+## Utilities
+
+Select-String -Path latest.log -Pattern "ERROR|FATAL|Exception|Caused by" | Select-Object -First 60
+
+Select-String -Path latest.log -Pattern "ERROR|FATAL|MixinApply|Caused by|mixin config" | Select-Object -First 50
+
+Select-String -Path latest.log -Pattern "Done!|Minecraft Crash|stopping|Exception in thread" | Select-Object -Last 10
+
+Select-String -Path latest.log -Pattern "Caused by|Exception" | Select-Object -Last 20
+
+Get-Content latest.log | Select-Object -Skip 27775 | Select-Object -First 50
+

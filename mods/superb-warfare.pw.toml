@@ -1,13 +1,13 @@
 name = "[SBW] Superb Warfare"
-filename = "superbwarfare-1.21.1-0.8.7.1-baa2609f.jar"
+filename = "superbwarfare-1.21.1-0.8.8-final-0cfd00d5.jar"
 side = "both"
 
 [download]
 hash-format = "sha1"
-hash = "5eb501095dde65b2bffc09fd018c6e8abbba167d"
+hash = "154e5b39b4544c0ab7875413e4ec30ab54007390"
 mode = "metadata:curseforge"
 
 [update]
 [update.curseforge]
-file-id = 6982137
+file-id = 7292699
 project-id = 1218165

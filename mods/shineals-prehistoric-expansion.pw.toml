@@ -3,11 +3,11 @@ filename = "shineals_prehistoric_expansion-1.4.2-neoforge-1.21.1.jar"
 side = "both"
 
 [download]
-hash-format = "sha1"
-hash = "ace2e1e52900c4117a7aacdf91099cf7188ea3c9"
-mode = "metadata:curseforge"
+url = "https://cdn.modrinth.com/data/j9t6FnvT/versions/rPlZqQ17/shineals_prehistoric_expansion-1.4.2-neoforge-1.21.1.jar"
+hash-format = "sha512"
+hash = "4a3969709563fb1573a950b4ec999c11afcd0e70a7c51baad58a40814423d78d12934ab6059d3af157dafb1a3a61d9e5e3231ff82935bc835bb9b3ff5957ac83"
 
 [update]
-[update.curseforge]
-file-id = 6670697
-project-id = 909176
+[update.modrinth]
+mod-id = "j9t6FnvT"
+version = "rPlZqQ17"

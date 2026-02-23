@@ -1,13 +1,13 @@
 name = "Nirvana Library"
-filename = "Nirvana Lib-neoforge-1.21.1-2.0.15.jar"
+filename = "Nirvana Lib-neoforge-1.21.1-2.1.6.jar"
 side = "both"
 
 [download]
-hash-format = "sha1"
-hash = "6afdbc2079cfaf23f1cdca48dcaf86f57e08ea33"
-mode = "metadata:curseforge"
+url = "https://cdn.modrinth.com/data/6gKEW2ql/versions/F4HifhPU/Nirvana%20Lib-neoforge-1.21.1-2.1.6.jar"
+hash-format = "sha512"
+hash = "098635b1e6c2385e019da45772de82b55df21a2be4149fbb991e017448c1db694c5c37e25073b1ab660e8d4dd0dfab45defc69e1b64bba2bec5528c5debae343"
 
 [update]
-[update.curseforge]
-file-id = 6755484
-project-id = 1164411
+[update.modrinth]
+mod-id = "6gKEW2ql"
+version = "F4HifhPU"

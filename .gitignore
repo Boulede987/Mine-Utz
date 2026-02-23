@@ -1,4 +1,10 @@
 # ===========================
+# generated pack
+# ===========================
+
+*.mrpack
+
+# ===========================
 # Packwiz mod metadata (root level)
 # Keep .pw.toml files, block any stray jars
 # ===========================

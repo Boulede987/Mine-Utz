@@ -1,13 +1,13 @@
 name = "Classic Pipes"
-filename = "classicpipes-neoforge-1.21.1-1.0.7.jar"
+filename = "classicpipes-neoforge-1.21.1-1.0.10.jar"
 side = "both"
 
 [download]
 hash-format = "sha1"
-hash = "2b83629109a2fe345d3db5a8743e88aae9a83aec"
+hash = "b66ddac731d539760a0b67dedc67ab3c73b6e9f8"
 mode = "metadata:curseforge"
 
 [update]
 [update.curseforge]
-file-id = 7126867
+file-id = 7344385
 project-id = 1351745
