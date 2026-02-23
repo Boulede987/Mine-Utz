@@ -26,7 +26,7 @@ hash = "a52f93f502321b22ec96e3bfcc5007e24b54126d0f73076421510167f0bff56a"
 
 [[files]]
 file = "instance.cfg"
-hash = "0e4cb9dde5e431759a15ada234ecfb6950b7f296149c623f00bf31eff06fc633"
+hash = "7a58e2699e135d2529931c698a8fea60b4ad89655f3a45ad102681e55f935b9f"
 
 [[files]]
 file = "minecraft/.mixin.out/class/net/minecraft/client/multiplayer/ClientCommonPacketListenerImpl.class"
@@ -19231,11 +19231,6 @@ hash = "ac73670af3abed54ac6fb4695131f4099be9fbe39d6076c5d0264a6bbdae9d83"
 [[files]]
 file = "minecraft/mods/.index/aaa-particles.pw.toml"
 hash = "0d2be4f83479057198ad00d9847aca1b3ea90af8b36ffcb6f9ac00ab72567dfc"
-metafile = true
-
-[[files]]
-file = "minecraft/mods/.index/accessories.pw.toml"
-hash = "b52af7a84c98c10f6d8398a7ad3c59138e34850c26dd8510a25b33dc9bf73cb3"
 metafile = true
 
 [[files]]
@@ -40278,7 +40273,7 @@ metafile = true
 
 [[files]]
 file = "mods/owo-lib.pw.toml"
-hash = "9e32af22dedc0eb55d65aaf0db28b1aa6f5867610423807c74b7a3c40bd28bd7"
+hash = "46831c04077a06df823bcd0f254833a90a9a9ccc78f5069f4b4c27fa301ac0cf"
 metafile = true
 
 [[files]]
