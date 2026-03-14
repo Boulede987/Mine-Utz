@@ -19400,11 +19400,6 @@ hash = "9ffd2afedf8308e38e77f56ed76b315a647a98c2775c5a64d3e9f184404f0d51"
 metafile = true
 
 [[files]]
-file = "minecraft/mods/.index/c2me-neoforge.pw.toml"
-hash = "a824dd4fe4f543e2cf6ef1419190c40605dbec2e57ff6d6ae996fd1c315afc13"
-metafile = true
-
-[[files]]
 file = "minecraft/mods/.index/chunk-sending-forge-fabric.pw.toml"
 hash = "42e74f08249769f9a5423b39394c7c25557c046ee51ee7a63da6d0384de9cef7"
 metafile = true
@@ -40285,6 +40280,11 @@ metafile = true
 [[files]]
 file = "mods/patchouli.pw.toml"
 hash = "b7fec81bc4939896a1feb78c16cb17fd3140092e7ceca993bf982387e6b7bdca"
+metafile = true
+
+[[files]]
+file = "mods/paxi.pw.toml"
+hash = "215d597764d5c5db89e700fc3495b72dc0a7f09c975de19dc8c580bde3469a5e"
 metafile = true
 
 [[files]]
