@@ -1,0 +1,65 @@
+===== DIMENSION DUMP START =====
+
+--- ae2 ---
+ae2:spatial_storage
+
+--- aether ---
+aether:the_aether
+
+--- astral_dimension ---
+astral_dimension:astral_dimension
+astral_dimension:setback
+
+--- atlantis ---
+atlantis:atlantis
+
+--- deeperdarker ---
+deeperdarker:otherside
+
+--- eternal_starlight ---
+eternal_starlight:starlight
+
+--- iceandfire ---
+iceandfire:dread_land
+
+--- irons_spellbooks ---
+irons_spellbooks:pocket_dimension
+
+--- lostcities ---
+lostcities:lostcity
+
+--- macabre ---
+macabre:the_pit
+
+--- mahoutsukai ---
+mahoutsukai:reality_marble
+
+--- minecraft ---
+minecraft:overworld
+minecraft:the_end
+minecraft:the_nether
+
+--- mineutz ---
+mineutz:zombie_city
+
+--- stellaris ---
+stellaris:earth_orbit
+stellaris:jupiter
+stellaris:mars
+stellaris:mars_orbit
+stellaris:mercury
+stellaris:mercury_orbit
+stellaris:moon
+stellaris:venus
+stellaris:venus_orbit
+
+--- the_bumblezone ---
+the_bumblezone:the_bumblezone
+
+--- twilightforest ---
+twilightforest:twilight_forest
+
+--- undergarden ---
+undergarden:undergarden
+
+===== DIMENSION DUMP END (28 total) =====

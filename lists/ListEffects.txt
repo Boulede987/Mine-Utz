@@ -1,0 +1,361 @@
+===== EFFECT DUMP START =====
+
+--- aether ---
+aether:inebriation
+aether:remedy
+
+--- apotheosis_modern_ragnarok ---
+apotheosis_modern_ragnarok:fire_dot
+apotheosis_modern_ragnarok:freeze
+apotheosis_modern_ragnarok:tyranny
+apotheosis_modern_ragnarok:verdant_ruin
+
+--- apothic_attributes ---
+apothic_attributes:bleeding
+apothic_attributes:detonation
+apothic_attributes:flying
+apothic_attributes:grievous
+apothic_attributes:knowledge
+apothic_attributes:sundering
+apothic_attributes:vitality
+
+--- artifacts ---
+artifacts:magnetism
+
+--- astral_dimension ---
+astral_dimension:fire_trail
+astral_dimension:flight
+astral_dimension:floral_bless
+astral_dimension:fury
+astral_dimension:lifesteal
+astral_dimension:poison_resistance
+astral_dimension:rain_of_fire
+astral_dimension:thorn_resistance
+astral_dimension:thorny
+astral_dimension:vanisher
+astral_dimension:void_walker
+astral_dimension:wounded
+
+--- atlantis ---
+atlantis:spikes
+
+--- born_in_chaos_v1 ---
+born_in_chaos_v1:bad_feeling
+born_in_chaos_v1:barbedattack
+born_in_chaos_v1:block_break
+born_in_chaos_v1:bone_barrier
+born_in_chaos_v1:bone_chilling
+born_in_chaos_v1:bone_fracture
+born_in_chaos_v1:cursed_mark
+born_in_chaos_v1:curseofthe_boat
+born_in_chaos_v1:dark_splash
+born_in_chaos_v1:dark_ward
+born_in_chaos_v1:detonation
+born_in_chaos_v1:dogtruce
+born_in_chaos_v1:experience_container
+born_in_chaos_v1:fish_breath
+born_in_chaos_v1:furious_rampage
+born_in_chaos_v1:gaze_of_terror
+born_in_chaos_v1:ice_barrier
+born_in_chaos_v1:infernal_flame
+born_in_chaos_v1:infestationof_flies
+born_in_chaos_v1:insect_protection
+born_in_chaos_v1:intoxication
+born_in_chaos_v1:jawattack
+born_in_chaos_v1:lifesteal
+born_in_chaos_v1:light_rampage
+born_in_chaos_v1:living_bomb
+born_in_chaos_v1:living_cocoon
+born_in_chaos_v1:living_cocoon_player_side
+born_in_chaos_v1:lost_items
+born_in_chaos_v1:magic_depletion
+born_in_chaos_v1:medium_rampage
+born_in_chaos_v1:minion_summon
+born_in_chaos_v1:myiasis
+born_in_chaos_v1:obsession
+born_in_chaos_v1:overly_heavy_weapon
+born_in_chaos_v1:predators_desire
+born_in_chaos_v1:rabbit_agility
+born_in_chaos_v1:rampant_rampage
+born_in_chaos_v1:rotten_smell
+born_in_chaos_v1:sacrifice
+born_in_chaos_v1:snow_storm
+born_in_chaos_v1:soul_stratification
+born_in_chaos_v1:stimulatingsurge
+born_in_chaos_v1:stimulation
+born_in_chaos_v1:stone_persistence
+born_in_chaos_v1:stranglehold
+born_in_chaos_v1:strong_rampage
+born_in_chaos_v1:stun
+born_in_chaos_v1:stunning_strike
+born_in_chaos_v1:sweet_madness
+born_in_chaos_v1:terrifying_presence
+born_in_chaos_v1:undead_summonun
+born_in_chaos_v1:unity_with_darkness
+born_in_chaos_v1:vampiric_touch
+born_in_chaos_v1:wither_resistance
+
+--- cataclysm ---
+cataclysm:abyssal_burn
+cataclysm:abyssal_curse
+cataclysm:abyssal_fear
+cataclysm:blazing_brand
+cataclysm:blessing_of_amethyst
+cataclysm:bone_fracture
+cataclysm:curse_of_desert
+cataclysm:ghost_form
+cataclysm:ghost_sickness
+cataclysm:monstrous
+cataclysm:stun
+cataclysm:wetness
+
+--- cobblemon ---
+cobblemon:cleanse_all
+cobblemon:cleanse_negative
+cobblemon:mental_restoration
+
+--- cold_sweat ---
+cold_sweat:frigidness
+cold_sweat:grace
+cold_sweat:ice_resistance
+cold_sweat:warmth
+
+--- createaddition ---
+createaddition:shocking
+
+--- deeperdarker ---
+deeperdarker:sculk_affinity
+
+--- eternal_starlight ---
+eternal_starlight:crystal_infection
+eternal_starlight:dream_catcher
+eternal_starlight:flammable
+eternal_starlight:numbness
+eternal_starlight:starfire
+eternal_starlight:sticky
+eternal_starlight:teary
+
+--- fightorflight ---
+fightorflight:resistance_weakened
+
+--- friendsandfoes ---
+friendsandfoes:reach
+
+--- gunsmithlib ---
+gunsmithlib:crossfire
+
+--- iceandfire ---
+iceandfire:frozen
+iceandfire:siren_charm
+
+--- irons_spellbooks ---
+irons_spellbooks:abyssal_shroud
+irons_spellbooks:airborne
+irons_spellbooks:angel_wings
+irons_spellbooks:antigravity
+irons_spellbooks:ascension
+irons_spellbooks:blight
+irons_spellbooks:burning_dash
+irons_spellbooks:charged
+irons_spellbooks:chilled
+irons_spellbooks:echoing_strikes
+irons_spellbooks:evasion
+irons_spellbooks:fall_damage_immunity
+irons_spellbooks:fortify
+irons_spellbooks:frostbite
+irons_spellbooks:gluttony
+irons_spellbooks:guided
+irons_spellbooks:hastened
+irons_spellbooks:heartstop
+irons_spellbooks:immolate
+irons_spellbooks:instant_mana
+irons_spellbooks:oakskin
+irons_spellbooks:planar_sight
+irons_spellbooks:polar_bear_timer
+irons_spellbooks:raise_dead_timer
+irons_spellbooks:rend
+irons_spellbooks:slowed
+irons_spellbooks:spider_aspect
+irons_spellbooks:summon_horse_timer
+irons_spellbooks:summon_swords_timer
+irons_spellbooks:thunderstorm
+irons_spellbooks:true_invisibility
+irons_spellbooks:vex_timer
+irons_spellbooks:vigor
+irons_spellbooks:volt_strike
+
+--- luminousworld ---
+luminousworld:universal_poison
+
+--- macabre ---
+macabre:dread
+macabre:hemorrhage
+macabre:macabre
+
+--- magistuarmory ---
+magistuarmory:laceration
+
+--- mahoutsukai ---
+mahoutsukai:abyss
+mahoutsukai:acting
+mahoutsukai:authority_jump
+mahoutsukai:ba_cooldown
+mahoutsukai:binding_eyes
+mahoutsukai:black_burning
+mahoutsukai:black_flame_eyes
+mahoutsukai:bleeding
+mahoutsukai:borrowed_authority
+mahoutsukai:bound
+mahoutsukai:clairvoyance_eyes
+mahoutsukai:cm_cooldown
+mahoutsukai:confusion
+mahoutsukai:death_collection_eyes
+mahoutsukai:fay_sight_eyes
+mahoutsukai:fear
+mahoutsukai:flung
+mahoutsukai:foresight
+mahoutsukai:immunity_exchange
+mahoutsukai:insight_eyes
+mahoutsukai:interesting_block
+mahoutsukai:mana_taken_cooldown
+mahoutsukai:misfortune
+mahoutsukai:peaceful_garden
+mahoutsukai:probability_alter
+mahoutsukai:rage
+mahoutsukai:reversion_eyes
+mahoutsukai:reverted
+mahoutsukai:ripper_cooldown
+mahoutsukai:ripper_invis
+mahoutsukai:ripper_invis_cooldown
+mahoutsukai:rpsw_cooldown
+mahoutsukai:selective_displacement
+mahoutsukai:selective_displacement_cooldown
+mahoutsukai:wall_stick
+mahoutsukai:wounded
+mahoutsukai:zap_cooldown
+
+--- minecraft ---
+minecraft:absorption
+minecraft:bad_omen
+minecraft:blindness
+minecraft:conduit_power
+minecraft:darkness
+minecraft:dolphins_grace
+minecraft:fire_resistance
+minecraft:glowing
+minecraft:haste
+minecraft:health_boost
+minecraft:hero_of_the_village
+minecraft:hunger
+minecraft:infested
+minecraft:instant_damage
+minecraft:instant_health
+minecraft:invisibility
+minecraft:jump_boost
+minecraft:levitation
+minecraft:luck
+minecraft:mining_fatigue
+minecraft:nausea
+minecraft:night_vision
+minecraft:oozing
+minecraft:poison
+minecraft:raid_omen
+minecraft:regeneration
+minecraft:resistance
+minecraft:saturation
+minecraft:slow_falling
+minecraft:slowness
+minecraft:speed
+minecraft:strength
+minecraft:trial_omen
+minecraft:unluck
+minecraft:water_breathing
+minecraft:weakness
+minecraft:weaving
+minecraft:wind_charged
+minecraft:wither
+
+--- mowziesmobs ---
+mowziesmobs:frozen
+mowziesmobs:geomancy
+mowziesmobs:poison_resist
+mowziesmobs:sunblock
+mowziesmobs:suns_blessing
+
+--- mutantmonsters ---
+mutantmonsters:chemical_x
+
+--- parcool ---
+parcool:inexhaustible
+
+--- simplyswords ---
+simplyswords:astral_shift
+simplyswords:battle_fatigue
+simplyswords:echo
+simplyswords:elemental_vortex
+simplyswords:fatal_flicker
+simplyswords:fire_vortex
+simplyswords:flameseed
+simplyswords:freeze
+simplyswords:frenzy
+simplyswords:frost_vortex
+simplyswords:immolation
+simplyswords:magislam
+simplyswords:magistorm
+simplyswords:onslaught
+simplyswords:pain
+simplyswords:resilience
+simplyswords:ribboncleave
+simplyswords:ribbonwrath
+simplyswords:smouldering
+simplyswords:soul_tether
+simplyswords:spore_swarm
+simplyswords:storm
+simplyswords:void_assault
+simplyswords:voidcloak
+simplyswords:ward
+simplyswords:wildfire
+
+--- stellaris ---
+stellaris:fogging
+stellaris:radioactive
+stellaris:sandstorm
+
+--- superbwarfare ---
+superbwarfare:burn
+superbwarfare:shock
+superbwarfare:strike_protection
+superbwarfare:trauma
+
+--- supplementaries ---
+supplementaries:flammable
+supplementaries:overencumbered
+
+--- the_bumblezone ---
+the_bumblezone:beenergized
+the_bumblezone:hidden
+the_bumblezone:paralyzed
+the_bumblezone:protection_of_the_hive
+the_bumblezone:wrath_of_the_hive
+
+--- twilightforest ---
+twilightforest:frosted
+
+--- undergarden ---
+undergarden:brittleness
+undergarden:chilly
+undergarden:featherweight
+undergarden:gooey
+undergarden:purity
+undergarden:virulence
+undergarden:virulent_resistance
+
+--- wan_ancient_beasts ---
+wan_ancient_beasts:alpha
+wan_ancient_beasts:fear
+
+--- yungscavebiomes ---
+yungscavebiomes:buffeted
+yungscavebiomes:frost
+
+===== EFFECT DUMP END (288 total) =====

@@ -1,0 +1,177 @@
+===== ENCHANTMENT DUMP START =====
+
+--- allurement ---
+allurement:alleviating
+allurement:ascension_curse
+allurement:fleeting_curse
+allurement:launch
+allurement:obedience
+allurement:reeling
+allurement:reforming
+allurement:shockwave
+allurement:spread_of_ailments
+allurement:vengeance
+
+--- apotheosis_modern_ragnarok ---
+apotheosis_modern_ragnarok:emergency_protector
+apotheosis_modern_ragnarok:last_stand
+apotheosis_modern_ragnarok:perfect_block
+apotheosis_modern_ragnarok:projection_magic
+apotheosis_modern_ragnarok:riptide_warhead
+apotheosis_modern_ragnarok:stability
+apotheosis_modern_ragnarok:survival_instinct
+
+--- apothic_enchanting ---
+apothic_enchanting:berserkers_fury
+apothic_enchanting:boon_of_the_earth
+apothic_enchanting:chainsaw
+apothic_enchanting:chromatic
+apothic_enchanting:crescendo_of_bolts
+apothic_enchanting:endless_quiver
+apothic_enchanting:growth_serum
+apothic_enchanting:icy_thorns
+apothic_enchanting:infusion
+apothic_enchanting:knowledge_of_the_ages
+apothic_enchanting:life_mending
+apothic_enchanting:miners_fervor
+apothic_enchanting:natures_blessing
+apothic_enchanting:rebounding
+apothic_enchanting:reflective_defenses
+apothic_enchanting:scavenger
+apothic_enchanting:shield_bash
+apothic_enchanting:stable_footing
+apothic_enchanting:tempting
+apothic_enchanting:worker_exploitation
+
+--- apothic_spawners ---
+apothic_spawners:capturing
+
+--- atlantis ---
+atlantis:abyss_walker
+atlantis:abyssal_armor
+atlantis:current_glide
+atlantis:depth_pulse
+atlantis:gill_breath
+atlantis:lightning_protection
+atlantis:reel_bind
+atlantis:tide_call
+
+--- create ---
+create:capacity
+create:potato_recovery
+
+--- deeperdarker ---
+deeperdarker:catalysis
+deeperdarker:sculk_smite
+
+--- dungeons_arise ---
+dungeons_arise:discharge
+dungeons_arise:ensnaring
+dungeons_arise:lolths_curse
+dungeons_arise:purification
+dungeons_arise:voltaic_shot
+
+--- eternal_starlight ---
+eternal_starlight:fearless
+eternal_starlight:fertile
+eternal_starlight:gathering
+eternal_starlight:glacial_sowing
+eternal_starlight:homing
+eternal_starlight:overheat
+eternal_starlight:poisoning
+eternal_starlight:precision
+eternal_starlight:soul_snatcher
+eternal_starlight:tearing
+eternal_starlight:tracing
+
+--- luminousworld ---
+luminousworld:launch
+
+--- minecraft ---
+minecraft:aqua_affinity
+minecraft:bane_of_arthropods
+minecraft:binding_curse
+minecraft:blast_protection
+minecraft:breach
+minecraft:channeling
+minecraft:density
+minecraft:depth_strider
+minecraft:efficiency
+minecraft:feather_falling
+minecraft:fire_aspect
+minecraft:fire_protection
+minecraft:flame
+minecraft:fortune
+minecraft:frost_walker
+minecraft:impaling
+minecraft:infinity
+minecraft:knockback
+minecraft:looting
+minecraft:loyalty
+minecraft:luck_of_the_sea
+minecraft:lure
+minecraft:mending
+minecraft:multishot
+minecraft:piercing
+minecraft:power
+minecraft:projectile_protection
+minecraft:protection
+minecraft:punch
+minecraft:quick_charge
+minecraft:respiration
+minecraft:riptide
+minecraft:sharpness
+minecraft:silk_touch
+minecraft:smite
+minecraft:soul_speed
+minecraft:sweeping_edge
+minecraft:swift_sneak
+minecraft:thorns
+minecraft:unbreaking
+minecraft:vanishing_curse
+minecraft:wind_burst
+
+--- nova_structures ---
+nova_structures:antidote
+nova_structures:boss_behaviour
+nova_structures:conductivity_curse
+nova_structures:ghasted
+nova_structures:gravity
+nova_structures:illagers_bane
+nova_structures:multishot
+nova_structures:outreach
+nova_structures:photosynthesis
+nova_structures:piercing
+nova_structures:power
+nova_structures:shulker_boss
+nova_structures:shulker_miniboss
+nova_structures:traveler
+nova_structures:wax_wings
+nova_structures:wither_coated
+
+--- supplementaries ---
+supplementaries:stasis
+
+--- the_bumblezone ---
+the_bumblezone:comb_cutter
+the_bumblezone:hive_lifeline
+the_bumblezone:neurotoxins
+the_bumblezone:potent_poison
+
+--- twilightforest ---
+twilightforest:chill_aura
+twilightforest:destruction
+twilightforest:fire_react
+twilightforest:renewal
+
+--- undergarden ---
+undergarden:longevity
+undergarden:ricochet
+undergarden:self_sling
+
+--- wan_ancient_beasts ---
+wan_ancient_beasts:blood_thirst
+wan_ancient_beasts:hunter_mark
+wan_ancient_beasts:life_steal
+
+===== ENCHANTMENT DUMP END (140 total) =====
