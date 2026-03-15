@@ -1,1 +1,13 @@
-[]
+[
+  {
+    "mob": "cobblemon:pokemon",
+    "dimension": "mineutz:pokemon_dimension",
+    "result": "allow",
+    "when": "onjoin"
+  },
+  {
+    "mob": "cobblemon:pokemon",
+    "result": "deny",
+    "when": "onjoin"
+  }
+]
