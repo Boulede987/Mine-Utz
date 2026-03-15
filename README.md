@@ -11,6 +11,7 @@ A custom Minecraft modpack tracked with [packwiz](https://packwiz.infra.link/) a
 - [Setup](#setup)
 - [Adding Mods](#adding-mods)
 - [Testing](#testing)
+- [Registry Dumps](#registry-dumps)
 - [Making a Release](#making-a-release)
 
 ---
@@ -29,6 +30,7 @@ A custom Minecraft modpack tracked with [packwiz](https://packwiz.infra.link/) a
 │   ├── kubejs/                # KubeJS scripts (tracked)
 │   ├── local/ftbquests/       # FTB Quests quest book (tracked)
 │   └── cobblenav/settings/    # Cobblenav settings (tracked)
+├── lists/                     # Registry dump snapshots (tracked, for diffing on mod updates)
 └── release/                   # Exported .mrpack files for distribution
 ```
 
@@ -142,6 +144,45 @@ Testing is done in Prism Launcher against the live `minecraft/` folder.
 5. Config changes made in-game will appear in `minecraft/config/` — commit anything intentional.
 
 > Since `minecraft/mods/*.jar` is gitignored, the actual jars are never committed. Prism handles downloading them from the metadata.
+
+---
+
+## Registry Dumps
+
+The `lists/` folder contains plain-text snapshots of every registry in the modpack — biomes, mobs, structures, dimensions, items, blocks, enchantments, effects, and sounds. These are generated in-game using a KubeJS script and committed to Git, so that when mods are updated, a simple `git diff` immediately shows what was added, removed, or renamed.
+
+The script lives at `minecraft/kubejs/server_scripts/dump_registries.js`. Load it with `/kubejs reload server_scripts`, then use any of the following commands in-game (requires permission level 2):
+
+| Command | Dumps |
+|---|---|
+| `/dump_biomes` | All biome IDs |
+| `/dump_structures` | All structure IDs |
+| `/dump_dimensions` | All loaded dimension IDs |
+| `/dump_mobs` | All entity type IDs |
+| `/dump_items` | All item IDs |
+| `/dump_blocks` | All block IDs |
+| `/dump_enchantments` | All enchantment IDs |
+| `/dump_effects` | All mob effect IDs |
+| `/dump_sounds` | All sound event IDs |
+| `/dump_all` | Everything above in one go |
+
+Results are printed to `logs/latest.log`. Search for `===== DUMP START =====` to find them. Copy the relevant block out and paste it into the appropriate file under `lists/`, for example `lists/ListBiomes.txt`, `lists/ListMobs.txt`, etc.
+
+### When to update the lists
+
+Re-run the relevant dump commands and update the `lists/` files whenever:
+- A mod is added or removed
+- A mod is updated to a new version
+- You add a new biome, structure, or entity via datapack or KubeJS
+
+Then commit the updated lists alongside the mod/datapack change:
+
+```bash
+git add lists/
+git commit -m "update lists after <mod name> update"
+```
+
+This makes the Git history a reliable audit trail — you can always look back at any commit and know exactly what content was available in the pack at that point, which is especially useful when writing InControl spawn rules or datapack JSON that references specific IDs.
 
 ---
 
