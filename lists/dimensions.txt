@@ -1,5 +1,3 @@
-===== DIMENSION DUMP START =====
-
 --- ae2 ---
 ae2:spatial_storage
 
@@ -40,6 +38,7 @@ minecraft:the_end
 minecraft:the_nether
 
 --- mineutz ---
+mineutz:pokemon_dimension
 mineutz:zombie_city
 
 --- stellaris ---
@@ -61,5 +60,3 @@ twilightforest:twilight_forest
 
 --- undergarden ---
 undergarden:undergarden
-
-===== DIMENSION DUMP END (28 total) =====

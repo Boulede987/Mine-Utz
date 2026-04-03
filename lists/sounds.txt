@@ -1,5 +1,3 @@
-===== SOUND DUMP START =====
-
 --- ae2 ---
 ae2:guide.click
 
@@ -4947,5 +4945,3 @@ yungscavebiomes:entity.sand_snapper.hurt
 yungscavebiomes:entity.sand_snapper.panic
 yungscavebiomes:music.overworld.ice_caves
 yungscavebiomes:music.overworld.lost_caves
-
-===== SOUND DUMP END (4814 total) =====

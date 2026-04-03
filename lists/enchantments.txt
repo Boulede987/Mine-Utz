@@ -1,5 +1,3 @@
-===== ENCHANTMENT DUMP START =====
-
 --- allurement ---
 allurement:alleviating
 allurement:ascension_curse
@@ -173,5 +171,3 @@ undergarden:self_sling
 wan_ancient_beasts:blood_thirst
 wan_ancient_beasts:hunter_mark
 wan_ancient_beasts:life_steal
-
-===== ENCHANTMENT DUMP END (140 total) =====

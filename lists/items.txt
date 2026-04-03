@@ -1,5 +1,3 @@
-===== ITEM DUMP START =====
-
 --- ae2 ---
 ae2:16k_crafting_storage
 ae2:1k_crafting_storage
@@ -26003,5 +26001,3 @@ yungscavebiomes:suspicious_ancient_sand
 
 --- zerocore ---
 zerocore:debugtool
-
-===== ITEM DUMP END (25812 total) =====

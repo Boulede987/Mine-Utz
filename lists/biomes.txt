@@ -1,5 +1,3 @@
-===== BIOME DUMP START =====
-
 --- ae2 ---
 ae2:spatial_storage
 
@@ -372,5 +370,3 @@ undergroundworlds:underground_tundra
 --- yungscavebiomes ---
 yungscavebiomes:frosted_caves
 yungscavebiomes:lost_caves
-
-===== BIOME DUMP END (325 total) =====

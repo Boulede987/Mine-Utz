@@ -1,5 +1,3 @@
-===== EFFECT DUMP START =====
-
 --- aether ---
 aether:inebriation
 aether:remedy
@@ -357,5 +355,3 @@ wan_ancient_beasts:fear
 --- yungscavebiomes ---
 yungscavebiomes:buffeted
 yungscavebiomes:frost
-
-===== EFFECT DUMP END (288 total) =====

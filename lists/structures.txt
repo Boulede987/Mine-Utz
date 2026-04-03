@@ -1,5 +1,3 @@
-===== STRUCTURE DUMP START =====
-
 --- ae2 ---
 ae2:meteorite
 
@@ -1080,5 +1078,3 @@ wan_ancient_beasts:digsite_taiga
 wan_ancient_beasts:ice_spike_castle
 wan_ancient_beasts:mesa_temple
 wan_ancient_beasts:mesa_temple_small
-
-===== STRUCTURE DUMP END (985 total) =====
