@@ -1,0 +1,34 @@
+===== MOD METADATA  format: mod_id | display_name | version | license | authors | url =====
+astral_dimension | Astral Dimension | v2.0 | license:Academic Free License v3.0 | authors:Mr.Sculk | url:https://mcreator.net
+atistructures | atistructures | v1.4.0 | license:All rights Reserved | authors:ATi | url:https://www.curseforge.com/minecraft/mc-mods/ati-structures
+born_in_chaos_v1 | Born in Chaos  | v1.7.2 | license:All Rights Reserved | authors:Mongoose_artist, MCreator | url:https://mcreator.net
+collective | Collective | v8.13 | license:All rights reserved | authors:Rick South | url:https://serilum.com/mod/collective
+customcredits | Custom Credits | v1.7 | license:All rights reserved | authors:Rick South | url:https://serilum.com/mod/custom-credits
+distanthorizons | Distant Horizons | v2.4.5-b | license:LGPL-3 | authors:James Seibel, Leonardo Amato, Cola, coolGi, Ran, Leetom, pshsh | url:https://gitlab.com/jeseibel/distant-horizons
+entityculling | EntityCulling | v1.9.3 | license:tr7zw Protective License | authors:tr7zw | url:https://modrinth.com/mod/entityculling
+immersivelanterns | Immersive Lanterns | v1.0.6 | license:Toni's MMC License | authors:Toni | url:https://github.com/txnimc/ImmersiveLanterns/
+journeymap-wrongloader | Journeymap-NeoForge | vnot a fabric mod | license:All Rights Reserved | authors:Mysticdrew, Techbrew, MemeSapiens | url:http://journeymap.info
+limitedchunks" #mandatory | Limited Chunkloading" #mandatory | v1.8" #mandatory | license:GPL3 | authors: | url: #optional
+lootbeams | Loot Beams Refork | v3.2.8 | license:MIT | authors:Clefal | url:
+luminousworld | Luminous: Overworld | v1.5.4 | license:All Rights Reserved | authors:RipleysMods | url:https://mcreator.net
+macabre | macabre | v0.7.1 | license:Academic Free License v3.0 | authors:Pixelgeist666 | url:https://legacy.curseforge.com/members/pixelgeist666/projects
+max_health_fix | max health fix | v1.0 | license:GPL-3.0 | authors:Nerjal Nosk | url:https://codeberg.org/NerjalNosk/MaxHealthFix
+moogs_structures |  | v | license:GNU Lesser General Public License v3.0 | authors: | url:
+mowziesmobs | Mowzie's Mobs | v1.7.5 | license:custom | authors:BobMowzie, Wadoo, Vakypanda, Noonyez, pau101 | url:https://www.curseforge.com/minecraft/mc-mods/mowzies-mobs
+mr_cobblemon_legendarystructures | Cobblemon: Legends Untold | v2.2 | license:MIT | authors:TSFlareon | url:https://modrinth.com/datapack/cobblemon-legendary-structures
+mr_hiddenmons_cobblemon | HiddenMons [Cobblemon] | v1-v0.6 | license:GPL-3.0-only | authors:marcustars | url:https://modrinth.com/datapack/hiddenmons-cobblemon
+mr_potions_description | Potions Description | v1.0 | license:LicenseRef-Unknown | authors:quillphen | url:https://modrinth.com/datapack/potions-description
+necronomicon | Necronomicon | v1.6.0 | license:MIT | authors:ElocinDev | url:
+nirvana_lib | Nirvana Lib | v2.0.17 | license:MIT | authors:Clefal | url:
+nullscape | Nullscape | v1.2.14 | license:Stardust Labs License | authors:Stardust Labs | url:https://www.stardustlabs.net/
+rhino | Rhino | v2101.2.7-build.81 | license:MPL-2.0 | authors:latvian.dev, Mozilla | url:
+shineals_prehistoric_expansion | ShineaL's Prehistoric Expansion | v1.4.1 | license:All Rights Reserved | authors:GlitchedMastery | url:https://akrineousgames.uk
+sodiumdynamiclights | Sodium Dynamic Lights | v1.0.9 | license:MIT | authors:toni, LambdAurora | url:https://github.com/txnimc/SodiumDynamicLights/
+sodiumoptionsapi | Sodium Options API | v1.0.10 | license:LGPLv3 | authors:toni | url:https://github.com/txnimc/SodiumOptionsAPI/
+starterkit | Starter Kit | v7.4 | license:All rights reserved | authors:Rick South | url:https://serilum.com/mod/starter-kit
+structory | Structory | v1.3.14 | license:Stardust Labs License | authors:Stardust Labs | url:https://www.stardustlabs.net/
+structory_towers | Structory: Towers | v1.0.15 | license:Stardust Labs License | authors:Stardust Labs | url:https://www.stardustlabs.net/
+t_and_t | Towns and Towers | v1.13.7 | license:CC BY-NC-ND 4.0 | authors:Kubek and Biban_Auriu, Cristelknight999 | url:https://modrinth.com/mod/towns-and-towers
+txnilib | TxniLib | v1.0.24 | license:MIT | authors:Toni | url:https://github.com/txnimc/TxniLib/
+===== END (31 total) =====
+
