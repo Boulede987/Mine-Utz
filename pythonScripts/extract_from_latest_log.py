@@ -14,19 +14,20 @@ prefix  = re.compile(r'^\[[\d:]+\] \[INFO\] ')
 cleaned = '\n'.join(prefix.sub('', line) for line in text.splitlines())
 
 label_to_file = {
-    'STRUCTURE':   'structures.txt',
-    'BIOME':       'biomes.txt',
-    'DIMENSION':   'dimensions.txt',
-    'ITEM':        'items.txt',
-    'BLOCK':       'blocks.txt',
-    'MOB':         'mobs.txt',
-    'ENCHANTMENT': 'enchantments.txt',
-    'EFFECT':      'effects.txt',
-    'SOUND':       'sounds.txt',
+    'STRUCTURE':        'structures.txt',
+    'BIOME':            'biomes.txt',
+    'DIMENSION':        'dimensions.txt',
+    'ITEM':             'items.txt',
+    'BLOCK':            'blocks.txt',
+    'MOB':              'mobs.txt',
+    'ENCHANTMENT':      'enchantments.txt',
+    'EFFECT':           'effects.txt',
+    'SOUND':            'sounds.txt',
+    'ENTITY LOOTTABLE': 'entity_loottables.txt',  # ← add this
 }
 
 pattern = re.compile(
-    r'===== (\w+) DUMP START =====\n(.*?)\n===== \w+ DUMP END \(\d+ total\) =====',
+    r'===== ([\w ]+?) DUMP START =====\n(.*?)\n===== [\w ]+ DUMP END \([^)]+\) =====',
     re.DOTALL
 )
 

@@ -12,6 +12,8 @@
 //   /dump_enchantments
 //   /dump_effects
 //   /dump_sounds
+//   /dump_entity_loottables
+//   /dump_check
 //   /dump_all
 //
 // Results go to: logs/latest.log
@@ -21,7 +23,6 @@ ServerEvents.commandRegistry(event => {
     const { commands: Commands } = event;
 
     function runDump(ctx, registry, label) {
-        // Collect all keys grouped by namespace
         let groups = {};
         ctx.source.getServer().registryAccess()
             .registryOrThrow(Java.loadClass('net.minecraft.core.registries.Registries')[registry])
@@ -33,7 +34,6 @@ ServerEvents.commandRegistry(event => {
                 groups[namespace].push(str);
             });
 
-        // Build the full output as one string
         let lines = [`===== ${label} DUMP START =====`];
         let total = 0;
         Object.keys(groups).sort().forEach(namespace => {
@@ -71,6 +71,118 @@ ServerEvents.commandRegistry(event => {
 
         console.log(lines.join('\n'));
         ctx.source.sendSuccess(() => Component.literal(`§aDumped ${total} dimensions to logs/latest.log`), false);
+    }
+
+    function runEntityLootDump(ctx) {
+        const Registries     = Java.loadClass('net.minecraft.core.registries.Registries');
+        const entityRegistry = ctx.source.getServer().registryAccess()
+            .registryOrThrow(Registries.ENTITY_TYPE);
+
+        let lines   = ['===== ENTITY LOOTTABLE DUMP START ====='];
+        let total   = 0;
+        let missing = 0;
+
+        entityRegistry.keySet().forEach(loc => {
+            const entityType = entityRegistry.get(loc);
+            if (!entityType) return;
+
+            let lootStr = '';
+            try {
+                lootStr = entityType.getDefaultLootTable().location().toString();
+            } catch(e) {
+                lootStr = '';
+            }
+
+            if (!lootStr || lootStr === 'minecraft:empty') {
+                missing++;
+                return;
+            }
+
+            lines.push(`${loc.toString()} | ${lootStr}`);
+            total++;
+        });
+
+        lines.push(`\n===== ENTITY LOOTTABLE DUMP END (${total} total, ${missing} with no loot table) =====`);
+        console.log(lines.join('\n'));
+        ctx.source.sendSuccess(() => Component.literal(`§aDumped ${total} entity loot tables to logs/latest.log`), false);
+    }
+
+    function runConsistencyCheck(ctx) {
+        const Registries     = Java.loadClass('net.minecraft.core.registries.Registries');
+        const registryAccess = ctx.source.getServer().registryAccess();
+
+        const entityRegistry = registryAccess.registryOrThrow(Registries.ENTITY_TYPE);
+        const itemRegistry   = registryAccess.registryOrThrow(Registries.ITEM);
+        const biomeRegistry  = registryAccess.registryOrThrow(Registries.BIOME);
+        const structRegistry = registryAccess.registryOrThrow(Registries.STRUCTURE);
+
+        let lines  = ['===== CONSISTENCY CHECK START ====='];
+        let issues = 0;
+
+        // ── 1. Registry counts ────────────────────────────────────────────────
+        lines.push('\n--- Registry counts ---');
+        lines.push(`  Entities   : ${entityRegistry.keySet().size()}`);
+        lines.push(`  Items      : ${itemRegistry.keySet().size()}`);
+        lines.push(`  Biomes     : ${biomeRegistry.keySet().size()}`);
+        lines.push(`  Structures : ${structRegistry.keySet().size()}`);
+
+        // ── 2. Entities with no loot table (informational) ────────────────────
+        let noLoot = [];
+        entityRegistry.keySet().forEach(loc => {
+            const entityType = entityRegistry.get(loc);
+            if (!entityType) return;
+            let lootStr = '';
+            try { lootStr = entityType.getDefaultLootTable().location().toString(); } catch(e) {}
+            if (!lootStr || lootStr === 'minecraft:empty') noLoot.push(loc.toString());
+        });
+        lines.push(`\n--- Entities with no loot table (informational): ${noLoot.length} ---`);
+        noLoot.sort().forEach(e => lines.push(`  INFO: ${e}`));
+
+        // ── 3. Collect namespaces per registry ────────────────────────────────
+        let entityNS = new Set();
+        let itemNS   = new Set();
+        let biomeNS  = new Set();
+        let structNS = new Set();
+        entityRegistry.keySet().forEach(loc => entityNS.add(loc.toString().split(':')[0]));
+        itemRegistry.keySet().forEach(loc => itemNS.add(loc.toString().split(':')[0]));
+        biomeRegistry.keySet().forEach(loc => biomeNS.add(loc.toString().split(':')[0]));
+        structRegistry.keySet().forEach(loc => structNS.add(loc.toString().split(':')[0]));
+
+        // Helper: filter a Set into a sorted array (Rhino has no spread operator)
+        function setDiff(setA, setB) {
+            let result = [];
+            setA.forEach(function(v) { if (!setB.has(v)) result.push(v); });
+            result.sort();
+            return result;
+        }
+
+        // ── 4. Namespaces with entities but no items ──────────────────────────
+        let entityOnly = setDiff(entityNS, itemNS);
+        lines.push(`\n--- Namespaces with entities but no items: ${entityOnly.length} ---`);
+        entityOnly.forEach(function(ns) { lines.push(`  WARN: ${ns}`); issues++; });
+
+        // ── 5. Namespaces with items but no entities (informational) ──────────
+        let itemOnly = setDiff(itemNS, entityNS);
+        lines.push(`\n--- Namespaces with items but no entities (informational): ${itemOnly.length} ---`);
+        itemOnly.forEach(function(ns) { lines.push(`  INFO: ${ns}`); });
+
+        // ── 6. Namespaces with biomes but no items ────────────────────────────
+        let biomeOnly = setDiff(biomeNS, itemNS);
+        lines.push(`\n--- Namespaces with biomes but no items: ${biomeOnly.length} ---`);
+        biomeOnly.forEach(function(ns) { lines.push(`  WARN: ${ns}`); issues++; });
+
+        // ── 7. Namespaces with structures but no biomes ───────────────────────
+        let structOnly = setDiff(structNS, biomeNS);
+        lines.push(`\n--- Namespaces with structures but no biomes: ${structOnly.length} ---`);
+        structOnly.forEach(function(ns) { lines.push(`  WARN: ${ns}`); issues++; });
+
+        lines.push(`\n===== CONSISTENCY CHECK END (${issues} warnings) =====`);
+        console.log(lines.join('\n'));
+        ctx.source.sendSuccess(() => Component.literal(
+            issues > 0
+                ? `§e${issues} consistency warnings — check logs/latest.log`
+                : `§aNo consistency issues found`
+        ), false);
     }
 
     event.register(Commands.literal('dump_structures').requires(src => src.hasPermission(2)).executes(ctx => {
@@ -118,6 +230,16 @@ ServerEvents.commandRegistry(event => {
         return 1;
     }));
 
+    event.register(Commands.literal('dump_entity_loottables').requires(src => src.hasPermission(2)).executes(ctx => {
+        try { runEntityLootDump(ctx); } catch(e) { ctx.source.sendFailure(Component.literal(`§cFailed: ${e}`)); }
+        return 1;
+    }));
+
+    event.register(Commands.literal('dump_check').requires(src => src.hasPermission(2)).executes(ctx => {
+        try { runConsistencyCheck(ctx); } catch(e) { ctx.source.sendFailure(Component.literal(`§cFailed: ${e}`)); }
+        return 1;
+    }));
+
     event.register(Commands.literal('dump_all').requires(src => src.hasPermission(2)).executes(ctx => {
         try {
             runDump(ctx, 'STRUCTURE',   'STRUCTURE');
@@ -129,6 +251,8 @@ ServerEvents.commandRegistry(event => {
             runDump(ctx, 'ENCHANTMENT', 'ENCHANTMENT');
             runDump(ctx, 'MOB_EFFECT',  'EFFECT');
             runDump(ctx, 'SOUND_EVENT', 'SOUND');
+            runEntityLootDump(ctx);
+            runConsistencyCheck(ctx);
             ctx.source.sendSuccess(() => Component.literal(`§aDumped everything to logs/latest.log`), false);
         } catch(e) { ctx.source.sendFailure(Component.literal(`§cFailed: ${e}`)); }
         return 1;

@@ -1,0 +1,180 @@
+Consistency Report
+==================
+Warnings : 7
+Info     : 7
+
+============================================================
+  FILE PRESENCE
+============================================================
+  OK  : items.txt  (25812 entries)
+  OK  : blocks.txt  (15987 entries)
+  OK  : mobs.txt  (1491 entries)
+  OK  : biomes.txt  (325 entries)
+  OK  : structures.txt  (985 entries)
+  OK  : recipes.txt  (1750 entries)
+  OK  : loot_entities.txt  (1218 entries)
+  OK  : loot_chests.txt  (14213 entries)
+  OK  : loot_blocks.txt  (28767 entries)
+  OK  : biome_spawns.txt  (2296 entries)
+  OK  : structure_biomes.txt  (1118 entries)
+  OK  : entity_loottables.txt  (1491 entries)
+  OK  : mod_meta.txt  (31 entries)
+  OK  : lang_names.txt  (87385 entries)
+
+============================================================
+  NAMESPACE COVERAGE
+============================================================
+  WARN: 115 namespaces found in registries but not in mod_meta.txt
+    - ae2
+    - aether
+    - amendments
+    - antiquelegacy
+    - apotheosis
+    - apotheosis_modern_ragnarok
+    - apothic_enchanting
+    - aquaculture
+    - artifacts
+    - ati_structures
+    - atlantis
+    - betterdeserttemples
+    - betterdungeons
+    - betterfortresses
+    - betterjungletemples
+    - bettermineshafts
+    - betteroceanmonuments
+    - betterstrongholds
+    - betterwitchhuts
+    - bibliocraft
+    ... and 95 more
+  WARN: 3 namespaces have entities but no items
+    - blueprint
+    - corpse
+    - gunsmithlib
+  WARN: 3 namespaces have biomes but no items
+    - blueprint
+    - nullscape
+    - terrablender
+
+============================================================
+  RECIPE INTEGRITY
+============================================================
+  WARN: 170 recipe result items not found in item registry
+    - alexsmobs:lava_bottle
+    - ars_nouveau:archwood_planks
+    - atmospheric:aloe_kernels
+    - atmospheric:arid_sand
+    - atmospheric:aspen_log
+    - atmospheric:aspen_wood
+    - atmospheric:crustose_path
+    - atmospheric:red_arid_sand
+    - autumnity:maple_planks
+    - betterendforge:amber_moss_path
+    - betterendforge:cave_moss_path
+    - betterendforge:chorus_nylium_path
+    - betterendforge:crystal_moss_path
+    - betterendforge:end_moss_path
+    - betterendforge:end_mycelium_path
+    - betterendforge:jungle_moss_path
+    - betterendforge:pink_moss_path
+    - betterendforge:shadow_grass_path
+    - bigreactors:cyanite_dust
+    - bigreactors:graphite_dust
+    ... and 150 more
+  WARN: 135 recipe ingredient items not found in item registry
+    - botania:petals/black
+    - botania:petals/blue
+    - botania:petals/brown
+    - botania:petals/cyan
+    - botania:petals/gray
+    - botania:petals/green
+    - botania:petals/light_blue
+    - botania:petals/light_gray
+    - botania:petals/lime
+    - botania:petals/magenta
+    - botania:petals/orange
+    - botania:petals/pink
+    - botania:petals/purple
+    - botania:petals/red
+    - botania:petals/white
+    - botania:petals/yellow
+    - c:cobblestones
+    - c:creosote
+    - c:crops
+    - c:dusts/obsidian
+    ... and 115 more
+  INFO: 22 mod stations not found in item registry (may be custom machine types)
+    - create:compacting
+    - create:crushing
+    - create:cutting
+    - create:deploying
+    - create:emptying
+    - create:filling
+    - create:haunting
+    - create:item_application
+    - create:milling
+    - create:mixing
+    ... and 12 more
+  INFO: 28714 items appear in no recipe (as input or output) — expected for loot-only items
+
+============================================================
+  LOOT TABLE INTEGRITY
+============================================================
+  WARN: 8444 loot table items not found in item registry
+    - basalt
+    - bibliocraft:allthemodium_ancient_bookcase
+    - bibliocraft:allthemodium_ancient_fancy_armor_stand
+    - bibliocraft:allthemodium_ancient_fancy_clock
+    - bibliocraft:allthemodium_ancient_fancy_crafter
+    - bibliocraft:allthemodium_ancient_fancy_sign
+    - bibliocraft:allthemodium_ancient_grandfather_clock
+    - bibliocraft:allthemodium_ancient_label
+    - bibliocraft:allthemodium_ancient_potion_shelf
+    - bibliocraft:allthemodium_ancient_shelf
+    - bibliocraft:allthemodium_ancient_table
+    - bibliocraft:allthemodium_ancient_tool_rack
+    - bibliocraft:allthemodium_demonic_bookcase
+    - bibliocraft:allthemodium_demonic_fancy_armor_stand
+    - bibliocraft:allthemodium_demonic_fancy_clock
+    - bibliocraft:allthemodium_demonic_fancy_crafter
+    - bibliocraft:allthemodium_demonic_fancy_sign
+    - bibliocraft:allthemodium_demonic_grandfather_clock
+    - bibliocraft:allthemodium_demonic_label
+    - bibliocraft:allthemodium_demonic_potion_shelf
+    ... and 8424 more
+  INFO: 472 entities have an assigned loot table but no loot file found in jars
+    - ae2:tiny_tnt_primed
+    - amendments:falling_lantern
+    - amendments:medium_dragon_fireball
+    - amendments:medium_fireball
+    - apotheosis:tiered_gateway
+    - artifacts:mimic
+    - atlantis:aquaiel_jellyfish
+    - atlantis:coconut_crab
+    - atlantis:glittertail_shrimp
+    - atlantis:leviathan
+    ... and 462 more
+  INFO: 405 / 1491 entity loot table assignments matched to extracted loot files
+
+============================================================
+  BIOME SPAWN INTEGRITY
+============================================================
+  OK  : All spawn table biomes are in the biome registry
+  OK  : All spawn table entities are in the entity registry
+
+============================================================
+  STRUCTURE-BIOME INTEGRITY
+============================================================
+  OK  : All plain biome references in structure-biome table are valid
+  INFO: 563 structure-biome entries use biome tags (cannot cross-reference)
+  WARN: 5 structures in structure-biome table not found in structure registry
+    - mythsandlegends:ancient_vestiges
+    - mythsandlegends:graveyard
+    - mythsandlegends:old_camp
+    - mythsandlegends:scorched_nest
+    - mythsandlegends:sepulcrum_ignitum
+
+============================================================
+  LANG NAME COVERAGE
+============================================================
+  INFO: 26526 / 29212 items have a lang entry
+  INFO: 1133 / 1491 mobs have a lang entry
