@@ -1,4 +1,4 @@
-===== BIOME FEATURES (placed-feature IDs)  format: biome | feature_id =====
+===== BIOME FEATURES  format: biome | feature_id =====
 aether:skyroot_forest | aether:aether_dirt_ore
 aether:skyroot_forest | aether:ambrosium_ore
 aether:skyroot_forest | aether:berry_bush_patch

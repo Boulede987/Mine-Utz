@@ -1,0 +1,24 @@
+===== STRUCTURE CHEST LOOT TABLES  format: structure_id | block_type | position | loottable =====
+atlantis:atlantean_tower | minecraft:chest | Int(1),Int(16),Int(8) | atlantis:chests/atlantean_loot
+atlantis:atlantean_tower | minecraft:chest | Int(2),Int(16),Int(9) | atlantis:chests/atlantean_loot
+atlantis:atlantean_village/house/house_1 | minecraft:chest | Int(6),Int(2),Int(2) | atlantis:chests/atlantean_loot
+atlantis:atlantean_village/house/house_2 | minecraft:chest | Int(6),Int(2),Int(2) | atlantis:chests/atlantean_loot
+atlantis:atlantean_village/house/house_2 | minecraft:chest | Int(6),Int(7),Int(2) | atlantis:chests/atlantean_loot
+atlantis:atlantean_village/house/house_3 | minecraft:chest | Int(8),Int(2),Int(2) | atlantis:chests/atlantean_loot
+atlantis:atlantean_village/house/house_3 | minecraft:chest | Int(9),Int(2),Int(2) | atlantis:chests/atlantean_loot
+atlantis:atlantean_village/house/house_4 | minecraft:chest | Int(2),Int(7),Int(2) | atlantis:chests/atlantean_loot
+atlantis:atlantean_village/house/house_4 | minecraft:chest | Int(3),Int(7),Int(2) | atlantis:chests/atlantean_loot
+atlantis:atlantean_village/house/house_4 | minecraft:chest | Int(5),Int(7),Int(2) | atlantis:chests/atlantean_loot
+atlantis:atlantean_village/house/house_4 | minecraft:chest | Int(6),Int(7),Int(2) | atlantis:chests/atlantean_loot
+atlantis:atlantean_village/jobsite/butcher | minecraft:chest | Int(6),Int(2),Int(6) | atlantis:chests/atlantean_loot
+atlantis:atlantean_village/jobsite/cartographer | minecraft:chest | Int(3),Int(2),Int(4) | atlantis:chests/atlantean_loot
+atlantis:atlantean_village/jobsite/shepherd | minecraft:chest | Int(6),Int(2),Int(2) | atlantis:chests/atlantean_loot
+atlantis:atlantean_village/jobsite/shepherd | minecraft:chest | Int(6),Int(2),Int(3) | atlantis:chests/atlantean_loot
+atlantis:atlantean_village/jobsite/smith | minecraft:chest | Int(8),Int(2),Int(3) | atlantis:chests/atlantean_loot
+atlantis:atlantean_village/jobsite/smith | minecraft:chest | Int(8),Int(2),Int(4) | atlantis:chests/atlantean_loot
+atlantis:atlantean_village/jobsite/smith | minecraft:chest | Int(8),Int(4),Int(3) | atlantis:chests/atlantean_loot
+atlantis:atlantean_village/jobsite/smith | minecraft:chest | Int(8),Int(4),Int(4) | atlantis:chests/atlantean_loot
+mowziesmobs:monastery/interior/monastery_bookshelf | minecraft:chest | Int(0),Int(1),Int(0) | mowziesmobs:chests/monastery_chest
+mowziesmobs:monastery/interior/monastery_bookshelf_2 | minecraft:chest | Int(0),Int(1),Int(0) | mowziesmobs:chests/monastery_chest
+===== END (21 total) =====
+

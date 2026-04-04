@@ -1,7 +1,7 @@
 Consistency Report
 ==================
 Warnings : 7
-Info     : 7
+Info     : 8
 
 ============================================================
   FILE PRESENCE
@@ -11,10 +11,10 @@ Info     : 7
   OK  : mobs.txt  (1491 entries)
   OK  : biomes.txt  (325 entries)
   OK  : structures.txt  (985 entries)
-  OK  : recipes.txt  (1750 entries)
-  OK  : loot_entities.txt  (1218 entries)
-  OK  : loot_chests.txt  (14213 entries)
-  OK  : loot_blocks.txt  (28767 entries)
+  OK  : recipes.txt  (33360 entries)
+  OK  : loot_entities.txt  (1221 entries)
+  OK  : loot_chests.txt  (14508 entries)
+  OK  : loot_blocks.txt  (28775 entries)
   OK  : biome_spawns.txt  (2296 entries)
   OK  : structure_biomes.txt  (1118 entries)
   OK  : entity_loottables.txt  (1491 entries)
@@ -24,7 +24,7 @@ Info     : 7
 ============================================================
   NAMESPACE COVERAGE
 ============================================================
-  WARN: 115 namespaces found in registries but not in mod_meta.txt
+  WARN: 95 namespaces found in registries but not in mod_meta.txt
     - ae2
     - aether
     - amendments
@@ -34,18 +34,18 @@ Info     : 7
     - apothic_enchanting
     - aquaculture
     - artifacts
-    - ati_structures
     - atlantis
-    - betterdeserttemples
-    - betterdungeons
-    - betterfortresses
-    - betterjungletemples
-    - bettermineshafts
-    - betteroceanmonuments
-    - betterstrongholds
-    - betterwitchhuts
     - bibliocraft
-    ... and 95 more
+    - bigreactors
+    - biomesoplenty
+    - biomeswevegone
+    - blueprint
+    - cataclysm
+    - classicpipes
+    - cobblemon
+    - cobblemonboxlink
+    - cobblemonsizevariation
+    ... and 75 more
   WARN: 3 namespaces have entities but no items
     - blueprint
     - corpse
@@ -58,63 +58,73 @@ Info     : 7
 ============================================================
   RECIPE INTEGRITY
 ============================================================
-  WARN: 170 recipe result items not found in item registry
-    - alexsmobs:lava_bottle
-    - ars_nouveau:archwood_planks
-    - atmospheric:aloe_kernels
-    - atmospheric:arid_sand
-    - atmospheric:aspen_log
-    - atmospheric:aspen_wood
-    - atmospheric:crustose_path
-    - atmospheric:red_arid_sand
-    - autumnity:maple_planks
-    - betterendforge:amber_moss_path
-    - betterendforge:cave_moss_path
-    - betterendforge:chorus_nylium_path
-    - betterendforge:crystal_moss_path
-    - betterendforge:end_moss_path
-    - betterendforge:end_mycelium_path
-    - betterendforge:jungle_moss_path
-    - betterendforge:pink_moss_path
-    - betterendforge:shadow_grass_path
-    - bigreactors:cyanite_dust
-    - bigreactors:graphite_dust
-    ... and 150 more
-  WARN: 135 recipe ingredient items not found in item registry
-    - botania:petals/black
-    - botania:petals/blue
-    - botania:petals/brown
-    - botania:petals/cyan
-    - botania:petals/gray
-    - botania:petals/green
-    - botania:petals/light_blue
-    - botania:petals/light_gray
-    - botania:petals/lime
-    - botania:petals/magenta
-    - botania:petals/orange
-    - botania:petals/pink
-    - botania:petals/purple
-    - botania:petals/red
-    - botania:petals/white
-    - botania:petals/yellow
-    - c:cobblestones
-    - c:creosote
-    - c:crops
-    - c:dusts/obsidian
-    ... and 115 more
-  INFO: 22 mod stations not found in item registry (may be custom machine types)
-    - create:compacting
-    - create:crushing
-    - create:cutting
-    - create:deploying
-    - create:emptying
-    - create:filling
-    - create:haunting
-    - create:item_application
-    - create:milling
-    - create:mixing
-    ... and 12 more
-  INFO: 28714 items appear in no recipe (as input or output) — expected for loot-only items
+  WARN: 9161 recipe result items not found in item registry (likely optional cross-mod recipes for uninstalled mods)
+    - adorn:cobblemon/apricorn_bench
+    - adorn:cobblemon/apricorn_chair
+    - adorn:cobblemon/apricorn_coffee_table
+    - adorn:cobblemon/apricorn_drawer
+    - adorn:cobblemon/apricorn_kitchen_counter
+    - adorn:cobblemon/apricorn_kitchen_cupboard
+    - adorn:cobblemon/apricorn_kitchen_sink
+    - adorn:cobblemon/apricorn_platform
+    - adorn:cobblemon/apricorn_post
+    - adorn:cobblemon/apricorn_shelf
+    - adorn:cobblemon/apricorn_step
+    - adorn:cobblemon/apricorn_table
+    - adorn:cobblemon/saccharine_bench
+    - adorn:cobblemon/saccharine_chair
+    - adorn:cobblemon/saccharine_coffee_table
+    - adorn:cobblemon/saccharine_drawer
+    - adorn:cobblemon/saccharine_kitchen_counter
+    - adorn:cobblemon/saccharine_kitchen_cupboard
+    - adorn:cobblemon/saccharine_kitchen_sink
+    - adorn:cobblemon/saccharine_platform
+    ... and 9141 more
+  WARN: 2049 recipe ingredient items not found in item registry
+    - 144 #c:plates/copper
+    - 144 minecraft:iron_ingot
+    - 144 minecraft:redstone
+    - 288 #c:glass_panes
+    - 36 #c:plates/copper
+    - 36 minecraft:iron_ingot
+    - 36 minecraft:redstone
+    - 4 #c:plates/copper
+    - 4 minecraft:iron_ingot
+    - 4 minecraft:paper
+    - 4 minecraft:redstone
+    - 72 #c:glass_panes
+    - 8 #c:glass_panes
+    - adorn:cobblemon/apricorn_kitchen_counter
+    - adorn:cobblemon/apricorn_post
+    - adorn:cobblemon/saccharine_kitchen_counter
+    - adorn:cobblemon/saccharine_post
+    - ae2:all_certus_quartz
+    - ae2:all_fluix
+    - ae2:all_nether_quartz
+    ... and 2029 more
+  INFO: 92 stations not found in item registry (may be custom machine types)
+    - ae2:quartz_cutting
+    - ae2:transform
+    - aether:enchanting
+    - aether:freezing
+    - apotheosis:sized_upgrade_recipe
+    - apothic_enchanting:infusion
+    - apothic_enchanting:keep_nbt_infusion
+    - atlantis:writing
+    - bibliocraft:printing_table_cloning
+    - bibliocraft:printing_table_cloning_with_enchantments
+    - bibliocraft:printing_table_merging
+    - bigreactors:fluidizerfluidmixing
+    - bigreactors:fluidizersolid
+    - bigreactors:fluidizersolidmixing
+    - bigreactors:reprocessor
+    - cataclysm:amethyst_bless
+    - cataclysm:weapon_fusion
+    - cobblemon:brewing_stand
+    - cobblemon:cooking_pot
+    - cobblemon:cooking_pot_shapeless
+    ... and 72 more
+  INFO: 8900 items appear in no recipe (as input or output) — expected for loot-only items
 
 ============================================================
   LOOT TABLE INTEGRITY
@@ -141,7 +151,18 @@ Info     : 7
     - bibliocraft:allthemodium_demonic_label
     - bibliocraft:allthemodium_demonic_potion_shelf
     ... and 8424 more
-  INFO: 472 entities have an assigned loot table but no loot file found in jars
+  INFO: 24 loot entries have path-like IDs (dynamic registry items, e.g. Cobblemon/Bibliocraft — cannot be cross-referenced statically)
+    - adorn:cobblemon/apricorn_bench
+    - adorn:cobblemon/apricorn_chair
+    - adorn:cobblemon/apricorn_coffee_table
+    - adorn:cobblemon/apricorn_drawer
+    - adorn:cobblemon/apricorn_kitchen_counter
+    - adorn:cobblemon/apricorn_kitchen_cupboard
+    - adorn:cobblemon/apricorn_kitchen_sink
+    - adorn:cobblemon/apricorn_platform
+    - adorn:cobblemon/apricorn_post
+    - adorn:cobblemon/apricorn_shelf
+  INFO: 472 entities have an assigned loot table but no loot file found in jars (projectiles, falling blocks, etc.)
     - ae2:tiny_tnt_primed
     - amendments:falling_lantern
     - amendments:medium_dragon_fireball
@@ -152,7 +173,17 @@ Info     : 7
     - atlantis:coconut_crab
     - atlantis:glittertail_shrimp
     - atlantis:leviathan
-    ... and 462 more
+    - atlantis:nymph_boat
+    - atlantis:palm_boat
+    - atlantis:rubyclaw_crab
+    - atlantis:sodium_bomb
+    - atlantis:starfish
+    - atlantis:submarine
+    - atlantis:thalassian_seahorse
+    - atlantis:zombie_starfish
+    - bibliocraft:fancy_armor_stand
+    - bibliocraft:seat
+    ... and 452 more
   INFO: 405 / 1491 entity loot table assignments matched to extracted loot files
 
 ============================================================
@@ -165,13 +196,13 @@ Info     : 7
   STRUCTURE-BIOME INTEGRITY
 ============================================================
   OK  : All plain biome references in structure-biome table are valid
-  INFO: 563 structure-biome entries use biome tags (cannot cross-reference)
   WARN: 5 structures in structure-biome table not found in structure registry
     - mythsandlegends:ancient_vestiges
     - mythsandlegends:graveyard
     - mythsandlegends:old_camp
     - mythsandlegends:scorched_nest
     - mythsandlegends:sepulcrum_ignitum
+  INFO: 563 structure-biome entries use biome tags (cannot cross-reference)
 
 ============================================================
   LANG NAME COVERAGE
