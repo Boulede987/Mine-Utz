@@ -28,6 +28,7 @@ SCRIPTS = [
     '06_mc_loot.py',
     '07_mc_relations.py',
     '08_mc_recipes.py',
+    '09_mc_loot_structure.py',
 ]
 
 failures = []
