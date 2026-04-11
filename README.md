@@ -225,4 +225,3 @@ Select-String -Path latest.log -Pattern "Done!|Minecraft Crash|stopping|Exceptio
 Select-String -Path latest.log -Pattern "Caused by|Exception" | Select-Object -Last 20
 
 Get-Content latest.log | Select-Object -Skip 27775 | Select-Object -First 50
-

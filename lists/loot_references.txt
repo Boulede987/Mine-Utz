@@ -623,6 +623,38 @@ mega_showdown:wishing_weald/wishing_weald_chest | cobblemon:sets/any_ancient_hel
 mega_showdown:wishing_weald/wishing_weald_chest | cobblemon:sets/any_evo_stone
 mega_showdown:wishing_weald/wishing_weald_chest | cobblemon:sets/any_exp_candy
 mega_showdown:wishing_weald/wishing_weald_chest | mega_showdown:sets/any_showdown_held_item
+minecraft:chests/trial_chambers/reward | minecraft:chests/trial_chambers/reward_common
+minecraft:chests/trial_chambers/reward | minecraft:chests/trial_chambers/reward_rare
+minecraft:chests/trial_chambers/reward | minecraft:chests/trial_chambers/reward_unique
+minecraft:chests/trial_chambers/reward_ominous | minecraft:chests/trial_chambers/reward_ominous_common
+minecraft:chests/trial_chambers/reward_ominous | minecraft:chests/trial_chambers/reward_ominous_rare
+minecraft:chests/trial_chambers/reward_ominous | minecraft:chests/trial_chambers/reward_ominous_unique
+minecraft:entities/elder_guardian | minecraft:gameplay/fishing/fish
+minecraft:entities/guardian | minecraft:gameplay/fishing/fish
+minecraft:entities/sheep/black | minecraft:entities/sheep
+minecraft:entities/sheep/blue | minecraft:entities/sheep
+minecraft:entities/sheep/brown | minecraft:entities/sheep
+minecraft:entities/sheep/cyan | minecraft:entities/sheep
+minecraft:entities/sheep/gray | minecraft:entities/sheep
+minecraft:entities/sheep/green | minecraft:entities/sheep
+minecraft:entities/sheep/light_blue | minecraft:entities/sheep
+minecraft:entities/sheep/light_gray | minecraft:entities/sheep
+minecraft:entities/sheep/lime | minecraft:entities/sheep
+minecraft:entities/sheep/magenta | minecraft:entities/sheep
+minecraft:entities/sheep/orange | minecraft:entities/sheep
+minecraft:entities/sheep/pink | minecraft:entities/sheep
+minecraft:entities/sheep/purple | minecraft:entities/sheep
+minecraft:entities/sheep/red | minecraft:entities/sheep
+minecraft:entities/sheep/white | minecraft:entities/sheep
+minecraft:entities/sheep/yellow | minecraft:entities/sheep
+minecraft:equipment/trial_chamber | {'pools': [{'bonus_rolls': 0.0, 'conditions': [{'chance': 0.5, 'condition': 'minecraft:random_chance'}], 'entries': [{'type': 'minecraft:item', 'functions': [{'components': {'minecraft:trim': {'material': 'minecraft:copper', 'pattern': 'minecraft:bolt'}}, 'function': 'minecraft:set_components'}, {'add': False, 'enchantments': {'minecraft:fire_protection': 4.0, 'minecraft:projectile_protection': 4.0, 'minecraft:protection': 4.0}, 'function': 'minecraft:set_enchantments'}], 'name': 'minecraft:chainmail_helmet'}], 'rolls': 1.0}, {'bonus_rolls': 0.0, 'conditions': [{'chance': 0.5, 'condition': 'minecraft:random_chance'}], 'entries': [{'type': 'minecraft:item', 'functions': [{'components': {'minecraft:trim': {'material': 'minecraft:copper', 'pattern': 'minecraft:bolt'}}, 'function': 'minecraft:set_components'}, {'add': False, 'enchantments': {'minecraft:fire_protection': 4.0, 'minecraft:projectile_protection': 4.0, 'minecraft:protection': 4.0}, 'function': 'minecraft:set_enchantments'}], 'name': 'minecraft:chainmail_chestplate'}], 'rolls': 1.0}]}
+minecraft:equipment/trial_chamber | {'pools': [{'bonus_rolls': 0.0, 'conditions': [{'chance': 0.5, 'condition': 'minecraft:random_chance'}], 'entries': [{'type': 'minecraft:item', 'functions': [{'components': {'minecraft:trim': {'material': 'minecraft:copper', 'pattern': 'minecraft:flow'}}, 'function': 'minecraft:set_components'}, {'add': False, 'enchantments': {'minecraft:fire_protection': 4.0, 'minecraft:projectile_protection': 4.0, 'minecraft:protection': 4.0}, 'function': 'minecraft:set_enchantments'}], 'name': 'minecraft:diamond_helmet'}], 'rolls': 1.0}, {'bonus_rolls': 0.0, 'conditions': [{'chance': 0.5, 'condition': 'minecraft:random_chance'}], 'entries': [{'type': 'minecraft:item', 'functions': [{'components': {'minecraft:trim': {'material': 'minecraft:copper', 'pattern': 'minecraft:flow'}}, 'function': 'minecraft:set_components'}, {'add': False, 'enchantments': {'minecraft:fire_protection': 4.0, 'minecraft:projectile_protection': 4.0, 'minecraft:protection': 4.0}, 'function': 'minecraft:set_enchantments'}], 'name': 'minecraft:diamond_chestplate'}], 'rolls': 1.0}]}
+minecraft:equipment/trial_chamber | {'pools': [{'bonus_rolls': 0.0, 'conditions': [{'chance': 0.5, 'condition': 'minecraft:random_chance'}], 'entries': [{'type': 'minecraft:item', 'functions': [{'components': {'minecraft:trim': {'material': 'minecraft:copper', 'pattern': 'minecraft:flow'}}, 'function': 'minecraft:set_components'}, {'add': False, 'enchantments': {'minecraft:fire_protection': 4.0, 'minecraft:projectile_protection': 4.0, 'minecraft:protection': 4.0}, 'function': 'minecraft:set_enchantments'}], 'name': 'minecraft:iron_helmet'}], 'rolls': 1.0}, {'bonus_rolls': 0.0, 'conditions': [{'chance': 0.5, 'condition': 'minecraft:random_chance'}], 'entries': [{'type': 'minecraft:item', 'functions': [{'components': {'minecraft:trim': {'material': 'minecraft:copper', 'pattern': 'minecraft:flow'}}, 'function': 'minecraft:set_components'}, {'add': False, 'enchantments': {'minecraft:fire_protection': 4.0, 'minecraft:projectile_protection': 4.0, 'minecraft:protection': 4.0}, 'function': 'minecraft:set_enchantments'}], 'name': 'minecraft:iron_chestplate'}], 'rolls': 1.0}]}
+minecraft:equipment/trial_chamber_melee | minecraft:equipment/trial_chamber
+minecraft:equipment/trial_chamber_ranged | minecraft:equipment/trial_chamber
+minecraft:gameplay/fishing | minecraft:gameplay/fishing/fish
+minecraft:gameplay/fishing | minecraft:gameplay/fishing/junk
+minecraft:gameplay/fishing | minecraft:gameplay/fishing/treasure
 mutantmonsters:entities/spider_pig | minecraft:entities/pig
 mutantmonsters:entities/spider_pig | minecraft:entities/spider
 nova_structures:archaelogy/archeology_toxic | nova_structures:keys/ominous_toxic_key
@@ -2884,5 +2916,5 @@ undergroundworlds:entities/black_recluse | minecraft:entities/spider
 undergroundworlds:entities/frozen_zombie | minecraft:entities/zombie
 undergroundworlds:entities/icy_creeper | minecraft:entities/creeper
 undergroundworlds:entities/jungle_zombie | minecraft:entities/zombie
-===== END (2885 total) =====
+===== END (2917 total) =====
 

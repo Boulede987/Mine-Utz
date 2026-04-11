@@ -30,6 +30,18 @@ def _unwrap_conditional(data: dict) -> dict:
     return data
 
 
+def _strip_quantity(value: str) -> str:
+    """
+    Strip a leading quantity prefix from a string ingredient.
+    e.g. '144 minecraft:iron_ingot' -> 'minecraft:iron_ingot'
+         '#c:plates/copper'         -> '#c:plates/copper'
+    """
+    parts = value.split(' ', 1)
+    if len(parts) == 2 and parts[0].isdigit():
+        return parts[1]
+    return value
+
+
 def _parse_inputs(data: dict) -> list[str]:
     """Extract all ingredient item IDs from a recipe dict."""
     inputs = []
@@ -38,7 +50,7 @@ def _parse_inputs(data: dict) -> list[str]:
         if isinstance(value, dict):
             inputs.append(value.get('item') or value.get('tag') or '')
         elif isinstance(value, str):
-            inputs.append(value)
+            inputs.append(_strip_quantity(value))
 
     for key in ('ingredients', 'ingredient', 'input', 'inputs', 'base', 'addition'):
         value = data.get(key)

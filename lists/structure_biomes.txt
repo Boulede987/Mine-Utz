@@ -497,6 +497,40 @@ mega_showdown:mega_site | #minecraft:is_overworld
 mega_showdown:megaroid | #minecraft:is_overworld
 mega_showdown:observatory | #cobblemon:is_jungle
 mega_showdown:wishing_weald | #cobblemon:is_spooky
+minecraft:ancient_city | #minecraft:has_structure/ancient_city
+minecraft:bastion_remnant | #minecraft:has_structure/bastion_remnant
+minecraft:buried_treasure | #minecraft:has_structure/buried_treasure
+minecraft:desert_pyramid | #minecraft:has_structure/desert_pyramid
+minecraft:end_city | #minecraft:has_structure/end_city
+minecraft:fortress | #minecraft:has_structure/nether_fortress
+minecraft:igloo | #minecraft:has_structure/igloo
+minecraft:jungle_pyramid | #minecraft:has_structure/jungle_temple
+minecraft:mansion | #minecraft:has_structure/woodland_mansion
+minecraft:mineshaft | #minecraft:has_structure/mineshaft
+minecraft:mineshaft_mesa | #minecraft:has_structure/mineshaft_mesa
+minecraft:monument | #minecraft:has_structure/ocean_monument
+minecraft:nether_fossil | #minecraft:has_structure/nether_fossil
+minecraft:ocean_ruin_cold | #minecraft:has_structure/ocean_ruin_cold
+minecraft:ocean_ruin_warm | #minecraft:has_structure/ocean_ruin_warm
+minecraft:pillager_outpost | #minecraft:has_structure/pillager_outpost
+minecraft:ruined_portal | #minecraft:has_structure/ruined_portal_standard
+minecraft:ruined_portal_desert | #minecraft:has_structure/ruined_portal_desert
+minecraft:ruined_portal_jungle | #minecraft:has_structure/ruined_portal_jungle
+minecraft:ruined_portal_mountain | #minecraft:has_structure/ruined_portal_mountain
+minecraft:ruined_portal_nether | #minecraft:has_structure/ruined_portal_nether
+minecraft:ruined_portal_ocean | #minecraft:has_structure/ruined_portal_ocean
+minecraft:ruined_portal_swamp | #minecraft:has_structure/ruined_portal_swamp
+minecraft:shipwreck | #minecraft:has_structure/shipwreck
+minecraft:shipwreck_beached | #minecraft:has_structure/shipwreck_beached
+minecraft:stronghold | #minecraft:has_structure/stronghold
+minecraft:swamp_hut | #minecraft:has_structure/swamp_hut
+minecraft:trail_ruins | #minecraft:has_structure/trail_ruins
+minecraft:trial_chambers | #minecraft:has_structure/trial_chambers
+minecraft:village_desert | #minecraft:has_structure/village_desert
+minecraft:village_plains | #minecraft:has_structure/village_plains
+minecraft:village_savanna | #minecraft:has_structure/village_savanna
+minecraft:village_snowy | #minecraft:has_structure/village_snowy
+minecraft:village_taiga | #minecraft:has_structure/village_taiga
 minecraft:village_taiga | #nova_structures:collections/any_taiga
 mostructures:air_balloon | #mostructures:has_structure/moai
 mostructures:barn_house | #mostructures:has_structure/barn_house
@@ -1117,5 +1151,5 @@ wan_ancient_beasts:digsite_taiga | #wan_ancient_beasts:has_structure/digsite_tai
 wan_ancient_beasts:ice_spike_castle | #wan_ancient_beasts:has_structure/ice_spike_castle
 wan_ancient_beasts:mesa_temple | #wan_ancient_beasts:has_structure/mesa_temple
 wan_ancient_beasts:mesa_temple_small | #wan_ancient_beasts:has_structure/mesa_temple
-===== END (1118 total) =====
+===== END (1152 total) =====
 
