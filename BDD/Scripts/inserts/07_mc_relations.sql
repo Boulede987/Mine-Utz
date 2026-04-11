@@ -360,7 +360,6 @@ INSERT INTO BiomeSpawnTable (biome_namespace, biome_name, entity_namespace, enti
   ('minecraft', 'mangrove_swamp', 'minecraft', 'glow_squid', 10, 4, 6),
   ('minecraft', 'mangrove_swamp', 'minecraft', 'skeleton', 70, 4, 4),
   ('minecraft', 'mangrove_swamp', 'minecraft', 'slime', 1, 1, 1),
-  ('minecraft', 'mangrove_swamp', 'minecraft', 'slime', 100, 4, 4),
   ('minecraft', 'mangrove_swamp', 'minecraft', 'spider', 100, 4, 4),
   ('minecraft', 'mangrove_swamp', 'minecraft', 'tropical_fish', 25, 8, 8),
   ('minecraft', 'mangrove_swamp', 'minecraft', 'witch', 5, 1, 1),
@@ -635,7 +634,6 @@ INSERT INTO BiomeSpawnTable (biome_namespace, biome_name, entity_namespace, enti
   ('minecraft', 'swamp', 'minecraft', 'sheep', 12, 4, 4),
   ('minecraft', 'swamp', 'minecraft', 'skeleton', 70, 4, 4),
   ('minecraft', 'swamp', 'minecraft', 'slime', 1, 1, 1),
-  ('minecraft', 'swamp', 'minecraft', 'slime', 100, 4, 4),
   ('minecraft', 'swamp', 'minecraft', 'spider', 100, 4, 4),
   ('minecraft', 'swamp', 'minecraft', 'witch', 5, 1, 1),
   ('minecraft', 'swamp', 'minecraft', 'zombie', 95, 4, 4),
@@ -1026,5 +1024,4 @@ INSERT INTO StructureBiome (structure_namespace, structure_name, biome_namespace
   ('minecraft', 'village_snowy', 'minecraft', 'snowy_plains'),
   ('minecraft', 'village_taiga', 'minecraft', 'taiga'),
   ('minecraft', 'village_taiga', 'minecraft', 'old_growth_pine_taiga'),
-  ('minecraft', 'village_taiga', 'minecraft', 'old_growth_spruce_taiga'),
-  ('minecraft', 'village_taiga', 'minecraft', 'taiga');
+  ('minecraft', 'village_taiga', 'minecraft', 'old_growth_spruce_taiga');

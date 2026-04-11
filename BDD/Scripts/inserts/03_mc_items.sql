@@ -1,5 +1,5 @@
 -- ==================================================
--- 03 - Minecraft items and blocks
+-- 03 - Minecraft items, blocks and stations
 -- ==================================================
 
 USE MineutzDB;
@@ -2255,3 +2255,13 @@ INSERT INTO Block (item_namespace, item_name, blastResistance, hardness, luminou
   ('minecraft', 'yellow_terracotta', NULL, NULL, NULL, NULL, NULL),
   ('minecraft', 'yellow_wool', NULL, NULL, NULL, NULL, NULL),
   ('minecraft', 'zombie_head', NULL, NULL, NULL, NULL, NULL);
+
+-- Station — vanilla crafting stations derived from the station column of recipes.txt
+INSERT INTO Station (item_namespace, item_name) VALUES
+  ('minecraft', 'blast_furnace'),
+  ('minecraft', 'campfire'),
+  ('minecraft', 'crafting_table'),
+  ('minecraft', 'furnace'),
+  ('minecraft', 'smithing_table'),
+  ('minecraft', 'smoker'),
+  ('minecraft', 'stonecutter');

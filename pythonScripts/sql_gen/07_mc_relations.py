@@ -54,6 +54,7 @@ tag_map   = load_tag_map(LISTS)
 # ── BiomeSpawnTable ───────────────────────────────────────────────────────────
 
 spawn_rows: list[tuple] = []
+seen_spawns: set[tuple] = set()
 
 for line in load_pipe_file(LISTS, 'biome_spawns.txt'):
     parts = parse_pipe_row(line)
@@ -69,13 +70,17 @@ for line in load_pipe_file(LISTS, 'biome_spawns.txt'):
     min_cnt = parse_int_field(parts[3])
     max_cnt = parse_int_field(parts[4])
 
-    spawn_rows.append((biome_ns, biome_name, entity_ns, entity_name, weight, min_cnt, max_cnt))
+    pk = (biome_ns, biome_name, entity_ns, entity_name)
+    if pk not in seen_spawns:
+        seen_spawns.add(pk)
+        spawn_rows.append((biome_ns, biome_name, entity_ns, entity_name, weight, min_cnt, max_cnt))
 
 print(f'BiomeSpawnTable entries : {len(spawn_rows)}')
 
 # ── StructureBiome ────────────────────────────────────────────────────────────
 
 struct_biome_rows: list[tuple] = []
+seen_struct_biomes: set[tuple] = set()
 skipped_unresolved = 0
 
 for line in load_pipe_file(LISTS, 'structure_biomes.txt'):
@@ -99,7 +104,10 @@ for line in load_pipe_file(LISTS, 'structure_biomes.txt'):
             skipped_unresolved += 1
             continue   # only vanilla biomes exist in our Biome table
         biome_ns, biome_name = biome.split(':', 1)
-        struct_biome_rows.append((struct_ns, struct_name, biome_ns, biome_name))
+        pk = (struct_ns, struct_name, biome_ns, biome_name)
+        if pk not in seen_struct_biomes:
+            seen_struct_biomes.add(pk)
+            struct_biome_rows.append(pk)
 
 print(f'StructureBiome entries  : {len(struct_biome_rows)}')
 print(f'  skipped (non-vanilla biomes from tag expansion): {skipped_unresolved}')

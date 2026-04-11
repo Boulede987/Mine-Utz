@@ -32,9 +32,16 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from sql_gen.utils import insert_rows, write_sql
 from lib.paths import LISTS, ROOT
-from lib.loaders import load_pipe_file
+from lib.loaders import load_pipe_file, load_registry
 
 OUTPUT = ROOT / 'BDD' / 'Scripts' / 'inserts' / '08_mc_recipes.sql'
+
+# Valid item set — vanilla only, guards RecipeIngredient FK references.
+# Restricted to minecraft: so mod items (not yet in Item table) are excluded.
+MC_ITEMS = {
+    e for e in load_registry(LISTS, 'items.txt') | load_registry(LISTS, 'blocks.txt')
+    if e.startswith('minecraft:')
+}
 
 
 def parse_count(field: str) -> int:
@@ -51,6 +58,7 @@ ingredient_rows:  list[tuple] = []   # deduplicated per (recipe, item)
 station_rows:     list[tuple] = []   # deduplicated per recipe
 
 # Track seen keys to avoid PK conflicts
+seen_recipes:     set[tuple] = set()
 seen_outputs:     set[tuple] = set()
 seen_ingredients: set[tuple] = set()
 seen_stations:    set[tuple] = set()
@@ -70,7 +78,12 @@ for line in load_pipe_file(LISTS, 'recipes.txt'):
     rec_ns, rec_name = recipe_id.split(':', 1)
 
     # ── Recipe ────────────────────────────────────────────────────────────────
-    recipe_rows.append((rec_ns, rec_name, recipe_type))
+    # Deduplicate by (namespace, name) — the extractor emits one line per output,
+    # so multi-output recipes produce duplicate recipe IDs in recipes.txt.
+    rec_key = (rec_ns, rec_name)
+    if rec_key not in seen_recipes:
+        seen_recipes.add(rec_key)
+        recipe_rows.append((rec_ns, rec_name, recipe_type))
 
     # ── RecipeOutput ──────────────────────────────────────────────────────────
     if result.startswith('minecraft:'):
@@ -94,8 +107,8 @@ for line in load_pipe_file(LISTS, 'recipes.txt'):
         ing = raw.strip()
         if not ing or ing.startswith('#'):
             continue   # skip tag references
-        if not ing.startswith('minecraft:'):
-            continue   # skip non-vanilla items (FK would fail)
+        if ing not in MC_ITEMS:
+            continue   # skip items absent from the Item table (non-vanilla or group names)
         ing_ns, ing_name = ing.split(':', 1)
         key = (rec_ns, rec_name, ing_ns, ing_name)
         if key not in seen_ingredients:

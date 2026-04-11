@@ -1,7 +1,10 @@
 {
   "permissions": {
     "allow": [
-      "Bash(python:*)"
+      "Bash(python:*)",
+      "Bash(mysql --version)",
+      "Bash(where mysql:*)",
+      "Bash(mysql -u root -e \"SHOW DATABASES;\")"
     ]
   }
 }
