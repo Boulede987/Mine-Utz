@@ -1,0 +1,61 @@
+"""
+sql_gen/04_mc_entities.py
+==========================
+Generates SQL inserts for the Entity table — vanilla Minecraft 1.21.1.
+
+Source : lists/mobs.txt  (namespace:name, one per line)
+Filter : minecraft: namespace only
+
+All combat/movement stats are left NULL — they are not available from the
+registry dump. Only namespace and name are populated.
+
+Output: BDD/Scripts/inserts/04_mc_entities.sql
+
+Usage
+-----
+  cd /path/to/mineutze_DEV_INSTANCE
+  python pythonScripts/sql_gen/04_mc_entities.py
+"""
+
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
+from sql_gen.utils import insert_rows, write_sql
+from lib.paths import LISTS, ROOT
+from lib.loaders import load_registry
+
+OUTPUT = ROOT / 'BDD' / 'Scripts' / 'inserts' / '04_mc_entities.sql'
+
+# ── Load and filter ───────────────────────────────────────────────────────────
+
+all_mobs = load_registry(LISTS, 'mobs.txt')
+mc_mobs  = sorted(e for e in all_mobs if e.startswith('minecraft:'))
+
+print(f'Found {len(mc_mobs)} vanilla entities.')
+
+# ── Build rows ────────────────────────────────────────────────────────────────
+# Columns: namespace, name, behavior, type, healthPoints, armorPoints,
+#          attackDamage, attackSpeed, attackRange, speed,
+#          knockbackResistance, weakness, hitboxSize, loottable_id
+
+rows = [
+    ('minecraft', name.split(':', 1)[1],
+     None, None, None, None, None, None, None, None, None, None, None, None)
+    for name in mc_mobs
+]
+
+# ── Write ─────────────────────────────────────────────────────────────────────
+
+write_sql(OUTPUT, '04 - Minecraft entities', [
+    ('Entity — vanilla 1.21.1  (all stats are NULL — not in registry dump)',
+     insert_rows(
+         'Entity',
+         ['namespace', 'name', 'behavior', 'type',
+          'healthPoints', 'armorPoints', 'attackDamage', 'attackSpeed',
+          'attackRange', 'speed', 'knockbackResistance', 'weakness',
+          'hitboxSize', 'loottable_id'],
+         rows,
+     )),
+])

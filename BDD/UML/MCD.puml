@@ -1,0 +1,190 @@
+@startuml
+
+package "ITEMS" {
+  class Item
+  {
+    id : int
+    rarity : Rarity.id
+    renewable : bool
+    stackable : bool
+  }
+
+  class Tool
+  {
+    name : string
+    miningEfficiency : int
+    miningLevel : int 
+    attackDamage : int 
+    attackSpeed : double
+    attackRange : int
+    durability : int
+    enchantability : int
+  }
+
+  class Armor 
+  {
+    name : string
+    armorPoints : int
+    armorToughness : int
+    durability : int
+    enchantability : int
+    knockbackResistance : int
+  }
+
+  Class Food
+  {
+    name : string
+    hungerRestoration : int
+    saturation : double
+  }
+
+
+  class Block
+  {
+    name : string
+    blastResistance : int
+    hardness : int
+    luminous : bool
+    transparent : bool
+    flammable : bool
+  }
+
+  class Station
+  {
+    name : string
+  }
+
+  class Recipe
+  {
+    id : int
+    name : string
+  }
+  Recipe "*" -- "*" Item : Produces
+
+  Item "*" -- "*" Recipe : UsedIn
+}
+
+class Rarity
+{
+  id : int
+  tier : string
+}
+
+class LootTable
+{
+}
+
+class Biome
+{
+  id : int
+  name : string
+  mainColor : string
+  temperature : float
+}
+
+class Structure
+{
+  id : int
+  name : string
+}
+
+
+
+class Entity
+{
+  id : int
+  name : string
+  behavior : string
+  type : string
+  healthPoints : double
+  armorPoints : int
+  attackDamage : int 
+  attackSpeed : double
+  attackRange : int
+  speed : double
+  knockbackResistance : double
+  weakness : string
+  hitboxSize : double
+}
+
+
+class Mod
+{
+  name : string
+  version : string
+}
+
+class Licence
+{
+  name : string
+}
+
+class Author
+{
+  name : string
+}
+
+class Source
+{
+  site : string
+  url : string
+}
+
+Mod -- "1" Licence : has
+Mod "*" -- "*" Author : DeveloppedBy
+Mod -- "1..*" Source : downloaded from
+Entity -- "0..1" Mod : comes from
+Item -- "0..1" Mod : comes from
+Biome -- "0..1" Mod : comes from
+Structure -- "0..1" Mod : comes from
+
+Station --|> Item
+Block --|> Item
+Tool --|> Item
+Armor --|> Item
+Food --|> Item
+
+
+
+
+
+Structure -- "*" Biome : generates
+Entity "*" -- "*" Biome : spawns
+class BiomeSpawnTable
+{
+  weight : int
+  minCount : int
+  maxCount : int
+}
+(Entity, Biome) .. BiomeSpawnTable
+Block "*" -- "*" Biome : generates
+Block "*" -- "*" Structure : generates
+
+Entity "*" -- "*" Structure : spawns
+Block "*" -- "*" Structure : generates
+class BlockStructureGenerationTable 
+{
+  number : int
+}
+(Block, Structure) .. BlockStructureGenerationTable
+LootTable "*" -- "*" Structure : has chests with
+
+LootTable "*" -- "*" Entity : drops
+
+LootTable "*" -- "*" LootTable : references
+
+LootTable "*" -- "1..*" Item : comprises
+class Comprises 
+{
+  minNumber : int
+  maxNumber : int
+  weight : int
+}
+(LootTable, Item) .. Comprises
+Rarity -- "*" Item : defines
+
+
+Recipe "*" -- "*" Station : made
+
+
+@enduml
