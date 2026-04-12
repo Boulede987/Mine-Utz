@@ -188,6 +188,7 @@ CREATE TABLE Entity (
     weakness            VARCHAR(100),
     hitboxSize          FLOAT,
     loottable_id        INT,
+    texture_b64         MEDIUMTEXT DEFAULT NULL,
     PRIMARY KEY (namespace, name),
     FOREIGN KEY (namespace)    REFERENCES `Mod`(namespace),
     FOREIGN KEY (loottable_id) REFERENCES LootTable(id)

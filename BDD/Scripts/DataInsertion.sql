@@ -8,3 +8,4 @@ SOURCE inserts/06_mc_loot.sql;
 SOURCE inserts/07_mc_relations.sql;
 SOURCE inserts/08_mc_recipes.sql;
 SOURCE inserts/09_mc_loot_structure.sql;
+SOURCE inserts/10_mc_entity_textures.sql;

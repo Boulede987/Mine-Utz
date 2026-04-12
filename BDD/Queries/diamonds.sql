@@ -131,3 +131,11 @@ LEFT JOIN RecipeStation rs
 WHERE ro.item_namespace = 'minecraft'
   AND ro.item_name      = 'diamond'
 ORDER BY ro.recipe_name;
+
+
+
+
+
+SELECT namespace, name, LEFT(texture_b64, 60) AS texture_preview
+  FROM Entity
+  WHERE namespace = 'minecraft' AND name = 'creeper';

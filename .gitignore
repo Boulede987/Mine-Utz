@@ -110,6 +110,7 @@ desktop.ini
 .project
 .classpath
 .settings/
+.claude/
 
 # ===========================
 # Temporary & Performance Files
