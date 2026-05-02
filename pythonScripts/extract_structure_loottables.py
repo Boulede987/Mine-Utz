@@ -133,8 +133,10 @@ def resolve_template(template_id: str) -> str | None:
 
 # ── Phase 2: Scan jars for structure NBT files ────────────────────────────────
 
-result_rows    = []  # structure_loottables.txt
+result_rows      = []  # structure_loottables.txt
 block_count_rows = []  # structure_blocks.txt
+entity_rows_seen: set[tuple[str, str]] = set()
+entity_rows      = []  # structure_nbt_entities.txt
 
 _IGNORE_BLOCKS = {
     'minecraft:air', 'minecraft:cave_air',
@@ -198,6 +200,16 @@ for jar_path in jars:
                     for block_name, count in sorted(counts.items()):
                         block_count_rows.append(f'{structure_id} | {block_name} | {count}')
 
+                    # Entities placed in template
+                    for entity in root.get('entities', []):
+                        entity_nbt = entity.get('nbt', {})
+                        entity_id  = str(entity_nbt.get('id', ''))
+                        if entity_id and ':' in entity_id:
+                            pair = (structure_id, entity_id)
+                            if pair not in entity_rows_seen:
+                                entity_rows_seen.add(pair)
+                                entity_rows.append(f'{structure_id} | {entity_id}')
+
                     # Chest loot tables
                     for block in blocks:
                         block_nbt  = block.get('nbt')
@@ -236,6 +248,10 @@ write_txt(LISTS, 'structure_loottables.txt', [(
 write_txt(LISTS, 'structure_blocks.txt', [(
     'STRUCTURE BLOCKS  format: structure_id | block_name | count',
     block_count_rows,
+)])
+write_txt(LISTS, 'structure_nbt_entities.txt', [(
+    'STRUCTURE NBT ENTITIES  format: structure_id | entity_id',
+    sorted(entity_rows),
 )])
 
 print('Done.')

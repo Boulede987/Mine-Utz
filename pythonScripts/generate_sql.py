@@ -35,6 +35,8 @@ SCRIPTS = [
     '13_mc_structure_blocks.py',
     '14_mc_biome_blocks.py',
     '15_mc_subtypes.py',
+    '16_mc_biome_dimension.py',
+    '17_mc_entity_dimension.py',
 ]
 
 failures = []

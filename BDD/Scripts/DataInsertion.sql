@@ -14,3 +14,5 @@ SOURCE inserts/12_mc_structure_spawns.sql;
 SOURCE inserts/13_mc_structure_blocks.sql;
 SOURCE inserts/14_mc_biome_blocks.sql;
 SOURCE inserts/15_mc_subtypes.sql;
+SOURCE inserts/16_mc_biome_dimension.sql;
+SOURCE inserts/17_mc_entity_dimension.sql;
