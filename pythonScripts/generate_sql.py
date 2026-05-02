@@ -30,6 +30,11 @@ SCRIPTS = [
     '08_mc_recipes.py',
     '09_mc_loot_structure.py',
     '10_mc_entity_textures.py',
+    '11_mc_dimensions.py',
+    '12_mc_structure_spawns.py',
+    '13_mc_structure_blocks.py',
+    '14_mc_biome_blocks.py',
+    '15_mc_subtypes.py',
 ]
 
 failures = []

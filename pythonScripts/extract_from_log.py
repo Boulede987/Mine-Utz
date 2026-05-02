@@ -31,6 +31,9 @@ LABEL_TO_FILE = {
     'EFFECT':           'effects.txt',
     'SOUND':            'sounds.txt',
     'ENTITY LOOTTABLE': 'entity_loottables.txt',
+    'FOOD STATS':       'food_stats.txt',
+    'TOOL STATS':       'tool_stats.txt',
+    'ARMOR STATS':      'armor_stats.txt',
 }
 
 # ── Parse ─────────────────────────────────────────────────────────────────────

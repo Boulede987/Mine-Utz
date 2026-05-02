@@ -16,6 +16,10 @@ LootTableReference(<u>LootTable.id[parent], LootTable.id[child]</u>)
 
 Biome(<u>namespace, name</u>, mainColor, temperature, Mod.namespace)
 
+Dimension(<u>namespace, name</u>, Mod.namespace)
+
+BiomeDimension(<u>Biome.namespace, Biome.name, Dimension.namespace, Dimension.name</u>)
+
 Structure(<u>namespace, name</u>, LootTable.id, Mod.namespace)
 
 StructureBiome(<u>Structure.namespace, Structure.name, Biome.namespace, Biome.name</u>)
@@ -30,19 +34,21 @@ Armor(<u>Item.namespace, Item.name</u>, armorPoints, armorToughness, durability,
 
 Food(<u>Item.namespace, Item.name</u>, hungerRestoration, saturation)
 
-Block(<u>Item.namespace, Item.name</u>, blastResistance, hardness, luminous, transparent, flammable)
+Block(<u>namespace, name</u>, blastResistance, hardness, luminous, transparent, flammable, Mod.namespace)
 
 Station(<u>Item.namespace, Item.name</u>)
 
 Comprises(<u>LootTable.id, Item.namespace, Item.name</u>, minNumber, maxNumber, weight)
 
-Entity(<u>namespace, name</u>, behavior, type, healthPoints, armorPoints, attackDamage, attackSpeed, attackRange, speed, knockbackResistance, weakness, hitboxSize, LootTable.id, Mod.namespace)
+Entity(<u>namespace, name</u>, behavior, type, healthPoints, armorPoints, attackDamage, attackSpeed, attackRange, speed, knockbackResistance, weakness, hitboxSize, texture_b64, LootTable.id, Mod.namespace)
 
 LootTableEntity(<u>LootTable.id, Entity.namespace, Entity.name</u>)
 
 BiomeSpawnTable(<u>Biome.namespace, Biome.name, Entity.namespace, Entity.name</u>, weight, minCount, maxCount)
 
 StructureSpawnTable(<u>Structure.namespace, Structure.name, Entity.namespace, Entity.name</u>)
+
+EntityDimension(<u>Entity.namespace, Entity.name, Dimension.namespace, Dimension.name</u>)
 
 BlockBiomeGenerationTable(<u>Block.namespace, Block.name, Biome.namespace, Biome.name</u>)
 

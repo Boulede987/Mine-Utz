@@ -44,9 +44,11 @@ all_blocks = load_registry(LISTS, 'blocks.txt')
 mc_items  = sorted(e for e in all_items  if e.startswith('minecraft:'))
 mc_blocks = sorted(e for e in all_blocks if e.startswith('minecraft:'))
 
-# Items that are also blocks (intersection of both sets, filtered to minecraft:)
-mc_items_set   = set(mc_items)
-mc_block_items = set(mc_blocks) & mc_items_set
+mc_items_set = set(mc_items)
+# All blocks get a Block row regardless of whether they have an item form.
+# (water, lava, crop stages, fire, nether_portal, etc. are valid blocks.)
+# To find blocks-with-item-forms, JOIN Block with Item on (namespace, name).
+mc_block_items = set(mc_blocks)  # all blocks, not just item-intersection
 
 # Stations: unique minecraft: values from the station column of recipes.txt
 # The station column (index 2) holds items like minecraft:crafting_table.
@@ -92,10 +94,10 @@ write_sql(OUTPUT, '03 - Minecraft items, blocks and stations', [
          item_rows,
      )),
 
-    ('Block — vanilla items that are also blocks  (physical properties are NULL)',
+    ('Block — all vanilla blocks  (physical properties are NULL)',
      insert_rows(
          'Block',
-         ['item_namespace', 'item_name', 'blastResistance', 'hardness', 'luminous', 'transparent', 'flammable'],
+         ['namespace', 'name', 'blastResistance', 'hardness', 'luminous', 'transparent', 'flammable'],
          block_rows,
      )),
 

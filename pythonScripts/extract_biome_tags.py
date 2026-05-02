@@ -33,15 +33,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 
-from lib.paths    import MODS_DIR, LISTS
+from lib.paths    import MODS_DIR, LISTS, VANILLA_JAR
 from lib.io_utils import write_txt
-
-VANILLA_JAR = (
-    Path.home()
-    / 'AppData' / 'Roaming' / 'PrismLauncher'
-    / 'libraries' / 'com' / 'mojang' / 'minecraft'
-    / '1.21.1' / 'minecraft-1.21.1-client.jar'
-)
 
 TAG_PREFIX   = 'data/'
 TAG_INFIX    = '/tags/worldgen/biome/'

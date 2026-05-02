@@ -11,12 +11,13 @@ from pathlib import Path
 from lib.io_utils import read_json
 
 
-def iter_jars(mods_dir: Path) -> list[Path]:
-    """Return all .jar files in mods_dir, sorted alphabetically."""
-    return sorted(mods_dir.glob('*.jar'))
+def iter_jars(mods_dir: Path, extra_jars: list[Path] | None = None) -> list[Path]:
+    """Return all .jar files in mods_dir (sorted), prepended with any extra_jars."""
+    extras = [j for j in (extra_jars or []) if j.exists()]
+    return extras + sorted(mods_dir.glob('*.jar'))
 
 
-def scan_jars(mods_dir: Path, handlers: dict) -> None:
+def scan_jars(mods_dir: Path, handlers: dict, extra_jars: list[Path] | None = None) -> None:
     """
     Iterate all jars and dispatch each JSON file to the appropriate handler.
 
@@ -36,6 +37,8 @@ def scan_jars(mods_dir: Path, handlers: dict) -> None:
     Special keys:
       '__lang__'    : called with (namespace, lang_dict) for en_us.json files
       '__mod_meta__': called with (jar_path, zip_file) for each jar
+
+    extra_jars: additional jars to scan before mod jars (e.g. vanilla client jar)
     """
     lang_handler     = handlers.get('__lang__')
     mod_meta_handler = handlers.get('__mod_meta__')
@@ -50,8 +53,8 @@ def scan_jars(mods_dir: Path, handlers: dict) -> None:
         else:
             compiled_handlers.append((re.compile(f'^{re.escape(prefix)}(.+)$'), handler))
 
-    jars = iter_jars(mods_dir)
-    print(f'Found {len(jars)} jars in {mods_dir}\n')
+    jars = iter_jars(mods_dir, extra_jars)
+    print(f'Found {len(jars)} jars ({len(extra_jars or [])} extra + mod jars)\n')
 
     for jar_path in jars:
         print(f'  Scanning {jar_path.name} ...')

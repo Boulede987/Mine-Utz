@@ -9,3 +9,8 @@ SOURCE inserts/07_mc_relations.sql;
 SOURCE inserts/08_mc_recipes.sql;
 SOURCE inserts/09_mc_loot_structure.sql;
 SOURCE inserts/10_mc_entity_textures.sql;
+SOURCE inserts/11_mc_dimensions.sql;
+SOURCE inserts/12_mc_structure_spawns.sql;
+SOURCE inserts/13_mc_structure_blocks.sql;
+SOURCE inserts/14_mc_biome_blocks.sql;
+SOURCE inserts/15_mc_subtypes.sql;

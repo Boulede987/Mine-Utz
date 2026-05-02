@@ -185,6 +185,102 @@ ServerEvents.commandRegistry(event => {
         ), false);
     }
 
+    function getAttrAmount(item, attrId) {
+        const DataComponents = Java.loadClass('net.minecraft.core.component.DataComponents');
+        const attrMods = item.components().get(DataComponents.ATTRIBUTE_MODIFIERS);
+        if (!attrMods) return null;
+        const mods = attrMods.modifiers();
+        for (let i = 0; i < mods.size(); i++) {
+            const entry = mods.get(i);
+            const keyOpt = entry.attribute().unwrapKey();
+            if (!keyOpt.isPresent()) continue;
+            if (keyOpt.get().location().toString() === attrId)
+                return entry.modifier().amount();
+        }
+        return null;
+    }
+
+    function runFoodStatsDump(ctx) {
+        const DataComponents = Java.loadClass('net.minecraft.core.component.DataComponents');
+        const Registries     = Java.loadClass('net.minecraft.core.registries.Registries');
+        const itemRegistry   = ctx.source.getServer().registryAccess().registryOrThrow(Registries.ITEM);
+
+        let lines = ['===== FOOD STATS DUMP START ====='];
+        let total = 0;
+
+        itemRegistry.keySet().forEach(loc => {
+            try {
+                const item = itemRegistry.get(loc);
+                const food = item.components().get(DataComponents.FOOD);
+                if (!food) return;
+                lines.push(`${loc} | ${food.nutrition()} | ${food.saturation()}`);
+                total++;
+            } catch(e) {}
+        });
+
+        lines.push(`===== FOOD STATS DUMP END (${total} total) =====`);
+        console.log(lines.join('\n'));
+        ctx.source.sendSuccess(() => Component.literal(`§aDumped ${total} food items to logs`), false);
+    }
+
+    function runToolStatsDump(ctx) {
+        const DataComponents = Java.loadClass('net.minecraft.core.component.DataComponents');
+        const Registries     = Java.loadClass('net.minecraft.core.registries.Registries');
+        const itemRegistry   = ctx.source.getServer().registryAccess().registryOrThrow(Registries.ITEM);
+
+        let lines = ['===== TOOL STATS DUMP START ====='];
+        let total = 0;
+
+        itemRegistry.keySet().forEach(loc => {
+            try {
+                const item       = itemRegistry.get(loc);
+                const atkDmg     = getAttrAmount(item, 'minecraft:attack_damage');
+                const atkSpd     = getAttrAmount(item, 'minecraft:attack_speed');
+                if (atkDmg === null && atkSpd === null) return;
+
+                const maxDmgComp = item.components().get(DataComponents.MAX_DAMAGE);
+                const durability = maxDmgComp != null ? maxDmgComp : 0;
+
+                lines.push(`${loc} | ${atkDmg} | ${atkSpd} | ${durability}`);
+                total++;
+            } catch(e) {}
+        });
+
+        lines.push(`===== TOOL STATS DUMP END (${total} total) =====`);
+        console.log(lines.join('\n'));
+        ctx.source.sendSuccess(() => Component.literal(`§aDumped ${total} tool/weapon items to logs`), false);
+    }
+
+    function runArmorStatsDump(ctx) {
+        const DataComponents = Java.loadClass('net.minecraft.core.component.DataComponents');
+        const Registries     = Java.loadClass('net.minecraft.core.registries.Registries');
+        const itemRegistry   = ctx.source.getServer().registryAccess().registryOrThrow(Registries.ITEM);
+
+        let lines = ['===== ARMOR STATS DUMP START ====='];
+        let total = 0;
+
+        itemRegistry.keySet().forEach(loc => {
+            try {
+                const item    = itemRegistry.get(loc);
+                const armor   = getAttrAmount(item, 'minecraft:armor');
+                if (armor === null) return;
+
+                const toughness = getAttrAmount(item, 'minecraft:armor_toughness') ?? 0;
+                const kbRes     = getAttrAmount(item, 'minecraft:knockback_resistance') ?? 0;
+
+                const maxDmgComp = item.components().get(DataComponents.MAX_DAMAGE);
+                const durability = maxDmgComp != null ? maxDmgComp : 0;
+
+                lines.push(`${loc} | ${armor} | ${toughness} | ${kbRes} | ${durability}`);
+                total++;
+            } catch(e) {}
+        });
+
+        lines.push(`===== ARMOR STATS DUMP END (${total} total) =====`);
+        console.log(lines.join('\n'));
+        ctx.source.sendSuccess(() => Component.literal(`§aDumped ${total} armor items to logs`), false);
+    }
+
     event.register(Commands.literal('dump_structures').requires(src => src.hasPermission(2)).executes(ctx => {
         try { runDump(ctx, 'STRUCTURE', 'STRUCTURE'); } catch(e) { ctx.source.sendFailure(Component.literal(`§cFailed: ${e}`)); }
         return 1;
@@ -240,6 +336,21 @@ ServerEvents.commandRegistry(event => {
         return 1;
     }));
 
+    event.register(Commands.literal('dump_food_stats').requires(src => src.hasPermission(2)).executes(ctx => {
+        try { runFoodStatsDump(ctx); } catch(e) { ctx.source.sendFailure(Component.literal(`§cFailed: ${e}`)); }
+        return 1;
+    }));
+
+    event.register(Commands.literal('dump_tool_stats').requires(src => src.hasPermission(2)).executes(ctx => {
+        try { runToolStatsDump(ctx); } catch(e) { ctx.source.sendFailure(Component.literal(`§cFailed: ${e}`)); }
+        return 1;
+    }));
+
+    event.register(Commands.literal('dump_armor_stats').requires(src => src.hasPermission(2)).executes(ctx => {
+        try { runArmorStatsDump(ctx); } catch(e) { ctx.source.sendFailure(Component.literal(`§cFailed: ${e}`)); }
+        return 1;
+    }));
+
     event.register(Commands.literal('dump_all').requires(src => src.hasPermission(2)).executes(ctx => {
         try {
             runDump(ctx, 'STRUCTURE',   'STRUCTURE');
@@ -252,6 +363,9 @@ ServerEvents.commandRegistry(event => {
             runDump(ctx, 'MOB_EFFECT',  'EFFECT');
             runDump(ctx, 'SOUND_EVENT', 'SOUND');
             runEntityLootDump(ctx);
+            runFoodStatsDump(ctx);
+            runToolStatsDump(ctx);
+            runArmorStatsDump(ctx);
             runConsistencyCheck(ctx);
             ctx.source.sendSuccess(() => Component.literal(`§aDumped everything to logs/latest.log`), false);
         } catch(e) { ctx.source.sendFailure(Component.literal(`§cFailed: ${e}`)); }

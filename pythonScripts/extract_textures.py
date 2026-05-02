@@ -34,18 +34,9 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from PIL import Image, ImageStat
 
-from lib.paths    import MODS_DIR, LISTS
+from lib.paths    import MODS_DIR, LISTS, VANILLA_JAR
 from lib.io_utils import write_txt
 from lib.loaders  import load_registry
-
-# ── Vanilla jar ───────────────────────────────────────────────────────────────
-
-VANILLA_JAR = (
-    Path.home()
-    / 'AppData' / 'Roaming' / 'PrismLauncher'
-    / 'libraries' / 'com' / 'mojang' / 'minecraft'
-    / '1.21.1' / 'minecraft-1.21.1-client.jar'
-)
 
 ENTITY_TEX_INFIX = '/textures/entity/'
 

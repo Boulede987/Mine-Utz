@@ -28,7 +28,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 
-from lib.paths       import MODS_DIR, LISTS
+from lib.paths       import MODS_DIR, LISTS, VANILLA_JAR
 from lib.io_utils    import write_txt
 from lib.jar_scanner import scan_jars
 
@@ -49,6 +49,7 @@ loot_reference_rows  = []
 biome_spawn_rows     = []
 biome_feature_rows   = []
 structure_biome_rows = []
+structure_spawn_rows = []
 mod_meta_rows        = []
 lang_dict            = {}
 
@@ -66,7 +67,7 @@ collect_biome, collect_structure_set = make_biome_collector(
     biome_spawn_rows, biome_feature_rows
 ), make_structure_collector(structure_biome_rows)[1]
 
-collect_structure, collect_structure_set = make_structure_collector(structure_biome_rows)
+collect_structure, collect_structure_set = make_structure_collector(structure_biome_rows, structure_spawn_rows)
 collect_mod_meta = make_mod_meta_collector(mod_meta_rows)
 collect_lang     = make_lang_collector(lang_dict)
 
@@ -80,7 +81,7 @@ scan_jars(MODS_DIR, {
     'worldgen/biome/':        collect_biome,
     'worldgen/structure/':    collect_structure,
     'worldgen/structure_set/': collect_structure_set,
-})
+}, extra_jars=[VANILLA_JAR])
 
 # ── Write outputs ─────────────────────────────────────────────────────────────
 
@@ -122,6 +123,10 @@ write_txt(LISTS, 'biome_features.txt', [(
 write_txt(LISTS, 'structure_biomes.txt', [(
     'STRUCTURE -> BIOME  format: structure | biome_or_tag',
     structure_biome_rows,
+)])
+write_txt(LISTS, 'structure_spawns.txt', [(
+    'STRUCTURE SPAWN OVERRIDES  format: structure | entity | weight | min | max',
+    structure_spawn_rows,
 )])
 write_txt(LISTS, 'mod_meta.txt', [(
     'MOD METADATA  format: mod_id | display_name | version | license | authors | url',

@@ -101,6 +101,27 @@ CREATE TABLE StructureBiome (
 ) ENGINE=InnoDB;
 
 -- =====================================
+-- DIMENSIONS
+-- =====================================
+
+CREATE TABLE Dimension (
+    namespace VARCHAR(100) NOT NULL,
+    name      VARCHAR(100) NOT NULL,
+    PRIMARY KEY (namespace, name),
+    FOREIGN KEY (namespace) REFERENCES `Mod`(namespace)
+) ENGINE=InnoDB;
+
+CREATE TABLE BiomeDimension (
+    biome_namespace     VARCHAR(100),
+    biome_name          VARCHAR(100),
+    dimension_namespace VARCHAR(100),
+    dimension_name      VARCHAR(100),
+    PRIMARY KEY (biome_namespace, biome_name, dimension_namespace, dimension_name),
+    FOREIGN KEY (biome_namespace,     biome_name)     REFERENCES Biome(namespace, name),
+    FOREIGN KEY (dimension_namespace, dimension_name) REFERENCES Dimension(namespace, name)
+) ENGINE=InnoDB;
+
+-- =====================================
 -- ITEMS
 -- =====================================
 
@@ -151,15 +172,15 @@ CREATE TABLE Food (
 ) ENGINE=InnoDB;
 
 CREATE TABLE Block (
-    item_namespace  VARCHAR(100),
-    item_name       VARCHAR(100),
+    namespace       VARCHAR(100) NOT NULL,
+    name            VARCHAR(100) NOT NULL,
     blastResistance FLOAT,
     hardness        FLOAT,
     luminous        BOOLEAN DEFAULT NULL,
     transparent     BOOLEAN DEFAULT NULL,
     flammable       BOOLEAN DEFAULT NULL,
-    PRIMARY KEY (item_namespace, item_name),
-    FOREIGN KEY (item_namespace, item_name) REFERENCES Item(namespace, name)
+    PRIMARY KEY (namespace, name),
+    FOREIGN KEY (namespace) REFERENCES `Mod`(namespace)
 ) ENGINE=InnoDB;
 
 CREATE TABLE Station (
@@ -217,6 +238,16 @@ CREATE TABLE StructureSpawnTable (
     FOREIGN KEY (entity_namespace,    entity_name)    REFERENCES Entity(namespace, name)
 ) ENGINE=InnoDB;
 
+CREATE TABLE EntityDimension (
+    entity_namespace    VARCHAR(100),
+    entity_name         VARCHAR(100),
+    dimension_namespace VARCHAR(100),
+    dimension_name      VARCHAR(100),
+    PRIMARY KEY (entity_namespace, entity_name, dimension_namespace, dimension_name),
+    FOREIGN KEY (entity_namespace,    entity_name)    REFERENCES Entity(namespace, name),
+    FOREIGN KEY (dimension_namespace, dimension_name) REFERENCES Dimension(namespace, name)
+) ENGINE=InnoDB;
+
 -- =====================================
 -- LOOT RELATIONS
 -- =====================================
@@ -261,7 +292,7 @@ CREATE TABLE BlockBiomeGenerationTable (
     biome_namespace VARCHAR(100),
     biome_name      VARCHAR(100),
     PRIMARY KEY (block_namespace, block_name, biome_namespace, biome_name),
-    FOREIGN KEY (block_namespace, block_name) REFERENCES Block(item_namespace, item_name),
+    FOREIGN KEY (block_namespace, block_name) REFERENCES Block(namespace, name),
     FOREIGN KEY (biome_namespace, biome_name) REFERENCES Biome(namespace, name)
 ) ENGINE=InnoDB;
 
@@ -272,7 +303,7 @@ CREATE TABLE BlockStructureGenerationTable (
     structure_name      VARCHAR(100),
     number              INT DEFAULT 1,
     PRIMARY KEY (block_namespace, block_name, structure_namespace, structure_name),
-    FOREIGN KEY (block_namespace,     block_name)     REFERENCES Block(item_namespace, item_name),
+    FOREIGN KEY (block_namespace,     block_name)     REFERENCES Block(namespace, name),
     FOREIGN KEY (structure_namespace, structure_name) REFERENCES Structure(namespace, name)
 ) ENGINE=InnoDB;
 

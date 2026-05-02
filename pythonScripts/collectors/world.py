@@ -37,10 +37,13 @@ def make_biome_collector(spawn_rows: list, feature_rows: list) -> callable:
     return collect_biome
 
 
-def make_structure_collector(structure_biome_rows: list) -> tuple[callable, callable]:
+def make_structure_collector(
+    structure_biome_rows: list,
+    structure_spawn_rows: list | None = None,
+) -> tuple[callable, callable]:
     """
     Returns (collect_structure, collect_structure_set) functions
-    that append to structure_biome_rows.
+    that append to structure_biome_rows and optionally structure_spawn_rows.
     """
     def _add_biome(structure_id: str, biome_value) -> None:
         if isinstance(biome_value, str) and biome_value:
@@ -53,6 +56,18 @@ def make_structure_collector(structure_biome_rows: list) -> tuple[callable, call
     def collect_structure(namespace: str, relative_path: str, data: dict) -> None:
         structure_id = f"{namespace}:{relative_path.removesuffix('.json')}"
         _add_biome(structure_id, data.get('biomes', ''))
+
+        if structure_spawn_rows is not None:
+            for override in data.get('spawn_overrides', {}).values():
+                for spawn in override.get('spawns', []):
+                    entity = spawn.get('type', '')
+                    if entity:
+                        structure_spawn_rows.append(
+                            f"{structure_id} | {entity} | "
+                            f"weight:{spawn.get('weight', 1)} | "
+                            f"min:{spawn.get('minCount', 1)} | "
+                            f"max:{spawn.get('maxCount', 1)}"
+                        )
 
     def collect_structure_set(namespace: str, relative_path: str, data: dict) -> None:
         for entry in data.get('structures', []):
