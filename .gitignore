@@ -102,6 +102,13 @@ desktop.ini
 .directory
 
 # ===========================
+# Generated textures (copyright — do not commit)
+# ===========================
+webui/textures/
+lists/entity_textures.txt
+lists/item_textures.txt
+
+# ===========================
 # Development Files
 # ===========================
 .vscode/

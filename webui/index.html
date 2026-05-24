@@ -1,0 +1,611 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Mineutze Graph Explorer</title>
+  <script src="https://unpkg.com/neo4j-driver@5/lib/browser/neo4j-web.min.js"></script>
+  <script src="https://unpkg.com/cytoscape/dist/cytoscape.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      display: flex;
+      height: 100vh;
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      background: #0f0f13;
+      color: #d4d4d8;
+    }
+
+    /* ── Sidebar ─────────────────────────── */
+    #sidebar {
+      width: 300px;
+      min-width: 260px;
+      background: #18181f;
+      border-right: 1px solid #2a2a38;
+      display: flex;
+      flex-direction: column;
+      padding: 16px;
+      gap: 14px;
+      overflow-y: auto;
+    }
+
+    h1 {
+      font-size: 1.2rem;
+      font-weight: 700;
+      color: #f4c430;
+      letter-spacing: 0.04em;
+    }
+
+    .section-title {
+      font-size: 0.7rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #6b6b80;
+      margin-bottom: 6px;
+    }
+
+    input, select, button {
+      width: 100%;
+      padding: 7px 10px;
+      border-radius: 6px;
+      border: 1px solid #2e2e42;
+      background: #12121a;
+      color: #d4d4d8;
+      font-size: 0.85rem;
+      outline: none;
+    }
+    input:focus, select:focus { border-color: #f4c430; }
+
+    button {
+      cursor: pointer;
+      background: #f4c430;
+      color: #0f0f13;
+      font-weight: 700;
+      border: none;
+      transition: opacity 0.15s;
+    }
+    button:hover { opacity: 0.85; }
+    button:disabled { opacity: 0.4; cursor: default; }
+
+    .btn-secondary {
+      background: #2a2a38;
+      color: #d4d4d8;
+      font-weight: 500;
+    }
+
+    .field-group { display: flex; flex-direction: column; gap: 5px; }
+
+    /* ── Legend ──────────────────────────── */
+    .legend { display: flex; flex-direction: column; gap: 5px; }
+    .legend-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.8rem;
+    }
+    .legend-dot {
+      width: 14px; height: 14px;
+      border-radius: 50%;
+      flex-shrink: 0;
+      border: 2px solid rgba(255,255,255,0.15);
+    }
+
+    /* ── Node info panel ─────────────────── */
+    #info-panel {
+      background: #12121a;
+      border: 1px solid #2e2e42;
+      border-radius: 8px;
+      padding: 12px;
+      font-size: 0.8rem;
+      display: none;
+    }
+    #info-panel.visible { display: block; }
+    #info-title {
+      font-weight: 700;
+      font-size: 0.95rem;
+      margin-bottom: 8px;
+      color: #f4c430;
+      word-break: break-all;
+    }
+    .info-row {
+      display: flex;
+      gap: 6px;
+      margin-bottom: 3px;
+    }
+    .info-key { color: #6b6b80; min-width: 80px; }
+    .info-val { color: #d4d4d8; word-break: break-all; }
+
+    /* ── Status ──────────────────────────── */
+    #status {
+      font-size: 0.75rem;
+      color: #6b6b80;
+      min-height: 16px;
+    }
+    #status.error { color: #f87171; }
+    #status.ok    { color: #4ade80; }
+
+    /* ── Graph ───────────────────────────── */
+    #graph-container {
+      flex: 1;
+      position: relative;
+    }
+    #cy {
+      width: 100%;
+      height: 100%;
+    }
+
+    /* ── Expand hint ─────────────────────── */
+    #hint {
+      position: absolute;
+      bottom: 12px;
+      right: 12px;
+      font-size: 0.72rem;
+      color: #3a3a55;
+      pointer-events: none;
+    }
+  </style>
+</head>
+<body>
+
+<div id="sidebar">
+  <h1>⛏ Mineutze Graph</h1>
+
+  <!-- Connection -->
+  <div>
+    <div class="section-title">Connection</div>
+    <div class="field-group">
+      <input id="neo-uri"  value="bolt://localhost:7687" placeholder="bolt://localhost:7687">
+      <input id="neo-user" value="neo4j" placeholder="user">
+      <input id="neo-pass" type="password" value="password" placeholder="password">
+      <button id="btn-connect">Connect</button>
+    </div>
+  </div>
+
+  <!-- Search -->
+  <div>
+    <div class="section-title">Search</div>
+    <div class="field-group">
+      <input id="search-input" placeholder="item or mob name…" disabled>
+      <select id="query-type" disabled>
+        <option value="recipe">Recipe chain</option>
+        <option value="sources">Item sources</option>
+        <option value="mob">Mob info</option>
+        <option value="explore">Explore neighbors</option>
+      </select>
+      <button id="btn-search" disabled>Search</button>
+      <button id="btn-clear" class="btn-secondary" disabled>Clear graph</button>
+    </div>
+  </div>
+
+  <!-- Status -->
+  <div id="status">Not connected.</div>
+
+  <!-- Info panel -->
+  <div id="info-panel">
+    <div id="info-title"></div>
+    <div id="info-body"></div>
+    <div style="margin-top:8px">
+      <button id="btn-expand" class="btn-secondary" style="width:auto;padding:4px 10px;font-size:0.78rem">
+        Expand neighbors
+      </button>
+    </div>
+  </div>
+
+  <!-- Legend -->
+  <div>
+    <div class="section-title">Legend</div>
+    <div class="legend">
+      <div class="legend-row"><div class="legend-dot" style="background:#f4c430"></div> Item</div>
+      <div class="legend-row"><div class="legend-dot" style="background:#6fb0d2"></div> Entity</div>
+      <div class="legend-row"><div class="legend-dot" style="background:#5cb85c"></div> Biome</div>
+      <div class="legend-row"><div class="legend-dot" style="background:#c87850"></div> Structure</div>
+      <div class="legend-row"><div class="legend-dot" style="background:#9b59b6"></div> Dimension</div>
+      <div class="legend-row"><div class="legend-dot" style="background:#e05c5c;border-radius:2px"></div> Recipe</div>
+    </div>
+  </div>
+</div>
+
+<div id="graph-container">
+  <div id="cy"></div>
+  <div id="hint">Scroll to zoom · Drag to pan · Click node for info · Double-click to expand</div>
+</div>
+
+<script>
+// ── Colours ────────────────────────────────────────────────────────────────
+
+const LABEL_COLOR = {
+  Item:      '#f4c430',
+  Armor:     '#f4c430',
+  Tool:      '#f4c430',
+  Food:      '#f4c430',
+  Entity:    '#6fb0d2',
+  Biome:     '#5cb85c',
+  Structure: '#c87850',
+  Dimension: '#9b59b6',
+  Recipe:    '#e05c5c',
+};
+
+const REL_COLOR = {
+  PRODUCES:          '#f4c430',
+  REQUIRES:          '#e05c5c',
+  USES_STATION:      '#aaaaaa',
+  DROPS:             '#6fb0d2',
+  CONTAINS:          '#c87850',
+  SPAWNS_IN:         '#5cb85c',
+  FOUND_IN:          '#c87850',
+  FOUND_IN_STRUCTURE:'#6fb0d2',
+  IN_DIMENSION:      '#9b59b6',
+};
+
+function primaryLabel(labels) {
+  for (const l of ['Entity','Biome','Structure','Dimension','Recipe']) {
+    if (labels.includes(l)) return l;
+  }
+  return 'Item';
+}
+
+// ── Cytoscape setup ────────────────────────────────────────────────────────
+
+const cy = cytoscape({
+  container: document.getElementById('cy'),
+  elements: [],
+  style: [
+    {
+      selector: 'node',
+      style: {
+        label: 'data(label)',
+        'font-size': 11,
+        'color': '#e4e4f0',
+        'text-valign': 'bottom',
+        'text-margin-y': 4,
+        'text-outline-width': 2,
+        'text-outline-color': '#0f0f13',
+        'background-color': 'data(color)',
+        'border-width': 2,
+        'border-color': 'rgba(255,255,255,0.15)',
+        width: 36,
+        height: 36,
+      }
+    },
+    {
+      selector: 'node[image]',
+      style: {
+        'background-image': 'data(image)',
+        'background-fit': 'cover',
+        'background-clip': 'none',
+        'border-width': 3,
+        'border-color': '#6fb0d2',
+        width: 40,
+        height: 40,
+      }
+    },
+    {
+      selector: 'node:selected',
+      style: {
+        'border-color': '#ffffff',
+        'border-width': 3,
+      }
+    },
+    {
+      selector: 'edge',
+      style: {
+        width: 2,
+        'line-color': 'data(color)',
+        'target-arrow-color': 'data(color)',
+        'target-arrow-shape': 'triangle',
+        'curve-style': 'bezier',
+        label: 'data(label)',
+        'font-size': 9,
+        'color': '#888',
+        'text-outline-width': 1,
+        'text-outline-color': '#0f0f13',
+        'text-rotation': 'autorotate',
+      }
+    },
+  ],
+  layout: { name: 'preset' },
+  wheelSensitivity: 0.3,
+});
+
+// ── Neo4j driver ───────────────────────────────────────────────────────────
+
+let driver = null;
+let selectedNode = null;
+
+function setStatus(msg, type = '') {
+  const el = document.getElementById('status');
+  el.textContent = msg;
+  el.className = type;
+}
+
+document.getElementById('btn-connect').addEventListener('click', async () => {
+  if (driver) { try { await driver.close(); } catch(_) {} }
+  const uri  = document.getElementById('neo-uri').value.trim();
+  const user = document.getElementById('neo-user').value.trim();
+  const pass = document.getElementById('neo-pass').value;
+  setStatus('Connecting…');
+  try {
+    driver = neo4j.driver(uri, neo4j.auth.basic(user, pass));
+    await driver.verifyConnectivity();
+    setStatus('Connected.', 'ok');
+    ['search-input','query-type','btn-search','btn-clear'].forEach(id =>
+      document.getElementById(id).disabled = false);
+  } catch (e) {
+    setStatus('Connection failed: ' + e.message, 'error');
+    driver = null;
+  }
+});
+
+// ── Graph helpers ──────────────────────────────────────────────────────────
+
+// Persistent map: neo4j internal ID → minecraft id used as cytoscape node id.
+// Survives across searches so edges in later queries can resolve nodes from earlier ones.
+const neoToCyto = new Map();
+
+function processResults(records) {
+  const nodes = new Map();
+  const edges = new Map();
+
+  function neoId(n) {
+    return n.elementId ?? n.identity?.toString() ?? String(n.identity);
+  }
+  function isNode(val) {
+    return val && typeof val === 'object' && Array.isArray(val.labels) &&
+           (val.elementId != null || val.identity != null);
+  }
+  function isRel(val) {
+    return val && typeof val === 'object' && typeof val.type === 'string' &&
+           (val.startNodeElementId != null || val.start != null);
+  }
+  function relStart(r) { return r.startNodeElementId ?? r.start?.toString(); }
+  function relEnd(r)   { return r.endNodeElementId   ?? r.end?.toString(); }
+
+  function addNode(n) {
+    const neo = neoId(n);
+    const label = primaryLabel(n.labels);
+    const { image: imageFile, ...restProps } = n.properties;
+    // Prefer the Minecraft registry id property; fall back to neo4j internal id.
+    const cytoId = restProps.id || neo;
+    neoToCyto.set(neo, cytoId);
+    if (nodes.has(cytoId)) return;
+    nodes.set(cytoId, {
+      data: {
+        id: cytoId,
+        label: restProps.name || cytoId,
+        color: LABEL_COLOR[label] || '#888',
+        neoLabels: n.labels,
+        image: imageFile ? `textures/${imageFile}` : undefined,
+        ...restProps,
+      }
+    });
+  }
+
+  function addEdge(r) {
+    const edgeId = 'e' + (r.elementId ?? r.identity?.toString());
+    if (edges.has(edgeId)) return;
+    const src = neoToCyto.get(relStart(r)) ?? relStart(r);
+    const tgt = neoToCyto.get(relEnd(r))   ?? relEnd(r);
+    if (!src || !tgt) return;
+    edges.set(edgeId, {
+      data: {
+        id: edgeId,
+        source: src,
+        target: tgt,
+        label: r.type.toLowerCase().replace(/_/g, ' '),
+        color: REL_COLOR[r.type] || '#666',
+        type: r.type,
+        ...r.properties,
+      }
+    });
+  }
+
+  function processVal(val) {
+    if (!val || typeof val !== 'object') return;
+    if (isNode(val)) { addNode(val); return; }
+    if (isRel(val))  { addEdge(val); return; }
+    if (Array.isArray(val)) { val.forEach(processVal); return; }
+    if (val.segments) {
+      val.segments.forEach(seg => {
+        addNode(seg.start); addNode(seg.end); addEdge(seg.relationship);
+      });
+    }
+  }
+
+  // Process nodes first so neoToCyto is populated before edges resolve their endpoints.
+  for (const record of records) {
+    record.keys.forEach(k => { const v = record.get(k); if (isNode(v)) addNode(v); });
+  }
+  for (const record of records) {
+    record.keys.forEach(k => { const v = record.get(k); if (isRel(v)) addEdge(v); });
+  }
+
+  return [...nodes.values(), ...edges.values()];
+}
+
+function addToGraph(elements) {
+  const existing = new Set(cy.elements().map(e => e.id()));
+  const fresh = elements.filter(e => !existing.has(e.data.id));
+  if (!fresh.length) return 0;
+
+  // Nodes must exist before edges that reference them
+  cy.add(fresh.filter(e => !e.data.source));
+  cy.add(fresh.filter(e =>  e.data.source));
+
+  // Re-run layout only on visible area
+  cy.layout({
+    name: 'cose',
+    animate: true,
+    animationDuration: 500,
+    nodeRepulsion: () => 8000,
+    idealEdgeLength: () => 120,
+    fit: cy.elements().length < 80,
+  }).run();
+
+  return fresh.length;
+}
+
+// ── Queries ────────────────────────────────────────────────────────────────
+
+// Exact name/id match scores 0, contains scores 1 → ORDER BY picks exact first.
+const MATCH_RANK = `
+  CASE WHEN toLower(n.name) = toLower($s) OR toLower(n.id) = toLower($s)
+       OR n.id = 'minecraft:' + $s THEN 0 ELSE 1 END AS _rank`;
+
+const QUERIES = {
+  recipe: `
+    MATCH (i:Item)
+    WHERE toLower(i.name) CONTAINS toLower($s) OR toLower(i.id) CONTAINS toLower($s)
+    WITH i, CASE WHEN toLower(i.name) = toLower($s) OR toLower(i.id) = toLower($s)
+                  OR i.id = 'minecraft:' + $s THEN 0 ELSE 1 END AS _rank
+    ORDER BY _rank LIMIT 1
+    OPTIONAL MATCH (i)<-[p:PRODUCES]-(r:Recipe)
+    OPTIONAL MATCH (r)-[req:REQUIRES]->(ing:Item)
+    OPTIONAL MATCH (r)-[us:USES_STATION]->(st:Item)
+    RETURN i, p, r, req, ing, us, st
+  `,
+  sources: `
+    MATCH (i:Item)
+    WHERE toLower(i.name) CONTAINS toLower($s) OR toLower(i.id) CONTAINS toLower($s)
+    WITH i, CASE WHEN toLower(i.name) = toLower($s) OR toLower(i.id) = toLower($s)
+                  OR i.id = 'minecraft:' + $s THEN 0 ELSE 1 END AS _rank
+    ORDER BY _rank LIMIT 1
+    OPTIONAL MATCH (e:Entity)-[dr:DROPS]->(i)
+    OPTIONAL MATCH (st:Structure)-[co:CONTAINS]->(i)
+    RETURN i, dr, e, co, st
+  `,
+  mob: `
+    MATCH (e:Entity)
+    WHERE toLower(e.name) CONTAINS toLower($s) OR toLower(e.id) CONTAINS toLower($s)
+    WITH e, CASE WHEN toLower(e.name) = toLower($s) OR toLower(e.id) = toLower($s)
+                  OR e.id = 'minecraft:' + $s THEN 0 ELSE 1 END AS _rank
+    ORDER BY _rank LIMIT 1
+    OPTIONAL MATCH (e)-[si:SPAWNS_IN]->(b:Biome)-[ind:IN_DIMENSION]->(d:Dimension)
+    OPTIONAL MATCH (e)-[dr:DROPS]->(item:Item)
+    OPTIONAL MATCH (e)-[fi:FOUND_IN_STRUCTURE]->(st:Structure)
+    RETURN e, si, b, ind, d, dr, item, fi, st
+  `,
+  explore: `
+    MATCH (n)
+    WHERE toLower(n.name) CONTAINS toLower($s) OR toLower(n.id) CONTAINS toLower($s)
+    WITH n, CASE WHEN toLower(n.name) = toLower($s) OR toLower(n.id) = toLower($s)
+                  OR n.id = 'minecraft:' + $s THEN 0 ELSE 1 END AS _rank
+    ORDER BY _rank LIMIT 1
+    MATCH (n)-[r]-(neighbor)
+    RETURN n, r, neighbor
+    LIMIT 60
+  `,
+};
+
+async function runQuery(cypher, params) {
+  const session = driver.session();
+  try {
+    const result = await session.run(cypher, params);
+    return result.records;
+  } finally {
+    await session.close();
+  }
+}
+
+document.getElementById('btn-search').addEventListener('click', search);
+document.getElementById('search-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter') search();
+});
+
+async function search() {
+  const s = document.getElementById('search-input').value.trim();
+  if (!s || !driver) return;
+  const type = document.getElementById('query-type').value;
+  setStatus('Searching…');
+  try {
+    const records = await runQuery(QUERIES[type], { s });
+    const elements = processResults(records);
+    const added = addToGraph(elements);
+    setStatus(`${added} new elements added (${cy.elements().length} total).`, 'ok');
+  } catch (e) {
+    setStatus('Query error: ' + e.message, 'error');
+  }
+}
+
+document.getElementById('btn-clear').addEventListener('click', () => {
+  cy.elements().remove();
+  neoToCyto.clear();
+  hideInfo();
+  setStatus('Graph cleared.', 'ok');
+});
+
+// ── Node info panel ────────────────────────────────────────────────────────
+
+const SKIP_PROPS = new Set(['id', 'label', 'color', 'neoLabels', 'image', 'namespace', 'name']);
+
+function showInfo(node) {
+  selectedNode = node;
+  const panel = document.getElementById('info-panel');
+  const data = node.data();
+  document.getElementById('info-title').textContent = data.id;
+  const body = document.getElementById('info-body');
+  body.innerHTML = '';
+
+  const labels = (data.neoLabels || []).join(', ');
+  appendInfo(body, 'type', labels);
+
+  for (const [k, v] of Object.entries(data)) {
+    if (SKIP_PROPS.has(k) || v === null || v === undefined || v === '') continue;
+    appendInfo(body, k, typeof v === 'number' ? v.toFixed(2).replace(/\.00$/, '') : String(v));
+  }
+  panel.classList.add('visible');
+}
+
+function appendInfo(parent, key, val) {
+  const row = document.createElement('div');
+  row.className = 'info-row';
+  row.innerHTML = `<span class="info-key">${key}</span><span class="info-val">${val}</span>`;
+  parent.appendChild(row);
+}
+
+function hideInfo() {
+  document.getElementById('info-panel').classList.remove('visible');
+  selectedNode = null;
+}
+
+cy.on('tap', 'node', evt => showInfo(evt.target));
+cy.on('tap', evt => { if (evt.target === cy) hideInfo(); });
+
+// Double-click a node → expand its neighbors
+cy.on('dblclick', 'node', async evt => {
+  if (!driver) return;
+  const nodeId = evt.target.data('id');
+  setStatus('Expanding…');
+  try {
+    const records = await runQuery(`
+      MATCH (n {id: $id})-[r]-(neighbor)
+      RETURN n, r, neighbor LIMIT 50
+    `, { id: nodeId });
+    const elements = processResults(records);
+    const added = addToGraph(elements);
+    setStatus(`${added} new elements added.`, 'ok');
+  } catch (e) {
+    setStatus('Expand error: ' + e.message, 'error');
+  }
+});
+
+// ── Expand button ──────────────────────────────────────────────────────────
+document.getElementById('btn-expand').addEventListener('click', async () => {
+  if (!selectedNode || !driver) return;
+  const nodeId = selectedNode.data('id');
+  setStatus('Expanding…');
+  try {
+    const records = await runQuery(`
+      MATCH (n {id: $id})-[r]-(neighbor)
+      RETURN n, r, neighbor LIMIT 50
+    `, { id: nodeId });
+    const elements = processResults(records);
+    const added = addToGraph(elements);
+    setStatus(`${added} new elements added.`, 'ok');
+  } catch (e) {
+    setStatus('Expand error: ' + e.message, 'error');
+  }
+});
+</script>
+</body>
+</html>

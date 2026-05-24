@@ -31,11 +31,14 @@ Edges :
   (Biome)-[:IN_DIMENSION]->(Dimension)
 """
 
+import base64
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from lib.paths import LISTS
+from lib.paths import LISTS, ROOT
+
+WEBUI_TEXTURES = ROOT / 'webui' / 'textures'
 
 try:
     from neo4j import GraphDatabase
@@ -112,10 +115,50 @@ def run_batch(session, query: str, rows: list[dict]):
         session.run(query, rows=rows[i:i + BATCH_SIZE])
 
 
+# ── Texture export ───────────────────────────────────────────────────────────
+
+def export_textures() -> dict[str, str]:
+    """Save entity + item textures as PNG files in webui/textures/. Returns {id: filename}."""
+    WEBUI_TEXTURES.mkdir(parents=True, exist_ok=True)
+    mapping: dict[str, str] = {}
+
+    def load_tex_file(filename: str, label: str):
+        path = LISTS / filename
+        if not path.exists():
+            print(f"  {filename} not found — skipping")
+            return
+        count = 0
+        for line in path.read_text(encoding='utf-8').splitlines():
+            line = line.strip()
+            if not line or line.startswith('=') or line.startswith('#'):
+                continue
+            parts = [p.strip() for p in line.split('|', 1)]
+            if len(parts) != 2:
+                continue
+            item_id, b64 = parts
+            safe_name = item_id.replace(':', '__') + '.png'
+            out_path = WEBUI_TEXTURES / safe_name
+            try:
+                out_path.write_bytes(base64.b64decode(b64))
+                mapping[item_id] = safe_name
+                count += 1
+            except Exception:
+                pass
+        print(f"  {count} {label} textures saved")
+
+    load_tex_file('entity_textures.txt', 'entity')
+    load_tex_file('item_textures.txt',   'item')
+    return mapping
+
+
 # ── Export ───────────────────────────────────────────────────────────────────
 
 def export(driver):
     with driver.session() as s:
+
+        # ── Textures ───────────────────────────────────────────────
+        print("Exporting entity textures...")
+        texture_map = export_textures()
 
         # ── Clear ──────────────────────────────────────────────────
         print("Clearing existing graph...")
@@ -151,6 +194,7 @@ def export(driver):
             if not p:
                 continue
             row = {'id': iid, 'namespace': p[0], 'name': p[1],
+                   'image':    texture_map.get(iid),
                    'is_armor': iid in armor_stats,
                    'is_tool':  iid in tool_stats,
                    'is_food':  iid in food_stats,
@@ -162,7 +206,7 @@ def export(driver):
         run_batch(s, """
             UNWIND $rows AS r
             MERGE (i:Item {id: r.id})
-            SET i.namespace = r.namespace, i.name = r.name
+            SET i.namespace = r.namespace, i.name = r.name, i.image = r.image
             FOREACH (_ IN CASE WHEN r.is_armor THEN [1] ELSE [] END |
                 SET i:Armor)
             FOREACH (_ IN CASE WHEN r.is_tool  THEN [1] ELSE [] END |
@@ -189,12 +233,13 @@ def export(driver):
         # ── Entities ───────────────────────────────────────────────
         print("Loading entities...")
         entity_ids = read_ids('mobs.txt')
-        entity_rows = [{'id': e, 'namespace': p[0], 'name': p[1]}
+        entity_rows = [{'id': e, 'namespace': p[0], 'name': p[1],
+                        'image': texture_map.get(e)}
                        for e in entity_ids if (p := parse_id(e))]
         run_batch(s, """
             UNWIND $rows AS r
             MERGE (e:Entity {id: r.id})
-            SET e.namespace = r.namespace, e.name = r.name
+            SET e.namespace = r.namespace, e.name = r.name, e.image = r.image
         """, entity_rows)
         print(f"  {len(entity_rows)} entities")
 

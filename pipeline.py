@@ -5,6 +5,7 @@ Run from the repo root: python pipeline.py
 
 import subprocess
 import sys
+import webbrowser
 from pathlib import Path
 
 ROOT    = Path(__file__).parent
@@ -44,7 +45,8 @@ JAR_EXTRACTORS = [
     ("extract_biome_tags.py",           "Biome tags (vanilla + mod jars)"),
     ("extract_biome_blocks.py",         "Biome blocks"),
     ("extract_item_tags.py",            "Item tags"),
-    ("extract_textures.py",             "Textures"),
+    ("extract_textures.py",             "Entity textures"),
+    ("extract_item_textures.py",        "Item textures"),
     ("extract_dimension_biomes.py",     "Dimension biomes"),
 ]
 
@@ -104,6 +106,16 @@ def step_full_pipeline():
         print("  Pipeline complete.")
 
 
+def step_web_explorer():
+    hr("STEP: Web Explorer")
+    webui = ROOT / 'webui'
+    port  = 8080
+    print(f"  Serving {webui} on http://localhost:{port}")
+    print("  Press Ctrl+C to stop the server.")
+    webbrowser.open(f"http://localhost:{port}")
+    subprocess.run([PY, "-m", "http.server", str(port), "--directory", str(webui)])
+
+
 # ── menu ─────────────────────────────────────────────────────
 
 MENU = """\
@@ -126,15 +138,17 @@ MENU = """\
    7  Biome tags
    8  Biome blocks
    9  Item tags
-  10  Textures
-  11  Dimension biomes
+  10  Entity textures
+  11  Item textures
+  12  Dimension biomes
 
   ── Database ────────────────────────────
-  12  Generate SQL
-  13  Consistency check
+  13  Generate SQL
+  14  Consistency check
 
   ── Graph ───────────────────────────────
-  14  Export to Neo4j
+  15  Export to Neo4j
+  16  Launch web explorer  (opens browser)
 
    0  Exit
 """
@@ -149,11 +163,13 @@ ACTIONS = {
     "7":  lambda: run("extract_biome_tags.py",           "Biome tags"),
     "8":  lambda: run("extract_biome_blocks.py",         "Biome blocks"),
     "9":  lambda: run("extract_item_tags.py",            "Item tags"),
-    "10": lambda: run("extract_textures.py",             "Textures"),
-    "11": lambda: run("extract_dimension_biomes.py",     "Dimension biomes"),
-    "12": step_generate_sql,
-    "13": step_consistency,
-    "14": lambda: run("export_to_neo4j.py",              "Export to Neo4j"),
+    "10": lambda: run("extract_textures.py",             "Entity textures"),
+    "11": lambda: run("extract_item_textures.py",        "Item textures"),
+    "12": lambda: run("extract_dimension_biomes.py",     "Dimension biomes"),
+    "13": step_generate_sql,
+    "14": step_consistency,
+    "15": lambda: run("export_to_neo4j.py",              "Export to Neo4j"),
+    "16": step_web_explorer,
 }
 
 
