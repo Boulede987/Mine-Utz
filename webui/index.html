@@ -5,6 +5,8 @@
   <title>Mineutze Graph Explorer</title>
   <script src="https://unpkg.com/neo4j-driver@5/lib/browser/neo4j-web.min.js"></script>
   <script src="https://unpkg.com/cytoscape/dist/cytoscape.min.js"></script>
+  <script src="https://unpkg.com/dagre/dist/dagre.min.js"></script>
+  <script src="https://unpkg.com/cytoscape-dagre/cytoscape-dagre.js"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -245,6 +247,22 @@ function primaryLabel(labels) {
   return 'Item';
 }
 
+// ── Neo4j value helpers (module-level) ────────────────────────────────────
+
+function neoId(n) {
+  return n.elementId ?? n.identity?.toString() ?? String(n.identity);
+}
+function isNode(val) {
+  return val && typeof val === 'object' && Array.isArray(val.labels) &&
+         (val.elementId != null || val.identity != null);
+}
+function isRel(val) {
+  return val && typeof val === 'object' && typeof val.type === 'string' &&
+         (val.startNodeElementId != null || val.start != null);
+}
+function relStart(r) { return r.startNodeElementId ?? r.start?.toString(); }
+function relEnd(r)   { return r.endNodeElementId   ?? r.end?.toString(); }
+
 // ── Cytoscape setup ────────────────────────────────────────────────────────
 
 const cy = cytoscape({
@@ -347,20 +365,6 @@ function processResults(records) {
   const nodes = new Map();
   const edges = new Map();
 
-  function neoId(n) {
-    return n.elementId ?? n.identity?.toString() ?? String(n.identity);
-  }
-  function isNode(val) {
-    return val && typeof val === 'object' && Array.isArray(val.labels) &&
-           (val.elementId != null || val.identity != null);
-  }
-  function isRel(val) {
-    return val && typeof val === 'object' && typeof val.type === 'string' &&
-           (val.startNodeElementId != null || val.start != null);
-  }
-  function relStart(r) { return r.startNodeElementId ?? r.start?.toString(); }
-  function relEnd(r)   { return r.endNodeElementId   ?? r.end?.toString(); }
-
   function addNode(n) {
     const neo = neoId(n);
     const label = primaryLabel(n.labels);
@@ -423,7 +427,139 @@ function processResults(records) {
   return [...nodes.values(), ...edges.values()];
 }
 
-function addToGraph(elements) {
+function extractRootId(records) {
+  if (!records.length) return null;
+  for (const key of records[0].keys) {
+    const v = records[0].get(key);
+    if (isNode(v)) return v.properties.id || neoId(v);
+  }
+  return null;
+}
+
+// ── Layout ─────────────────────────────────────────────────────────────────
+
+function runDagre() {
+  cy.layout({
+    name: 'dagre',
+    rankDir: 'LR',
+    rankSep: 120,
+    nodeSep: 50,
+    edgeSep: 10,
+    animate: true,
+    animationDuration: 400,
+    fit: true,
+    padding: 50,
+  }).run();
+}
+
+/**
+ * Radial zone layout:
+ *   - Root at (0, 0)
+ *   - Each relationship type gets its own zone arranged on a circle around root
+ *   - Nodes within a zone are placed in a compact square grid
+ *   - 2nd-hop nodes push further outward from their parent along the same angle
+ */
+function smartLayout(rootId) {
+  const ZONE_DIST  = 300;  // distance root → zone centre (base)
+  const CELL       = 75;   // node spacing within a zone grid
+  const HOP2_EXTRA = 180;  // extra radial distance for 2nd-hop clusters
+
+  const root = cy.getElementById(rootId);
+  if (!root.length) { runDagre(); return; }
+
+  root.position({ x: 0, y: 0 });
+  const positioned = new Set([rootId]);
+
+  // ── Group direct neighbours by edge type ─────────────────────────────────
+  const groups = new Map(); // edgeType → cyNode[]
+  root.connectedEdges().forEach(edge => {
+    const type  = edge.data('type') || '_';
+    const other = edge.source().id() === rootId ? edge.target() : edge.source();
+    const oid   = other.id();
+    if (positioned.has(oid)) return;
+    if (!groups.has(type)) groups.set(type, []);
+    if (!groups.get(type).some(n => n.id() === oid)) groups.get(type).push(other);
+  });
+
+  const zoneList  = [...groups.entries()];
+  const N         = zoneList.length;
+  const zoneAngle = new Map(); // edgeType → angle (radians)
+
+  zoneList.forEach(([type, nodes], i) => {
+    // Evenly space zones on a circle, starting from the right (angle 0)
+    const angle = (2 * Math.PI * i) / Math.max(N, 1);
+    zoneAngle.set(type, angle);
+
+    // Grid size for this zone
+    const cols  = Math.ceil(Math.sqrt(nodes.length));
+    const rows  = Math.ceil(nodes.length / cols);
+    const zoneW = (cols - 1) * CELL;
+    const zoneH = (rows - 1) * CELL;
+
+    // Push larger zones farther out so they don't overlap the root
+    const dist = ZONE_DIST + Math.max(zoneW, zoneH) * 0.3;
+    const ox   = dist * Math.cos(angle);
+    const oy   = dist * Math.sin(angle);
+
+    nodes.forEach((node, idx) => {
+      const c = idx % cols;
+      const r = Math.floor(idx / cols);
+      node.position({
+        x: ox - zoneW / 2 + c * CELL,
+        y: oy - zoneH / 2 + r * CELL,
+      });
+      positioned.add(node.id());
+    });
+  });
+
+  // ── 2nd-hop: extend each parent's zone outward along the same angle ───────
+  for (const [type, nodes] of groups) {
+    const angle = zoneAngle.get(type);
+    const nx    = Math.cos(angle);
+    const ny    = Math.sin(angle);
+
+    const hop2 = new Map(); // parentId → cyNode[]
+    for (const node of nodes) {
+      node.connectedEdges().forEach(edge => {
+        const other = edge.source().id() === node.id() ? edge.target() : edge.source();
+        const oid = other.id();
+        if (positioned.has(oid)) return;
+        const pid = node.id();
+        if (!hop2.has(pid)) hop2.set(pid, []);
+        if (!hop2.get(pid).some(n => n.id() === oid)) hop2.get(pid).push(other);
+      });
+    }
+
+    for (const [parentId, hop2nodes] of hop2) {
+      const pp   = cy.getElementById(parentId).position();
+      const cols = Math.ceil(Math.sqrt(hop2nodes.length));
+      const rows = Math.ceil(hop2nodes.length / cols);
+      const hx   = pp.x + nx * HOP2_EXTRA;
+      const hy   = pp.y + ny * HOP2_EXTRA;
+
+      hop2nodes.forEach((node, idx) => {
+        if (positioned.has(node.id())) return;
+        const c = idx % cols;
+        const r = Math.floor(idx / cols);
+        node.position({
+          x: hx + (c - (cols - 1) / 2) * CELL,
+          y: hy + (r - (rows - 1) / 2) * CELL,
+        });
+        positioned.add(node.id());
+      });
+    }
+  }
+
+  // ── Overflow ──────────────────────────────────────────────────────────────
+  let oi = 0;
+  cy.nodes().forEach(n => {
+    if (!positioned.has(n.id())) n.position({ x: 600, y: (oi++) * CELL });
+  });
+
+  cy.fit(cy.elements(), 50);
+}
+
+function addToGraph(elements, rootId) {
   const existing = new Set(cy.elements().map(e => e.id()));
   const fresh = elements.filter(e => !existing.has(e.data.id));
   if (!fresh.length) return 0;
@@ -432,15 +568,11 @@ function addToGraph(elements) {
   cy.add(fresh.filter(e => !e.data.source));
   cy.add(fresh.filter(e =>  e.data.source));
 
-  // Re-run layout only on visible area
-  cy.layout({
-    name: 'cose',
-    animate: true,
-    animationDuration: 500,
-    nodeRepulsion: () => 8000,
-    idealEdgeLength: () => 120,
-    fit: cy.elements().length < 80,
-  }).run();
+  if (rootId && cy.getElementById(rootId).length) {
+    smartLayout(rootId);
+  } else {
+    runDagre();
+  }
 
   return fresh.length;
 }
@@ -519,8 +651,9 @@ async function search() {
   setStatus('Searching…');
   try {
     const records = await runQuery(QUERIES[type], { s });
+    const rootId  = extractRootId(records);
     const elements = processResults(records);
-    const added = addToGraph(elements);
+    const added = addToGraph(elements, rootId);
     setStatus(`${added} new elements added (${cy.elements().length} total).`, 'ok');
   } catch (e) {
     setStatus('Query error: ' + e.message, 'error');
