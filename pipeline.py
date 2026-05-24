@@ -108,6 +108,9 @@ def step_full_pipeline():
 
 def step_web_explorer():
     hr("STEP: Web Explorer")
+    print("  [REMINDER]  Make sure Neo4j Desktop is running and the database is started.")
+    print("              The web explorer connects to bolt://localhost:7687 by default.")
+    input("  Press Enter when Neo4j is ready...")
     webui = ROOT / 'webui'
     port  = 8080
     print(f"  Serving {webui} on http://localhost:{port}")
