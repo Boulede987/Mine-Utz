@@ -133,6 +133,9 @@ MENU = """\
   12  Generate SQL
   13  Consistency check
 
+  ── Graph ───────────────────────────────
+  14  Export to Neo4j
+
    0  Exit
 """
 
@@ -150,6 +153,7 @@ ACTIONS = {
     "11": lambda: run("extract_dimension_biomes.py",     "Dimension biomes"),
     "12": step_generate_sql,
     "13": step_consistency,
+    "14": lambda: run("export_to_neo4j.py",              "Export to Neo4j"),
 }
 
 
