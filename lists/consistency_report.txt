@@ -11,15 +11,15 @@ Info     : 8
   OK  : mobs.txt  (1491 entries)
   OK  : biomes.txt  (325 entries)
   OK  : structures.txt  (985 entries)
-  OK  : recipes.txt  (33360 entries)
-  OK  : loot_entities.txt  (1221 entries)
-  OK  : loot_chests.txt  (14508 entries)
-  OK  : loot_blocks.txt  (28775 entries)
-  OK  : biome_spawns.txt  (2296 entries)
-  OK  : structure_biomes.txt  (1118 entries)
+  OK  : recipes.txt  (34618 entries)
+  OK  : loot_entities.txt  (1347 entries)
+  OK  : loot_chests.txt  (15205 entries)
+  OK  : loot_blocks.txt  (29720 entries)
+  OK  : biome_spawns.txt  (3034 entries)
+  OK  : structure_biomes.txt  (1152 entries)
   OK  : entity_loottables.txt  (1491 entries)
   OK  : mod_meta.txt  (31 entries)
-  OK  : lang_names.txt  (87385 entries)
+  OK  : lang_names.txt  (94199 entries)
 
 ============================================================
   NAMESPACE COVERAGE
@@ -80,20 +80,7 @@ Info     : 8
     - adorn:cobblemon/saccharine_kitchen_sink
     - adorn:cobblemon/saccharine_platform
     ... and 9141 more
-  WARN: 2049 recipe ingredient items not found in item registry
-    - 144 #c:plates/copper
-    - 144 minecraft:iron_ingot
-    - 144 minecraft:redstone
-    - 288 #c:glass_panes
-    - 36 #c:plates/copper
-    - 36 minecraft:iron_ingot
-    - 36 minecraft:redstone
-    - 4 #c:plates/copper
-    - 4 minecraft:iron_ingot
-    - 4 minecraft:paper
-    - 4 minecraft:redstone
-    - 72 #c:glass_panes
-    - 8 #c:glass_panes
+  WARN: 2050 recipe ingredient items not found in item registry
     - adorn:cobblemon/apricorn_kitchen_counter
     - adorn:cobblemon/apricorn_post
     - adorn:cobblemon/saccharine_kitchen_counter
@@ -101,7 +88,20 @@ Info     : 8
     - ae2:all_certus_quartz
     - ae2:all_fluix
     - ae2:all_nether_quartz
-    ... and 2029 more
+    - ae2:all_quartz_dust
+    - ae2:can_remove_color
+    - ae2:illuminated_panel
+    - ae2:knife
+    - ae2:metal_ingots
+    - ae2:quartz_axe
+    - ae2:quartz_hoe
+    - ae2:quartz_pickaxe
+    - ae2:quartz_shovel
+    - ae2:quartz_sword
+    - ae2:quartz_wrench
+    - ae2:smart_dense_cable
+    - aether:accepted_music_discs
+    ... and 2030 more
   INFO: 92 stations not found in item registry (may be custom machine types)
     - ae2:quartz_cutting
     - ae2:transform
@@ -124,7 +124,7 @@ Info     : 8
     - cobblemon:cooking_pot
     - cobblemon:cooking_pot_shapeless
     ... and 72 more
-  INFO: 8900 items appear in no recipe (as input or output) — expected for loot-only items
+  INFO: 8525 items appear in no recipe (as input or output) — expected for loot-only items
 
 ============================================================
   LOOT TABLE INTEGRITY
@@ -162,7 +162,7 @@ Info     : 8
     - adorn:cobblemon/apricorn_platform
     - adorn:cobblemon/apricorn_post
     - adorn:cobblemon/apricorn_shelf
-  INFO: 472 entities have an assigned loot table but no loot file found in jars (projectiles, falling blocks, etc.)
+  INFO: 342 entities have an assigned loot table but no loot file found in jars (projectiles, falling blocks, etc.)
     - ae2:tiny_tnt_primed
     - amendments:falling_lantern
     - amendments:medium_dragon_fireball
@@ -183,8 +183,8 @@ Info     : 8
     - atlantis:zombie_starfish
     - bibliocraft:fancy_armor_stand
     - bibliocraft:seat
-    ... and 452 more
-  INFO: 405 / 1491 entity loot table assignments matched to extracted loot files
+    ... and 322 more
+  INFO: 463 / 1491 entity loot table assignments matched to extracted loot files
 
 ============================================================
   BIOME SPAWN INTEGRITY
@@ -202,10 +202,10 @@ Info     : 8
     - mythsandlegends:old_camp
     - mythsandlegends:scorched_nest
     - mythsandlegends:sepulcrum_ignitum
-  INFO: 563 structure-biome entries use biome tags (cannot cross-reference)
+  INFO: 591 structure-biome entries use biome tags (cannot cross-reference)
 
 ============================================================
   LANG NAME COVERAGE
 ============================================================
-  INFO: 26526 / 29212 items have a lang entry
-  INFO: 1133 / 1491 mobs have a lang entry
+  INFO: 27962 / 29212 items have a lang entry
+  INFO: 1263 / 1491 mobs have a lang entry
