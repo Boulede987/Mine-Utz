@@ -511,20 +511,26 @@ function processQueryResults(records) {
   function addNode(neoNode) {
     const internalId = getNeoId(neoNode);
     const label      = primaryLabel(neoNode.labels);
-    const { image: imageFile, ...otherProps } = neoNode.properties;
-    const cytoId     = otherProps.id || internalId;
+    const { image: imageFile, id: minecraftId, name, ...extraProps } = neoNode.properties;
+
+    // Use neo4j elementId as cytoscape node ID — DB-assigned, globally unique.
+    // Prevents any collision regardless of mod naming (same minecraft id across
+    // different registries, or duplicate recipe names across mods).
+    const cytoId = internalId;
 
     neoToCytoMap.set(internalId, cytoId);
     if (nodeMap.has(cytoId)) return;
 
     nodeMap.set(cytoId, {
       data: {
-        id:        cytoId,
-        label:     otherProps.name || cytoId,
-        color:     LABEL_COLOR[label] || '#888',
-        neoLabels: neoNode.labels,
-        image:     imageFile ? `textures/${imageFile}` : undefined,
-        ...otherProps,
+        id:          cytoId,
+        minecraftId: minecraftId,
+        name:        name || minecraftId || cytoId,
+        label:       name || minecraftId || cytoId,
+        color:       LABEL_COLOR[label] || '#888',
+        neoLabels:   neoNode.labels,
+        image:       imageFile ? `textures/${imageFile}` : undefined,
+        ...extraProps,
       }
     });
   }
@@ -570,7 +576,7 @@ function extractRootId(records) {
   if (!records.length) return null;
   for (const key of records[0].keys) {
     const value = records[0].get(key);
-    if (isNeo4jNode(value)) return value.properties.id || getNeoId(value);
+    if (isNeo4jNode(value)) return getNeoId(value); // elementId = cytoId
   }
   return null;
 }
@@ -934,13 +940,13 @@ document.getElementById('btn-clear').addEventListener('click', () => {
   setStatus('Graph cleared.', 'ok');
 });
 
-async function expandNeighbours(nodeId) {
+async function expandNeighbours(elementId) {
   if (!driver) return;
   setStatus('Expanding…');
   try {
     const records  = await runQuery(
-      `MATCH (node {id: $nodeId})-[rel]-(neighbour) RETURN node, rel, neighbour LIMIT ${EXPAND_LIMIT}`,
-      { nodeId }
+      `MATCH (node) WHERE elementId(node) = $elementId MATCH (node)-[rel]-(neighbour) RETURN node, rel, neighbour LIMIT ${EXPAND_LIMIT}`,
+      { elementId }
     );
     const elements = processQueryResults(records);
     const added    = addToGraph(elements, null);
@@ -1007,12 +1013,12 @@ function renderBreadcrumbs(currentIdx = breadcrumbs.length - 1) {
 // NODE INFO PANEL
 // ═══════════════════════════════════════════════════════════════════
 
-const SKIP_INFO_KEYS = new Set(['id', 'label', 'color', 'neoLabels', 'image', 'namespace', 'name']);
+const SKIP_INFO_KEYS = new Set(['id', 'minecraftId', 'label', 'color', 'neoLabels', 'image', 'namespace', 'name']);
 
 function showInfoPanel(node) {
   selectedNode = node;
   const data   = node.data();
-  document.getElementById('info-title').textContent = data.id;
+  document.getElementById('info-title').textContent = data.minecraftId || data.name || data.id;
 
   const bodyEl = document.getElementById('info-body');
   bodyEl.innerHTML = '';
@@ -1043,10 +1049,10 @@ function hideInfoPanel() {
 
 cy.on('tap', 'node', evt => showInfoPanel(evt.target));
 cy.on('tap', evt   => { if (evt.target === cy) hideInfoPanel(); });
-cy.on('dblclick', 'node', evt => expandNeighbours(evt.target.data('id')));
+cy.on('dblclick', 'node', evt => expandNeighbours(evt.target.id()));
 
 document.getElementById('btn-expand').addEventListener('click', () => {
-  if (selectedNode) expandNeighbours(selectedNode.data('id'));
+  if (selectedNode) expandNeighbours(selectedNode.id());
 });
 
 // ═══════════════════════════════════════════════════════════════════
@@ -1105,7 +1111,7 @@ function openContextMenu(clientX, clientY, node) {
     label:  isPinned ? 'Unpin node' : 'Pin node',
     action: () => { isPinned ? unpinNode(nodeId) : pinNode(node); },
   });
-  menuItems.push({ label: 'Expand neighbors', action: () => expandNeighbours(nodeId) });
+  menuItems.push({ label: 'Expand neighbors', action: () => expandNeighbours(node.id()) });
   menuItems.push({ separator: true });
   menuItems.push({
     label:  'Remove from graph',
@@ -1145,7 +1151,7 @@ function closeContextMenu() {
 }
 
 function searchNodeAs(node, queryType) {
-  const name = node.data('name') || node.data('id');
+  const name = node.data('name') || node.data('minecraftId');
   searchInputEl.value                = name;
   searchInputEl.dataset.detectedType = queryType;
   document.getElementById('query-type').value = 'auto';
