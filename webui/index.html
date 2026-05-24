@@ -18,7 +18,7 @@
       color: #d4d4d8;
     }
 
-    /* ── Sidebar ─────────────────────────── */
+    /* ── Sidebar ──────────────────────────────────────────────────── */
     #sidebar {
       width: 300px;
       min-width: 260px;
@@ -31,12 +31,7 @@
       overflow-y: auto;
     }
 
-    h1 {
-      font-size: 1.2rem;
-      font-weight: 700;
-      color: #f4c430;
-      letter-spacing: 0.04em;
-    }
+    h1 { font-size: 1.2rem; font-weight: 700; color: #f4c430; letter-spacing: 0.04em; }
 
     .section-title {
       font-size: 0.7rem;
@@ -58,7 +53,6 @@
       outline: none;
     }
     input:focus, select:focus { border-color: #f4c430; }
-
     button {
       cursor: pointer;
       background: #f4c430;
@@ -67,33 +61,70 @@
       border: none;
       transition: opacity 0.15s;
     }
-    button:hover { opacity: 0.85; }
+    button:hover   { opacity: 0.85; }
     button:disabled { opacity: 0.4; cursor: default; }
+    .btn-secondary { background: #2a2a38; color: #d4d4d8; font-weight: 500; }
+    .field-group   { display: flex; flex-direction: column; gap: 5px; }
 
-    .btn-secondary {
-      background: #2a2a38;
-      color: #d4d4d8;
-      font-weight: 500;
+    /* ── Autocomplete ─────────────────────────────────────────────── */
+    #autocomplete-dropdown {
+      position: fixed;
+      z-index: 1000;
+      background: #1e1e2a;
+      border: 1px solid #2e2e42;
+      border-radius: 6px;
+      overflow: hidden;
+      display: none;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.5);
     }
-
-    .field-group { display: flex; flex-direction: column; gap: 5px; }
-
-    /* ── Legend ──────────────────────────── */
-    .legend { display: flex; flex-direction: column; gap: 5px; }
-    .legend-row {
+    .autocomplete-item {
       display: flex;
       align-items: center;
       gap: 8px;
-      font-size: 0.8rem;
+      padding: 7px 10px;
+      cursor: pointer;
+      font-size: 0.82rem;
+      border-bottom: 1px solid #22222e;
     }
+    .autocomplete-item:last-child { border-bottom: none; }
+    .autocomplete-item:hover,
+    .autocomplete-item.active { background: #2a2a38; }
+    .autocomplete-dot  { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+    .autocomplete-name { color: #d4d4d8; }
+    .autocomplete-id   { color: #5a5a72; font-size: 0.74rem; margin-left: auto; white-space: nowrap; }
+
+    /* ── Breadcrumbs ──────────────────────────────────────────────── */
+    #breadcrumb-list { display: flex; flex-wrap: wrap; gap: 5px; }
+    .breadcrumb-chip {
+      font-size: 0.74rem;
+      background: #22222e;
+      border: 1px solid #2e2e42;
+      border-radius: 12px;
+      padding: 3px 9px;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: background 0.1s;
+    }
+    .breadcrumb-chip:hover   { background: #2e2e42; }
+    .breadcrumb-chip.current { border-color: #f4c430; color: #f4c430; }
+
+    /* ── Legend ───────────────────────────────────────────────────── */
+    .legend { display: flex; flex-direction: column; gap: 5px; }
+    .legend-row { display: flex; align-items: center; gap: 8px; font-size: 0.8rem; }
     .legend-dot {
       width: 14px; height: 14px;
       border-radius: 50%;
       flex-shrink: 0;
       border: 2px solid rgba(255,255,255,0.15);
     }
+    .legend-pin {
+      width: 14px; height: 14px;
+      border-radius: 50%;
+      flex-shrink: 0;
+      border: 2px dashed #ffffff;
+    }
 
-    /* ── Node info panel ─────────────────── */
+    /* ── Info panel ───────────────────────────────────────────────── */
     #info-panel {
       background: #12121a;
       border: 1px solid #2e2e42;
@@ -110,40 +141,76 @@
       color: #f4c430;
       word-break: break-all;
     }
-    .info-row {
-      display: flex;
-      gap: 6px;
-      margin-bottom: 3px;
-    }
-    .info-key { color: #6b6b80; min-width: 80px; }
-    .info-val { color: #d4d4d8; word-break: break-all; }
+    .info-row    { display: flex; gap: 6px; margin-bottom: 3px; }
+    .info-key    { color: #6b6b80; min-width: 80px; }
+    .info-val    { color: #d4d4d8; word-break: break-all; }
 
-    /* ── Status ──────────────────────────── */
-    #status {
-      font-size: 0.75rem;
-      color: #6b6b80;
-      min-height: 16px;
-    }
+    /* ── Status ───────────────────────────────────────────────────── */
+    #status { font-size: 0.75rem; color: #6b6b80; min-height: 16px; }
     #status.error { color: #f87171; }
     #status.ok    { color: #4ade80; }
 
-    /* ── Graph ───────────────────────────── */
-    #graph-container {
-      flex: 1;
-      position: relative;
-    }
-    #cy {
-      width: 100%;
-      height: 100%;
-    }
+    /* ── Graph container ──────────────────────────────────────────── */
+    #graph-container { flex: 1; position: relative; }
+    #cy { width: 100%; height: 100%; }
 
-    /* ── Expand hint ─────────────────────── */
-    #hint {
+    /* ── Context menu ─────────────────────────────────────────────── */
+    #context-menu {
+      position: fixed;
+      z-index: 2000;
+      background: #1e1e2a;
+      border: 1px solid #2e2e42;
+      border-radius: 8px;
+      padding: 5px 0;
+      display: none;
+      min-width: 175px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.6);
+    }
+    .context-item {
+      padding: 7px 14px;
+      font-size: 0.82rem;
+      cursor: pointer;
+      color: #d4d4d8;
+      transition: background 0.1s;
+    }
+    .context-item:hover  { background: #2a2a38; }
+    .context-item.danger { color: #f87171; }
+    .context-sep { height: 1px; background: #2e2e42; margin: 4px 0; }
+
+    /* ── Shortcuts panel ──────────────────────────────────────────── */
+    #shortcuts-panel {
       position: absolute;
       bottom: 12px;
       right: 12px;
+      background: #18181f;
+      border: 1px solid #2a2a38;
+      border-radius: 8px;
+      font-size: 0.76rem;
+      overflow: hidden;
+      min-width: 190px;
+      user-select: none;
+    }
+    #shortcuts-toggle {
+      padding: 6px 10px;
+      cursor: pointer;
+      color: #6b6b80;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    #shortcuts-toggle:hover { color: #d4d4d8; }
+    #shortcuts-body { display: none; padding: 6px 10px 8px; border-top: 1px solid #2a2a38; }
+    #shortcuts-body.open { display: block; }
+    .shortcut-row { display: flex; justify-content: space-between; gap: 12px; padding: 2px 0; color: #a0a0b8; }
+    .shortcut-key { color: #f4c430; font-family: monospace; white-space: nowrap; }
+
+    /* ── Graph hint ───────────────────────────────────────────────── */
+    #hint {
+      position: absolute;
+      bottom: 12px;
+      left: 12px;
       font-size: 0.72rem;
-      color: #3a3a55;
+      color: #2a2a42;
       pointer-events: none;
     }
   </style>
@@ -153,23 +220,22 @@
 <div id="sidebar">
   <h1>⛏ Mineutze Graph</h1>
 
-  <!-- Connection -->
   <div>
     <div class="section-title">Connection</div>
     <div class="field-group">
-      <input id="neo-uri"  value="bolt://localhost:7687" placeholder="bolt://localhost:7687">
-      <input id="neo-user" value="neo4j" placeholder="user">
-      <input id="neo-pass" type="password" value="password" placeholder="password">
+      <input id="neo-uri"  value="bolt://localhost:7687">
+      <input id="neo-user" value="neo4j">
+      <input id="neo-pass" type="password" value="password">
       <button id="btn-connect">Connect</button>
     </div>
   </div>
 
-  <!-- Search -->
   <div>
     <div class="section-title">Search</div>
     <div class="field-group">
-      <input id="search-input" placeholder="item or mob name…" disabled>
+      <input id="search-input" placeholder="item or mob name…" disabled autocomplete="off">
       <select id="query-type" disabled>
+        <option value="auto">Auto-detect</option>
         <option value="recipe">Recipe chain</option>
         <option value="sources">Item sources</option>
         <option value="mob">Mob info</option>
@@ -180,41 +246,78 @@
     </div>
   </div>
 
-  <!-- Status -->
+  <div id="breadcrumb-section" style="display:none">
+    <div class="section-title">History</div>
+    <div id="breadcrumb-list"></div>
+  </div>
+
   <div id="status">Not connected.</div>
 
-  <!-- Info panel -->
   <div id="info-panel">
     <div id="info-title"></div>
     <div id="info-body"></div>
     <div style="margin-top:8px">
-      <button id="btn-expand" class="btn-secondary" style="width:auto;padding:4px 10px;font-size:0.78rem">
+      <button id="btn-expand" class="btn-secondary"
+              style="width:auto;padding:4px 10px;font-size:0.78rem">
         Expand neighbors
       </button>
     </div>
   </div>
 
-  <!-- Legend -->
   <div>
     <div class="section-title">Legend</div>
     <div class="legend">
-      <div class="legend-row"><div class="legend-dot" style="background:#f4c430"></div> Item</div>
+      <div class="legend-row"><div class="legend-dot" style="background:#f4c430"></div> Item / Tool / Armor / Food</div>
       <div class="legend-row"><div class="legend-dot" style="background:#6fb0d2"></div> Entity</div>
       <div class="legend-row"><div class="legend-dot" style="background:#5cb85c"></div> Biome</div>
       <div class="legend-row"><div class="legend-dot" style="background:#c87850"></div> Structure</div>
       <div class="legend-row"><div class="legend-dot" style="background:#9b59b6"></div> Dimension</div>
       <div class="legend-row"><div class="legend-dot" style="background:#e05c5c;border-radius:2px"></div> Recipe</div>
+      <div class="legend-row"><div class="legend-pin"></div> Pinned node</div>
     </div>
   </div>
 </div>
 
 <div id="graph-container">
   <div id="cy"></div>
-  <div id="hint">Scroll to zoom · Drag to pan · Click node for info · Double-click to expand</div>
+
+  <div id="shortcuts-panel">
+    <div id="shortcuts-toggle">⌨ Shortcuts <span id="shortcuts-arrow">▸</span></div>
+    <div id="shortcuts-body">
+      <div class="shortcut-row"><span class="shortcut-key">/</span><span>Focus search</span></div>
+      <div class="shortcut-row"><span class="shortcut-key">Enter</span><span>Run search</span></div>
+      <div class="shortcut-row"><span class="shortcut-key">Esc</span><span>Close / deselect</span></div>
+      <div class="shortcut-row"><span class="shortcut-key">F</span><span>Fit graph to screen</span></div>
+      <div class="shortcut-row"><span class="shortcut-key">R</span><span>Re-run layout</span></div>
+      <div class="shortcut-row"><span class="shortcut-key">U</span><span>Unpin all nodes</span></div>
+      <div class="shortcut-row"><span class="shortcut-key">Del</span><span>Remove selected node</span></div>
+      <div class="shortcut-row"><span class="shortcut-key">Drag</span><span>Pin node in place</span></div>
+      <div class="shortcut-row"><span class="shortcut-key">Dbl-click</span><span>Expand neighbors</span></div>
+      <div class="shortcut-row"><span class="shortcut-key">Right-click</span><span>Node options</span></div>
+      <div class="shortcut-row"><span class="shortcut-key">Shift+Scroll</span><span>Fast zoom</span></div>
+    </div>
+  </div>
+
+  <div id="hint">Click · Double-click to expand · Drag to pin · Right-click for options</div>
 </div>
 
+<div id="context-menu"></div>
+<div id="autocomplete-dropdown"></div>
+
 <script>
-// ── Colours ────────────────────────────────────────────────────────────────
+'use strict';
+
+// ═══════════════════════════════════════════════════════════════════
+// CONSTANTS
+// ═══════════════════════════════════════════════════════════════════
+
+const MAX_BREADCRUMBS      = 8;
+const AUTOCOMPLETE_LIMIT   = 12;
+const AUTOCOMPLETE_DELAY   = 250;
+const EXPAND_LIMIT         = 50;
+const ZONE_BASE_DIST       = 300;
+const ZONE_NODE_CELL       = 75;
+const ZONE_HOP2_EXTRA_DIST = 180;
 
 const LABEL_COLOR = {
   Item:      '#f4c430',
@@ -229,41 +332,63 @@ const LABEL_COLOR = {
 };
 
 const REL_COLOR = {
-  PRODUCES:          '#f4c430',
-  REQUIRES:          '#e05c5c',
-  USES_STATION:      '#aaaaaa',
-  DROPS:             '#6fb0d2',
-  CONTAINS:          '#c87850',
-  SPAWNS_IN:         '#5cb85c',
-  FOUND_IN:          '#c87850',
-  FOUND_IN_STRUCTURE:'#6fb0d2',
-  IN_DIMENSION:      '#9b59b6',
+  PRODUCES:           '#f4c430',
+  REQUIRES:           '#e05c5c',
+  USES_STATION:       '#aaaaaa',
+  DROPS:              '#6fb0d2',
+  CONTAINS:           '#c87850',
+  SPAWNS_IN:          '#5cb85c',
+  FOUND_IN:           '#c87850',
+  FOUND_IN_STRUCTURE: '#6fb0d2',
+  IN_DIMENSION:       '#9b59b6',
 };
 
+// ═══════════════════════════════════════════════════════════════════
+// LABEL & COLOR UTILITIES
+// ═══════════════════════════════════════════════════════════════════
+
 function primaryLabel(labels) {
-  for (const l of ['Entity','Biome','Structure','Dimension','Recipe']) {
-    if (labels.includes(l)) return l;
+  for (const candidate of ['Entity', 'Biome', 'Structure', 'Dimension', 'Recipe']) {
+    if (labels.includes(candidate)) return candidate;
   }
   return 'Item';
 }
 
-// ── Neo4j value helpers (module-level) ────────────────────────────────────
+function detectQueryType(labels) {
+  const label = primaryLabel(labels);
+  if (label === 'Entity') return 'mob';
+  if (label === 'Item')   return 'recipe';
+  return 'explore';
+}
 
-function neoId(n) {
-  return n.elementId ?? n.identity?.toString() ?? String(n.identity);
-}
-function isNode(val) {
-  return val && typeof val === 'object' && Array.isArray(val.labels) &&
-         (val.elementId != null || val.identity != null);
-}
-function isRel(val) {
-  return val && typeof val === 'object' && typeof val.type === 'string' &&
-         (val.startNodeElementId != null || val.start != null);
-}
-function relStart(r) { return r.startNodeElementId ?? r.start?.toString(); }
-function relEnd(r)   { return r.endNodeElementId   ?? r.end?.toString(); }
+// Cypher fragment: ranks exact match above contains match
+const rankCase = (alias) =>
+  `CASE WHEN toLower(${alias}.name) = toLower($searchTerm) OR toLower(${alias}.id) = toLower($searchTerm) OR ${alias}.id = 'minecraft:' + $searchTerm THEN 0 ELSE 1 END AS _rank`;
 
-// ── Cytoscape setup ────────────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════
+// NEO4J VALUE HELPERS
+// ═══════════════════════════════════════════════════════════════════
+
+function getNeoId(neoNode) {
+  return neoNode.elementId ?? neoNode.identity?.toString() ?? String(neoNode.identity);
+}
+
+function isNeo4jNode(value) {
+  return value != null && typeof value === 'object' && Array.isArray(value.labels) &&
+         (value.elementId != null || value.identity != null);
+}
+
+function isNeo4jRel(value) {
+  return value != null && typeof value === 'object' && typeof value.type === 'string' &&
+         (value.startNodeElementId != null || value.start != null);
+}
+
+function getRelSourceId(rel) { return rel.startNodeElementId ?? rel.start?.toString(); }
+function getRelTargetId(rel) { return rel.endNodeElementId   ?? rel.end?.toString(); }
+
+// ═══════════════════════════════════════════════════════════════════
+// CYTOSCAPE INITIALIZATION
+// ═══════════════════════════════════════════════════════════════════
 
 const cy = cytoscape({
   container: document.getElementById('cy'),
@@ -274,7 +399,7 @@ const cy = cytoscape({
       style: {
         label: 'data(label)',
         'font-size': 11,
-        'color': '#e4e4f0',
+        color: '#e4e4f0',
         'text-valign': 'bottom',
         'text-margin-y': 4,
         'text-outline-width': 2,
@@ -299,11 +424,16 @@ const cy = cytoscape({
       }
     },
     {
-      selector: 'node:selected',
+      selector: 'node[?pinned]',
       style: {
-        'border-color': '#ffffff',
         'border-width': 3,
+        'border-style': 'dashed',
+        'border-color': '#ffffff',
       }
+    },
+    {
+      selector: 'node:selected',
+      style: { 'border-color': '#ffffff', 'border-width': 3 }
     },
     {
       selector: 'edge',
@@ -315,7 +445,7 @@ const cy = cytoscape({
         'curve-style': 'bezier',
         label: 'data(label)',
         'font-size': 9,
-        'color': '#888',
+        color: '#888',
         'text-outline-width': 1,
         'text-outline-color': '#0f0f13',
         'text-rotation': 'autorotate',
@@ -326,19 +456,34 @@ const cy = cytoscape({
   wheelSensitivity: 0.3,
 });
 
-// ── Neo4j driver ───────────────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════
+// APPLICATION STATE
+// ═══════════════════════════════════════════════════════════════════
 
-let driver = null;
+let driver       = null;
 let selectedNode = null;
+let lastRootId   = null;
 
-function setStatus(msg, type = '') {
+const pinnedNodes  = new Set();   // cytoscape node IDs the user has drag-pinned
+const breadcrumbs  = [];          // { label, rootId, elements[], neoMapping[] }
+const neoToCytoMap = new Map();   // neo4j internal elementId → minecraft registry id
+
+// ═══════════════════════════════════════════════════════════════════
+// STATUS BAR
+// ═══════════════════════════════════════════════════════════════════
+
+function setStatus(message, type = '') {
   const el = document.getElementById('status');
-  el.textContent = msg;
-  el.className = type;
+  el.textContent = message;
+  el.className   = type;
 }
 
+// ═══════════════════════════════════════════════════════════════════
+// CONNECTION
+// ═══════════════════════════════════════════════════════════════════
+
 document.getElementById('btn-connect').addEventListener('click', async () => {
-  if (driver) { try { await driver.close(); } catch(_) {} }
+  if (driver) { try { await driver.close(); } catch (_) {} }
   const uri  = document.getElementById('neo-uri').value.trim();
   const user = document.getElementById('neo-user').value.trim();
   const pass = document.getElementById('neo-pass').value;
@@ -347,287 +492,237 @@ document.getElementById('btn-connect').addEventListener('click', async () => {
     driver = neo4j.driver(uri, neo4j.auth.basic(user, pass));
     await driver.verifyConnectivity();
     setStatus('Connected.', 'ok');
-    ['search-input','query-type','btn-search','btn-clear'].forEach(id =>
-      document.getElementById(id).disabled = false);
-  } catch (e) {
-    setStatus('Connection failed: ' + e.message, 'error');
+    ['search-input', 'query-type', 'btn-search', 'btn-clear']
+      .forEach(id => document.getElementById(id).disabled = false);
+  } catch (err) {
+    setStatus('Connection failed: ' + err.message, 'error');
     driver = null;
   }
 });
 
-// ── Graph helpers ──────────────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════
+// GRAPH DATA PROCESSING
+// ═══════════════════════════════════════════════════════════════════
 
-// Persistent map: neo4j internal ID → minecraft id used as cytoscape node id.
-// Survives across searches so edges in later queries can resolve nodes from earlier ones.
-const neoToCyto = new Map();
+function processQueryResults(records) {
+  const nodeMap = new Map(); // cytoId → element object
+  const edgeMap = new Map(); // edgeId → element object
 
-function processResults(records) {
-  const nodes = new Map();
-  const edges = new Map();
+  function addNode(neoNode) {
+    const internalId = getNeoId(neoNode);
+    const label      = primaryLabel(neoNode.labels);
+    const { image: imageFile, ...otherProps } = neoNode.properties;
+    const cytoId     = otherProps.id || internalId;
 
-  function addNode(n) {
-    const neo = neoId(n);
-    const label = primaryLabel(n.labels);
-    const { image: imageFile, ...restProps } = n.properties;
-    // Prefer the Minecraft registry id property; fall back to neo4j internal id.
-    const cytoId = restProps.id || neo;
-    neoToCyto.set(neo, cytoId);
-    if (nodes.has(cytoId)) return;
-    nodes.set(cytoId, {
+    neoToCytoMap.set(internalId, cytoId);
+    if (nodeMap.has(cytoId)) return;
+
+    nodeMap.set(cytoId, {
       data: {
-        id: cytoId,
-        label: restProps.name || cytoId,
-        color: LABEL_COLOR[label] || '#888',
-        neoLabels: n.labels,
-        image: imageFile ? `textures/${imageFile}` : undefined,
-        ...restProps,
+        id:        cytoId,
+        label:     otherProps.name || cytoId,
+        color:     LABEL_COLOR[label] || '#888',
+        neoLabels: neoNode.labels,
+        image:     imageFile ? `textures/${imageFile}` : undefined,
+        ...otherProps,
       }
     });
   }
 
-  function addEdge(r) {
-    const edgeId = 'e' + (r.elementId ?? r.identity?.toString());
-    if (edges.has(edgeId)) return;
-    const src = neoToCyto.get(relStart(r)) ?? relStart(r);
-    const tgt = neoToCyto.get(relEnd(r))   ?? relEnd(r);
-    if (!src || !tgt) return;
-    edges.set(edgeId, {
+  function addEdge(rel) {
+    const edgeId   = 'edge-' + (rel.elementId ?? rel.identity?.toString());
+    if (edgeMap.has(edgeId)) return;
+    const sourceId = neoToCytoMap.get(getRelSourceId(rel)) ?? getRelSourceId(rel);
+    const targetId = neoToCytoMap.get(getRelTargetId(rel)) ?? getRelTargetId(rel);
+    if (!sourceId || !targetId) return;
+
+    edgeMap.set(edgeId, {
       data: {
-        id: edgeId,
-        source: src,
-        target: tgt,
-        label: r.type.toLowerCase().replace(/_/g, ' '),
-        color: REL_COLOR[r.type] || '#666',
-        type: r.type,
-        ...r.properties,
+        id:     edgeId,
+        source: sourceId,
+        target: targetId,
+        label:  rel.type.toLowerCase().replace(/_/g, ' '),
+        color:  REL_COLOR[rel.type] || '#666',
+        type:   rel.type,
+        ...rel.properties,
       }
     });
   }
 
-  function processVal(val) {
-    if (!val || typeof val !== 'object') return;
-    if (isNode(val)) { addNode(val); return; }
-    if (isRel(val))  { addEdge(val); return; }
-    if (Array.isArray(val)) { val.forEach(processVal); return; }
-    if (val.segments) {
-      val.segments.forEach(seg => {
-        addNode(seg.start); addNode(seg.end); addEdge(seg.relationship);
-      });
-    }
-  }
-
-  // Process nodes first so neoToCyto is populated before edges resolve their endpoints.
+  // Two-pass: populate neoToCytoMap from nodes before edges resolve their endpoints
   for (const record of records) {
-    record.keys.forEach(k => { const v = record.get(k); if (isNode(v)) addNode(v); });
+    record.keys.forEach(key => {
+      const value = record.get(key);
+      if (isNeo4jNode(value)) addNode(value);
+    });
   }
   for (const record of records) {
-    record.keys.forEach(k => { const v = record.get(k); if (isRel(v)) addEdge(v); });
+    record.keys.forEach(key => {
+      const value = record.get(key);
+      if (isNeo4jRel(value)) addEdge(value);
+    });
   }
 
-  return [...nodes.values(), ...edges.values()];
+  return [...nodeMap.values(), ...edgeMap.values()];
 }
 
 function extractRootId(records) {
   if (!records.length) return null;
   for (const key of records[0].keys) {
-    const v = records[0].get(key);
-    if (isNode(v)) return v.properties.id || neoId(v);
+    const value = records[0].get(key);
+    if (isNeo4jNode(value)) return value.properties.id || getNeoId(value);
   }
   return null;
 }
 
-// ── Layout ─────────────────────────────────────────────────────────────────
+function addToGraph(elements, rootId) {
+  const existingIds = new Set(cy.elements().map(el => el.id()));
+  const newElements = elements.filter(el => !existingIds.has(el.data.id));
+  if (!newElements.length) return 0;
 
-function runDagre() {
-  cy.layout({
-    name: 'dagre',
-    rankDir: 'LR',
-    rankSep: 120,
-    nodeSep: 50,
-    edgeSep: 10,
-    animate: true,
-    animationDuration: 400,
-    fit: true,
-    padding: 50,
-  }).run();
+  cy.add(newElements.filter(el => !el.data.source));
+  cy.add(newElements.filter(el =>  el.data.source));
+
+  if (rootId && cy.getElementById(rootId).length) {
+    runSmartLayout(rootId);
+  } else {
+    runDagreLayout();
+  }
+
+  return newElements.length;
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// LAYOUT ENGINE
+// ═══════════════════════════════════════════════════════════════════
+
+function runDagreLayout() {
+  const savedPositions = new Map();
+  cy.nodes().forEach(node => {
+    if (pinnedNodes.has(node.id())) savedPositions.set(node.id(), { ...node.position() });
+  });
+
+  const layout = cy.layout({
+    name: 'dagre', rankDir: 'LR',
+    rankSep: 120, nodeSep: 50, edgeSep: 10,
+    animate: true, animationDuration: 400, fit: true, padding: 50,
+  });
+
+  layout.one('layoutstop', () => {
+    savedPositions.forEach((pos, nodeId) => cy.getElementById(nodeId).position(pos));
+  });
+
+  layout.run();
 }
 
 /**
  * Radial zone layout:
- *   - Root at (0, 0)
- *   - Each relationship type gets its own zone arranged on a circle around root
- *   - Nodes within a zone are placed in a compact square grid
- *   - 2nd-hop nodes push further outward from their parent along the same angle
+ * - Root at (0, 0)
+ * - Each relationship type → its own zone on a circle around root
+ * - Nodes within a zone in a compact square grid
+ * - 2nd-hop nodes extend radially outward from their parent
  */
-function smartLayout(rootId) {
-  const ZONE_DIST  = 300;  // distance root → zone centre (base)
-  const CELL       = 75;   // node spacing within a zone grid
-  const HOP2_EXTRA = 180;  // extra radial distance for 2nd-hop clusters
+function runSmartLayout(rootId) {
+  const rootNode = cy.getElementById(rootId);
+  if (!rootNode.length) { runDagreLayout(); return; }
 
-  const root = cy.getElementById(rootId);
-  if (!root.length) { runDagre(); return; }
-
-  root.position({ x: 0, y: 0 });
+  if (!pinnedNodes.has(rootId)) rootNode.position({ x: 0, y: 0 });
   const positioned = new Set([rootId]);
 
-  // ── Group direct neighbours by edge type ─────────────────────────────────
-  const groups = new Map(); // edgeType → cyNode[]
-  root.connectedEdges().forEach(edge => {
-    const type  = edge.data('type') || '_';
-    const other = edge.source().id() === rootId ? edge.target() : edge.source();
-    const oid   = other.id();
-    if (positioned.has(oid)) return;
-    if (!groups.has(type)) groups.set(type, []);
-    if (!groups.get(type).some(n => n.id() === oid)) groups.get(type).push(other);
+  // Group direct neighbours by relationship type
+  const zonesByType = new Map(); // relType → cyNode[]
+  rootNode.connectedEdges().forEach(edge => {
+    const relType    = edge.data('type') || '_';
+    const neighbour  = edge.source().id() === rootId ? edge.target() : edge.source();
+    const neighbourId = neighbour.id();
+    if (positioned.has(neighbourId)) return;
+    if (!zonesByType.has(relType)) zonesByType.set(relType, []);
+    if (!zonesByType.get(relType).some(node => node.id() === neighbourId)) {
+      zonesByType.get(relType).push(neighbour);
+    }
   });
 
-  const zoneList  = [...groups.entries()];
-  const N         = zoneList.length;
-  const zoneAngle = new Map(); // edgeType → angle (radians)
+  const zoneList  = [...zonesByType.entries()];
+  const zoneCount = zoneList.length;
+  const zoneAngle = new Map(); // relType → radians
 
-  zoneList.forEach(([type, nodes], i) => {
-    // Evenly space zones on a circle, starting from the right (angle 0)
-    const angle = (2 * Math.PI * i) / Math.max(N, 1);
-    zoneAngle.set(type, angle);
+  zoneList.forEach(([relType, zoneNodes], zoneIdx) => {
+    const angle  = (2 * Math.PI * zoneIdx) / Math.max(zoneCount, 1);
+    zoneAngle.set(relType, angle);
 
-    // Grid size for this zone
-    const cols  = Math.ceil(Math.sqrt(nodes.length));
-    const rows  = Math.ceil(nodes.length / cols);
-    const zoneW = (cols - 1) * CELL;
-    const zoneH = (rows - 1) * CELL;
+    const cols   = Math.ceil(Math.sqrt(zoneNodes.length));
+    const rows   = Math.ceil(zoneNodes.length / cols);
+    const zoneW  = (cols - 1) * ZONE_NODE_CELL;
+    const zoneH  = (rows - 1) * ZONE_NODE_CELL;
+    const dist   = ZONE_BASE_DIST + Math.max(zoneW, zoneH) * 0.3;
+    const zoneX  = dist * Math.cos(angle);
+    const zoneY  = dist * Math.sin(angle);
 
-    // Push larger zones farther out so they don't overlap the root
-    const dist = ZONE_DIST + Math.max(zoneW, zoneH) * 0.3;
-    const ox   = dist * Math.cos(angle);
-    const oy   = dist * Math.sin(angle);
-
-    nodes.forEach((node, idx) => {
-      const c = idx % cols;
-      const r = Math.floor(idx / cols);
-      node.position({
-        x: ox - zoneW / 2 + c * CELL,
-        y: oy - zoneH / 2 + r * CELL,
-      });
+    zoneNodes.forEach((node, nodeIdx) => {
       positioned.add(node.id());
+      if (pinnedNodes.has(node.id())) return;
+      const colIdx = nodeIdx % cols;
+      const rowIdx = Math.floor(nodeIdx / cols);
+      node.position({
+        x: zoneX - zoneW / 2 + colIdx * ZONE_NODE_CELL,
+        y: zoneY - zoneH / 2 + rowIdx * ZONE_NODE_CELL,
+      });
     });
   });
 
-  // ── 2nd-hop: extend each parent's zone outward along the same angle ───────
-  for (const [type, nodes] of groups) {
-    const angle = zoneAngle.get(type);
-    const nx    = Math.cos(angle);
-    const ny    = Math.sin(angle);
+  // 2nd-hop: push further out from parent along the same zone angle
+  for (const [relType, zoneNodes] of zonesByType) {
+    const angle  = zoneAngle.get(relType);
+    const dirX   = Math.cos(angle);
+    const dirY   = Math.sin(angle);
+    const hop2   = new Map(); // parentId → cyNode[]
 
-    const hop2 = new Map(); // parentId → cyNode[]
-    for (const node of nodes) {
-      node.connectedEdges().forEach(edge => {
-        const other = edge.source().id() === node.id() ? edge.target() : edge.source();
-        const oid = other.id();
-        if (positioned.has(oid)) return;
-        const pid = node.id();
-        if (!hop2.has(pid)) hop2.set(pid, []);
-        if (!hop2.get(pid).some(n => n.id() === oid)) hop2.get(pid).push(other);
+    for (const parentNode of zoneNodes) {
+      parentNode.connectedEdges().forEach(edge => {
+        const neighbour    = edge.source().id() === parentNode.id() ? edge.target() : edge.source();
+        const neighbourId  = neighbour.id();
+        if (positioned.has(neighbourId)) return;
+        const parentId = parentNode.id();
+        if (!hop2.has(parentId)) hop2.set(parentId, []);
+        if (!hop2.get(parentId).some(node => node.id() === neighbourId)) {
+          hop2.get(parentId).push(neighbour);
+        }
       });
     }
 
-    for (const [parentId, hop2nodes] of hop2) {
-      const pp   = cy.getElementById(parentId).position();
-      const cols = Math.ceil(Math.sqrt(hop2nodes.length));
-      const rows = Math.ceil(hop2nodes.length / cols);
-      const hx   = pp.x + nx * HOP2_EXTRA;
-      const hy   = pp.y + ny * HOP2_EXTRA;
+    for (const [parentId, hop2Nodes] of hop2) {
+      const parentPos = cy.getElementById(parentId).position();
+      const clusterX  = parentPos.x + dirX * ZONE_HOP2_EXTRA_DIST;
+      const clusterY  = parentPos.y + dirY * ZONE_HOP2_EXTRA_DIST;
+      const cols      = Math.ceil(Math.sqrt(hop2Nodes.length));
 
-      hop2nodes.forEach((node, idx) => {
-        if (positioned.has(node.id())) return;
-        const c = idx % cols;
-        const r = Math.floor(idx / cols);
-        node.position({
-          x: hx + (c - (cols - 1) / 2) * CELL,
-          y: hy + (r - (rows - 1) / 2) * CELL,
-        });
+      hop2Nodes.forEach((node, nodeIdx) => {
         positioned.add(node.id());
+        if (pinnedNodes.has(node.id())) return;
+        const colIdx = nodeIdx % cols;
+        const rowIdx = Math.floor(nodeIdx / cols);
+        node.position({
+          x: clusterX + (colIdx - (cols - 1) / 2) * ZONE_NODE_CELL,
+          y: clusterY + (rowIdx - Math.floor(hop2Nodes.length / cols / 2)) * ZONE_NODE_CELL,
+        });
       });
     }
   }
 
-  // ── Overflow ──────────────────────────────────────────────────────────────
-  let oi = 0;
-  cy.nodes().forEach(n => {
-    if (!positioned.has(n.id())) n.position({ x: 600, y: (oi++) * CELL });
+  // Overflow: anything unreachable from root
+  let overflowIdx = 0;
+  cy.nodes().forEach(node => {
+    if (!positioned.has(node.id())) {
+      node.position({ x: 600, y: (overflowIdx++) * ZONE_NODE_CELL });
+    }
   });
 
   cy.fit(cy.elements(), 50);
 }
 
-function addToGraph(elements, rootId) {
-  const existing = new Set(cy.elements().map(e => e.id()));
-  const fresh = elements.filter(e => !existing.has(e.data.id));
-  if (!fresh.length) return 0;
-
-  // Nodes must exist before edges that reference them
-  cy.add(fresh.filter(e => !e.data.source));
-  cy.add(fresh.filter(e =>  e.data.source));
-
-  if (rootId && cy.getElementById(rootId).length) {
-    smartLayout(rootId);
-  } else {
-    runDagre();
-  }
-
-  return fresh.length;
-}
-
-// ── Queries ────────────────────────────────────────────────────────────────
-
-// Exact name/id match scores 0, contains scores 1 → ORDER BY picks exact first.
-const MATCH_RANK = `
-  CASE WHEN toLower(n.name) = toLower($s) OR toLower(n.id) = toLower($s)
-       OR n.id = 'minecraft:' + $s THEN 0 ELSE 1 END AS _rank`;
-
-const QUERIES = {
-  recipe: `
-    MATCH (i:Item)
-    WHERE toLower(i.name) CONTAINS toLower($s) OR toLower(i.id) CONTAINS toLower($s)
-    WITH i, CASE WHEN toLower(i.name) = toLower($s) OR toLower(i.id) = toLower($s)
-                  OR i.id = 'minecraft:' + $s THEN 0 ELSE 1 END AS _rank
-    ORDER BY _rank LIMIT 1
-    OPTIONAL MATCH (i)<-[p:PRODUCES]-(r:Recipe)
-    OPTIONAL MATCH (r)-[req:REQUIRES]->(ing:Item)
-    OPTIONAL MATCH (r)-[us:USES_STATION]->(st:Item)
-    RETURN i, p, r, req, ing, us, st
-  `,
-  sources: `
-    MATCH (i:Item)
-    WHERE toLower(i.name) CONTAINS toLower($s) OR toLower(i.id) CONTAINS toLower($s)
-    WITH i, CASE WHEN toLower(i.name) = toLower($s) OR toLower(i.id) = toLower($s)
-                  OR i.id = 'minecraft:' + $s THEN 0 ELSE 1 END AS _rank
-    ORDER BY _rank LIMIT 1
-    OPTIONAL MATCH (e:Entity)-[dr:DROPS]->(i)
-    OPTIONAL MATCH (st:Structure)-[co:CONTAINS]->(i)
-    RETURN i, dr, e, co, st
-  `,
-  mob: `
-    MATCH (e:Entity)
-    WHERE toLower(e.name) CONTAINS toLower($s) OR toLower(e.id) CONTAINS toLower($s)
-    WITH e, CASE WHEN toLower(e.name) = toLower($s) OR toLower(e.id) = toLower($s)
-                  OR e.id = 'minecraft:' + $s THEN 0 ELSE 1 END AS _rank
-    ORDER BY _rank LIMIT 1
-    OPTIONAL MATCH (e)-[si:SPAWNS_IN]->(b:Biome)-[ind:IN_DIMENSION]->(d:Dimension)
-    OPTIONAL MATCH (e)-[dr:DROPS]->(item:Item)
-    OPTIONAL MATCH (e)-[fi:FOUND_IN_STRUCTURE]->(st:Structure)
-    RETURN e, si, b, ind, d, dr, item, fi, st
-  `,
-  explore: `
-    MATCH (n)
-    WHERE toLower(n.name) CONTAINS toLower($s) OR toLower(n.id) CONTAINS toLower($s)
-    WITH n, CASE WHEN toLower(n.name) = toLower($s) OR toLower(n.id) = toLower($s)
-                  OR n.id = 'minecraft:' + $s THEN 0 ELSE 1 END AS _rank
-    ORDER BY _rank LIMIT 1
-    MATCH (n)-[r]-(neighbor)
-    RETURN n, r, neighbor
-    LIMIT 60
-  `,
-};
+// ═══════════════════════════════════════════════════════════════════
+// NEO4J QUERY RUNNER
+// ═══════════════════════════════════════════════════════════════════
 
 async function runQuery(cypher, params) {
   const session = driver.session();
@@ -639,106 +734,511 @@ async function runQuery(cypher, params) {
   }
 }
 
-document.getElementById('btn-search').addEventListener('click', search);
-document.getElementById('search-input').addEventListener('keydown', e => {
-  if (e.key === 'Enter') search();
+// ═══════════════════════════════════════════════════════════════════
+// AUTOCOMPLETE
+// ═══════════════════════════════════════════════════════════════════
+
+const searchInputEl      = document.getElementById('search-input');
+const autocompleteEl     = document.getElementById('autocomplete-dropdown');
+let   autocompleteSuggestions = [];
+let   autocompleteActiveIdx   = -1;
+let   autocompleteDebounce    = null;
+
+const AUTOCOMPLETE_CYPHER = `
+  MATCH (node)
+  WHERE toLower(node.name) STARTS WITH toLower($query)
+     OR toLower(node.id)   STARTS WITH toLower($query)
+     OR toLower(node.name) CONTAINS toLower($query)
+  RETURN node.id AS id, node.name AS name, labels(node) AS labels
+  ORDER BY
+    CASE WHEN toLower(node.name) STARTS WITH toLower($query) THEN 0 ELSE 1 END,
+    size(node.name)
+  LIMIT ${AUTOCOMPLETE_LIMIT}
+`;
+
+function positionAutocompleteDropdown() {
+  const rect = searchInputEl.getBoundingClientRect();
+  autocompleteEl.style.top   = (rect.bottom + 2) + 'px';
+  autocompleteEl.style.left  = rect.left + 'px';
+  autocompleteEl.style.width = rect.width + 'px';
+}
+
+function renderAutocompleteSuggestions(suggestions) {
+  autocompleteSuggestions = suggestions;
+  autocompleteActiveIdx   = -1;
+  autocompleteEl.innerHTML = '';
+
+  if (!suggestions.length) { closeAutocomplete(); return; }
+
+  suggestions.forEach((suggestion, idx) => {
+    const label = primaryLabel(suggestion.labels);
+    const color = LABEL_COLOR[label] || '#888';
+    const item  = document.createElement('div');
+    item.className = 'autocomplete-item';
+    item.innerHTML =
+      `<div class="autocomplete-dot" style="background:${color}"></div>` +
+      `<span class="autocomplete-name">${suggestion.name || suggestion.id}</span>` +
+      `<span class="autocomplete-id">${suggestion.id}</span>`;
+    item.addEventListener('mousedown', evt => {
+      evt.preventDefault(); // prevent input blur before selection registers
+      applyAutocompleteSuggestion(idx);
+    });
+    autocompleteEl.appendChild(item);
+  });
+
+  positionAutocompleteDropdown();
+  autocompleteEl.style.display = 'block';
+}
+
+function closeAutocomplete() {
+  autocompleteEl.style.display = 'none';
+  autocompleteSuggestions = [];
+  autocompleteActiveIdx   = -1;
+}
+
+function highlightAutocompleteItem(idx) {
+  autocompleteEl.querySelectorAll('.autocomplete-item')
+    .forEach((item, itemIdx) => item.classList.toggle('active', itemIdx === idx));
+}
+
+function applyAutocompleteSuggestion(idx) {
+  const suggestion = autocompleteSuggestions[idx];
+  if (!suggestion) return;
+  searchInputEl.value                = suggestion.name || suggestion.id;
+  searchInputEl.dataset.detectedType = detectQueryType(suggestion.labels);
+  closeAutocomplete();
+}
+
+searchInputEl.addEventListener('input', () => {
+  clearTimeout(autocompleteDebounce);
+  const query = searchInputEl.value.trim();
+  if (query.length < 2 || !driver) { closeAutocomplete(); return; }
+  autocompleteDebounce = setTimeout(async () => {
+    try {
+      const records     = await runQuery(AUTOCOMPLETE_CYPHER, { query });
+      const suggestions = records.map(record => ({
+        id:     record.get('id'),
+        name:   record.get('name'),
+        labels: record.get('labels'),
+      }));
+      renderAutocompleteSuggestions(suggestions);
+    } catch (_) { /* autocomplete errors are non-fatal */ }
+  }, AUTOCOMPLETE_DELAY);
 });
 
-async function search() {
-  const s = document.getElementById('search-input').value.trim();
-  if (!s || !driver) return;
-  const type = document.getElementById('query-type').value;
+searchInputEl.addEventListener('keydown', evt => {
+  if (autocompleteEl.style.display === 'none') return;
+  const count = autocompleteSuggestions.length;
+  if (evt.key === 'ArrowDown') {
+    evt.preventDefault();
+    autocompleteActiveIdx = (autocompleteActiveIdx + 1) % count;
+    highlightAutocompleteItem(autocompleteActiveIdx);
+  } else if (evt.key === 'ArrowUp') {
+    evt.preventDefault();
+    autocompleteActiveIdx = (autocompleteActiveIdx - 1 + count) % count;
+    highlightAutocompleteItem(autocompleteActiveIdx);
+  } else if (evt.key === 'Enter' && autocompleteActiveIdx >= 0) {
+    evt.preventDefault();
+    evt.stopPropagation();
+    applyAutocompleteSuggestion(autocompleteActiveIdx);
+  }
+});
+
+document.addEventListener('click', evt => {
+  if (!autocompleteEl.contains(evt.target) && evt.target !== searchInputEl) {
+    closeAutocomplete();
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════
+// QUERIES
+// ═══════════════════════════════════════════════════════════════════
+
+const QUERIES = {
+  recipe: `
+    MATCH (item:Item)
+    WHERE toLower(item.name) CONTAINS toLower($searchTerm) OR toLower(item.id) CONTAINS toLower($searchTerm)
+    WITH item, ${rankCase('item')} ORDER BY _rank LIMIT 1
+    OPTIONAL MATCH (item)<-[produces:PRODUCES]-(recipe:Recipe)
+    OPTIONAL MATCH (recipe)-[requires:REQUIRES]->(ingredient:Item)
+    OPTIONAL MATCH (recipe)-[usesStation:USES_STATION]->(station:Item)
+    RETURN item, produces, recipe, requires, ingredient, usesStation, station
+  `,
+  sources: `
+    MATCH (item:Item)
+    WHERE toLower(item.name) CONTAINS toLower($searchTerm) OR toLower(item.id) CONTAINS toLower($searchTerm)
+    WITH item, ${rankCase('item')} ORDER BY _rank LIMIT 1
+    OPTIONAL MATCH (entity:Entity)-[drops:DROPS]->(item)
+    OPTIONAL MATCH (structure:Structure)-[contains:CONTAINS]->(item)
+    RETURN item, drops, entity, contains, structure
+  `,
+  mob: `
+    MATCH (entity:Entity)
+    WHERE toLower(entity.name) CONTAINS toLower($searchTerm) OR toLower(entity.id) CONTAINS toLower($searchTerm)
+    WITH entity, ${rankCase('entity')} ORDER BY _rank LIMIT 1
+    OPTIONAL MATCH (entity)-[spawnsIn:SPAWNS_IN]->(biome:Biome)-[inDim:IN_DIMENSION]->(dim:Dimension)
+    OPTIONAL MATCH (entity)-[drops:DROPS]->(item:Item)
+    OPTIONAL MATCH (entity)-[foundIn:FOUND_IN_STRUCTURE]->(structure:Structure)
+    RETURN entity, spawnsIn, biome, inDim, dim, drops, item, foundIn, structure
+  `,
+  explore: `
+    MATCH (node)
+    WHERE toLower(node.name) CONTAINS toLower($searchTerm) OR toLower(node.id) CONTAINS toLower($searchTerm)
+    WITH node, ${rankCase('node')} ORDER BY _rank LIMIT 1
+    MATCH (node)-[rel]-(neighbour)
+    RETURN node, rel, neighbour
+    LIMIT 60
+  `,
+};
+
+// ═══════════════════════════════════════════════════════════════════
+// SEARCH
+// ═══════════════════════════════════════════════════════════════════
+
+document.getElementById('btn-search').addEventListener('click', runSearch);
+searchInputEl.addEventListener('keydown', evt => {
+  if (evt.key === 'Enter' && autocompleteActiveIdx < 0) runSearch();
+});
+
+async function runSearch() {
+  const searchTerm = searchInputEl.value.trim();
+  if (!searchTerm || !driver) return;
+  closeAutocomplete();
+
+  let queryType = document.getElementById('query-type').value;
+  if (queryType === 'auto') {
+    queryType = searchInputEl.dataset.detectedType || 'explore';
+  }
+
   setStatus('Searching…');
   try {
-    const records = await runQuery(QUERIES[type], { s });
-    const rootId  = extractRootId(records);
-    const elements = processResults(records);
-    const added = addToGraph(elements, rootId);
+    const records  = await runQuery(QUERIES[queryType], { searchTerm });
+    const rootId   = extractRootId(records);
+    const elements = processQueryResults(records);
+    const added    = addToGraph(elements, rootId);
+
+    if (rootId) lastRootId = rootId;
+    saveBreadcrumb(`${searchTerm} (${queryType})`, rootId);
     setStatus(`${added} new elements added (${cy.elements().length} total).`, 'ok');
-  } catch (e) {
-    setStatus('Query error: ' + e.message, 'error');
+  } catch (err) {
+    setStatus('Query error: ' + err.message, 'error');
   }
 }
 
 document.getElementById('btn-clear').addEventListener('click', () => {
   cy.elements().remove();
-  neoToCyto.clear();
-  hideInfo();
+  neoToCytoMap.clear();
+  pinnedNodes.clear();
+  lastRootId = null;
+  hideInfoPanel();
   setStatus('Graph cleared.', 'ok');
 });
 
-// ── Node info panel ────────────────────────────────────────────────────────
-
-const SKIP_PROPS = new Set(['id', 'label', 'color', 'neoLabels', 'image', 'namespace', 'name']);
-
-function showInfo(node) {
-  selectedNode = node;
-  const panel = document.getElementById('info-panel');
-  const data = node.data();
-  document.getElementById('info-title').textContent = data.id;
-  const body = document.getElementById('info-body');
-  body.innerHTML = '';
-
-  const labels = (data.neoLabels || []).join(', ');
-  appendInfo(body, 'type', labels);
-
-  for (const [k, v] of Object.entries(data)) {
-    if (SKIP_PROPS.has(k) || v === null || v === undefined || v === '') continue;
-    appendInfo(body, k, typeof v === 'number' ? v.toFixed(2).replace(/\.00$/, '') : String(v));
+async function expandNeighbours(nodeId) {
+  if (!driver) return;
+  setStatus('Expanding…');
+  try {
+    const records  = await runQuery(
+      `MATCH (node {id: $nodeId})-[rel]-(neighbour) RETURN node, rel, neighbour LIMIT ${EXPAND_LIMIT}`,
+      { nodeId }
+    );
+    const elements = processQueryResults(records);
+    const added    = addToGraph(elements, null);
+    setStatus(`${added} new elements added.`, 'ok');
+  } catch (err) {
+    setStatus('Expand error: ' + err.message, 'error');
   }
-  panel.classList.add('visible');
 }
 
-function appendInfo(parent, key, val) {
+// ═══════════════════════════════════════════════════════════════════
+// BREADCRUMB HISTORY
+// ═══════════════════════════════════════════════════════════════════
+
+function saveBreadcrumb(label, rootId) {
+  const snapshot = {
+    label,
+    rootId,
+    elements:   [...cy.nodes().map(node => node.json()), ...cy.edges().map(edge => edge.json())],
+    neoMapping: [...neoToCytoMap.entries()],
+  };
+  breadcrumbs.push(snapshot);
+  if (breadcrumbs.length > MAX_BREADCRUMBS) breadcrumbs.shift();
+  renderBreadcrumbs(breadcrumbs.length - 1);
+}
+
+function restoreBreadcrumb(snapshotIdx) {
+  const snapshot = breadcrumbs[snapshotIdx];
+  if (!snapshot) return;
+
+  cy.elements().remove();
+  neoToCytoMap.clear();
+  pinnedNodes.clear();
+  snapshot.neoMapping.forEach(([neoId, cytoId]) => neoToCytoMap.set(neoId, cytoId));
+
+  const nodeElements = snapshot.elements.filter(el => el.group === 'nodes');
+  const edgeElements = snapshot.elements.filter(el => el.group === 'edges');
+  cy.add(nodeElements);
+  cy.add(edgeElements);
+
+  lastRootId = snapshot.rootId;
+  hideInfoPanel();
+  setStatus(`Restored: ${snapshot.label}`, 'ok');
+  renderBreadcrumbs(snapshotIdx);
+}
+
+function renderBreadcrumbs(currentIdx = breadcrumbs.length - 1) {
+  const sectionEl = document.getElementById('breadcrumb-section');
+  const listEl    = document.getElementById('breadcrumb-list');
+
+  if (!breadcrumbs.length) { sectionEl.style.display = 'none'; return; }
+  sectionEl.style.display = 'block';
+  listEl.innerHTML = '';
+
+  breadcrumbs.forEach((crumb, idx) => {
+    const chip = document.createElement('div');
+    chip.className = 'breadcrumb-chip' + (idx === currentIdx ? ' current' : '');
+    chip.textContent = crumb.label;
+    chip.addEventListener('click', () => restoreBreadcrumb(idx));
+    listEl.appendChild(chip);
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// NODE INFO PANEL
+// ═══════════════════════════════════════════════════════════════════
+
+const SKIP_INFO_KEYS = new Set(['id', 'label', 'color', 'neoLabels', 'image', 'namespace', 'name']);
+
+function showInfoPanel(node) {
+  selectedNode = node;
+  const data   = node.data();
+  document.getElementById('info-title').textContent = data.id;
+
+  const bodyEl = document.getElementById('info-body');
+  bodyEl.innerHTML = '';
+  appendInfoRow(bodyEl, 'type', (data.neoLabels || []).join(', '));
+
+  for (const [key, value] of Object.entries(data)) {
+    if (SKIP_INFO_KEYS.has(key) || value == null || value === '') continue;
+    const display = typeof value === 'number'
+      ? value.toFixed(2).replace(/\.00$/, '')
+      : String(value);
+    appendInfoRow(bodyEl, key, display);
+  }
+
+  document.getElementById('info-panel').classList.add('visible');
+}
+
+function appendInfoRow(parent, key, value) {
   const row = document.createElement('div');
   row.className = 'info-row';
-  row.innerHTML = `<span class="info-key">${key}</span><span class="info-val">${val}</span>`;
+  row.innerHTML = `<span class="info-key">${key}</span><span class="info-val">${value}</span>`;
   parent.appendChild(row);
 }
 
-function hideInfo() {
+function hideInfoPanel() {
   document.getElementById('info-panel').classList.remove('visible');
   selectedNode = null;
 }
 
-cy.on('tap', 'node', evt => showInfo(evt.target));
-cy.on('tap', evt => { if (evt.target === cy) hideInfo(); });
+cy.on('tap', 'node', evt => showInfoPanel(evt.target));
+cy.on('tap', evt   => { if (evt.target === cy) hideInfoPanel(); });
+cy.on('dblclick', 'node', evt => expandNeighbours(evt.target.data('id')));
 
-// Double-click a node → expand its neighbors
-cy.on('dblclick', 'node', async evt => {
-  if (!driver) return;
-  const nodeId = evt.target.data('id');
-  setStatus('Expanding…');
-  try {
-    const records = await runQuery(`
-      MATCH (n {id: $id})-[r]-(neighbor)
-      RETURN n, r, neighbor LIMIT 50
-    `, { id: nodeId });
-    const elements = processResults(records);
-    const added = addToGraph(elements);
-    setStatus(`${added} new elements added.`, 'ok');
-  } catch (e) {
-    setStatus('Expand error: ' + e.message, 'error');
+document.getElementById('btn-expand').addEventListener('click', () => {
+  if (selectedNode) expandNeighbours(selectedNode.data('id'));
+});
+
+// ═══════════════════════════════════════════════════════════════════
+// PIN SYSTEM  (drag to pin; right-click or shortcut to unpin)
+// ═══════════════════════════════════════════════════════════════════
+
+cy.on('dragfree', 'node', evt => {
+  const node = evt.target;
+  pinnedNodes.add(node.id());
+  node.data('pinned', true);
+});
+
+function pinNode(node) {
+  pinnedNodes.add(node.id());
+  node.data('pinned', true);
+}
+
+function unpinNode(nodeId) {
+  pinnedNodes.delete(nodeId);
+  cy.getElementById(nodeId).removeData('pinned');
+}
+
+function unpinAllNodes() {
+  pinnedNodes.forEach(nodeId => cy.getElementById(nodeId).removeData('pinned'));
+  pinnedNodes.clear();
+  setStatus('All nodes unpinned.', 'ok');
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// CONTEXT MENU
+// ═══════════════════════════════════════════════════════════════════
+
+const contextMenuEl = document.getElementById('context-menu');
+
+function openContextMenu(clientX, clientY, node) {
+  const nodeId   = node.data('id');
+  const labels   = node.data('neoLabels') || [];
+  const isPinned = pinnedNodes.has(nodeId);
+
+  const menuItems = [];
+
+  if (labels.includes('Entity')) {
+    menuItems.push({ label: 'Mob info',          action: () => searchNodeAs(node, 'mob')     });
+    menuItems.push({ label: 'Item sources (drops)', action: () => searchNodeAs(node, 'sources') });
+  }
+  if (labels.some(l => ['Item', 'Armor', 'Tool', 'Food'].includes(l))) {
+    menuItems.push({ label: 'Recipe chain', action: () => searchNodeAs(node, 'recipe')  });
+    menuItems.push({ label: 'Item sources', action: () => searchNodeAs(node, 'sources') });
+  }
+  if (['Biome', 'Structure', 'Dimension'].some(l => labels.includes(l))) {
+    menuItems.push({ label: 'Explore neighbors', action: () => searchNodeAs(node, 'explore') });
+  }
+
+  menuItems.push({ separator: true });
+  menuItems.push({
+    label:  isPinned ? 'Unpin node' : 'Pin node',
+    action: () => { isPinned ? unpinNode(nodeId) : pinNode(node); },
+  });
+  menuItems.push({ label: 'Expand neighbors', action: () => expandNeighbours(nodeId) });
+  menuItems.push({ separator: true });
+  menuItems.push({
+    label:  'Remove from graph',
+    danger: true,
+    action: () => {
+      if (selectedNode?.id() === node.id()) hideInfoPanel();
+      pinnedNodes.delete(nodeId);
+      cy.getElementById(nodeId).remove();
+      setStatus('Node removed.', 'ok');
+    },
+  });
+
+  contextMenuEl.innerHTML = '';
+  menuItems.forEach(item => {
+    if (item.separator) {
+      const sep = document.createElement('div');
+      sep.className = 'context-sep';
+      contextMenuEl.appendChild(sep);
+      return;
+    }
+    const el = document.createElement('div');
+    el.className = 'context-item' + (item.danger ? ' danger' : '');
+    el.textContent = item.label;
+    el.addEventListener('click', () => { closeContextMenu(); item.action(); });
+    contextMenuEl.appendChild(el);
+  });
+
+  const menuW = 180;
+  const menuH = menuItems.length * 32;
+  contextMenuEl.style.left    = Math.min(clientX, window.innerWidth  - menuW - 8) + 'px';
+  contextMenuEl.style.top     = Math.min(clientY, window.innerHeight - menuH - 8) + 'px';
+  contextMenuEl.style.display = 'block';
+}
+
+function closeContextMenu() {
+  contextMenuEl.style.display = 'none';
+}
+
+function searchNodeAs(node, queryType) {
+  const name = node.data('name') || node.data('id');
+  searchInputEl.value                = name;
+  searchInputEl.dataset.detectedType = queryType;
+  document.getElementById('query-type').value = 'auto';
+  runSearch();
+}
+
+cy.on('cxttap', 'node', evt => {
+  const { clientX, clientY } = evt.originalEvent;
+  openContextMenu(clientX, clientY, evt.target);
+});
+
+document.addEventListener('click', closeContextMenu);
+document.addEventListener('contextmenu', evt => {
+  if (evt.target?.closest?.('#graph-container')) evt.preventDefault();
+});
+
+// ═══════════════════════════════════════════════════════════════════
+// KEYBOARD SHORTCUTS
+// ═══════════════════════════════════════════════════════════════════
+
+document.addEventListener('keydown', evt => {
+  const tag     = document.activeElement?.tagName?.toLowerCase();
+  const inInput = (tag === 'input' || tag === 'select' || tag === 'textarea');
+
+  switch (evt.key) {
+    case '/':
+      if (!inInput) { evt.preventDefault(); searchInputEl.focus(); searchInputEl.select(); }
+      break;
+
+    case 'Escape':
+      if (autocompleteEl.style.display !== 'none') { closeAutocomplete(); break; }
+      if (contextMenuEl.style.display  !== 'none') { closeContextMenu();  break; }
+      if (inInput) { document.activeElement.blur(); break; }
+      cy.elements().unselect();
+      hideInfoPanel();
+      break;
+
+    case 'f': case 'F':
+      if (!inInput) cy.fit(cy.elements(), 50);
+      break;
+
+    case 'r': case 'R':
+      if (!inInput) {
+        if (lastRootId) runSmartLayout(lastRootId);
+        else runDagreLayout();
+      }
+      break;
+
+    case 'u': case 'U':
+      if (!inInput) unpinAllNodes();
+      break;
+
+    case 'Delete': case 'Backspace':
+      if (!inInput && selectedNode) {
+        const nodeId = selectedNode.data('id');
+        pinnedNodes.delete(nodeId);
+        selectedNode.remove();
+        hideInfoPanel();
+        setStatus('Node removed.', 'ok');
+      }
+      break;
   }
 });
 
-// ── Expand button ──────────────────────────────────────────────────────────
-document.getElementById('btn-expand').addEventListener('click', async () => {
-  if (!selectedNode || !driver) return;
-  const nodeId = selectedNode.data('id');
-  setStatus('Expanding…');
-  try {
-    const records = await runQuery(`
-      MATCH (n {id: $id})-[r]-(neighbor)
-      RETURN n, r, neighbor LIMIT 50
-    `, { id: nodeId });
-    const elements = processResults(records);
-    const added = addToGraph(elements);
-    setStatus(`${added} new elements added.`, 'ok');
-  } catch (e) {
-    setStatus('Expand error: ' + e.message, 'error');
-  }
+// ═══════════════════════════════════════════════════════════════════
+// FAST ZOOM  (Shift + scroll wheel)
+// ═══════════════════════════════════════════════════════════════════
+
+document.getElementById('cy').addEventListener('wheel', evt => {
+  if (!evt.shiftKey) return;
+  evt.preventDefault();
+  evt.stopPropagation(); // prevent cytoscape's own handler from also firing
+
+  const zoomFactor = evt.deltaY < 0 ? 1.5 : 1 / 1.5;
+  const newZoom    = Math.max(cy.minZoom(), Math.min(cy.maxZoom(), cy.zoom() * zoomFactor));
+
+  cy.zoom({
+    level:            newZoom,
+    renderedPosition: { x: evt.offsetX, y: evt.offsetY },
+  });
+}, { passive: false });
+
+// ═══════════════════════════════════════════════════════════════════
+// SHORTCUTS PANEL TOGGLE
+// ═══════════════════════════════════════════════════════════════════
+
+document.getElementById('shortcuts-toggle').addEventListener('click', () => {
+  const body  = document.getElementById('shortcuts-body');
+  const arrow = document.getElementById('shortcuts-arrow');
+  const open  = body.classList.toggle('open');
+  arrow.textContent = open ? '▾' : '▸';
 });
+
 </script>
 </body>
 </html>
