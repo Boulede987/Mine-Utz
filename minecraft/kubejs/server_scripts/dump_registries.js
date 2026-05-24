@@ -185,14 +185,11 @@ ServerEvents.commandRegistry(event => {
         ), false);
     }
 
-    function getAttrAmount(item, attrId) {
-        const DataComponents = Java.loadClass('net.minecraft.core.component.DataComponents');
-        const attrMods = item.components().get(DataComponents.ATTRIBUTE_MODIFIERS);
-        if (!attrMods) return null;
-        const mods = attrMods.modifiers();
-        for (let i = 0; i < mods.size(); i++) {
-            const entry = mods.get(i);
-            const keyOpt = entry.attribute().unwrapKey();
+    function getAttrAmount(stack, attrId) {
+        var mods = stack.getAttributeModifiers().modifiers();
+        for (var i = 0; i < mods.size(); i++) {
+            var entry  = mods.get(i);
+            var keyOpt = entry.attribute().unwrapKey();
             if (!keyOpt.isPresent()) continue;
             if (keyOpt.get().location().toString() === attrId)
                 return entry.modifier().amount();
@@ -201,88 +198,140 @@ ServerEvents.commandRegistry(event => {
     }
 
     function runFoodStatsDump(ctx) {
-        const DataComponents = Java.loadClass('net.minecraft.core.component.DataComponents');
-        const Registries     = Java.loadClass('net.minecraft.core.registries.Registries');
-        const itemRegistry   = ctx.source.getServer().registryAccess().registryOrThrow(Registries.ITEM);
+        const ItemStack    = Java.loadClass('net.minecraft.world.item.ItemStack');
+        const Registries   = Java.loadClass('net.minecraft.core.registries.Registries');
+        const itemRegistry = ctx.source.getServer().registryAccess().registryOrThrow(Registries.ITEM);
 
-        let lines = ['===== FOOD STATS DUMP START ====='];
-        let total = 0;
+        let lines  = ['===== FOOD STATS DUMP START ====='];
+        let total  = 0;
+        let errors = 0;
 
         itemRegistry.keySet().forEach(loc => {
             try {
-                const item = itemRegistry.get(loc);
-                const food = item.components().get(DataComponents.FOOD);
+                var opt = itemRegistry.getOptional(loc);
+                if (!opt.isPresent()) return;
+                var holder = opt.get();
+                var item  = holder.value ? holder.value() : holder;
+                var stack = new ItemStack(item);
+                var food  = item.getFoodProperties(stack, null);
                 if (!food) return;
                 lines.push(`${loc} | ${food.nutrition()} | ${food.saturation()}`);
                 total++;
-            } catch(e) {}
+            } catch(e) { errors++; lines.push(`# ERROR ${e}`); }
         });
 
-        lines.push(`===== FOOD STATS DUMP END (${total} total) =====`);
+        lines.push(`===== FOOD STATS DUMP END (${total} total, ${errors} errors) =====`);
         console.log(lines.join('\n'));
-        ctx.source.sendSuccess(() => Component.literal(`§aDumped ${total} food items to logs`), false);
+        ctx.source.sendSuccess(() => Component.literal(`§aDumped ${total} food items (${errors} errors)`), false);
     }
 
     function runToolStatsDump(ctx) {
-        const DataComponents = Java.loadClass('net.minecraft.core.component.DataComponents');
-        const Registries     = Java.loadClass('net.minecraft.core.registries.Registries');
-        const itemRegistry   = ctx.source.getServer().registryAccess().registryOrThrow(Registries.ITEM);
+        const ItemStack    = Java.loadClass('net.minecraft.world.item.ItemStack');
+        const Registries   = Java.loadClass('net.minecraft.core.registries.Registries');
+        const itemRegistry = ctx.source.getServer().registryAccess().registryOrThrow(Registries.ITEM);
 
-        let lines = ['===== TOOL STATS DUMP START ====='];
-        let total = 0;
+        let lines  = ['===== TOOL STATS DUMP START ====='];
+        let total  = 0;
+        let errors = 0;
 
         itemRegistry.keySet().forEach(loc => {
             try {
-                const item       = itemRegistry.get(loc);
-                const atkDmg     = getAttrAmount(item, 'minecraft:attack_damage');
-                const atkSpd     = getAttrAmount(item, 'minecraft:attack_speed');
+                var opt = itemRegistry.getOptional(loc);
+                if (!opt.isPresent()) return;
+                var holder = opt.get();
+                var item   = holder.value ? holder.value() : holder;
+                var stack  = new ItemStack(item);
+                var atkDmg = getAttrAmount(stack, 'minecraft:generic.attack_damage');
+                var atkSpd = getAttrAmount(stack, 'minecraft:generic.attack_speed');
                 if (atkDmg === null && atkSpd === null) return;
 
-                const maxDmgComp = item.components().get(DataComponents.MAX_DAMAGE);
-                const durability = maxDmgComp != null ? maxDmgComp : 0;
-
-                lines.push(`${loc} | ${atkDmg} | ${atkSpd} | ${durability}`);
+                lines.push(`${loc} | ${atkDmg} | ${atkSpd} | ${stack.getMaxDamage()}`);
                 total++;
-            } catch(e) {}
+            } catch(e) { errors++; lines.push(`# ERROR ${e}`); }
         });
 
-        lines.push(`===== TOOL STATS DUMP END (${total} total) =====`);
+        lines.push(`===== TOOL STATS DUMP END (${total} total, ${errors} errors) =====`);
         console.log(lines.join('\n'));
-        ctx.source.sendSuccess(() => Component.literal(`§aDumped ${total} tool/weapon items to logs`), false);
+        ctx.source.sendSuccess(() => Component.literal(`§aDumped ${total} tool/weapon items (${errors} errors)`), false);
     }
 
     function runArmorStatsDump(ctx) {
-        const DataComponents = Java.loadClass('net.minecraft.core.component.DataComponents');
-        const Registries     = Java.loadClass('net.minecraft.core.registries.Registries');
-        const itemRegistry   = ctx.source.getServer().registryAccess().registryOrThrow(Registries.ITEM);
+        const ItemStack    = Java.loadClass('net.minecraft.world.item.ItemStack');
+        const Registries   = Java.loadClass('net.minecraft.core.registries.Registries');
+        const itemRegistry = ctx.source.getServer().registryAccess().registryOrThrow(Registries.ITEM);
 
-        let lines = ['===== ARMOR STATS DUMP START ====='];
-        let total = 0;
+        let lines  = ['===== ARMOR STATS DUMP START ====='];
+        let total  = 0;
+        let errors = 0;
 
         itemRegistry.keySet().forEach(loc => {
             try {
-                const item    = itemRegistry.get(loc);
-                const armor   = getAttrAmount(item, 'minecraft:armor');
+                var opt = itemRegistry.getOptional(loc);
+                if (!opt.isPresent()) return;
+                var holder = opt.get();
+                var item      = holder.value ? holder.value() : holder;
+                var stack     = new ItemStack(item);
+                var armor     = getAttrAmount(stack, 'minecraft:generic.armor');
                 if (armor === null) return;
 
-                const toughness = getAttrAmount(item, 'minecraft:armor_toughness') ?? 0;
-                const kbRes     = getAttrAmount(item, 'minecraft:knockback_resistance') ?? 0;
-
-                const maxDmgComp = item.components().get(DataComponents.MAX_DAMAGE);
-                const durability = maxDmgComp != null ? maxDmgComp : 0;
-
-                lines.push(`${loc} | ${armor} | ${toughness} | ${kbRes} | ${durability}`);
+                var toughness = getAttrAmount(stack, 'minecraft:generic.armor_toughness');
+                var kbRes     = getAttrAmount(stack, 'minecraft:generic.knockback_resistance');
+                lines.push(`${loc} | ${armor} | ${toughness !== null ? toughness : 0} | ${kbRes !== null ? kbRes : 0} | ${stack.getMaxDamage()}`);
                 total++;
-            } catch(e) {}
+            } catch(e) { errors++; lines.push(`# ERROR ${e}`); }
         });
 
-        lines.push(`===== ARMOR STATS DUMP END (${total} total) =====`);
+        lines.push(`===== ARMOR STATS DUMP END (${total} total, ${errors} errors) =====`);
         console.log(lines.join('\n'));
-        ctx.source.sendSuccess(() => Component.literal(`§aDumped ${total} armor items to logs`), false);
+        ctx.source.sendSuccess(() => Component.literal(`§aDumped ${total} armor items (${errors} errors)`), false);
     }
 
     event.register(Commands.literal('dump_structures').requires(src => src.hasPermission(2)).executes(ctx => {
         try { runDump(ctx, 'STRUCTURE', 'STRUCTURE'); } catch(e) { ctx.source.sendFailure(Component.literal(`§cFailed: ${e}`)); }
+        return 1;
+    }));
+
+    function runDebugDump(ctx) {
+        const ItemStack    = Java.loadClass('net.minecraft.world.item.ItemStack');
+        const Registries   = Java.loadClass('net.minecraft.core.registries.Registries');
+        const itemRegistry = ctx.source.getServer().registryAccess().registryOrThrow(Registries.ITEM);
+        let lines = ['===== DEBUG START ====='];
+
+        itemRegistry.keySet().forEach(loc => {
+            if (loc.toString() !== 'minecraft:diamond_sword') return;
+            lines.push('loc: ' + loc + ' (typeof ' + (typeof loc) + ')');
+
+            try {
+                var opt = itemRegistry.getOptional(loc);
+                lines.push('opt.isPresent: ' + opt.isPresent());
+                if (!opt.isPresent()) return;
+                var holder = opt.get();
+                lines.push('holder: ' + holder + ' (typeof ' + (typeof holder) + ')');
+                var item = (holder.value) ? holder.value() : holder;
+                lines.push('item: ' + item + ' (typeof ' + (typeof item) + ')');
+
+                try {
+                    var stack = new ItemStack(item);
+                    lines.push('stack.isEmpty: ' + stack.isEmpty());
+                    var am = stack.getAttributeModifiers();
+                    lines.push('am: ' + am);
+                    lines.push('mods.size: ' + am.modifiers().size());
+                    if (am.modifiers().size() > 0) {
+                        var e0 = am.modifiers().get(0);
+                        lines.push('entry[0].attribute: ' + e0.attribute().unwrapKey().get().location());
+                        lines.push('entry[0].amount: ' + e0.modifier().amount());
+                    }
+                } catch(e2) { lines.push('ItemStack/am error: ' + e2); }
+            } catch(e) { lines.push('getOptional error: ' + e); }
+        });
+
+        lines.push('===== DEBUG END =====');
+        console.log(lines.join('\n'));
+        ctx.source.sendSuccess(() => Component.literal('§aDebug done, check logs'), false);
+    }
+
+    event.register(Commands.literal('dump_debug').requires(src => src.hasPermission(2)).executes(ctx => {
+        try { runDebugDump(ctx); } catch(e) { ctx.source.sendFailure(Component.literal(`§cDebug failed: ${e}`)); }
         return 1;
     }));
 

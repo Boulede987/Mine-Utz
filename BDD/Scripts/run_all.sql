@@ -12,3 +12,9 @@
 -- Schema (drop & recreate database, all tables)
 SOURCE DBSetUp.sql;
 SOURCE DataInsertion.sql;
+
+-- Row counts per table
+SELECT table_name, table_rows
+FROM information_schema.tables
+WHERE table_schema = 'MineutzDB'
+ORDER BY table_name;
