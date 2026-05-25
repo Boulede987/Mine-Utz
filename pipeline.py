@@ -81,6 +81,13 @@ def step_consistency() -> bool:
     return run("check_consistency.py", "Run integrity checks")
 
 
+def step_worldgen_noise():
+    hr("STEP: World gen — overworld noise")
+    print("  Load your world and make sure you have op (level 2+).")
+    pause("Run  /dump_all_noise  in-game, then wait for the success message.")
+    return run("worldgen/extract_noise_to_json.py", "Extract noise → worldgen_data/")
+
+
 def step_full_pipeline():
     hr("FULL PIPELINE")
     failures = []
@@ -154,7 +161,7 @@ MENU = """\
   16  Launch web explorer  (opens browser)
 
   ── World gen ───────────────────────────
-  17  Overworld noise → dimension JSONs
+  17  All noise params → worldgen_data/  (run /dump_all_noise first)
 
    0  Exit
 """
@@ -176,7 +183,7 @@ ACTIONS = {
     "14": step_consistency,
     "15": lambda: run("export_to_neo4j.py",                         "Export to Neo4j"),
     "16": step_web_explorer,
-    "17": lambda: run("worldgen/extract_overworld_noise.py",        "Overworld noise → dimension JSONs"),
+    "17": step_worldgen_noise,
 }
 
 

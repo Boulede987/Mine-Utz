@@ -36,7 +36,7 @@ import zipfile
 from collections import defaultdict
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent))
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from lib.paths        import MODS_DIR, LISTS, VANILLA_JAR
 from lib.io_utils     import write_txt

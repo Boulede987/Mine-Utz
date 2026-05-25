@@ -1,0 +1,132 @@
+{
+  "namespace": "undergroundworlds",
+  "dimensions": {
+    "minecraft:overworld": {
+      "surface": [],
+      "underground": [],
+      "caves": [
+        {
+          "biome": "undergroundworlds:spider_cave",
+          "parameters": {
+            "temperature": [
+              -0.4,
+              0.2
+            ],
+            "humidity": [
+              -1.0,
+              -0.4
+            ],
+            "continentalness": [
+              0.5,
+              1.0
+            ],
+            "erosion": [
+              -1.0,
+              1.0
+            ],
+            "depth": [
+              0.2,
+              0.9
+            ],
+            "weirdness": [
+              0.7,
+              1.0
+            ],
+            "offset": 0.0
+          }
+        },
+        {
+          "biome": "undergroundworlds:underground_desert",
+          "parameters": {
+            "temperature": [
+              0.6,
+              1.0
+            ],
+            "humidity": [
+              -1.0,
+              -0.4
+            ],
+            "continentalness": [
+              0.5,
+              1.0
+            ],
+            "erosion": [
+              -1.0,
+              1.0
+            ],
+            "depth": [
+              0.2,
+              0.9
+            ],
+            "weirdness": [
+              0.0,
+              1.0
+            ],
+            "offset": 0.0
+          }
+        },
+        {
+          "biome": "undergroundworlds:underground_jungle",
+          "parameters": {
+            "temperature": [
+              0.4,
+              1.0
+            ],
+            "humidity": [
+              0.4,
+              1.0
+            ],
+            "continentalness": [
+              0.5,
+              1.0
+            ],
+            "erosion": [
+              -1.0,
+              1.0
+            ],
+            "depth": [
+              0.2,
+              0.9
+            ],
+            "weirdness": [
+              0.0,
+              1.0
+            ],
+            "offset": 0.0
+          }
+        },
+        {
+          "biome": "undergroundworlds:underground_tundra",
+          "parameters": {
+            "temperature": [
+              -1.0,
+              -0.5
+            ],
+            "humidity": [
+              0.0,
+              1.0
+            ],
+            "continentalness": [
+              0.5,
+              1.0
+            ],
+            "erosion": [
+              0.0,
+              1.0
+            ],
+            "depth": [
+              0.2,
+              0.9
+            ],
+            "weirdness": [
+              0.0,
+              1.0
+            ],
+            "offset": 0.0
+          }
+        }
+      ],
+      "deep": []
+    }
+  }
+}
