@@ -162,6 +162,8 @@ MENU = """\
 
   ── World gen ───────────────────────────
   17  All noise params → worldgen_data/  (run /dump_all_noise first)
+  18  BiomesOPlenty noise params  (parse from source, no dump needed)
+  19  Oh The Biomes We've Gone noise params  (parse from source)
 
    0  Exit
 """
@@ -184,6 +186,8 @@ ACTIONS = {
     "15": lambda: run("export_to_neo4j.py",                         "Export to Neo4j"),
     "16": step_web_explorer,
     "17": step_worldgen_noise,
+    "18": lambda: run("worldgen/parse_bop_source.py",  "BiomesOPlenty noise -> worldgen_data/biomesoplenty.json"),
+    "19": lambda: run("worldgen/parse_bwg_source.py",  "Oh The Biomes We've Gone noise -> worldgen_data/biomeswevegone.json"),
 }
 
 
