@@ -12,6 +12,7 @@ A custom Minecraft modpack tracked with [packwiz](https://packwiz.infra.link/) a
 - [Adding Mods](#adding-mods)
 - [Testing](#testing)
 - [Registry Dumps](#registry-dumps)
+- [Graph Explorer](#graph-explorer)
 - [Making a Release](#making-a-release)
 
 ---
@@ -30,7 +31,9 @@ A custom Minecraft modpack tracked with [packwiz](https://packwiz.infra.link/) a
 │   ├── kubejs/                # KubeJS scripts (tracked)
 │   ├── local/ftbquests/       # FTB Quests quest book (tracked)
 │   └── cobblenav/settings/    # Cobblenav settings (tracked)
-├── lists/                     # Registry dump snapshots (tracked, for diffing on mod updates)
+├── lists/                     # Extracted data snapshots: items, loot tables, recipes, biomes, etc.
+├── pythonScripts/             # Data extraction pipeline (jar scanner → lists/ → Neo4j)
+├── webui/                     # Graph Explorer web app (Cytoscape.js + Neo4j)
 └── release/                   # Exported .mrpack files for distribution
 ```
 
@@ -183,6 +186,72 @@ git commit -m "update lists after <mod name> update"
 ```
 
 This makes the Git history a reliable audit trail — you can always look back at any commit and know exactly what content was available in the pack at that point, which is especially useful when writing InControl spawn rules or datapack JSON that references specific IDs.
+
+---
+
+## Graph Explorer
+
+A browser-based graph UI for exploring the modpack's data — items, recipes, mobs, biomes, structures, dimensions, and block drops — as an interactive node graph backed by Neo4j.
+
+### Prerequisites
+
+- [Neo4j Desktop](https://neo4j.com/download/) (or any Neo4j 5.x instance) running locally on `bolt://localhost:7687`
+- Python 3.11+ with the `neo4j` driver: `pip install neo4j`
+
+### Running the pipeline
+
+The pipeline extracts data from mod jars and loads it into Neo4j. Run these scripts in order from the repo root:
+
+```bash
+# 1. Extract data from all mod jars
+python pythonScripts/extract_from_jars.py
+
+# 2. (Optional) Extract data that requires loading the game first
+#    — biome/dimension mappings, structure loot table references
+python pythonScripts/extract_dimension_biomes.py
+python pythonScripts/extract_structure_loottables.py
+
+# 3. Load everything into Neo4j
+python pythonScripts/export_to_neo4j.py
+```
+
+Re-run steps 1 and 3 whenever mods are added or updated.
+
+### Opening the app
+
+Open `webui/index.html` directly in a browser (no server needed — it connects to Neo4j via the bolt protocol).
+
+1. Enter your Neo4j credentials and click **Connect**
+2. Type any item, mob, biome, structure, or dimension name in the search box
+3. Select a query type (or leave on Auto-detect) and click **Search**
+
+### Features
+
+| Feature | How |
+|---|---|
+| Recipe chain | Search an item, select "Recipe chain" |
+| Full ingredient tree | Select "Recipe tree (recursive)" |
+| Item sources (drops, chests, mining) | Select "Item sources" |
+| Mob spawns and drops | Search a mob, or select "Mob info" from right-click menu |
+| Block drops | Search a block, or select "Block drops" from right-click menu |
+| Biome / structure / dimension info | Auto-detected on search |
+| Expand a node's neighbors | Double-click or right-click → Expand neighbors |
+| Raw Cypher query | Type any Cypher in the Raw Cypher box, Ctrl+Enter to run |
+| Pin nodes | Drag a node to lock its position |
+| Navigation history | Previous searches saved as chips in the History panel |
+
+### Keyboard shortcuts
+
+| Key | Action |
+|---|---|
+| `/` | Focus search |
+| `Enter` | Run search |
+| `Ctrl+Enter` (in Cypher box) | Run raw Cypher |
+| `F` | Fit graph to screen |
+| `R` | Re-run layout |
+| `U` | Unpin all nodes |
+| `Del` | Remove selected node |
+| `Esc` | Close panel / deselect |
 
 ---
 
