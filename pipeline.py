@@ -40,14 +40,14 @@ def hr(title: str = ""):
 # ── step functions ────────────────────────────────────────────
 
 JAR_EXTRACTORS = [
-    ("extract_from_jars.py",           "Jar scanner (recipes, loot, biomes, mobs…)"),
-    ("extract_structure_loottables.py", "Structure loot tables (.nbt in jars)"),
-    ("extract_biome_tags.py",           "Biome tags (vanilla + mod jars)"),
-    ("extract_biome_blocks.py",         "Biome blocks"),
-    ("extract_item_tags.py",            "Item tags"),
-    ("extract_textures.py",             "Entity textures"),
-    ("extract_item_textures.py",        "Item textures"),
-    ("extract_dimension_biomes.py",     "Dimension biomes"),
+    ("extractors/extract_from_jars.py",           "Jar scanner (recipes, loot, biomes, mobs…)"),
+    ("extractors/extract_structure_loottables.py", "Structure loot tables (.nbt in jars)"),
+    ("extractors/extract_biome_tags.py",           "Biome tags (vanilla + mod jars)"),
+    ("extractors/extract_biome_blocks.py",         "Biome blocks"),
+    ("extractors/extract_item_tags.py",            "Item tags"),
+    ("extractors/extract_textures.py",             "Entity textures"),
+    ("extractors/extract_item_textures.py",        "Item textures"),
+    ("extractors/extract_dimension_biomes.py",     "Dimension biomes"),
 ]
 
 
@@ -68,7 +68,7 @@ def step_ingame_dump():
 
 def step_log_extract() -> bool:
     hr("STEP: Extract from log")
-    return run("extract_from_log.py", "Parse kubejs server.log")
+    return run("extractors/extract_from_log.py", "Parse kubejs server.log")
 
 
 def step_generate_sql() -> bool:
@@ -153,6 +153,9 @@ MENU = """\
   15  Export to Neo4j
   16  Launch web explorer  (opens browser)
 
+  ── World gen ───────────────────────────
+  17  Overworld noise → dimension JSONs
+
    0  Exit
 """
 
@@ -161,18 +164,19 @@ ACTIONS = {
     "2":  step_jar_extract,
     "3":  step_ingame_dump,
     "4":  step_log_extract,
-    "5":  lambda: run("extract_from_jars.py",           "Jar scanner"),
-    "6":  lambda: run("extract_structure_loottables.py", "Structure loot tables"),
-    "7":  lambda: run("extract_biome_tags.py",           "Biome tags"),
-    "8":  lambda: run("extract_biome_blocks.py",         "Biome blocks"),
-    "9":  lambda: run("extract_item_tags.py",            "Item tags"),
-    "10": lambda: run("extract_textures.py",             "Entity textures"),
-    "11": lambda: run("extract_item_textures.py",        "Item textures"),
-    "12": lambda: run("extract_dimension_biomes.py",     "Dimension biomes"),
+    "5":  lambda: run("extractors/extract_from_jars.py",           "Jar scanner"),
+    "6":  lambda: run("extractors/extract_structure_loottables.py", "Structure loot tables"),
+    "7":  lambda: run("extractors/extract_biome_tags.py",           "Biome tags"),
+    "8":  lambda: run("extractors/extract_biome_blocks.py",         "Biome blocks"),
+    "9":  lambda: run("extractors/extract_item_tags.py",            "Item tags"),
+    "10": lambda: run("extractors/extract_textures.py",             "Entity textures"),
+    "11": lambda: run("extractors/extract_item_textures.py",        "Item textures"),
+    "12": lambda: run("extractors/extract_dimension_biomes.py",     "Dimension biomes"),
     "13": step_generate_sql,
     "14": step_consistency,
-    "15": lambda: run("export_to_neo4j.py",              "Export to Neo4j"),
+    "15": lambda: run("export_to_neo4j.py",                         "Export to Neo4j"),
     "16": step_web_explorer,
+    "17": lambda: run("worldgen/extract_overworld_noise.py",        "Overworld noise → dimension JSONs"),
 }
 
 
