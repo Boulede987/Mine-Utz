@@ -12,6 +12,7 @@ A custom Minecraft modpack tracked with [packwiz](https://packwiz.infra.link/) a
 - [Adding Mods](#adding-mods)
 - [Testing](#testing)
 - [Registry Dumps](#registry-dumps)
+- [Configuration Mods](#configuration-mods)
 - [Graph Explorer](#graph-explorer)
 - [Making a Release](#making-a-release)
 
@@ -189,6 +190,25 @@ This makes the Git history a reliable audit trail — you can always look back a
 
 ---
 
+## Configuration Mods
+
+These mods exist purely to configure or constrain the pack's behaviour. They don't add content — they shape it. All their config files live under `minecraft/config/` and are tracked in Git.
+
+| Mod | Purpose | Config location |
+|---|---|---|
+| [AttributeSetter](https://modrinth.com/mod/attributesetter) | Modify default entity/item attributes (health, damage, follow range, etc.) via datapacks | `config/attributesetter/` |
+| [In Control!](https://modrinth.com/mod/in-control) | JSON rule files controlling where and how mobs spawn, their loot, and XP rewards | `config/incontrol/` |
+| [Toast Control](https://www.curseforge.com/minecraft/mc-mods/toast-control) | Suppress or restyle toast notifications (recipe unlocks, tutorials, advancements) | `config/toastcontrol.toml` |
+| [Better Days](https://github.com/wendall911/BetterDays) | Configurable day/night cycle length and smooth sleep time-skip | `config/betterdays-common.toml` |
+| [Item Obliterator](https://modrinth.com/mod/item-obliterator) | Disable unwanted items: removes them from creative tabs, recipes, trades, and JEI/REI | `config/item_obliterator.json5` |
+| [Biome Replacer](https://modrinth.com/mod/biome-replacer) | Swap or remove biomes at world-gen time via a simple `old > new` properties file | `config/biome_replacer.properties` |
+| [Toasty](https://modrinth.com/mod/toasty-mod) | Trigger custom toast notifications on login, item pickup, or entity kill via resource pack JSON | `assets/<namespace>/toasts/` in a resource pack |
+| [Eccentric Tome](https://www.curseforge.com/minecraft/mc-mods/eccentric-tome) | Merge multiple guidebooks into one item to reduce inventory clutter | *(no config file — craft-only)* |
+
+> When modifying spawn rules or attribute overrides, re-run the relevant pipeline scripts and update the `lists/` snapshots so the Graph Explorer reflects the current state.
+
+---
+
 ## Graph Explorer
 
 A browser-based graph UI for exploring the modpack's data — items, recipes, mobs, biomes, structures, dimensions, and block drops — as an interactive node graph backed by Neo4j.
@@ -285,12 +305,33 @@ A release is a single `.mrpack` file that bundles the mod list *and* all configs
 
 ## Utilities
 
+### In-game commands
+
+Teleport to a dimension (keeps your current coordinates):
+```
+/execute in <dimension_id> run tp @s ~ ~ ~
+```
+Example: `/execute in minecraft:the_nether run tp @s ~ ~ ~`
+
+Use IDs from `lists/ListDimensions.txt` for modded dimensions.
+
+### Log analysis (PowerShell)
+
+Run these from the directory containing `latest.log`:
+
+```powershell
+# Errors and exceptions
 Select-String -Path latest.log -Pattern "ERROR|FATAL|Exception|Caused by" | Select-Object -First 60
 
+# Mixin-related failures
 Select-String -Path latest.log -Pattern "ERROR|FATAL|MixinApply|Caused by|mixin config" | Select-Object -First 50
 
+# Check if the game actually started or crashed
 Select-String -Path latest.log -Pattern "Done!|Minecraft Crash|stopping|Exception in thread" | Select-Object -Last 10
 
+# Last exceptions before crash
 Select-String -Path latest.log -Pattern "Caused by|Exception" | Select-Object -Last 20
 
+# Read a specific line range (adjust the skip number as needed)
 Get-Content latest.log | Select-Object -Skip 27775 | Select-Object -First 50
+```
