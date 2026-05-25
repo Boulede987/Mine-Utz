@@ -61,8 +61,8 @@ def make_loot_collector(
             other_rows
         )
 
-        for pool in data.get('pools', []):
-            for entry in pool.get('entries', []):
+        def process_entries(entries):
+            for entry in entries:
                 entry_type = entry.get('type', '')
 
                 # Nested loot table reference
@@ -70,6 +70,11 @@ def make_loot_collector(
                     reference_target = entry.get('value', '')
                     if reference_target:
                         reference_rows.append(f"{source_id} | {reference_target}")
+                    continue
+
+                # Composite entry types (alternatives, sequence, group) — recurse into children
+                if entry.get('children'):
+                    process_entries(entry['children'])
                     continue
 
                 if not entry_type.endswith('item'):
@@ -89,5 +94,8 @@ def make_loot_collector(
                 bucket.append(
                     f"{source_id} | {item_id} | min:{min_count} | max:{max_count} | weight:{weight}"
                 )
+
+        for pool in data.get('pools', []):
+            process_entries(pool.get('entries', []))
 
     return collect_loot

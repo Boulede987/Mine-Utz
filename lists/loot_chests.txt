@@ -2410,6 +2410,9 @@ dungeons_arise:chests/aviary/aviary_normal | minecraft:book | min:1 | max:1 | we
 dungeons_arise:chests/aviary/aviary_normal | minecraft:crossbow | min:1 | max:1 | weight:1
 dungeons_arise:chests/aviary/aviary_normal | minecraft:diamond | min:12 | max:16 | weight:5
 dungeons_arise:chests/aviary/aviary_normal | minecraft:diamond_boots | min:1 | max:1 | weight:1
+dungeons_arise:chests/aviary/aviary_normal | minecraft:diamond_chestplate | min:1 | max:1 | weight:1
+dungeons_arise:chests/aviary/aviary_normal | minecraft:diamond_helmet | min:1 | max:1 | weight:1
+dungeons_arise:chests/aviary/aviary_normal | minecraft:diamond_leggings | min:1 | max:1 | weight:1
 dungeons_arise:chests/aviary/aviary_normal | minecraft:diamond_sword | min:1 | max:1 | weight:1
 dungeons_arise:chests/aviary/aviary_normal | minecraft:enchanted_golden_apple | min:1 | max:1 | weight:5
 dungeons_arise:chests/aviary/aviary_normal | minecraft:experience_bottle | min:1 | max:4 | weight:1
@@ -2422,6 +2425,9 @@ dungeons_arise:chests/aviary/aviary_treasure | minecraft:book | min:1 | max:1 | 
 dungeons_arise:chests/aviary/aviary_treasure | minecraft:crossbow | min:1 | max:1 | weight:1
 dungeons_arise:chests/aviary/aviary_treasure | minecraft:diamond | min:12 | max:24 | weight:10
 dungeons_arise:chests/aviary/aviary_treasure | minecraft:diamond_boots | min:1 | max:1 | weight:1
+dungeons_arise:chests/aviary/aviary_treasure | minecraft:diamond_chestplate | min:1 | max:1 | weight:1
+dungeons_arise:chests/aviary/aviary_treasure | minecraft:diamond_helmet | min:1 | max:1 | weight:1
+dungeons_arise:chests/aviary/aviary_treasure | minecraft:diamond_leggings | min:1 | max:1 | weight:1
 dungeons_arise:chests/aviary/aviary_treasure | minecraft:diamond_sword | min:1 | max:1 | weight:1
 dungeons_arise:chests/aviary/aviary_treasure | minecraft:enchanted_golden_apple | min:1 | max:2 | weight:5
 dungeons_arise:chests/aviary/aviary_treasure | minecraft:experience_bottle | min:14 | max:16 | weight:1
@@ -2699,6 +2705,9 @@ dungeons_arise:chests/heavenly_challenger/heavenly_challenger_normal | minecraft
 dungeons_arise:chests/heavenly_challenger/heavenly_challenger_normal | minecraft:crossbow | min:1 | max:1 | weight:1
 dungeons_arise:chests/heavenly_challenger/heavenly_challenger_normal | minecraft:diamond | min:12 | max:16 | weight:5
 dungeons_arise:chests/heavenly_challenger/heavenly_challenger_normal | minecraft:diamond_boots | min:1 | max:1 | weight:1
+dungeons_arise:chests/heavenly_challenger/heavenly_challenger_normal | minecraft:diamond_chestplate | min:1 | max:1 | weight:1
+dungeons_arise:chests/heavenly_challenger/heavenly_challenger_normal | minecraft:diamond_helmet | min:1 | max:1 | weight:1
+dungeons_arise:chests/heavenly_challenger/heavenly_challenger_normal | minecraft:diamond_leggings | min:1 | max:1 | weight:1
 dungeons_arise:chests/heavenly_challenger/heavenly_challenger_normal | minecraft:diamond_sword | min:1 | max:1 | weight:1
 dungeons_arise:chests/heavenly_challenger/heavenly_challenger_normal | minecraft:enchanted_golden_apple | min:1 | max:1 | weight:5
 dungeons_arise:chests/heavenly_challenger/heavenly_challenger_normal | minecraft:experience_bottle | min:1 | max:4 | weight:1
@@ -2774,6 +2783,9 @@ dungeons_arise:chests/heavenly_conqueror/heavenly_conqueror_normal | minecraft:s
 dungeons_arise:chests/heavenly_conqueror/heavenly_conqueror_normal | minecraft:totem_of_undying | min:1 | max:1 | weight:1
 dungeons_arise:chests/heavenly_conqueror/heavenly_conqueror_treasure | minecraft:book | min:1 | max:1 | weight:1
 dungeons_arise:chests/heavenly_conqueror/heavenly_conqueror_treasure | minecraft:diamond | min:12 | max:16 | weight:10
+dungeons_arise:chests/heavenly_conqueror/heavenly_conqueror_treasure | minecraft:diamond_chestplate | min:1 | max:1 | weight:1
+dungeons_arise:chests/heavenly_conqueror/heavenly_conqueror_treasure | minecraft:diamond_helmet | min:1 | max:1 | weight:1
+dungeons_arise:chests/heavenly_conqueror/heavenly_conqueror_treasure | minecraft:diamond_leggings | min:1 | max:1 | weight:1
 dungeons_arise:chests/heavenly_conqueror/heavenly_conqueror_treasure | minecraft:enchanted_golden_apple | min:0 | max:1 | weight:1
 dungeons_arise:chests/heavenly_conqueror/heavenly_conqueror_treasure | minecraft:gold_ingot | min:1 | max:12 | weight:10
 dungeons_arise:chests/heavenly_conqueror/heavenly_conqueror_treasure | minecraft:gold_ingot | min:4 | max:48 | weight:1
@@ -2809,6 +2821,9 @@ dungeons_arise:chests/heavenly_rider/heavenly_rider_normal | minecraft:splash_po
 dungeons_arise:chests/heavenly_rider/heavenly_rider_normal | minecraft:totem_of_undying | min:1 | max:1 | weight:1
 dungeons_arise:chests/heavenly_rider/heavenly_rider_treasure | minecraft:book | min:1 | max:1 | weight:1
 dungeons_arise:chests/heavenly_rider/heavenly_rider_treasure | minecraft:diamond | min:12 | max:16 | weight:1
+dungeons_arise:chests/heavenly_rider/heavenly_rider_treasure | minecraft:diamond_chestplate | min:1 | max:1 | weight:1
+dungeons_arise:chests/heavenly_rider/heavenly_rider_treasure | minecraft:diamond_helmet | min:1 | max:1 | weight:1
+dungeons_arise:chests/heavenly_rider/heavenly_rider_treasure | minecraft:diamond_leggings | min:1 | max:1 | weight:1
 dungeons_arise:chests/heavenly_rider/heavenly_rider_treasure | minecraft:enchanted_golden_apple | min:0 | max:1 | weight:1
 dungeons_arise:chests/heavenly_rider/heavenly_rider_treasure | minecraft:gold_ingot | min:1 | max:12 | weight:10
 dungeons_arise:chests/heavenly_rider/heavenly_rider_treasure | minecraft:gold_ingot | min:4 | max:48 | weight:1
@@ -3084,10 +3099,14 @@ dungeons_arise:chests/infested_temple/infested_temple_vault_treasure | minecraft
 dungeons_arise:chests/infested_temple/infested_temple_vault_treasure | minecraft:iron_ingot | min:8 | max:16 | weight:1
 dungeons_arise:chests/jungle_tree_house/jungle_tree_house_barrels | minecraft:book | min:1 | max:1 | weight:1
 dungeons_arise:chests/jungle_tree_house/jungle_tree_house_barrels | minecraft:dark_oak_sapling | min:1 | max:3 | weight:1
+dungeons_arise:chests/jungle_tree_house/jungle_tree_house_barrels | minecraft:gold_nugget | min:16 | max:48 | weight:1
 dungeons_arise:chests/jungle_tree_house/jungle_tree_house_barrels | minecraft:iron_boots | min:1 | max:1 | weight:1
 dungeons_arise:chests/jungle_tree_house/jungle_tree_house_barrels | minecraft:iron_chestplate | min:1 | max:1 | weight:1
 dungeons_arise:chests/jungle_tree_house/jungle_tree_house_barrels | minecraft:iron_helmet | min:1 | max:1 | weight:1
+dungeons_arise:chests/jungle_tree_house/jungle_tree_house_barrels | minecraft:iron_ingot | min:4 | max:18 | weight:1
 dungeons_arise:chests/jungle_tree_house/jungle_tree_house_barrels | minecraft:iron_leggings | min:1 | max:1 | weight:1
+dungeons_arise:chests/jungle_tree_house/jungle_tree_house_barrels | minecraft:iron_nugget | min:24 | max:48 | weight:1
+dungeons_arise:chests/jungle_tree_house/jungle_tree_house_barrels | minecraft:iron_ore | min:8 | max:32 | weight:1
 dungeons_arise:chests/jungle_tree_house/jungle_tree_house_barrels | minecraft:iron_sword | min:1 | max:1 | weight:1
 dungeons_arise:chests/jungle_tree_house/jungle_tree_house_barrels | minecraft:leather_boots | min:1 | max:1 | weight:1
 dungeons_arise:chests/jungle_tree_house/jungle_tree_house_barrels | minecraft:leather_chestplate | min:1 | max:1 | weight:1
@@ -3096,10 +3115,14 @@ dungeons_arise:chests/jungle_tree_house/jungle_tree_house_barrels | minecraft:le
 dungeons_arise:chests/jungle_tree_house/jungle_tree_house_barrels | minecraft:oak_sapling | min:1 | max:2 | weight:1
 dungeons_arise:chests/jungle_tree_house/jungle_tree_house_normal | minecraft:book | min:1 | max:1 | weight:1
 dungeons_arise:chests/jungle_tree_house/jungle_tree_house_normal | minecraft:dark_oak_sapling | min:1 | max:3 | weight:1
+dungeons_arise:chests/jungle_tree_house/jungle_tree_house_normal | minecraft:gold_nugget | min:16 | max:48 | weight:1
 dungeons_arise:chests/jungle_tree_house/jungle_tree_house_normal | minecraft:iron_boots | min:1 | max:1 | weight:1
 dungeons_arise:chests/jungle_tree_house/jungle_tree_house_normal | minecraft:iron_chestplate | min:1 | max:1 | weight:1
 dungeons_arise:chests/jungle_tree_house/jungle_tree_house_normal | minecraft:iron_helmet | min:1 | max:1 | weight:1
+dungeons_arise:chests/jungle_tree_house/jungle_tree_house_normal | minecraft:iron_ingot | min:4 | max:18 | weight:1
 dungeons_arise:chests/jungle_tree_house/jungle_tree_house_normal | minecraft:iron_leggings | min:1 | max:1 | weight:1
+dungeons_arise:chests/jungle_tree_house/jungle_tree_house_normal | minecraft:iron_nugget | min:24 | max:48 | weight:1
+dungeons_arise:chests/jungle_tree_house/jungle_tree_house_normal | minecraft:iron_ore | min:8 | max:32 | weight:1
 dungeons_arise:chests/jungle_tree_house/jungle_tree_house_normal | minecraft:iron_sword | min:1 | max:1 | weight:1
 dungeons_arise:chests/jungle_tree_house/jungle_tree_house_normal | minecraft:leather_boots | min:1 | max:1 | weight:1
 dungeons_arise:chests/jungle_tree_house/jungle_tree_house_normal | minecraft:leather_chestplate | min:1 | max:1 | weight:1
@@ -15204,5 +15227,5 @@ wan_ancient_beasts:chests/ice_castle | minecraft:packed_ice | min:2 | max:5 | we
 wan_ancient_beasts:chests/ice_castle | minecraft:snow_block | min:2 | max:5 | weight:4
 wan_ancient_beasts:chests/ice_castle | minecraft:snowball | min:3 | max:7 | weight:6
 wan_ancient_beasts:chests/ice_castle | minecraft:tipped_arrow | min:2 | max:4 | weight:20
-===== END (15205 total) =====
+===== END (15228 total) =====
 

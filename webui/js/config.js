@@ -20,6 +20,7 @@ const LABEL_COLOR = {
   Structure: '#c87850',
   Dimension: '#9b59b6',
   Recipe:    '#e05c5c',
+  Block:     '#909090',
 };
 
 const REL_COLOR = {
@@ -32,4 +33,5 @@ const REL_COLOR = {
   FOUND_IN:           '#c87850',
   FOUND_IN_STRUCTURE: '#6fb0d2',
   IN_DIMENSION:       '#9b59b6',
+  MINED_FROM:         '#909090',
 };

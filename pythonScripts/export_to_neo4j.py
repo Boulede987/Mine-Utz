@@ -17,13 +17,14 @@ Setup:
 
 Graph model
 -----------
-Nodes : Item, Entity, Biome, Structure, Dimension, Recipe
+Nodes : Item, Entity, Biome, Structure, Dimension, Recipe, Block
         Item subtypes carry extra labels: :Armor :Tool :Food
 Edges :
   (Recipe)-[:PRODUCES {count}]->(Item)
   (Recipe)-[:REQUIRES]->(Item)          -- ingredients
   (Recipe)-[:USES_STATION]->(Item)
   (Entity)-[:DROPS {min,max,weight}]->(Item)
+  (Block)-[:DROPS {min,max,weight}]->(Item)   -- mining drops
   (Structure)-[:CONTAINS {min,max,weight}]->(Item)   -- chest loot
   (Entity)-[:SPAWNS_IN {weight,min,max}]->(Biome)
   (Entity)-[:FOUND_IN_STRUCTURE]->(Structure)
@@ -166,7 +167,7 @@ def export(driver):
 
         # ── Constraints ────────────────────────────────────────────
         print("Creating constraints...")
-        for label in ("Item", "Entity", "Biome", "Structure", "Dimension", "Recipe"):
+        for label in ("Item", "Entity", "Biome", "Structure", "Dimension", "Recipe", "Block"):
             s.run(f"CREATE CONSTRAINT IF NOT EXISTS FOR (n:{label}) REQUIRE n.id IS UNIQUE")
 
         # ── Items ──────────────────────────────────────────────────
@@ -471,6 +472,49 @@ def export(driver):
             MERGE (e)-[:FOUND_IN_STRUCTURE]->(st)
         """, struct_spawns)
         print(f"  {len(struct_spawns)} entity→structure edges")
+
+        # ── Block mining drops ─────────────────────────────────────
+        # loot_blocks.txt: loot_path | item | min | max | weight
+        # loot_path format: namespace:blocks/block_name → block ID: namespace:block_name
+        print("Loading block mining drops...")
+        block_ids = read_ids('blocks.txt')
+
+        def loot_path_to_block_id(source: str) -> str | None:
+            if ':' not in source:
+                return None
+            ns, _, path = source.partition(':')
+            if path.startswith('blocks/'):
+                return f"{ns}:{path[len('blocks/'):]}"
+            return None
+
+        block_nodes_seen: set[str] = set()
+        block_drops = []
+        for row in read_pipe('loot_blocks.txt'):
+            if len(row) < 5:
+                continue
+            loot_path, item_id = row[0], row[1]
+            block_id = loot_path_to_block_id(loot_path)
+            if not block_id or block_id not in block_ids or item_id not in item_ids:
+                continue
+            block_nodes_seen.add(block_id)
+            block_drops.append({'block': block_id, 'item': item_id,
+                                 'min': parse_kv(row[2]), 'max': parse_kv(row[3]),
+                                 'weight': parse_kv(row[4])})
+
+        block_node_rows = [{'id': bid, 'namespace': p[0], 'name': p[1]}
+                           for bid in block_nodes_seen if (p := parse_id(bid))]
+        run_batch(s, """
+            UNWIND $rows AS r
+            MERGE (b:Block {id: r.id})
+            SET b.namespace = r.namespace, b.name = r.name
+        """, block_node_rows)
+        run_batch(s, """
+            UNWIND $rows AS r
+            MATCH (b:Block {id:r.block}), (i:Item {id:r.item})
+            MERGE (b)-[d:DROPS]->(i)
+            SET d.min = r.min, d.max = r.max, d.weight = r.weight
+        """, block_drops)
+        print(f"  {len(block_node_rows)} blocks, {len(block_drops)} block→item drop edges")
 
         print("\nExport complete. Open http://localhost:7474 in your browser.")
         print("Example query:")

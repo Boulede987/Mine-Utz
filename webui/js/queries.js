@@ -1,7 +1,7 @@
 'use strict';
 
 function primaryLabel(labels) {
-  for (const candidate of ['Entity', 'Biome', 'Structure', 'Dimension', 'Recipe']) {
+  for (const candidate of ['Entity', 'Biome', 'Structure', 'Dimension', 'Recipe', 'Block']) {
     if (labels.includes(candidate)) return candidate;
   }
   return 'Item';
@@ -14,6 +14,7 @@ function detectQueryType(labels) {
   if (label === 'Biome')     return 'biome';
   if (label === 'Structure') return 'structure';
   if (label === 'Dimension') return 'dimension';
+  if (label === 'Block')     return 'block';
   return 'explore';
 }
 
@@ -73,7 +74,8 @@ const QUERIES = {
     WITH item, ${rankCase('item')} ORDER BY _rank LIMIT 1
     OPTIONAL MATCH (mob:Entity)-[drops:DROPS]->(item)
     OPTIONAL MATCH (structure:Structure)-[contains:CONTAINS]->(item)
-    RETURN item, drops, mob, contains, structure
+    OPTIONAL MATCH (block:Block)-[mined:DROPS]->(item)
+    RETURN item, drops, mob, contains, structure, mined, block
   `,
 
   source_tree: `
@@ -82,14 +84,25 @@ const QUERIES = {
     WITH root, ${rankCase('root')} ORDER BY _rank LIMIT 1
     OPTIONAL MATCH (mob:Entity)-[drops:DROPS]->(root)
     OPTIONAL MATCH (chest:Structure)-[contains:CONTAINS]->(root)
+    OPTIONAL MATCH (block:Block)-[mined:DROPS]->(root)
     OPTIONAL MATCH (root)<-[produces:PRODUCES]-(recipe:Recipe)
     OPTIONAL MATCH (recipe)-[requires:REQUIRES]->(ingredient:Item)
     OPTIONAL MATCH (recipe)-[usesStation:USES_STATION]->(station:Item)
     OPTIONAL MATCH (mob)-[spawnsIn:SPAWNS_IN]->(biome:Biome)-[inDim:IN_DIMENSION]->(dim:Dimension)
     OPTIONAL MATCH (mob)-[foundIn:FOUND_IN_STRUCTURE]->(mobStruct:Structure)
-    RETURN root, drops, mob, contains, chest,
+    RETURN root, drops, mob, contains, chest, mined, block,
            produces, recipe, requires, ingredient, usesStation, station,
            spawnsIn, biome, inDim, dim, foundIn, mobStruct
+  `,
+
+  // ── Blocks ─────────────────────────────────────────────────────────────────
+
+  block: `
+    MATCH (block:Block)
+    WHERE toLower(block.name) CONTAINS toLower($searchTerm) OR toLower(block.id) CONTAINS toLower($searchTerm)
+    WITH block, ${rankCase('block')} ORDER BY _rank LIMIT 1
+    OPTIONAL MATCH (block)-[drops:DROPS]->(item:Item)
+    RETURN block, drops, item
   `,
 
   // ── Entities ───────────────────────────────────────────────────────────────

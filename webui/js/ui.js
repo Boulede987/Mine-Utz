@@ -196,6 +196,7 @@ function openContextMenu(clientX, clientY, node) {
   if (labels.includes('Biome'))     menuItems.push({ label: 'Biome info',     action: () => searchNodeAs(node, 'biome')     });
   if (labels.includes('Structure')) menuItems.push({ label: 'Structure info', action: () => searchNodeAs(node, 'structure') });
   if (labels.includes('Dimension')) menuItems.push({ label: 'Dimension info', action: () => searchNodeAs(node, 'dimension') });
+  if (labels.includes('Block'))     menuItems.push({ label: 'Block drops',    action: () => searchNodeAs(node, 'block')     });
 
   menuItems.push({ separator: true });
   menuItems.push({
