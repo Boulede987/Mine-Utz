@@ -24,7 +24,7 @@ document.getElementById('btn-connect').addEventListener('click', async () => {
     driver = neo4j.driver(uri, neo4j.auth.basic(user, pass));
     await driver.verifyConnectivity();
     setStatus('Connected.', 'ok');
-    ['search-input', 'query-type', 'btn-search', 'btn-clear']
+    ['search-input', 'query-type', 'btn-search', 'btn-clear', 'cypher-input', 'btn-cypher']
       .forEach(id => document.getElementById(id).disabled = false);
   } catch (err) {
     setStatus('Connection failed: ' + err.message, 'error');
@@ -233,6 +233,32 @@ document.getElementById('cy').addEventListener('wheel', evt => {
     renderedPosition: { x: evt.offsetX, y: evt.offsetY },
   });
 }, { passive: false });
+
+// ── Raw Cypher ────────────────────────────────────────────────────────
+
+document.getElementById('btn-cypher').addEventListener('click', runRawCypher);
+document.getElementById('cypher-input').addEventListener('keydown', evt => {
+  if (evt.key === 'Enter' && evt.ctrlKey) runRawCypher();
+});
+
+async function runRawCypher() {
+  const cypher = document.getElementById('cypher-input').value.trim();
+  if (!cypher || !driver) return;
+
+  setStatus('Running…');
+  try {
+    const records  = await runQuery(cypher, {});
+    const elements = processQueryResults(records);
+    const rootId   = extractRootId(records);
+    const added    = addToGraph(elements, rootId, 'dagre');
+
+    if (rootId) lastRootId = rootId;
+    saveBreadcrumb(`cypher: ${cypher.slice(0, 40)}…`, rootId);
+    setStatus(`${added} new elements added (${cy.elements().length} total).`, 'ok');
+  } catch (err) {
+    setStatus('Cypher error: ' + err.message, 'error');
+  }
+}
 
 // ── Shortcuts Panel Toggle ────────────────────────────────────────────
 
