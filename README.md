@@ -315,6 +315,13 @@ Example: `/execute in minecraft:the_nether run tp @s ~ ~ ~`
 
 Use IDs from `lists/ListDimensions.txt` for modded dimensions.
 
+Locate and teleport to the nearest biome or structure (two steps):
+```
+/locate biome <biome_id>
+/locate structure <structure_id>
+```
+Both print coordinates to chat as a clickable link — click it to auto-fill `/tp @s <x> <y> <z>`, then Enter. `locate structure` only finds structures in the current dimension. Use IDs from `lists/ListBiomes.txt` and `lists/ListStructures.txt` for modded content.
+
 ### Log analysis (PowerShell)
 
 Run these from the directory containing `latest.log`:
