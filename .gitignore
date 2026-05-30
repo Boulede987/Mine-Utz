@@ -120,6 +120,12 @@ lists/item_textures.txt
 .claude/
 
 # ===========================
+# Python
+# ===========================
+__pycache__/
+*.py[cod]
+
+# ===========================
 # Temporary & Performance Files
 # ===========================
 *.tmp
