@@ -84,6 +84,9 @@ def step_consistency():
     return run_script(CHECK_CONSISTENCY, "Run integrity checks")
 
 def step_neo4j_export():
+    section("STEP: Export to Neo4j")
+    print("  [REMINDER]  Make sure Neo4j Desktop is running and the database is started.")
+    pause("Press Enter when Neo4j is ready...")
     return run_script(EXPORT_TO_NEO4J, "Export to Neo4j")
 
 def step_web_explorer():
