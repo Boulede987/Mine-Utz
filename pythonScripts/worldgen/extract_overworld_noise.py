@@ -11,11 +11,15 @@ Usage:
 
 import json
 import re
+import sys
 from pathlib import Path
 
-LOG   = Path('minecraft/logs/latest.log')
-PAXI  = Path('minecraft/config/paxi/datapacks/mineutz/data/mineutz/dimension')
-EXCL  = {'minecraft:mushroom_fields', 'minecraft:mushroom_fields_shore'}
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
+from lib.paths import LATEST_LOG, ROOT
+
+PAXI             = ROOT / 'minecraft' / 'config' / 'paxi' / 'datapacks' / 'mineutz' / 'data' / 'mineutz' / 'dimension'
+EXCLUDED_BIOMES  = {'minecraft:mushroom_fields', 'minecraft:mushroom_fields_shore'}
 
 DIMENSIONS = {
     'pokemon_dimension': 'mineutz:pokemon_dimension',
@@ -24,13 +28,12 @@ DIMENSIONS = {
 
 # ── Extract JSON from log ─────────────────────────────────────────────────────
 
-log_text = LOG.read_text(encoding='utf-8', errors='replace')
-# Strip log prefixes ([timestamp] [thread/LEVEL] [source/]: ) from each line
-def strip_prefix(line):
+def _strip_log_prefix(line: str) -> str:
     return re.sub(r'^\[[^\]]+\]\s+\[[^\]]+\]\s+\[[^\]]+\]:\s*', '', line)
 
-lines = [strip_prefix(l) for l in log_text.splitlines()]
-clean = '\n'.join(lines)
+log_text = LATEST_LOG.read_text(encoding='utf-8', errors='replace')
+lines    = [_strip_log_prefix(line) for line in log_text.splitlines()]
+clean    = '\n'.join(lines)
 
 match = re.search(
     r'===== OVERWORLD NOISE PARAMS START =====\n(.+?)\n===== OVERWORLD NOISE PARAMS END =====',
@@ -40,40 +43,35 @@ if not match:
     print('ERROR: marker not found in log. Run /dump_overworld_noise first.')
     raise SystemExit(1)
 
-data   = json.loads(match.group(1).strip())
+data       = json.loads(match.group(1).strip())
 all_biomes = data['biomes']
 print(f'Loaded {len(all_biomes)} biome entries from log.')
 
 # ── Filter out mushroom biomes ────────────────────────────────────────────────
 
-filtered = [e for e in all_biomes if e['biome'] not in EXCL]
-removed  = [e['biome'] for e in all_biomes if e['biome'] in EXCL]
+filtered = [entry for entry in all_biomes if entry['biome'] not in EXCLUDED_BIOMES]
+removed  = [entry['biome'] for entry in all_biomes if entry['biome'] in EXCLUDED_BIOMES]
 print(f'Removed {len(removed)} entries: {removed}')
 print(f'Remaining: {len(filtered)} entries.')
 
 # ── Build biome_source block ──────────────────────────────────────────────────
 
-def make_param(values):
-    if isinstance(values, list):
-        return values  # already [min, max]
-    return values      # scalar offset
-
 biome_source = {
     'type': 'minecraft:multi_noise',
     'biomes': [
         {
-            'biome': e['biome'],
+            'biome': entry['biome'],
             'parameters': {
-                'temperature':     e['parameters']['temperature'],
-                'humidity':        e['parameters']['humidity'],
-                'continentalness': e['parameters']['continentalness'],
-                'erosion':         e['parameters']['erosion'],
-                'depth':           e['parameters']['depth'],
-                'weirdness':       e['parameters']['weirdness'],
-                'offset':          e['parameters']['offset'],
+                'temperature':     entry['parameters']['temperature'],
+                'humidity':        entry['parameters']['humidity'],
+                'continentalness': entry['parameters']['continentalness'],
+                'erosion':         entry['parameters']['erosion'],
+                'depth':           entry['parameters']['depth'],
+                'weirdness':       entry['parameters']['weirdness'],
+                'offset':          entry['parameters']['offset'],
             }
         }
-        for e in filtered
+        for entry in filtered
     ]
 }
 

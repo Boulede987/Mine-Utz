@@ -30,33 +30,39 @@ Usage:
 
 import json
 import re
+import sys
 from collections import defaultdict
 from pathlib import Path
 
-LOG     = Path('minecraft/logs/latest.log')
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
+from lib.paths import LATEST_LOG
+
 OUT_DIR = Path('worldgen_data')
 
-EMPTY_SECTIONS = lambda: {'surface': [], 'underground': [], 'caves': [], 'deep': []}
+
+def _empty_sections() -> dict:
+    return {'surface': [], 'underground': [], 'caves': [], 'deep': []}
 
 
-def strip_prefix(line):
+def _strip_log_prefix(line: str) -> str:
     return re.sub(r'^\[[^\]]+\]\s+\[[^\]]+\]\s+\[[^\]]+\]:\s*', '', line)
 
 
-def depth_section(depth):
-    d_min = depth[0] if isinstance(depth, list) else depth
-    d_max = depth[1] if isinstance(depth, list) else depth
-    if d_max <= 0.05:
+def depth_section(depth: list | float) -> str:
+    depth_min = depth[0] if isinstance(depth, list) else depth
+    depth_max = depth[1] if isinstance(depth, list) else depth
+    if depth_max <= 0.05:
         return 'surface'
-    if d_min >= 1.05:
+    if depth_min >= 1.05:
         return 'deep'
-    if d_min >= 0.15:
+    if depth_min >= 0.15:
         return 'caves'
     return 'underground'
 
 
-log_text = LOG.read_text(encoding='utf-8', errors='replace')
-lines    = [strip_prefix(l) for l in log_text.splitlines()]
+log_text = LATEST_LOG.read_text(encoding='utf-8', errors='replace')
+lines    = [_strip_log_prefix(line) for line in log_text.splitlines()]
 clean    = '\n'.join(lines)
 
 # ── Parse log — prefer /dump_all_noise, fall back to /dump_overworld_noise ────
@@ -95,7 +101,7 @@ else:
 # ── Group by namespace → dimension → depth section ────────────────────────────
 
 # by_ns[namespace][dim_id][section] = [entries]
-by_ns = defaultdict(lambda: defaultdict(EMPTY_SECTIONS))
+by_ns = defaultdict(lambda: defaultdict(_empty_sections))
 
 for dim_id, entries in dim_data.items():
     for entry in entries:

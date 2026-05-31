@@ -41,6 +41,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from lib.paths        import MODS_DIR, LISTS, VANILLA_JAR
 from lib.io_utils     import write_txt
 from lib.tag_resolver import load_tag_map, resolve_tag
+from lib.jar_scanner  import iter_jars
 
 # ── Phase 1: biome tags ───────────────────────────────────────────────────────
 
@@ -67,22 +68,14 @@ phase1_count = len(rows)
 
 # ── Phase 2: mod dimension JSON files ────────────────────────────────────────
 
-def iter_jars() -> list[Path]:
-    jars = []
-    if VANILLA_JAR.exists():
-        jars.append(VANILLA_JAR)
-    jars.extend(sorted(MODS_DIR.glob('*.jar')))
-    return jars
-
-
 # Pre-load all multi_noise parameter list files across all jars
 # key: "namespace:name" -> list of biome IDs
 parameter_lists: dict[str, list[str]] = {}
 
-for jar_path in iter_jars():
+for jar_path in iter_jars(MODS_DIR, extra_jars=[VANILLA_JAR]):
     try:
-        with zipfile.ZipFile(jar_path, 'r') as zf:
-            for entry in zf.namelist():
+        with zipfile.ZipFile(jar_path, 'r') as zip_file:
+            for entry in zip_file.namelist():
                 if 'worldgen/multi_noise_biome_source_parameter_list/' not in entry:
                     continue
                 if not entry.endswith('.json'):
@@ -90,12 +83,12 @@ for jar_path in iter_jars():
                 parts = entry.split('/', 2)
                 if len(parts) < 3:
                     continue
-                ns       = parts[1]
-                rel      = parts[2]  # worldgen/multi_noise_biome_source_parameter_list/<name>.json
-                name     = rel.split('/')[-1].removesuffix('.json')
-                key      = f'{ns}:{name}'
+                namespace = parts[1]
+                relative  = parts[2]  # worldgen/multi_noise_biome_source_parameter_list/<name>.json
+                name      = relative.split('/')[-1].removesuffix('.json')
+                key       = f'{namespace}:{name}'
                 try:
-                    data   = json.loads(zf.read(entry))
+                    data   = json.loads(zip_file.read(entry))
                     biomes = [b['biome'] for b in data.get('biomes', []) if 'biome' in b]
                     if biomes:
                         parameter_lists.setdefault(key, []).extend(biomes)
@@ -105,7 +98,7 @@ for jar_path in iter_jars():
         pass
 
 
-def biomes_from_source(biome_source: dict, jar_zf: zipfile.ZipFile) -> list[str]:
+def biomes_from_source(biome_source: dict, zip_file: zipfile.ZipFile) -> list[str]:
     """Extract biome IDs from a biome_source dict. Returns [] if unresolvable."""
     src_type = biome_source.get('type', '')
 
@@ -134,10 +127,10 @@ def biomes_from_source(biome_source: dict, jar_zf: zipfile.ZipFile) -> list[str]
 skipped_types: dict[str, int] = defaultdict(int)
 phase2_new = 0
 
-for jar_path in iter_jars():
+for jar_path in iter_jars(MODS_DIR, extra_jars=[VANILLA_JAR]):
     try:
-        with zipfile.ZipFile(jar_path, 'r') as zf:
-            for entry in zf.namelist():
+        with zipfile.ZipFile(jar_path, 'r') as zip_file:
+            for entry in zip_file.namelist():
                 if 'worldgen/dimension/' not in entry:
                     continue
                 if not entry.endswith('.json'):
@@ -145,24 +138,24 @@ for jar_path in iter_jars():
                 parts = entry.split('/', 2)
                 if len(parts) < 3:
                     continue
-                ns      = parts[1]
-                rel     = parts[2]   # worldgen/dimension/<name>.json
-                dim_name = rel.split('/')[-1].removesuffix('.json')
-                dim_id   = f'{ns}:{dim_name}'
+                namespace = parts[1]
+                relative  = parts[2]   # worldgen/dimension/<name>.json
+                dim_name  = relative.split('/')[-1].removesuffix('.json')
+                dim_id    = f'{namespace}:{dim_name}'
 
                 # Skip vanilla dimensions — covered by phase 1
-                if ns == 'minecraft':
+                if namespace == 'minecraft':
                     continue
 
                 try:
-                    data   = json.loads(zf.read(entry))
-                    gen    = data.get('generator', {})
-                    src    = gen.get('biome_source', {})
-                    src_type = src.get('type', 'unknown')
-                    biomes = biomes_from_source(src, zf)
+                    data          = json.loads(zip_file.read(entry))
+                    generator     = data.get('generator', {})
+                    biome_source  = generator.get('biome_source', {})
+                    source_type   = biome_source.get('type', 'unknown')
+                    biomes        = biomes_from_source(biome_source, zip_file)
 
                     if not biomes:
-                        skipped_types[src_type] += 1
+                        skipped_types[source_type] += 1
                         continue
 
                     for biome in biomes:

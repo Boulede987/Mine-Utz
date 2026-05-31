@@ -27,8 +27,9 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from PIL import Image
 
-from lib.paths   import MODS_DIR, LISTS, VANILLA_JAR
-from lib.loaders import load_registry
+from lib.paths       import MODS_DIR, LISTS, VANILLA_JAR
+from lib.loaders     import load_registry
+from lib.jar_scanner import iter_jars
 
 TARGET_SIZE = 32
 
@@ -43,83 +44,76 @@ print(f'Loaded {len(all_items)} item IDs from items.txt')
 tex_map: dict[tuple[str, str, str], bytes] = {}
 
 
-def scan_jar(jar_path: Path) -> int:
+def _scan_jar_for_item_textures(jar_path: Path) -> int:
     count = 0
     try:
-        with zipfile.ZipFile(jar_path, 'r') as zf:
-            for entry in zf.namelist():
+        with zipfile.ZipFile(jar_path, 'r') as zip_file:
+            for entry in zip_file.namelist():
                 if not entry.endswith('.png'):
                     continue
-                for tex_type in ('item', 'block'):
-                    infix = f'/textures/{tex_type}/'
+                for texture_type in ('item', 'block'):
+                    infix = f'/textures/{texture_type}/'
                     if infix not in entry:
                         continue
-                    idx = entry.index(infix)
-                    ns  = entry[len('assets/'):idx]
-                    rel = entry[idx + len(infix):]        # e.g. "diamond_sword.png"
-                    key = (ns, tex_type, rel)
+                    idx               = entry.index(infix)
+                    texture_namespace = entry[len('assets/'):idx]
+                    relative          = entry[idx + len(infix):]  # e.g. "diamond_sword.png"
+                    key               = (texture_namespace, texture_type, relative)
                     if key not in tex_map:
-                        tex_map[key] = zf.read(entry)
+                        tex_map[key] = zip_file.read(entry)
                         count += 1
     except zipfile.BadZipFile:
         print(f'  !! Bad zip: {jar_path.name}')
-    except Exception as e:
-        print(f'  !! {jar_path.name}: {e}')
+    except Exception as error:
+        print(f'  !! {jar_path.name}: {error}')
     return count
 
 
-jars = []
-if VANILLA_JAR.exists():
-    jars.append(VANILLA_JAR)
-else:
-    print(f'WARNING: vanilla jar not found at {VANILLA_JAR}')
-jars.extend(sorted(MODS_DIR.glob('*.jar')))
+jars = iter_jars(MODS_DIR, extra_jars=[VANILLA_JAR])
 
 print(f'Scanning {len(jars)} jar(s)...')
 for jar in jars:
-    n = scan_jar(jar)
-    if n:
+    new_count = _scan_jar_for_item_textures(jar)
+    if new_count:
         label = 'vanilla' if jar == VANILLA_JAR else jar.name
-        print(f'  {n:5d}  {label}')
+        print(f'  {new_count:5d}  {label}')
 
 print(f'  {len(tex_map)} total texture entries\n')
 
 # ── Index by namespace for fast lookup ────────────────────────────────────────
 
-by_ns_type: dict[tuple[str, str], dict[str, bytes]] = {}
-for (ns, tex_type, rel), data in tex_map.items():
-    key = (ns, tex_type)
-    by_ns_type.setdefault(key, {})[rel] = data
+by_namespace_and_type: dict[tuple[str, str], dict[str, bytes]] = {}
+for (texture_namespace, texture_type, relative), data in tex_map.items():
+    key = (texture_namespace, texture_type)
+    by_namespace_and_type.setdefault(key, {})[relative] = data
 
 # ── Sprite extraction ─────────────────────────────────────────────────────────
 
 def crop_and_encode(raw: bytes) -> str | None:
     try:
         img = Image.open(io.BytesIO(raw)).convert('RGBA')
-        w, h = img.size
+        width, height = img.size
         # Animated sprite sheet: height is a multiple of width — take first frame
-        if h > w and w > 0 and h % w == 0:
-            img = img.crop((0, 0, w, w))
+        if height > width and width > 0 and height % width == 0:
+            img = img.crop((0, 0, width, width))
         img = img.resize((TARGET_SIZE, TARGET_SIZE), Image.NEAREST)
-        buf = io.BytesIO()
-        img.save(buf, format='PNG')
-        return base64.b64encode(buf.getvalue()).decode('ascii')
+        buffer = io.BytesIO()
+        img.save(buffer, format='PNG')
+        return base64.b64encode(buffer.getvalue()).decode('ascii')
     except Exception:
         return None
 
 
-def find_texture(ns: str, name: str) -> str | None:
-    """Try item/ then block/ locations for a given (ns, name)."""
-    name_no_ns = name  # already stripped of namespace
-
+def find_texture(namespace: str, name: str) -> str | None:
+    """Try item/ then block/ locations for a given (namespace, name)."""
     candidates = [
-        (ns, 'item',  f'{name_no_ns}.png'),
-        (ns, 'block', f'{name_no_ns}.png'),
-        (ns, 'block', f'{name_no_ns}_top.png'),
-        (ns, 'block', f'{name_no_ns}_side.png'),
+        (namespace, 'item',  f'{name}.png'),
+        (namespace, 'block', f'{name}.png'),
+        (namespace, 'block', f'{name}_top.png'),
+        (namespace, 'block', f'{name}_side.png'),
     ]
-    for (tns, ttype, rel) in candidates:
-        raw = by_ns_type.get((tns, ttype), {}).get(rel)
+    for (texture_namespace, texture_type, relative) in candidates:
+        raw = by_namespace_and_type.get((texture_namespace, texture_type), {}).get(relative)
         if raw:
             return crop_and_encode(raw)
     return None
@@ -134,10 +128,10 @@ missing = 0
 for item_id in sorted(all_items):
     if ':' not in item_id:
         continue
-    ns, name = item_id.split(':', 1)
-    b64 = find_texture(ns, name)
-    if b64:
-        lines.append(f'{item_id} | {b64}')
+    namespace, name = item_id.split(':', 1)
+    encoded_png = find_texture(namespace, name)
+    if encoded_png:
+        lines.append(f'{item_id} | {encoded_png}')
         found += 1
     else:
         missing += 1

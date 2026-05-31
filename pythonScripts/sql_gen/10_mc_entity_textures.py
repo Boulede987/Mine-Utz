@@ -20,10 +20,10 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from lib.paths   import LISTS, ROOT
+from lib.paths   import LISTS, SQL_INSERTS
 from lib.loaders import load_pipe_file
 
-OUTPUT = ROOT / 'BDD' / 'Scripts' / 'inserts' / '10_mc_entity_textures.sql'
+OUTPUT = SQL_INSERTS / '10_mc_entity_textures.sql'
 
 # ── Load ──────────────────────────────────────────────────────────────────────
 

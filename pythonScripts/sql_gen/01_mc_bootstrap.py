@@ -25,9 +25,9 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from sql_gen.utils import insert_rows, write_sql
-from lib.paths import ROOT
+from lib.paths import SQL_INSERTS
 
-OUTPUT = ROOT / 'BDD' / 'Scripts' / 'inserts' / '01_mc_bootstrap.sql'
+OUTPUT = SQL_INSERTS / '01_mc_bootstrap.sql'
 
 # ── Rarity ───────────────────────────────────────────────────────────────────
 # Vanilla Minecraft rarity tiers in ascending order.

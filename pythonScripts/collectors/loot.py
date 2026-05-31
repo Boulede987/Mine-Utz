@@ -35,6 +35,51 @@ def _resolve_bucket(loot_type_field: str, folder_hint: str) -> str:
     return FOLDER_TO_BUCKET.get(folder_hint, 'other')
 
 
+def _process_loot_entries(
+    entries: list,
+    source_id: str,
+    bucket: list,
+    reference_rows: list,
+) -> None:
+    for entry in entries:
+        entry_type = entry.get('type', '')
+
+        if 'loot_table' in entry_type:
+            reference_target = entry.get('value', '')
+            if reference_target:
+                reference_rows.append(f"{source_id} | {reference_target}")
+            continue
+
+        if entry.get('children'):
+            _process_loot_entries(entry['children'], source_id, bucket, reference_rows)
+            continue
+
+        if not entry_type.endswith('item'):
+            continue
+
+        item_id = entry.get('name', '')
+        if not item_id:
+            continue
+
+        min_count = max_count = 1
+        weight    = entry.get('weight', 1)
+
+        for function in entry.get('functions', []):
+            if 'set_count' in function.get('function', ''):
+                min_count, max_count = resolve_count(function.get('count', 1))
+
+        bucket.append(
+            f"{source_id} | {item_id} | min:{min_count} | max:{max_count} | weight:{weight}"
+        )
+
+
+def _select_bucket(bucket_name: str, entity_rows, chest_rows, block_rows, other_rows) -> list:
+    if bucket_name == 'entities': return entity_rows
+    if bucket_name == 'chests':   return chest_rows
+    if bucket_name == 'blocks':   return block_rows
+    return other_rows
+
+
 def make_loot_collector(
     entity_rows: list,
     chest_rows: list,
@@ -49,53 +94,12 @@ def make_loot_collector(
     relative_path is everything after loot_table(s)/
     """
     def collect_loot(namespace: str, relative_path: str, data: dict) -> None:
-        folder    = relative_path.split('/')[0]
-        source_id = f"{namespace}:{relative_path.removesuffix('.json')}"
-        loot_type = data.get('type', '')
-
-        bucket_name = _resolve_bucket(loot_type, folder)
-        bucket = (
-            entity_rows if bucket_name == 'entities' else
-            chest_rows  if bucket_name == 'chests'   else
-            block_rows  if bucket_name == 'blocks'   else
-            other_rows
-        )
-
-        def process_entries(entries):
-            for entry in entries:
-                entry_type = entry.get('type', '')
-
-                # Nested loot table reference
-                if 'loot_table' in entry_type:
-                    reference_target = entry.get('value', '')
-                    if reference_target:
-                        reference_rows.append(f"{source_id} | {reference_target}")
-                    continue
-
-                # Composite entry types (alternatives, sequence, group) — recurse into children
-                if entry.get('children'):
-                    process_entries(entry['children'])
-                    continue
-
-                if not entry_type.endswith('item'):
-                    continue
-
-                item_id = entry.get('name', '')
-                if not item_id:
-                    continue
-
-                min_count = max_count = 1
-                weight    = entry.get('weight', 1)
-
-                for function in entry.get('functions', []):
-                    if 'set_count' in function.get('function', ''):
-                        min_count, max_count = resolve_count(function.get('count', 1))
-
-                bucket.append(
-                    f"{source_id} | {item_id} | min:{min_count} | max:{max_count} | weight:{weight}"
-                )
+        folder      = relative_path.split('/')[0]
+        source_id   = f"{namespace}:{relative_path.removesuffix('.json')}"
+        bucket_name = _resolve_bucket(data.get('type', ''), folder)
+        bucket      = _select_bucket(bucket_name, entity_rows, chest_rows, block_rows, other_rows)
 
         for pool in data.get('pools', []):
-            process_entries(pool.get('entries', []))
+            _process_loot_entries(pool.get('entries', []), source_id, bucket, reference_rows)
 
     return collect_loot

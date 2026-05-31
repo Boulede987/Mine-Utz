@@ -33,23 +33,13 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from lib.paths    import MODS_DIR, LISTS, VANILLA_JAR
-from lib.io_utils import write_txt
+from lib.paths       import MODS_DIR, LISTS, VANILLA_JAR
+from lib.io_utils    import write_txt
+from lib.jar_scanner import iter_jars
 
 TAG_PREFIX   = 'data/'
 TAG_INFIX    = '/tags/worldgen/biome/'
 TAG_SUFFIX   = '.json'
-
-
-def iter_jars() -> list[Path]:
-    """Yield vanilla client jar first, then all mod jars."""
-    jars = []
-    if VANILLA_JAR.exists():
-        jars.append(VANILLA_JAR)
-    else:
-        print(f'WARNING: vanilla jar not found at {VANILLA_JAR}')
-    jars.extend(sorted(MODS_DIR.glob('*.jar')))
-    return jars
 
 
 def scan_tag_file(zip_file: zipfile.ZipFile, entry_name: str, tag_map: dict[str, list[str]]) -> None:
@@ -58,10 +48,10 @@ def scan_tag_file(zip_file: zipfile.ZipFile, entry_name: str, tag_map: dict[str,
     parts = entry_name.split('/', 2)
     if len(parts) < 3:
         return
-    namespace = parts[1]
-    relative  = parts[2]          # tags/worldgen/biome/<path>.json
-    tag_path  = relative[len('tags/worldgen/biome/'):].removesuffix('.json')
-    tag_id    = f'{namespace}:{tag_path}'
+    namespace  = parts[1]
+    relative   = parts[2]          # tags/worldgen/biome/<path>.json
+    tag_path   = relative[len('tags/worldgen/biome/'):].removesuffix('.json')
+    tag_id     = f'{namespace}:{tag_path}'
 
     try:
         data = json.loads(zip_file.read(entry_name))
@@ -88,28 +78,28 @@ def scan_tag_file(zip_file: zipfile.ZipFile, entry_name: str, tag_map: dict[str,
 # ── Scan ──────────────────────────────────────────────────────────────────────
 
 tag_map: dict[str, list[str]] = {}   # tag_id -> [values]
-jars = iter_jars()
+jars = iter_jars(MODS_DIR, extra_jars=[VANILLA_JAR])
 print(f'Scanning {len(jars)} jar(s) for biome tag files...\n')
 
 for jar_path in jars:
     label = 'vanilla' if jar_path == VANILLA_JAR else jar_path.name
     try:
-        with zipfile.ZipFile(jar_path, 'r') as zf:
+        with zipfile.ZipFile(jar_path, 'r') as zip_file:
             tag_entries = [
-                n for n in zf.namelist()
-                if n.startswith(TAG_PREFIX)
-                and TAG_INFIX in n
-                and n.endswith(TAG_SUFFIX)
+                entry for entry in zip_file.namelist()
+                if entry.startswith(TAG_PREFIX)
+                and TAG_INFIX in entry
+                and entry.endswith(TAG_SUFFIX)
             ]
             if tag_entries:
                 print(f'  {label[:60]:60s}  {len(tag_entries)} tag file(s)')
             for entry in tag_entries:
-                scan_tag_file(zf, entry, tag_map)
+                scan_tag_file(zip_file, entry, tag_map)
 
     except zipfile.BadZipFile:
         print(f'  !! Bad zip: {label}')
-    except Exception as e:
-        print(f'  !! Error in {label}: {e}')
+    except Exception as error:
+        print(f'  !! Error in {label}: {error}')
 
 # ── Deduplicate values per tag ────────────────────────────────────────────────
 

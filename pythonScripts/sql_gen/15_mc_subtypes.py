@@ -24,11 +24,11 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from sql_gen.utils    import insert_rows, write_sql
-from lib.paths        import LISTS, ROOT
+from lib.paths        import LISTS, SQL_INSERTS
 from lib.loaders      import load_registry, load_pipe_file
 from lib.tag_resolver import load_tag_map, resolve_tag
 
-OUTPUT = ROOT / 'BDD' / 'Scripts' / 'inserts' / '15_mc_subtypes.sql'
+OUTPUT = SQL_INSERTS / '15_mc_subtypes.sql'
 
 # ── Load registry & tags ──────────────────────────────────────────────────────
 

@@ -31,11 +31,11 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from sql_gen.utils import insert_rows, write_sql
-from lib.paths import LISTS, ROOT
+from lib.paths import LISTS, SQL_INSERTS
 from lib.loaders import load_pipe_file, load_registry
 from lib.tag_resolver import load_tag_map, resolve_tag
 
-OUTPUT = ROOT / 'BDD' / 'Scripts' / 'inserts' / '07_mc_relations.sql'
+OUTPUT = SQL_INSERTS / '07_mc_relations.sql'
 
 
 def parse_pipe_row(raw_line: str) -> list[str]:

@@ -40,10 +40,10 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from sql_gen.utils import insert_rows, write_sql
-from lib.paths import LISTS, ROOT
+from lib.paths import LISTS, SQL_INSERTS
 from lib.loaders import load_pipe_file
 
-OUTPUT = ROOT / 'BDD' / 'Scripts' / 'inserts' / '06_mc_loot.sql'
+OUTPUT = SQL_INSERTS / '06_mc_loot.sql'
 
 LOOT_FILES = ['loot_entities.txt', 'loot_chests.txt', 'loot_blocks.txt', 'loot_other.txt']
 

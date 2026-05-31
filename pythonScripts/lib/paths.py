@@ -9,10 +9,12 @@ from pathlib import Path
 # Root of the project: mineutze_DEV_INSTANCE/
 ROOT = Path(__file__).parent.parent.parent
 
-MODS_DIR    = ROOT / 'minecraft' / 'mods'
-LISTS       = ROOT / 'lists'
-LOG_FILE    = ROOT / 'minecraft' / 'logs' / 'kubejs' / 'server.log'
-VANILLA_JAR = (
+MODS_DIR     = ROOT / 'minecraft' / 'mods'
+LISTS        = ROOT / 'lists'
+LOG_FILE     = ROOT / 'minecraft' / 'logs' / 'kubejs' / 'server.log'
+LATEST_LOG   = ROOT / 'minecraft' / 'logs' / 'latest.log'
+SQL_INSERTS  = ROOT / 'BDD' / 'Scripts' / 'inserts'
+VANILLA_JAR  = (
     Path.home()
     / 'AppData' / 'Roaming' / 'PrismLauncher'
     / 'libraries' / 'com' / 'mojang' / 'minecraft'

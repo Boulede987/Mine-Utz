@@ -42,15 +42,16 @@ def _strip_quantity(value: str) -> str:
     return value
 
 
+def _collect_ingredient(value, inputs: list) -> None:
+    if isinstance(value, dict):
+        inputs.append(value.get('item') or value.get('tag') or '')
+    elif isinstance(value, str):
+        inputs.append(_strip_quantity(value))
+
+
 def _parse_inputs(data: dict) -> list[str]:
     """Extract all ingredient item IDs from a recipe dict."""
     inputs = []
-
-    def add(value):
-        if isinstance(value, dict):
-            inputs.append(value.get('item') or value.get('tag') or '')
-        elif isinstance(value, str):
-            inputs.append(_strip_quantity(value))
 
     for key in ('ingredients', 'ingredient', 'input', 'inputs', 'base', 'addition'):
         value = data.get(key)
@@ -58,14 +59,12 @@ def _parse_inputs(data: dict) -> list[str]:
             continue
         if isinstance(value, list):
             for item in value:
-                add(item)
+                _collect_ingredient(item, inputs)
         else:
-            add(value)
+            _collect_ingredient(value, inputs)
 
-    # Shaped recipe symbol → ingredient map
-    if 'key' in data:
-        for value in data['key'].values():
-            add(value)
+    for value in data.get('key', {}).values():
+        _collect_ingredient(value, inputs)
 
     return [item for item in inputs if item]
 

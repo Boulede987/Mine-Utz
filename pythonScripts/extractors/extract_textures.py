@@ -34,9 +34,10 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from PIL import Image, ImageStat
 
-from lib.paths    import MODS_DIR, LISTS, VANILLA_JAR
-from lib.io_utils import write_txt
-from lib.loaders  import load_registry
+from lib.paths       import MODS_DIR, LISTS, VANILLA_JAR
+from lib.io_utils    import write_txt
+from lib.loaders     import load_registry
+from lib.jar_scanner import iter_jars
 
 ENTITY_TEX_INFIX = '/textures/entity/'
 
@@ -55,51 +56,46 @@ texture_map: dict[tuple[str, str], bytes] = {}
 def scan_jar_for_textures(jar_path: Path) -> int:
     count = 0
     try:
-        with zipfile.ZipFile(jar_path, 'r') as zf:
-            for entry in zf.namelist():
+        with zipfile.ZipFile(jar_path, 'r') as zip_file:
+            for entry in zip_file.namelist():
                 if ENTITY_TEX_INFIX not in entry or not entry.endswith('.png'):
                     continue
-                idx = entry.index(ENTITY_TEX_INFIX)
-                ns  = entry[len('assets/'):idx]
-                rel = entry[idx + len(ENTITY_TEX_INFIX):]
+                idx       = entry.index(ENTITY_TEX_INFIX)
+                namespace = entry[len('assets/'):idx]
+                relative  = entry[idx + len(ENTITY_TEX_INFIX):]
                 # First writer wins — vanilla entries are loaded first
-                if (ns, rel) not in texture_map:
-                    texture_map[(ns, rel)] = zf.read(entry)
+                if (namespace, relative) not in texture_map:
+                    texture_map[(namespace, relative)] = zip_file.read(entry)
                     count += 1
     except zipfile.BadZipFile:
         print(f'  !! Bad zip: {jar_path.name}')
-    except Exception as e:
-        print(f'  !! Error in {jar_path.name}: {e}')
+    except Exception as error:
+        print(f'  !! Error in {jar_path.name}: {error}')
     return count
 
 
-jars = []
-if VANILLA_JAR.exists():
-    jars.append(VANILLA_JAR)
-else:
-    print(f'WARNING: vanilla jar not found at {VANILLA_JAR}')
-jars.extend(sorted(MODS_DIR.glob('*.jar')))
+jars = iter_jars(MODS_DIR, extra_jars=[VANILLA_JAR])
 
 print(f'Scanning {len(jars)} jar(s) for entity textures...')
 for jar in jars:
-    n = scan_jar_for_textures(jar)
-    if n:
+    new_count = scan_jar_for_textures(jar)
+    if new_count:
         label = 'vanilla' if jar == VANILLA_JAR else jar.name
-        print(f'  {n:4d}  {label}')
+        print(f'  {new_count:4d}  {label}')
 
 print(f'\nTotal textures in map: {len(texture_map)}')
 
 # ── Pre-index textures by namespace for fast lookup ───────────────────────────
 
-by_ns: dict[str, dict[str, bytes]] = defaultdict(dict)
-for (ns, rel), data in texture_map.items():
-    by_ns[ns][rel] = data
+by_namespace: dict[str, dict[str, bytes]] = defaultdict(dict)
+for (namespace, relative), data in texture_map.items():
+    by_namespace[namespace][relative] = data
 
 # ── Texture lookup ────────────────────────────────────────────────────────────
 
-def find_entity_texture(ns: str, name: str) -> bytes | None:
+def find_entity_texture(namespace: str, name: str) -> bytes | None:
     """
-    Given an entity registry ID (ns, name), find the best-matching PNG.
+    Given an entity registry ID (namespace, name), find the best-matching PNG.
 
     Priority:
       1. Exact conventional paths  (zombie/zombie.png, zombie.png)
@@ -107,30 +103,30 @@ def find_entity_texture(ns: str, name: str) -> bytes | None:
       3. First file inside a matching folder
       4. Any file whose stem matches the name
     """
-    ns_tex = by_ns.get(ns)
-    if not ns_tex:
+    namespace_textures = by_namespace.get(namespace)
+    if not namespace_textures:
         return None
 
-    name_nu = name.replace('_', '')   # e.g. ender_dragon -> enderdragon
+    name_no_underscores = name.replace('_', '')
 
     for candidate in [
         f'{name}/{name}.png',
         f'{name}.png',
-        f'{name_nu}/{name_nu}.png',
-        f'{name_nu}.png',
+        f'{name_no_underscores}/{name_no_underscores}.png',
+        f'{name_no_underscores}.png',
     ]:
-        if candidate in ns_tex:
-            return ns_tex[candidate]
+        if candidate in namespace_textures:
+            return namespace_textures[candidate]
 
-    for folder in [name, name_nu]:
+    for folder in [name, name_no_underscores]:
         prefix = f'{folder}/'
-        for path, data in ns_tex.items():
+        for path, data in namespace_textures.items():
             if path.startswith(prefix):
                 return data
 
-    for path, data in ns_tex.items():
+    for path, data in namespace_textures.items():
         stem = path.rsplit('/', 1)[-1].removesuffix('.png')
-        if stem == name or stem == name_nu:
+        if stem == name or stem == name_no_underscores:
             return data
 
     return None
@@ -148,8 +144,8 @@ def crop_face(raw: bytes) -> bytes:
     Result is upscaled to 64x64 with nearest-neighbour (preserves pixel art).
     """
     img = Image.open(io.BytesIO(raw)).convert('RGBA')
-    w, h = img.size
-    scale = w / 64
+    width, height = img.size
+    scale = width / 64
 
     x0, y0 = int(8 * scale), int(8 * scale)
     x1, y1 = int(16 * scale), int(16 * scale)
@@ -160,9 +156,9 @@ def crop_face(raw: bytes) -> bytes:
         crop = img              # fall back to full texture sheet
 
     out = crop.resize((64, 64), Image.NEAREST)
-    buf = io.BytesIO()
-    out.save(buf, format='PNG', optimize=True)
-    return buf.getvalue()
+    buffer = io.BytesIO()
+    out.save(buffer, format='PNG', optimize=True)
+    return buffer.getvalue()
 
 # ── Process entities ──────────────────────────────────────────────────────────
 
@@ -173,14 +169,14 @@ missing = 0
 for entity_id in sorted(all_entities):
     if ':' not in entity_id:
         continue
-    ns, name = entity_id.split(':', 1)
-    raw = find_entity_texture(ns, name)
+    namespace, name = entity_id.split(':', 1)
+    raw = find_entity_texture(namespace, name)
     if raw is None:
         missing += 1
         continue
-    png_bytes = crop_face(raw)
-    b64       = base64.b64encode(png_bytes).decode('ascii')
-    rows.append(f'{entity_id} | {b64}')
+    png_bytes   = crop_face(raw)
+    encoded_png = base64.b64encode(png_bytes).decode('ascii')
+    rows.append(f'{entity_id} | {encoded_png}')
     matched += 1
 
 print(f'\nMatched   : {matched}')

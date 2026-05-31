@@ -21,10 +21,10 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from sql_gen.utils import insert_rows, write_sql
-from lib.paths     import LISTS, ROOT
+from lib.paths     import LISTS, SQL_INSERTS
 from lib.loaders   import load_registry, load_pipe_file
 
-OUTPUT = ROOT / 'BDD' / 'Scripts' / 'inserts' / '16_mc_biome_dimension.sql'
+OUTPUT = SQL_INSERTS / '16_mc_biome_dimension.sql'
 
 # ── Load valid sets for FK checks ─────────────────────────────────────────────
 
