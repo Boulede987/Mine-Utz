@@ -26,48 +26,50 @@ from lib.loaders   import load_registry, load_pipe_file
 
 OUTPUT = SQL_INSERTS / '16_mc_biome_dimension.sql'
 
-# ── Load valid sets for FK checks ─────────────────────────────────────────────
 
-all_biomes     = load_registry(LISTS, 'biomes.txt')
-all_dimensions = load_registry(LISTS, 'dimensions.txt')
+def _load_valid_sets() -> tuple[set[str], set[str]]:
+    all_biomes     = load_registry(LISTS, 'biomes.txt')
+    all_dimensions = load_registry(LISTS, 'dimensions.txt')
+    return all_biomes, all_dimensions
 
-# ── Parse dimension_biomes.txt ────────────────────────────────────────────────
 
-rows: list[tuple] = []
-seen: set[tuple]  = set()
-skipped           = 0
+def _parse_biome_dimension_rows(all_biomes: set, all_dimensions: set) -> list[tuple]:
+    rows: list[tuple] = []
+    seen: set[tuple]  = set()
+    skipped           = 0
+    for line in load_pipe_file(LISTS, 'dimension_biomes.txt'):
+        parts = [p.strip() for p in line.split('|')]
+        if len(parts) < 2:
+            continue
+        dim_id, biome_id = parts[0], parts[1]
+        if not dim_id.startswith('minecraft:') or not biome_id.startswith('minecraft:'):
+            skipped += 1
+            continue
+        if dim_id not in all_dimensions or biome_id not in all_biomes:
+            skipped += 1
+            continue
+        dim_ns,   dim_name   = dim_id.split(':', 1)
+        biome_ns, biome_name = biome_id.split(':', 1)
+        pk = (biome_ns, biome_name, dim_ns, dim_name)
+        if pk not in seen:
+            seen.add(pk)
+            rows.append(pk)
+    print(f'BiomeDimension rows : {len(rows)}')
+    print(f'Skipped (FK miss)   : {skipped}')
+    return rows
 
-for line in load_pipe_file(LISTS, 'dimension_biomes.txt'):
-    parts = [p.strip() for p in line.split('|')]
-    if len(parts) < 2:
-        continue
-    dim_id, biome_id = parts[0], parts[1]
 
-    if not dim_id.startswith('minecraft:') or not biome_id.startswith('minecraft:'):
-        skipped += 1
-        continue
-    if dim_id not in all_dimensions or biome_id not in all_biomes:
-        skipped += 1
-        continue
+def main() -> None:
+    all_biomes, all_dimensions = _load_valid_sets()
+    rows = _parse_biome_dimension_rows(all_biomes, all_dimensions)
+    write_sql(OUTPUT, '16 - Biome-dimension mapping', [
+        ('BiomeDimension — sourced from biome tags (vanilla dims) + dimension JSON (mod dims)',
+         insert_rows(
+             'BiomeDimension',
+             ['biome_namespace', 'biome_name', 'dimension_namespace', 'dimension_name'],
+             rows,
+         )),
+    ])
 
-    dim_ns,   dim_name   = dim_id.split(':', 1)
-    biome_ns, biome_name = biome_id.split(':', 1)
 
-    pk = (biome_ns, biome_name, dim_ns, dim_name)
-    if pk not in seen:
-        seen.add(pk)
-        rows.append(pk)
-
-print(f'BiomeDimension rows : {len(rows)}')
-print(f'Skipped (FK miss)   : {skipped}')
-
-# ── Write ─────────────────────────────────────────────────────────────────────
-
-write_sql(OUTPUT, '16 - Biome-dimension mapping', [
-    ('BiomeDimension — sourced from biome tags (vanilla dims) + dimension JSON (mod dims)',
-     insert_rows(
-         'BiomeDimension',
-         ['biome_namespace', 'biome_name', 'dimension_namespace', 'dimension_name'],
-         rows,
-     )),
-])
+main()

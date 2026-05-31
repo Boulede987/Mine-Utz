@@ -29,44 +29,46 @@ from lib.loaders import load_pipe_file, load_registry
 
 OUTPUT = SQL_INSERTS / '14_mc_biome_blocks.sql'
 
-# ── Load valid sets for FK checks ─────────────────────────────────────────────
 
-mc_biomes = {b for b in load_registry(LISTS, 'biomes.txt') if b.startswith('minecraft:')}
-mc_blocks = {b for b in load_registry(LISTS, 'blocks.txt') if b.startswith('minecraft:')}
+def _load_valid_sets() -> tuple[set[str], set[str]]:
+    mc_biomes = {b for b in load_registry(LISTS, 'biomes.txt') if b.startswith('minecraft:')}
+    mc_blocks = {b for b in load_registry(LISTS, 'blocks.txt') if b.startswith('minecraft:')}
+    return mc_biomes, mc_blocks
 
-# ── Parse biome_blocks.txt ────────────────────────────────────────────────────
 
-rows: list[tuple] = []
-seen: set[tuple]  = set()
+def _parse_biome_block_rows(mc_biomes: set, mc_blocks: set) -> list[tuple]:
+    rows: list[tuple] = []
+    seen: set[tuple]  = set()
+    for line in load_pipe_file(LISTS, 'biome_blocks.txt'):
+        parts = [p.strip() for p in line.split('|')]
+        if len(parts) < 2:
+            continue
+        biome_id, block_id = parts[0], parts[1]
+        if not biome_id.startswith('minecraft:') or not block_id.startswith('minecraft:'):
+            continue
+        if biome_id not in mc_biomes or block_id not in mc_blocks:
+            continue
+        bio_ns, bio_name = biome_id.split(':', 1)
+        blk_ns, blk_name = block_id.split(':', 1)
+        pk = (blk_ns, blk_name, bio_ns, bio_name)
+        if pk not in seen:
+            seen.add(pk)
+            rows.append(pk)
+    print(f'BlockBiomeGenerationTable rows: {len(rows)}')
+    return rows
 
-for line in load_pipe_file(LISTS, 'biome_blocks.txt'):
-    parts = [p.strip() for p in line.split('|')]
-    if len(parts) < 2:
-        continue
 
-    biome_id, block_id = parts[0], parts[1]
-    if not biome_id.startswith('minecraft:') or not block_id.startswith('minecraft:'):
-        continue
-    if biome_id not in mc_biomes or block_id not in mc_blocks:
-        continue
+def main() -> None:
+    mc_biomes, mc_blocks = _load_valid_sets()
+    rows = _parse_biome_block_rows(mc_biomes, mc_blocks)
+    write_sql(OUTPUT, '14 - Minecraft block-biome generation', [
+        ('BlockBiomeGenerationTable — ore/disk blocks that generate in each biome',
+         insert_rows(
+             'BlockBiomeGenerationTable',
+             ['block_namespace', 'block_name', 'biome_namespace', 'biome_name'],
+             rows,
+         )),
+    ])
 
-    bio_ns,  bio_name  = biome_id.split(':', 1)
-    blk_ns,  blk_name  = block_id.split(':', 1)
 
-    pk = (blk_ns, blk_name, bio_ns, bio_name)
-    if pk not in seen:
-        seen.add(pk)
-        rows.append(pk)
-
-print(f'BlockBiomeGenerationTable rows: {len(rows)}')
-
-# ── Write ─────────────────────────────────────────────────────────────────────
-
-write_sql(OUTPUT, '14 - Minecraft block-biome generation', [
-    ('BlockBiomeGenerationTable — ore/disk blocks that generate in each biome',
-     insert_rows(
-         'BlockBiomeGenerationTable',
-         ['block_namespace', 'block_name', 'biome_namespace', 'biome_name'],
-         rows,
-     )),
-])
+main()

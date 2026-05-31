@@ -29,7 +29,6 @@ from lib.paths import SQL_INSERTS
 
 OUTPUT = SQL_INSERTS / '01_mc_bootstrap.sql'
 
-# ── Rarity ───────────────────────────────────────────────────────────────────
 # Vanilla Minecraft rarity tiers in ascending order.
 # IDs are explicit so downstream INSERT scripts can reference them by number.
 RARITY_ROWS = [
@@ -39,49 +38,33 @@ RARITY_ROWS = [
     (4, 'EPIC'),
 ]
 
-# ── Licence ───────────────────────────────────────────────────────────────────
-LICENCE_ROWS = [
-    (1, 'Mojang EULA'),
-]
+LICENCE_ROWS    = [(1, 'Mojang EULA')]
+AUTHOR_ROWS     = [(1, 'Mojang Studios')]
+MOD_ROWS        = [('minecraft', 'Minecraft', '1.21.1', 1)]   # licence_id = 1
+SOURCE_ROWS     = [('minecraft', 'Official', 'https://minecraft.net')]
+DEVELOPED_BY_ROWS = [('minecraft', 1)]                         # author_id = 1
 
-# ── Author ────────────────────────────────────────────────────────────────────
-AUTHOR_ROWS = [
-    (1, 'Mojang Studios'),
-]
 
-# ── Mod ───────────────────────────────────────────────────────────────────────
-MOD_ROWS = [
-    ('minecraft', 'Minecraft', '1.21.1', 1),   # licence_id = 1 (Mojang EULA)
-]
+def main() -> None:
+    write_sql(OUTPUT, '01 - Minecraft bootstrap (Rarity, Licence, Author, Mod)', [
+        ('Rarity tiers',
+         insert_rows('Rarity', ['id', 'tier'], RARITY_ROWS)),
 
-# ── Source ────────────────────────────────────────────────────────────────────
-SOURCE_ROWS = [
-    ('minecraft', 'Official', 'https://minecraft.net'),
-]
+        ('Licence',
+         insert_rows('Licence', ['id', 'name'], LICENCE_ROWS)),
 
-# ── DeveloppedBy ─────────────────────────────────────────────────────────────
-DEVELOPED_BY_ROWS = [
-    ('minecraft', 1),   # author_id = 1 (Mojang Studios)
-]
+        ('Author',
+         insert_rows('Author', ['id', 'name'], AUTHOR_ROWS)),
 
-# ── Assemble and write ────────────────────────────────────────────────────────
+        ('Mod — vanilla Minecraft 1.21.1',
+         insert_rows('`Mod`', ['namespace', 'display_name', 'version', 'licence_id'], MOD_ROWS)),
 
-write_sql(OUTPUT, '01 - Minecraft bootstrap (Rarity, Licence, Author, Mod)', [
-    ('Rarity tiers',
-     insert_rows('Rarity', ['id', 'tier'], RARITY_ROWS)),
+        ('Source',
+         insert_rows('Source', ['namespace', 'site', 'url'], SOURCE_ROWS)),
 
-    ('Licence',
-     insert_rows('Licence', ['id', 'name'], LICENCE_ROWS)),
+        ('DeveloppedBy',
+         insert_rows('DeveloppedBy', ['namespace', 'author_id'], DEVELOPED_BY_ROWS)),
+    ])
 
-    ('Author',
-     insert_rows('Author', ['id', 'name'], AUTHOR_ROWS)),
 
-    ('Mod — vanilla Minecraft 1.21.1',
-     insert_rows('`Mod`', ['namespace', 'display_name', 'version', 'licence_id'], MOD_ROWS)),
-
-    ('Source',
-     insert_rows('Source', ['namespace', 'site', 'url'], SOURCE_ROWS)),
-
-    ('DeveloppedBy',
-     insert_rows('DeveloppedBy', ['namespace', 'author_id'], DEVELOPED_BY_ROWS)),
-])
+main()

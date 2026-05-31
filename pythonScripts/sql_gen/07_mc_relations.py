@@ -38,96 +38,91 @@ from lib.tag_resolver import load_tag_map, resolve_tag
 OUTPUT = SQL_INSERTS / '07_mc_relations.sql'
 
 
-def parse_pipe_row(raw_line: str) -> list[str]:
+def _parse_pipe_row(raw_line: str) -> list[str]:
     return [p.strip() for p in raw_line.split('|')]
 
 
-def parse_int_field(field: str) -> int:
+def _parse_int_field(field: str) -> int:
     return int(field.split(':', 1)[1]) if ':' in field else 1
 
 
-# ── Load supporting data ──────────────────────────────────────────────────────
+def _build_spawn_rows() -> list[tuple]:
+    rows: list[tuple] = []
+    seen: set[tuple]  = set()
+    for line in load_pipe_file(LISTS, 'biome_spawns.txt'):
+        parts = _parse_pipe_row(line)
+        if len(parts) < 5:
+            continue
+        biome, entity = parts[0], parts[1]
+        if not biome.startswith('minecraft:') or not entity.startswith('minecraft:'):
+            continue
+        biome_ns,  biome_name  = biome.split(':', 1)
+        entity_ns, entity_name = entity.split(':', 1)
+        weight  = _parse_int_field(parts[2])
+        min_cnt = _parse_int_field(parts[3])
+        max_cnt = _parse_int_field(parts[4])
+        pk = (biome_ns, biome_name, entity_ns, entity_name)
+        if pk not in seen:
+            seen.add(pk)
+            rows.append((biome_ns, biome_name, entity_ns, entity_name, weight, min_cnt, max_cnt))
+    print(f'BiomeSpawnTable entries : {len(rows)}')
+    return rows
 
-mc_biomes = load_registry(LISTS, 'biomes.txt')   # for FK validation
-tag_map   = load_tag_map(LISTS)
 
-# ── BiomeSpawnTable ───────────────────────────────────────────────────────────
+def _build_structure_biome_rows(mc_biomes: set, tag_map: dict) -> list[tuple]:
+    rows: list[tuple]  = []
+    seen: set[tuple]   = set()
+    skipped_unresolved = 0
+    for line in load_pipe_file(LISTS, 'structure_biomes.txt'):
+        parts = _parse_pipe_row(line)
+        if len(parts) < 2:
+            continue
+        structure, biome_or_tag = parts[0], parts[1]
+        if not structure.startswith('minecraft:'):
+            continue
+        struct_ns, struct_name = structure.split(':', 1)
+        resolved_biomes = (
+            resolve_tag(biome_or_tag[1:], tag_map) if biome_or_tag.startswith('#')
+            else {biome_or_tag}
+        )
+        for biome in sorted(resolved_biomes):
+            if not biome.startswith('minecraft:') or biome not in mc_biomes:
+                skipped_unresolved += 1
+                continue
+            biome_ns, biome_name = biome.split(':', 1)
+            pk = (struct_ns, struct_name, biome_ns, biome_name)
+            if pk not in seen:
+                seen.add(pk)
+                rows.append(pk)
+    print(f'StructureBiome entries  : {len(rows)}')
+    print(f'  skipped (non-vanilla biomes from tag expansion): {skipped_unresolved}')
+    return rows
 
-spawn_rows: list[tuple] = []
-seen_spawns: set[tuple] = set()
 
-for line in load_pipe_file(LISTS, 'biome_spawns.txt'):
-    parts = parse_pipe_row(line)
-    if len(parts) < 5:
-        continue
-    biome, entity = parts[0], parts[1]
-    if not biome.startswith('minecraft:') or not entity.startswith('minecraft:'):
-        continue
+def main() -> None:
+    mc_biomes = load_registry(LISTS, 'biomes.txt')
+    tag_map   = load_tag_map(LISTS)
 
-    biome_ns,  biome_name  = biome.split(':', 1)
-    entity_ns, entity_name = entity.split(':', 1)
-    weight  = parse_int_field(parts[2])
-    min_cnt = parse_int_field(parts[3])
-    max_cnt = parse_int_field(parts[4])
+    spawn_rows        = _build_spawn_rows()
+    struct_biome_rows = _build_structure_biome_rows(mc_biomes, tag_map)
 
-    pk = (biome_ns, biome_name, entity_ns, entity_name)
-    if pk not in seen_spawns:
-        seen_spawns.add(pk)
-        spawn_rows.append((biome_ns, biome_name, entity_ns, entity_name, weight, min_cnt, max_cnt))
+    write_sql(OUTPUT, '07 - Minecraft relations (biome spawns + structure biomes)', [
+        ('BiomeSpawnTable — entity spawn weights per biome',
+         insert_rows(
+             'BiomeSpawnTable',
+             ['biome_namespace', 'biome_name',
+              'entity_namespace', 'entity_name',
+              'weight', 'minCount', 'maxCount'],
+             spawn_rows,
+         )),
 
-print(f'BiomeSpawnTable entries : {len(spawn_rows)}')
+        ('StructureBiome — resolved from biome tags via biome_tags.txt',
+         insert_rows(
+             'StructureBiome',
+             ['structure_namespace', 'structure_name', 'biome_namespace', 'biome_name'],
+             struct_biome_rows,
+         )),
+    ])
 
-# ── StructureBiome ────────────────────────────────────────────────────────────
 
-struct_biome_rows: list[tuple] = []
-seen_struct_biomes: set[tuple] = set()
-skipped_unresolved = 0
-
-for line in load_pipe_file(LISTS, 'structure_biomes.txt'):
-    parts = parse_pipe_row(line)
-    if len(parts) < 2:
-        continue
-    structure, biome_or_tag = parts[0], parts[1]
-    if not structure.startswith('minecraft:'):
-        continue
-
-    struct_ns, struct_name = structure.split(':', 1)
-
-    # Resolve tags to concrete biome IDs
-    if biome_or_tag.startswith('#'):
-        resolved_biomes = resolve_tag(biome_or_tag[1:], tag_map)
-    else:
-        resolved_biomes = {biome_or_tag}
-
-    for biome in sorted(resolved_biomes):
-        if not biome.startswith('minecraft:') or biome not in mc_biomes:
-            skipped_unresolved += 1
-            continue   # only vanilla biomes exist in our Biome table
-        biome_ns, biome_name = biome.split(':', 1)
-        pk = (struct_ns, struct_name, biome_ns, biome_name)
-        if pk not in seen_struct_biomes:
-            seen_struct_biomes.add(pk)
-            struct_biome_rows.append(pk)
-
-print(f'StructureBiome entries  : {len(struct_biome_rows)}')
-print(f'  skipped (non-vanilla biomes from tag expansion): {skipped_unresolved}')
-
-# ── Write ─────────────────────────────────────────────────────────────────────
-
-write_sql(OUTPUT, '07 - Minecraft relations (biome spawns + structure biomes)', [
-    ('BiomeSpawnTable — entity spawn weights per biome',
-     insert_rows(
-         'BiomeSpawnTable',
-         ['biome_namespace', 'biome_name',
-          'entity_namespace', 'entity_name',
-          'weight', 'minCount', 'maxCount'],
-         spawn_rows,
-     )),
-
-    ('StructureBiome — resolved from biome tags via biome_tags.txt',
-     insert_rows(
-         'StructureBiome',
-         ['structure_namespace', 'structure_name', 'biome_namespace', 'biome_name'],
-         struct_biome_rows,
-     )),
-])
+main()

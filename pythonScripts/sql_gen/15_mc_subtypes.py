@@ -30,14 +30,15 @@ from lib.tag_resolver import load_tag_map, resolve_tag
 
 OUTPUT = SQL_INSERTS / '15_mc_subtypes.sql'
 
-# ── Load registry & tags ──────────────────────────────────────────────────────
+# Tag names as of 1.21.1 (vanilla renamed armor tags; food split into meat/fish/etc.)
+TOOL_TAGS  = ['minecraft:swords', 'minecraft:pickaxes', 'minecraft:axes',
+              'minecraft:shovels', 'minecraft:hoes']
+ARMOR_TAGS = ['minecraft:head_armor', 'minecraft:chest_armor',
+              'minecraft:leg_armor', 'minecraft:foot_armor']
+FOOD_TAGS  = ['minecraft:meat', 'minecraft:fishes', 'minecraft:cat_food']
 
-mc_items = {i for i in load_registry(LISTS, 'items.txt') if i.startswith('minecraft:')}
-tag_map  = load_tag_map(LISTS, 'item_tags.txt')
 
-# ── Load stats (optional) ─────────────────────────────────────────────────────
-
-def load_stats(filename: str, columns: list[str]) -> dict[str, dict]:
+def _load_stats(filename: str, columns: list[str]) -> dict[str, dict]:
     """Parse a pipe-separated stats file into {item_id: {col: value}}."""
     result: dict[str, dict] = {}
     for line in load_pipe_file(LISTS, filename):
@@ -51,110 +52,128 @@ def load_stats(filename: str, columns: list[str]) -> dict[str, dict]:
         }
     return result
 
-tool_stats  = load_stats('tool_stats.txt',  ['attackDamage', 'attackSpeed', 'durability'])
-armor_stats = load_stats('armor_stats.txt', ['armorPoints', 'armorToughness', 'knockbackResistance', 'durability'])
-food_stats  = load_stats('food_stats.txt',  ['hungerRestoration', 'saturation'])
 
-print(f'tool_stats  entries : {len(tool_stats)}')
-print(f'armor_stats entries : {len(armor_stats)}')
-print(f'food_stats  entries : {len(food_stats)}')
-
-# ── Classify via tags ─────────────────────────────────────────────────────────
-
-def items_from_tags(tags: list[str]) -> list[tuple[str, str]]:
+def _items_from_tags(tags: list[str], tag_map: dict, mc_items: set) -> list[tuple[str, str]]:
     resolved: set[str] = set()
     for tag in tags:
         resolved |= resolve_tag(tag, tag_map)
     return sorted(
-        (id_.split(':', 1)[0], id_.split(':', 1)[1])
-        for id_ in resolved
-        if id_.startswith('minecraft:') and id_ in mc_items
+        (item_id.split(':', 1)[0], item_id.split(':', 1)[1])
+        for item_id in resolved
+        if item_id.startswith('minecraft:') and item_id in mc_items
     )
 
-# Tag names as of 1.21.1 (vanilla renamed armor tags; food split into meat/fish/etc.)
-TOOL_TAGS  = ['minecraft:swords', 'minecraft:pickaxes', 'minecraft:axes',
-              'minecraft:shovels', 'minecraft:hoes']
-ARMOR_TAGS = ['minecraft:head_armor', 'minecraft:chest_armor',
-              'minecraft:leg_armor', 'minecraft:foot_armor']
-FOOD_TAGS  = ['minecraft:meat', 'minecraft:fishes', 'minecraft:cat_food']
 
-# Food classification uses stats dump when available (catches items not in tags)
-if food_stats:
-    food_pairs = sorted(
-        (id_.split(':', 1)[0], id_.split(':', 1)[1])
-        for id_ in food_stats
-        if id_.startswith('minecraft:') and id_ in mc_items
-    )
-else:
-    food_pairs = items_from_tags(FOOD_TAGS)
-
-tool_pairs  = items_from_tags(TOOL_TAGS)
-armor_pairs = items_from_tags(ARMOR_TAGS)
-
-print(f'Tool  rows : {len(tool_pairs)}')
-print(f'Armor rows : {len(armor_pairs)}')
-print(f'Food  rows : {len(food_pairs)}')
-
-# ── Build rows ────────────────────────────────────────────────────────────────
-
-def s(stats: dict, key: str):
+def _stat(stats: dict, key: str):
     return stats.get(key) if stats else None
 
-tool_rows = [
-    (ns, name,
-     None, None,  # miningEfficiency, miningLevel — need separate dump
-     s(tool_stats.get(f'minecraft:{name}'), 'attackDamage'),
-     s(tool_stats.get(f'minecraft:{name}'), 'attackSpeed'),
-     None,  # attackRange — not in attribute system
-     s(tool_stats.get(f'minecraft:{name}'), 'durability'),
-     None)  # enchantability — not in attribute system
-    for ns, name in tool_pairs
-]
 
-armor_rows = [
-    (ns, name,
-     s(armor_stats.get(f'minecraft:{name}'), 'armorPoints'),
-     s(armor_stats.get(f'minecraft:{name}'), 'armorToughness'),
-     s(armor_stats.get(f'minecraft:{name}'), 'durability'),
-     None,  # enchantability
-     s(armor_stats.get(f'minecraft:{name}'), 'knockbackResistance'))
-    for ns, name in armor_pairs
-]
+def _load_data() -> dict:
+    mc_items    = {i for i in load_registry(LISTS, 'items.txt') if i.startswith('minecraft:')}
+    tag_map     = load_tag_map(LISTS, 'item_tags.txt')
+    tool_stats  = _load_stats('tool_stats.txt',  ['attackDamage', 'attackSpeed', 'durability'])
+    armor_stats = _load_stats('armor_stats.txt', ['armorPoints', 'armorToughness', 'knockbackResistance', 'durability'])
+    food_stats  = _load_stats('food_stats.txt',  ['hungerRestoration', 'saturation'])
+    print(f'tool_stats  entries : {len(tool_stats)}')
+    print(f'armor_stats entries : {len(armor_stats)}')
+    print(f'food_stats  entries : {len(food_stats)}')
+    return {
+        'mc_items':    mc_items,
+        'tag_map':     tag_map,
+        'tool_stats':  tool_stats,
+        'armor_stats': armor_stats,
+        'food_stats':  food_stats,
+    }
 
-food_rows = [
-    (ns, name,
-     s(food_stats.get(f'minecraft:{name}'), 'hungerRestoration'),
-     s(food_stats.get(f'minecraft:{name}'), 'saturation'))
-    for ns, name in food_pairs
-]
 
-# ── Write ─────────────────────────────────────────────────────────────────────
+def _classify_items(data: dict) -> tuple[list, list, list]:
+    mc_items    = data['mc_items']
+    tag_map     = data['tag_map']
+    food_stats  = data['food_stats']
 
-write_sql(OUTPUT, '15 - Minecraft item subtypes (Tool, Armor, Food)', [
-    ('Tool — classified via item tags; attack stats from /dump_tool_stats when available',
-     insert_rows(
-         'Tool',
-         ['item_namespace', 'item_name',
-          'miningEfficiency', 'miningLevel',
-          'attackDamage', 'attackSpeed', 'attackRange',
-          'durability', 'enchantability'],
-         tool_rows,
-     )),
+    tool_pairs  = _items_from_tags(TOOL_TAGS,  tag_map, mc_items)
+    armor_pairs = _items_from_tags(ARMOR_TAGS, tag_map, mc_items)
+    food_pairs  = (
+        sorted(
+            (item_id.split(':', 1)[0], item_id.split(':', 1)[1])
+            for item_id in food_stats
+            if item_id.startswith('minecraft:') and item_id in mc_items
+        )
+        if food_stats else _items_from_tags(FOOD_TAGS, tag_map, mc_items)
+    )
 
-    ('Armor — classified via item tags; stats from /dump_armor_stats when available',
-     insert_rows(
-         'Armor',
-         ['item_namespace', 'item_name',
-          'armorPoints', 'armorToughness',
-          'durability', 'enchantability', 'knockbackResistance'],
-         armor_rows,
-     )),
+    print(f'Tool  rows : {len(tool_pairs)}')
+    print(f'Armor rows : {len(armor_pairs)}')
+    print(f'Food  rows : {len(food_pairs)}')
+    return tool_pairs, armor_pairs, food_pairs
 
-    ('Food — from /dump_food_stats when available, else item tags',
-     insert_rows(
-         'Food',
-         ['item_namespace', 'item_name',
-          'hungerRestoration', 'saturation'],
-         food_rows,
-     )),
-])
+
+def _build_tool_rows(tool_pairs: list, tool_stats: dict) -> list[tuple]:
+    return [
+        (ns, name,
+         None, None,
+         _stat(tool_stats.get(f'minecraft:{name}'), 'attackDamage'),
+         _stat(tool_stats.get(f'minecraft:{name}'), 'attackSpeed'),
+         None,
+         _stat(tool_stats.get(f'minecraft:{name}'), 'durability'),
+         None)
+        for ns, name in tool_pairs
+    ]
+
+
+def _build_armor_rows(armor_pairs: list, armor_stats: dict) -> list[tuple]:
+    return [
+        (ns, name,
+         _stat(armor_stats.get(f'minecraft:{name}'), 'armorPoints'),
+         _stat(armor_stats.get(f'minecraft:{name}'), 'armorToughness'),
+         _stat(armor_stats.get(f'minecraft:{name}'), 'durability'),
+         None,
+         _stat(armor_stats.get(f'minecraft:{name}'), 'knockbackResistance'))
+        for ns, name in armor_pairs
+    ]
+
+
+def _build_food_rows(food_pairs: list, food_stats: dict) -> list[tuple]:
+    return [
+        (ns, name,
+         _stat(food_stats.get(f'minecraft:{name}'), 'hungerRestoration'),
+         _stat(food_stats.get(f'minecraft:{name}'), 'saturation'))
+        for ns, name in food_pairs
+    ]
+
+
+def main() -> None:
+    data = _load_data()
+    tool_pairs, armor_pairs, food_pairs = _classify_items(data)
+
+    write_sql(OUTPUT, '15 - Minecraft item subtypes (Tool, Armor, Food)', [
+        ('Tool — classified via item tags; attack stats from /dump_tool_stats when available',
+         insert_rows(
+             'Tool',
+             ['item_namespace', 'item_name',
+              'miningEfficiency', 'miningLevel',
+              'attackDamage', 'attackSpeed', 'attackRange',
+              'durability', 'enchantability'],
+             _build_tool_rows(tool_pairs, data['tool_stats']),
+         )),
+
+        ('Armor — classified via item tags; stats from /dump_armor_stats when available',
+         insert_rows(
+             'Armor',
+             ['item_namespace', 'item_name',
+              'armorPoints', 'armorToughness',
+              'durability', 'enchantability', 'knockbackResistance'],
+             _build_armor_rows(armor_pairs, data['armor_stats']),
+         )),
+
+        ('Food — from /dump_food_stats when available, else item tags',
+         insert_rows(
+             'Food',
+             ['item_namespace', 'item_name',
+              'hungerRestoration', 'saturation'],
+             _build_food_rows(food_pairs, data['food_stats']),
+         )),
+    ])
+
+
+main()

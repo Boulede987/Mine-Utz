@@ -28,24 +28,23 @@ from lib.loaders import load_registry
 
 OUTPUT = SQL_INSERTS / '05_mc_structures.sql'
 
-# ── Load and filter ───────────────────────────────────────────────────────────
 
-all_structures = load_registry(LISTS, 'structures.txt')
-mc_structures  = sorted(s for s in all_structures if s.startswith('minecraft:'))
+def _load_vanilla_structure_rows() -> list[tuple]:
+    all_structures = load_registry(LISTS, 'structures.txt')
+    mc_structures  = sorted(s for s in all_structures if s.startswith('minecraft:'))
+    print(f'Found {len(mc_structures)} vanilla structures.')
+    return [
+        ('minecraft', name.split(':', 1)[1], None)
+        for name in mc_structures
+    ]
 
-print(f'Found {len(mc_structures)} vanilla structures.')
 
-# ── Build rows ────────────────────────────────────────────────────────────────
-# Columns: namespace, name, loottable_id
+def main() -> None:
+    rows = _load_vanilla_structure_rows()
+    write_sql(OUTPUT, '05 - Minecraft structures', [
+        ('Structure — vanilla 1.21.1  (loottable_id is NULL — populated in loot step)',
+         insert_rows('Structure', ['namespace', 'name', 'loottable_id'], rows)),
+    ])
 
-rows = [
-    ('minecraft', name.split(':', 1)[1], None)
-    for name in mc_structures
-]
 
-# ── Write ─────────────────────────────────────────────────────────────────────
-
-write_sql(OUTPUT, '05 - Minecraft structures', [
-    ('Structure — vanilla 1.21.1  (loottable_id is NULL — populated in loot step)',
-     insert_rows('Structure', ['namespace', 'name', 'loottable_id'], rows)),
-])
+main()

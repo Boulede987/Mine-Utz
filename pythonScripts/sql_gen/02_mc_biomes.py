@@ -26,21 +26,23 @@ from lib.loaders import load_registry
 
 OUTPUT = SQL_INSERTS / '02_mc_biomes.sql'
 
-# ── Load and filter ───────────────────────────────────────────────────────────
 
-all_biomes = load_registry(LISTS, 'biomes.txt')
-mc_biomes  = sorted(b for b in all_biomes if b.startswith('minecraft:'))
+def _load_vanilla_biome_rows() -> list[tuple]:
+    all_biomes = load_registry(LISTS, 'biomes.txt')
+    mc_biomes  = sorted(b for b in all_biomes if b.startswith('minecraft:'))
+    print(f'Found {len(mc_biomes)} vanilla biomes.')
+    return [
+        ('minecraft', name.split(':', 1)[1], None, None)
+        for name in mc_biomes
+    ]
 
-rows = [
-    ('minecraft', name.split(':', 1)[1], None, None)
-    for name in mc_biomes
-]
 
-print(f'Found {len(rows)} vanilla biomes.')
+def main() -> None:
+    rows = _load_vanilla_biome_rows()
+    write_sql(OUTPUT, '02 - Minecraft biomes', [
+        ('Biome — vanilla 1.21.1  (mainColor and temperature are NULL)',
+         insert_rows('Biome', ['namespace', 'name', 'mainColor', 'temperature'], rows)),
+    ])
 
-# ── Write ─────────────────────────────────────────────────────────────────────
 
-write_sql(OUTPUT, '02 - Minecraft biomes', [
-    ('Biome — vanilla 1.21.1  (mainColor and temperature are NULL)',
-     insert_rows('Biome', ['namespace', 'name', 'mainColor', 'temperature'], rows)),
-])
+main()

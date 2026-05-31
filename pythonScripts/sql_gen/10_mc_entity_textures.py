@@ -25,41 +25,44 @@ from lib.loaders import load_pipe_file
 
 OUTPUT = SQL_INSERTS / '10_mc_entity_textures.sql'
 
-# ── Load ──────────────────────────────────────────────────────────────────────
 
-raw_rows = load_pipe_file(LISTS, 'entity_textures.txt')   # full row strings
-print(f'Loaded {len(raw_rows)} entity texture entries.')
+def _build_update_statements() -> list[str]:
+    raw_rows = load_pipe_file(LISTS, 'entity_textures.txt')
+    print(f'Loaded {len(raw_rows)} entity texture entries.')
+    updates = []
+    for row in raw_rows:
+        parts = row.split(' | ', 1)
+        if len(parts) != 2:
+            continue
+        entity_id, encoded_png = parts
+        if ':' not in entity_id:
+            continue
+        namespace, name = entity_id.split(':', 1)
+        namespace = namespace.replace("'", "''")
+        name      = name.replace("'", "''")
+        updates.append(
+            f"UPDATE Entity SET texture_b64 = '{encoded_png}'"
+            f" WHERE namespace = '{namespace}' AND name = '{name}';"
+        )
+    print(f'Generated {len(updates)} UPDATE statements.')
+    return updates
 
-# ── Generate UPDATE statements ────────────────────────────────────────────────
 
-updates = []
-for row in raw_rows:
-    # Split on first ' | ' only — base64 has no '|' but be explicit
-    parts = row.split(' | ', 1)
-    if len(parts) != 2:
-        continue
-    entity_id, b64 = parts
-    if ':' not in entity_id:
-        continue
-    ns, name = entity_id.split(':', 1)
-    ns   = ns.replace("'", "''")
-    name = name.replace("'", "''")
-    updates.append(
-        f"UPDATE Entity SET texture_b64 = '{b64}'"
-        f" WHERE namespace = '{ns}' AND name = '{name}';"
+def _write_updates(updates: list[str]) -> None:
+    header = (
+        '-- ' + '=' * 50 + '\n'
+        '-- 10 - Entity textures (base64-encoded PNG)\n'
+        '-- ' + '=' * 50 + '\n\n'
+        'USE MineutzDB;\n\n'
     )
+    OUTPUT.parent.mkdir(parents=True, exist_ok=True)
+    OUTPUT.write_text(header + '\n'.join(updates) + '\n', encoding='utf-8')
+    print(f'Written -> {OUTPUT}')
 
-print(f'Generated {len(updates)} UPDATE statements.')
 
-# ── Write ─────────────────────────────────────────────────────────────────────
+def main() -> None:
+    updates = _build_update_statements()
+    _write_updates(updates)
 
-header = (
-    '-- ' + '=' * 50 + '\n'
-    '-- 10 - Entity textures (base64-encoded PNG)\n'
-    '-- ' + '=' * 50 + '\n\n'
-    'USE MineutzDB;\n\n'
-)
 
-OUTPUT.parent.mkdir(parents=True, exist_ok=True)
-OUTPUT.write_text(header + '\n'.join(updates) + '\n', encoding='utf-8')
-print(f'Written -> {OUTPUT}')
+main()

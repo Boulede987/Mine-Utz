@@ -31,44 +31,45 @@ def _parse_int(field: str) -> int:
     return int(field.split(':', 1)[1]) if ':' in field else 1
 
 
-# ── Load valid sets for FK checks ────────────────────────────────────────────
+def _load_valid_sets() -> tuple[set[str], set[str]]:
+    mc_structures = {s for s in load_registry(LISTS, 'structures.txt') if s.startswith('minecraft:')}
+    mc_entities   = {e for e in load_registry(LISTS, 'mobs.txt')       if e.startswith('minecraft:')}
+    return mc_structures, mc_entities
 
-mc_structures = {s for s in load_registry(LISTS, 'structures.txt') if s.startswith('minecraft:')}
-mc_entities   = {e for e in load_registry(LISTS, 'mobs.txt')       if e.startswith('minecraft:')}
 
-# ── Parse structure_spawns.txt ───────────────────────────────────────────────
+def _parse_structure_spawn_rows(mc_structures: set, mc_entities: set) -> list[tuple]:
+    rows: list[tuple] = []
+    seen: set[tuple]  = set()
+    for line in load_pipe_file(LISTS, 'structure_spawns.txt'):
+        parts = [p.strip() for p in line.split('|')]
+        if len(parts) < 5:
+            continue
+        structure, entity = parts[0], parts[1]
+        if not structure.startswith('minecraft:') or not entity.startswith('minecraft:'):
+            continue
+        if structure not in mc_structures or entity not in mc_entities:
+            continue
+        str_ns, str_name = structure.split(':', 1)
+        ent_ns, ent_name = entity.split(':', 1)
+        pk = (str_ns, str_name, ent_ns, ent_name)
+        if pk not in seen:
+            seen.add(pk)
+            rows.append(pk)
+    print(f'StructureSpawnTable rows: {len(rows)}')
+    return rows
 
-rows: list[tuple] = []
-seen: set[tuple]  = set()
 
-for line in load_pipe_file(LISTS, 'structure_spawns.txt'):
-    parts = [p.strip() for p in line.split('|')]
-    if len(parts) < 5:
-        continue
+def main() -> None:
+    mc_structures, mc_entities = _load_valid_sets()
+    rows = _parse_structure_spawn_rows(mc_structures, mc_entities)
+    write_sql(OUTPUT, '12 - Minecraft structure spawn overrides', [
+        ('StructureSpawnTable — entities that spawn inside structures',
+         insert_rows(
+             'StructureSpawnTable',
+             ['structure_namespace', 'structure_name', 'entity_namespace', 'entity_name'],
+             rows,
+         )),
+    ])
 
-    structure, entity = parts[0], parts[1]
-    if not structure.startswith('minecraft:') or not entity.startswith('minecraft:'):
-        continue
-    if structure not in mc_structures or entity not in mc_entities:
-        continue
 
-    str_ns,  str_name  = structure.split(':', 1)
-    ent_ns,  ent_name  = entity.split(':', 1)
-
-    pk = (str_ns, str_name, ent_ns, ent_name)
-    if pk not in seen:
-        seen.add(pk)
-        rows.append(pk)
-
-print(f'StructureSpawnTable rows: {len(rows)}')
-
-# ── Write ─────────────────────────────────────────────────────────────────────
-
-write_sql(OUTPUT, '12 - Minecraft structure spawn overrides', [
-    ('StructureSpawnTable — entities that spawn inside structures',
-     insert_rows(
-         'StructureSpawnTable',
-         ['structure_namespace', 'structure_name', 'entity_namespace', 'entity_name'],
-         rows,
-     )),
-])
+main()

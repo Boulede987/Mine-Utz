@@ -36,75 +36,78 @@ from lib.loaders import load_registry, load_pipe_file
 
 OUTPUT = SQL_INSERTS / '03_mc_items.sql'
 
-# ── Load and filter ───────────────────────────────────────────────────────────
 
-all_items  = load_registry(LISTS, 'items.txt')
-all_blocks = load_registry(LISTS, 'blocks.txt')
+def _load_vanilla_items() -> tuple[list[str], list[str], set[str]]:
+    all_items  = load_registry(LISTS, 'items.txt')
+    all_blocks = load_registry(LISTS, 'blocks.txt')
+    mc_items   = sorted(e for e in all_items  if e.startswith('minecraft:'))
+    mc_blocks  = sorted(e for e in all_blocks if e.startswith('minecraft:'))
+    print(f'Vanilla items   : {len(mc_items)}')
+    print(f'Vanilla blocks  : {len(mc_blocks)}')
+    print(f'  blocks-only (no item form): {len(set(mc_blocks) - set(mc_items))}')
+    return mc_items, mc_blocks, set(mc_items)
 
-mc_items  = sorted(e for e in all_items  if e.startswith('minecraft:'))
-mc_blocks = sorted(e for e in all_blocks if e.startswith('minecraft:'))
 
-mc_items_set = set(mc_items)
-# All blocks get a Block row regardless of whether they have an item form.
-# (water, lava, crop stages, fire, nether_portal, etc. are valid blocks.)
-# To find blocks-with-item-forms, JOIN Block with Item on (namespace, name).
-mc_block_items = set(mc_blocks)  # all blocks, not just item-intersection
+def _load_vanilla_stations(mc_items_set: set[str]) -> set[str]:
+    stations: set[str] = set()
+    for line in load_pipe_file(LISTS, 'recipes.txt'):
+        parts = [p.strip() for p in line.split('|')]
+        if len(parts) < 3:
+            continue
+        station = parts[2]
+        if station.startswith('minecraft:') and station in mc_items_set:
+            stations.add(station)
+    print(f'Vanilla stations: {len(stations)}')
+    return stations
 
-# Stations: unique minecraft: values from the station column of recipes.txt
-# The station column (index 2) holds items like minecraft:crafting_table.
-mc_station_items: set[str] = set()
-for line in load_pipe_file(LISTS, 'recipes.txt'):
-    parts = [p.strip() for p in line.split('|')]
-    if len(parts) < 3:
-        continue
-    station = parts[2]
-    if station.startswith('minecraft:') and station in mc_items_set:
-        mc_station_items.add(station)
 
-print(f'Vanilla items   : {len(mc_items)}')
-print(f'Vanilla blocks  : {len(mc_blocks)}')
-print(f'  of which also in items.txt: {len(mc_block_items)}')
-print(f'  blocks-only (no item form): {len(set(mc_blocks) - mc_items_set)}')
-print(f'Vanilla stations: {len(mc_station_items)}')
+def _build_item_rows(mc_items: list[str]) -> list[tuple]:
+    return [
+        ('minecraft', name.split(':', 1)[1], None, None, None)
+        for name in mc_items
+    ]
 
-# ── Build rows ────────────────────────────────────────────────────────────────
 
-item_rows = [
-    ('minecraft', name.split(':', 1)[1], None, None, None)   # rarity_id, renewable, stackable
-    for name in mc_items
-]
+def _build_block_rows(mc_blocks: list[str]) -> list[tuple]:
+    return [
+        ('minecraft', name.split(':', 1)[1], None, None, None, None, None)
+        for name in mc_blocks
+    ]
 
-block_rows = [
-    ('minecraft', name.split(':', 1)[1], None, None, None, None, None)  # blastResistance, hardness, luminous, transparent, flammable
-    for name in sorted(mc_block_items)
-]
 
-station_rows = [
-    ('minecraft', name.split(':', 1)[1])
-    for name in sorted(mc_station_items)
-]
+def _build_station_rows(mc_stations: set[str]) -> list[tuple]:
+    return [
+        ('minecraft', name.split(':', 1)[1])
+        for name in sorted(mc_stations)
+    ]
 
-# ── Write ─────────────────────────────────────────────────────────────────────
 
-write_sql(OUTPUT, '03 - Minecraft items, blocks and stations', [
-    ('Item — all vanilla items  (rarity, renewable, stackable are NULL)',
-     insert_rows(
-         'Item',
-         ['namespace', 'name', 'rarity_id', 'renewable', 'stackable'],
-         item_rows,
-     )),
+def main() -> None:
+    mc_items, mc_blocks, mc_items_set = _load_vanilla_items()
+    mc_stations = _load_vanilla_stations(mc_items_set)
 
-    ('Block — all vanilla blocks  (physical properties are NULL)',
-     insert_rows(
-         'Block',
-         ['namespace', 'name', 'blastResistance', 'hardness', 'luminous', 'transparent', 'flammable'],
-         block_rows,
-     )),
+    write_sql(OUTPUT, '03 - Minecraft items, blocks and stations', [
+        ('Item — all vanilla items  (rarity, renewable, stackable are NULL)',
+         insert_rows(
+             'Item',
+             ['namespace', 'name', 'rarity_id', 'renewable', 'stackable'],
+             _build_item_rows(mc_items),
+         )),
 
-    ('Station — vanilla crafting stations derived from the station column of recipes.txt',
-     insert_rows(
-         'Station',
-         ['item_namespace', 'item_name'],
-         station_rows,
-     )),
-])
+        ('Block — all vanilla blocks  (physical properties are NULL)',
+         insert_rows(
+             'Block',
+             ['namespace', 'name', 'blastResistance', 'hardness', 'luminous', 'transparent', 'flammable'],
+             _build_block_rows(mc_blocks),
+         )),
+
+        ('Station — vanilla crafting stations derived from the station column of recipes.txt',
+         insert_rows(
+             'Station',
+             ['item_namespace', 'item_name'],
+             _build_station_rows(mc_stations),
+         )),
+    ])
+
+
+main()

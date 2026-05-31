@@ -28,49 +28,51 @@ from lib.loaders import load_pipe_file, load_registry
 
 OUTPUT = SQL_INSERTS / '13_mc_structure_blocks.sql'
 
-# ── Load valid sets for FK checks ─────────────────────────────────────────────
 
-mc_structures = {s for s in load_registry(LISTS, 'structures.txt') if s.startswith('minecraft:')}
-mc_blocks     = {b for b in load_registry(LISTS, 'blocks.txt')     if b.startswith('minecraft:')}
+def _load_valid_sets() -> tuple[set[str], set[str]]:
+    mc_structures = {s for s in load_registry(LISTS, 'structures.txt') if s.startswith('minecraft:')}
+    mc_blocks     = {b for b in load_registry(LISTS, 'blocks.txt')     if b.startswith('minecraft:')}
+    return mc_structures, mc_blocks
 
-# ── Parse structure_blocks.txt and aggregate counts ───────────────────────────
 
-# (str_ns, str_name, blk_ns, blk_name) → total count across all templates
-aggregated: dict[tuple, int] = defaultdict(int)
+def _aggregate_block_counts(mc_structures: set, mc_blocks: set) -> list[tuple]:
+    aggregated: dict[tuple, int] = defaultdict(int)
+    for line in load_pipe_file(LISTS, 'structure_blocks.txt'):
+        parts = [p.strip() for p in line.split('|')]
+        if len(parts) < 3:
+            continue
+        structure_id, block_name = parts[0], parts[1]
+        try:
+            count = int(parts[2])
+        except ValueError:
+            count = 1
+        if not structure_id.startswith('minecraft:') or not block_name.startswith('minecraft:'):
+            continue
+        if structure_id not in mc_structures or block_name not in mc_blocks:
+            continue
+        str_ns, str_name = structure_id.split(':', 1)
+        blk_ns, blk_name = block_name.split(':', 1)
+        aggregated[(str_ns, str_name, blk_ns, blk_name)] += count
 
-for line in load_pipe_file(LISTS, 'structure_blocks.txt'):
-    parts = [p.strip() for p in line.split('|')]
-    if len(parts) < 3:
-        continue
-    structure_id, block_name = parts[0], parts[1]
-    try:
-        count = int(parts[2])
-    except ValueError:
-        count = 1
+    rows = [
+        (blk_ns, blk_name, str_ns, str_name, count)
+        for (str_ns, str_name, blk_ns, blk_name), count in sorted(aggregated.items())
+    ]
+    print(f'BlockStructureGenerationTable rows: {len(rows)}')
+    return rows
 
-    if not structure_id.startswith('minecraft:') or not block_name.startswith('minecraft:'):
-        continue
-    if structure_id not in mc_structures or block_name not in mc_blocks:
-        continue
 
-    str_ns, str_name = structure_id.split(':', 1)
-    blk_ns, blk_name = block_name.split(':', 1)
-    aggregated[(str_ns, str_name, blk_ns, blk_name)] += count
+def main() -> None:
+    mc_structures, mc_blocks = _load_valid_sets()
+    rows = _aggregate_block_counts(mc_structures, mc_blocks)
+    write_sql(OUTPUT, '13 - Minecraft block-structure generation', [
+        ('BlockStructureGenerationTable — blocks found in structure templates (aggregated count)',
+         insert_rows(
+             'BlockStructureGenerationTable',
+             ['block_namespace', 'block_name', 'structure_namespace', 'structure_name', 'number'],
+             rows,
+         )),
+    ])
 
-rows = [
-    (blk_ns, blk_name, str_ns, str_name, count)
-    for (str_ns, str_name, blk_ns, blk_name), count in sorted(aggregated.items())
-]
 
-print(f'BlockStructureGenerationTable rows: {len(rows)}')
-
-# ── Write ─────────────────────────────────────────────────────────────────────
-
-write_sql(OUTPUT, '13 - Minecraft block-structure generation', [
-    ('BlockStructureGenerationTable — blocks found in structure templates (aggregated count)',
-     insert_rows(
-         'BlockStructureGenerationTable',
-         ['block_namespace', 'block_name', 'structure_namespace', 'structure_name', 'number'],
-         rows,
-     )),
-])
+main()

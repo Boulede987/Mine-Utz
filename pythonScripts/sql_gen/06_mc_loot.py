@@ -48,145 +48,129 @@ OUTPUT = SQL_INSERTS / '06_mc_loot.sql'
 LOOT_FILES = ['loot_entities.txt', 'loot_chests.txt', 'loot_blocks.txt', 'loot_other.txt']
 
 
-def parse_pipe_row(raw_line: str) -> list[str]:
+def _parse_pipe_row(raw_line: str) -> list[str]:
     return [p.strip() for p in raw_line.split('|')]
 
 
-def parse_int_field(field: str) -> int:
-    """Parse fields like 'min:3', 'max:8', 'weight:4'."""
+def _parse_int_field(field: str) -> int:
     return int(field.split(':', 1)[1]) if ':' in field else 1
 
 
-# ── Collect all unique minecraft: loot table paths ────────────────────────────
+def _build_loot_id_map() -> dict[str, int]:
+    loot_paths: set[str] = set()
+    for filename in LOOT_FILES:
+        for line in load_pipe_file(LISTS, filename):
+            source = _parse_pipe_row(line)[0]
+            if source.startswith('minecraft:'):
+                loot_paths.add(source)
+    for line in load_pipe_file(LISTS, 'loot_references.txt'):
+        for part in _parse_pipe_row(line):
+            if part.startswith('minecraft:'):
+                loot_paths.add(part)
+    loot_id_map = {path: idx + 1 for idx, path in enumerate(sorted(loot_paths))}
+    print(f'Unique minecraft: loot tables : {len(loot_id_map)}')
+    return loot_id_map
 
-loot_paths: set[str] = set()
 
-for filename in LOOT_FILES:
-    for line in load_pipe_file(LISTS, filename):
-        source = parse_pipe_row(line)[0]
-        if source.startswith('minecraft:'):
-            loot_paths.add(source)
+def _build_comprises_rows(loot_id_map: dict) -> list[tuple]:
+    comprises_map: dict[tuple, tuple] = {}
+    for filename in LOOT_FILES:
+        for line in load_pipe_file(LISTS, filename):
+            parts = _parse_pipe_row(line)
+            if len(parts) < 5:
+                continue
+            source, item = parts[0], parts[1]
+            if not source.startswith('minecraft:') or source not in loot_id_map:
+                continue
+            if not item.startswith('minecraft:'):
+                continue
+            loot_id          = loot_id_map[source]
+            item_ns, item_name = item.split(':', 1)
+            min_val          = _parse_int_field(parts[2])
+            max_val          = _parse_int_field(parts[3])
+            weight           = _parse_int_field(parts[4])
+            comprises_map[(loot_id, item_ns, item_name)] = (min_val, max_val, weight)
+    rows = [
+        (loot_id, ns, name, min_val, max_val, weight)
+        for (loot_id, ns, name), (min_val, max_val, weight) in sorted(comprises_map.items())
+    ]
+    print(f'Comprises entries             : {len(rows)}')
+    return rows
 
-# Also collect referenced child tables
-for line in load_pipe_file(LISTS, 'loot_references.txt'):
-    parts = parse_pipe_row(line)
-    for p in parts:
-        if p.startswith('minecraft:'):
-            loot_paths.add(p)
 
-# Assign stable sequential IDs (sorted for reproducibility)
-loot_id_map: dict[str, int] = {
-    path: idx + 1
-    for idx, path in enumerate(sorted(loot_paths))
-}
-
-print(f'Unique minecraft: loot tables : {len(loot_id_map)}')
-
-# ── LootTable rows ────────────────────────────────────────────────────────────
-
-loottable_rows = [(loot_id_map[path],) for path in sorted(loot_paths)]
-
-# ── Comprises rows ────────────────────────────────────────────────────────────
-# PK is (loottable_id, item_namespace, item_name) — deduplicate; last row wins.
-
-comprises_map: dict[tuple, tuple] = {}   # (loot_id, ns, name) -> (min, max, weight)
-
-for filename in LOOT_FILES:
-    for line in load_pipe_file(LISTS, filename):
-        parts = parse_pipe_row(line)
-        if len(parts) < 5:
+def _build_entity_loot_rows(loot_id_map: dict) -> tuple[list[tuple], list[str]]:
+    entity_rows: list[tuple] = []
+    update_lines: list[str]  = []
+    for line in load_pipe_file(LISTS, 'entity_loottables.txt'):
+        parts = _parse_pipe_row(line)
+        if len(parts) < 2:
             continue
-        source, item = parts[0], parts[1]
-        if not source.startswith('minecraft:') or source not in loot_id_map:
+        entity, loot_path = parts[0], parts[1]
+        if not entity.startswith('minecraft:') or not loot_path.startswith('minecraft:'):
             continue
-        if not item.startswith('minecraft:'):
-            continue   # skip mod-injected items — their Item rows don't exist yet
+        if loot_path not in loot_id_map:
+            continue
+        loot_id          = loot_id_map[loot_path]
+        ent_ns, ent_name = entity.split(':', 1)
+        entity_rows.append((loot_id, ent_ns, ent_name))
+        update_lines.append(
+            f"UPDATE Entity SET loottable_id = {loot_id}"
+            f" WHERE namespace = 'minecraft' AND name = '{ent_name}';"
+        )
+    print(f'LootTableEntity entries       : {len(entity_rows)}')
+    return entity_rows, update_lines
 
-        loot_id  = loot_id_map[source]
-        item_ns, item_name = item.split(':', 1)
-        min_val  = parse_int_field(parts[2])
-        max_val  = parse_int_field(parts[3])
-        weight   = parse_int_field(parts[4])
 
-        comprises_map[(loot_id, item_ns, item_name)] = (min_val, max_val, weight)
+def _build_reference_rows(loot_id_map: dict) -> list[tuple]:
+    rows: list[tuple] = []
+    for line in load_pipe_file(LISTS, 'loot_references.txt'):
+        parts = _parse_pipe_row(line)
+        if len(parts) < 2:
+            continue
+        parent, child = parts[0], parts[1]
+        if parent in loot_id_map and child in loot_id_map:
+            rows.append((loot_id_map[parent], loot_id_map[child]))
+    print(f'LootTableReference entries    : {len(rows)}')
+    return rows
 
-comprises_rows = [
-    (loot_id, ns, name, mn, mx, w)
-    for (loot_id, ns, name), (mn, mx, w) in sorted(comprises_map.items())
-]
 
-print(f'Comprises entries             : {len(comprises_rows)}')
+def main() -> None:
+    loot_id_map    = _build_loot_id_map()
+    loottable_rows = [(loot_id_map[path],) for path in sorted(loot_id_map)]
+    comprises_rows = _build_comprises_rows(loot_id_map)
+    entity_rows, update_lines = _build_entity_loot_rows(loot_id_map)
+    reference_rows = _build_reference_rows(loot_id_map)
 
-# ── LootTableEntity rows ──────────────────────────────────────────────────────
+    entity_updates_sql = '\n'.join(update_lines) + '\n' if update_lines else '-- (none)\n'
 
-lt_entity_rows: list[tuple] = []
-entity_update_lines: list[str] = []
+    write_sql(OUTPUT, '06 - Minecraft loot tables', [
+        ('LootTable — one row per unique minecraft: loot table path',
+         insert_rows('LootTable', ['id'], loottable_rows)),
 
-for line in load_pipe_file(LISTS, 'entity_loottables.txt'):
-    parts = parse_pipe_row(line)
-    if len(parts) < 2:
-        continue
-    entity, loot_path = parts[0], parts[1]
-    if not entity.startswith('minecraft:') or not loot_path.startswith('minecraft:'):
-        continue
-    if loot_path not in loot_id_map:
-        continue
+        ('Comprises — (loottable_id, item, min, max, weight)',
+         insert_rows(
+             'Comprises',
+             ['loottable_id', 'item_namespace', 'item_name', 'minNumber', 'maxNumber', 'weight'],
+             comprises_rows,
+         )),
 
-    loot_id  = loot_id_map[loot_path]
-    ent_ns, ent_name = entity.split(':', 1)
+        ('LootTableEntity — entity to loot table junction',
+         insert_rows(
+             'LootTableEntity',
+             ['loottable_id', 'entity_namespace', 'entity_name'],
+             entity_rows,
+         )),
 
-    lt_entity_rows.append((loot_id, ent_ns, ent_name))
-    entity_update_lines.append(
-        f"UPDATE Entity SET loottable_id = {loot_id}"
-        f" WHERE namespace = 'minecraft' AND name = '{ent_name}';"
-    )
+        ('LootTableReference — nested loot table references',
+         insert_rows(
+             'LootTableReference',
+             ['parent_id', 'child_id'],
+             reference_rows,
+         )),
 
-print(f'LootTableEntity entries       : {len(lt_entity_rows)}')
+        ('UPDATE Entity.loottable_id from entity_loottables.txt',
+         entity_updates_sql),
+    ])
 
-# ── LootTableReference rows ───────────────────────────────────────────────────
 
-lt_ref_rows: list[tuple] = []
-
-for line in load_pipe_file(LISTS, 'loot_references.txt'):
-    parts = parse_pipe_row(line)
-    if len(parts) < 2:
-        continue
-    parent, child = parts[0], parts[1]
-    if parent not in loot_id_map or child not in loot_id_map:
-        continue
-    lt_ref_rows.append((loot_id_map[parent], loot_id_map[child]))
-
-print(f'LootTableReference entries    : {len(lt_ref_rows)}')
-
-# ── Assemble SQL ──────────────────────────────────────────────────────────────
-
-entity_updates_sql = '\n'.join(entity_update_lines) + '\n' if entity_update_lines else '-- (none)\n'
-
-write_sql(OUTPUT, '06 - Minecraft loot tables', [
-    ('LootTable — one row per unique minecraft: loot table path',
-     insert_rows('LootTable', ['id'], loottable_rows)),
-
-    ('Comprises — (loottable_id, item, min, max, weight)',
-     insert_rows(
-         'Comprises',
-         ['loottable_id', 'item_namespace', 'item_name', 'minNumber', 'maxNumber', 'weight'],
-         comprises_rows,
-     )),
-
-    ('LootTableEntity — entity to loot table junction',
-     insert_rows(
-         'LootTableEntity',
-         ['loottable_id', 'entity_namespace', 'entity_name'],
-         lt_entity_rows,
-     )),
-
-    ('LootTableReference — nested loot table references',
-     insert_rows(
-         'LootTableReference',
-         ['parent_id', 'child_id'],
-         lt_ref_rows,
-     )),
-
-    ('UPDATE Entity.loottable_id from entity_loottables.txt',
-     entity_updates_sql),
-])
+main()

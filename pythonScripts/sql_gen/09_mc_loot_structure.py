@@ -37,34 +37,6 @@ OUTPUT = SQL_INSERTS / '09_mc_loot_structure.sql'
 
 LOOT_FILES = ['loot_entities.txt', 'loot_chests.txt', 'loot_blocks.txt', 'loot_other.txt']
 
-
-# ── Rebuild loot_id_map (must match 06_mc_loot.py exactly) ───────────────────
-
-loot_paths: set[str] = set()
-
-for filename in LOOT_FILES:
-    for line in load_pipe_file(LISTS, filename):
-        source = line.split('|')[0].strip()
-        if source.startswith('minecraft:'):
-            loot_paths.add(source)
-
-for line in load_pipe_file(LISTS, 'loot_references.txt'):
-    for part in line.split('|'):
-        p = part.strip()
-        if p.startswith('minecraft:'):
-            loot_paths.add(p)
-
-loot_id_map: dict[str, int] = {
-    path: idx + 1
-    for idx, path in enumerate(sorted(loot_paths))
-}
-
-# ── Hardcoded loot table path → structure name(s) mapping ────────────────────
-# Keys are exact chest loot table paths (minecraft: namespace).
-# Values are lists of structure names (namespace implied as 'minecraft').
-# Prefix rules (illager_mansion/*, village/*, trial_chambers/*, etc.) are
-# handled separately below.
-
 EXACT: dict[str, list[str]] = {
     'minecraft:chests/abandoned_mineshaft':     ['mineshaft', 'mineshaft_mesa'],
     'minecraft:chests/ancient_city':            ['ancient_city'],
@@ -96,7 +68,6 @@ EXACT: dict[str, list[str]] = {
     'minecraft:chests/underwater_ruin_small':   ['ocean_ruin_cold', 'ocean_ruin_warm'],
     'minecraft:chests/woodland_mansion':        ['mansion'],
 
-    # Village profession chests appear in every village type
     'minecraft:chests/village/village_armorer':      ['village_desert', 'village_plains', 'village_savanna', 'village_snowy', 'village_taiga'],
     'minecraft:chests/village/village_butcher':      ['village_desert', 'village_plains', 'village_savanna', 'village_snowy', 'village_taiga'],
     'minecraft:chests/village/village_cartographer': ['village_desert', 'village_plains', 'village_savanna', 'village_snowy', 'village_taiga'],
@@ -109,29 +80,25 @@ EXACT: dict[str, list[str]] = {
     'minecraft:chests/village/village_toolsmith':    ['village_desert', 'village_plains', 'village_savanna', 'village_snowy', 'village_taiga'],
     'minecraft:chests/village/village_weaponsmith':  ['village_desert', 'village_plains', 'village_savanna', 'village_snowy', 'village_taiga'],
 
-    # Village house chests are biome-specific
     'minecraft:chests/village/village_desert_house':  ['village_desert'],
     'minecraft:chests/village/village_plains_house':  ['village_plains'],
     'minecraft:chests/village/village_savanna_house': ['village_savanna'],
     'minecraft:chests/village/village_snowy_house':   ['village_snowy'],
     'minecraft:chests/village/village_taiga_house':   ['village_taiga'],
-    # jungle/swamp house loot tables exist but have no matching registered structure
 }
 
-# Prefix rules: any loot table path starting with the key maps to the listed structures
 PREFIXES: list[tuple[str, list[str]]] = [
-    ('minecraft:chests/illager_mansion/',        ['mansion']),
-    ('minecraft:chests/nether_fortress/',        ['fortress']),
-    ('minecraft:chests/trial_chambers/',         ['trial_chambers']),
-    ('minecraft:dispensers/trial_chambers/',     ['trial_chambers']),
-    ('minecraft:pots/trial_chambers/',           ['trial_chambers']),
-    ('minecraft:spawners/trial_chamber/',        ['trial_chambers']),
+    ('minecraft:chests/illager_mansion/',         ['mansion']),
+    ('minecraft:chests/nether_fortress/',         ['fortress']),
+    ('minecraft:chests/trial_chambers/',          ['trial_chambers']),
+    ('minecraft:dispensers/trial_chambers/',      ['trial_chambers']),
+    ('minecraft:pots/trial_chambers/',            ['trial_chambers']),
+    ('minecraft:spawners/trial_chamber/',         ['trial_chambers']),
     ('minecraft:spawners/ominous/trial_chamber/', ['trial_chambers']),
 ]
 
 
-def structures_for(path: str) -> list[str]:
-    """Return the list of structure names for a given loot table path."""
+def _structures_for(path: str) -> list[str]:
     if path in EXACT:
         return EXACT[path]
     for prefix, structures in PREFIXES:
@@ -140,37 +107,58 @@ def structures_for(path: str) -> list[str]:
     return []
 
 
-# ── Build rows ────────────────────────────────────────────────────────────────
+def _rebuild_loot_id_map() -> dict[str, int]:
+    loot_paths: set[str] = set()
+    for filename in LOOT_FILES:
+        for line in load_pipe_file(LISTS, filename):
+            source = line.split('|')[0].strip()
+            if source.startswith('minecraft:'):
+                loot_paths.add(source)
+    for line in load_pipe_file(LISTS, 'loot_references.txt'):
+        for part in line.split('|'):
+            part = part.strip()
+            if part.startswith('minecraft:'):
+                loot_paths.add(part)
+    return {path: idx + 1 for idx, path in enumerate(sorted(loot_paths))}
 
-rows: list[tuple] = []
-seen: set[tuple] = set()
-skipped_no_map   = []
-skipped_no_id    = []
 
-for path, loot_id in sorted(loot_id_map.items()):
-    structures = structures_for(path)
-    if not structures:
-        skipped_no_map.append(path)
-        continue
-    for struct_name in structures:
-        pk = (loot_id, 'minecraft', struct_name)
-        if pk not in seen:
-            seen.add(pk)
-            rows.append(pk)
+def _build_loot_structure_rows(loot_id_map: dict) -> tuple[list[tuple], list[str]]:
+    rows: list[tuple]    = []
+    seen: set[tuple]     = set()
+    skipped_no_map: list = []
 
-print(f'LootTableStructure rows : {len(rows)}')
-print(f'Skipped (no mapping)    : {len(skipped_no_map)}')
-if skipped_no_map:
-    for p in sorted(skipped_no_map):
-        print(f'  {p}')
+    for path, loot_id in sorted(loot_id_map.items()):
+        structures = _structures_for(path)
+        if not structures:
+            skipped_no_map.append(path)
+            continue
+        for struct_name in structures:
+            pk = (loot_id, 'minecraft', struct_name)
+            if pk not in seen:
+                seen.add(pk)
+                rows.append(pk)
 
-# ── Write ─────────────────────────────────────────────────────────────────────
+    print(f'LootTableStructure rows : {len(rows)}')
+    print(f'Skipped (no mapping)    : {len(skipped_no_map)}')
+    return rows, skipped_no_map
 
-write_sql(OUTPUT, '09 - Minecraft LootTableStructure', [
-    ('LootTableStructure — chest loot tables linked to their structures',
-     insert_rows(
-         'LootTableStructure',
-         ['loottable_id', 'structure_namespace', 'structure_name'],
-         rows,
-     )),
-])
+
+def main() -> None:
+    loot_id_map           = _rebuild_loot_id_map()
+    rows, skipped_no_map  = _build_loot_structure_rows(loot_id_map)
+
+    if skipped_no_map:
+        for path in sorted(skipped_no_map):
+            print(f'  {path}')
+
+    write_sql(OUTPUT, '09 - Minecraft LootTableStructure', [
+        ('LootTableStructure — chest loot tables linked to their structures',
+         insert_rows(
+             'LootTableStructure',
+             ['loottable_id', 'structure_namespace', 'structure_name'],
+             rows,
+         )),
+    ])
+
+
+main()

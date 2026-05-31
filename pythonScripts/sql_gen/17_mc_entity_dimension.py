@@ -35,43 +35,45 @@ from lib.tag_resolver import load_tag_map, resolve_tag
 
 OUTPUT = SQL_INSERTS / '17_mc_entity_dimension.sql'
 
-# ── Load supporting data ──────────────────────────────────────────────────────
 
-all_entities   = load_registry(LISTS, 'mobs.txt')
-all_dimensions = load_registry(LISTS, 'dimensions.txt')
+def _build_biome_to_dims(all_dimensions: set) -> dict[str, set[str]]:
+    biome_to_dims: dict[str, set[str]] = {}
+    for line in load_pipe_file(LISTS, 'dimension_biomes.txt'):
+        parts = [p.strip() for p in line.split('|')]
+        if len(parts) < 2:
+            continue
+        dim_id, biome_id = parts[0], parts[1]
+        if dim_id in all_dimensions:
+            biome_to_dims.setdefault(biome_id, set()).add(dim_id)
+    return biome_to_dims
 
-# biome_id -> set of dimension IDs
-biome_to_dims: dict[str, set[str]] = {}
-for line in load_pipe_file(LISTS, 'dimension_biomes.txt'):
-    parts = [p.strip() for p in line.split('|')]
-    if len(parts) < 2:
-        continue
-    dim_id, biome_id = parts[0], parts[1]
-    if dim_id in all_dimensions:
-        biome_to_dims.setdefault(biome_id, set()).add(dim_id)
 
-# structure_id -> set of dimension IDs  (via structure_biomes + dimension_biomes)
-tag_map = load_tag_map(LISTS)   # biome_tags.txt for resolving #tag refs
-structure_to_dims: dict[str, set[str]] = {}
-for line in load_pipe_file(LISTS, 'structure_biomes.txt'):
-    parts = [p.strip() for p in line.split('|')]
-    if len(parts) < 2:
-        continue
-    structure_id, biome_or_tag = parts[0], parts[1]
-    if biome_or_tag.startswith('#'):
-        biomes = resolve_tag(biome_or_tag[1:], tag_map)
-    else:
-        biomes = {biome_or_tag}
-    for biome_id in biomes:
-        for dim_id in biome_to_dims.get(biome_id, set()):
-            structure_to_dims.setdefault(structure_id, set()).add(dim_id)
+def _build_structure_to_dims(biome_to_dims: dict) -> dict[str, set[str]]:
+    tag_map = load_tag_map(LISTS)
+    structure_to_dims: dict[str, set[str]] = {}
+    for line in load_pipe_file(LISTS, 'structure_biomes.txt'):
+        parts = [p.strip() for p in line.split('|')]
+        if len(parts) < 2:
+            continue
+        structure_id, biome_or_tag = parts[0], parts[1]
+        biomes = (
+            resolve_tag(biome_or_tag[1:], tag_map) if biome_or_tag.startswith('#')
+            else {biome_or_tag}
+        )
+        for biome_id in biomes:
+            for dim_id in biome_to_dims.get(biome_id, set()):
+                structure_to_dims.setdefault(structure_id, set()).add(dim_id)
+    return structure_to_dims
 
-# ── Helper ────────────────────────────────────────────────────────────────────
 
-seen: set[tuple] = set()
-rows: list[tuple] = []
-
-def add(entity_id: str, dim_id: str) -> None:
+def _add_row(
+    entity_id: str,
+    dim_id: str,
+    all_entities: set,
+    all_dimensions: set,
+    seen: set,
+    rows: list,
+) -> None:
     if not entity_id.startswith('minecraft:') or not dim_id.startswith('minecraft:'):
         return
     if entity_id not in all_entities or dim_id not in all_dimensions:
@@ -83,37 +85,58 @@ def add(entity_id: str, dim_id: str) -> None:
         seen.add(pk)
         rows.append(pk)
 
-# ── Path 1: biome spawns ──────────────────────────────────────────────────────
 
-for line in load_pipe_file(LISTS, 'biome_spawns.txt'):
-    parts = [p.strip() for p in line.split('|')]
-    if len(parts) < 2:
-        continue
-    biome_id, entity_id = parts[0], parts[1]
-    for dim_id in biome_to_dims.get(biome_id, set()):
-        add(entity_id, dim_id)
-
-# ── Path 2: structure spawns (JSON overrides + NBT-placed entities) ───────────
-
-for source_file in ('structure_spawns.txt', 'structure_nbt_entities.txt'):
-    for line in load_pipe_file(LISTS, source_file):
+def _collect_from_biome_spawns(biome_to_dims: dict, all_entities: set, all_dimensions: set) -> tuple[list, set]:
+    seen: set[tuple] = set()
+    rows: list[tuple] = []
+    for line in load_pipe_file(LISTS, 'biome_spawns.txt'):
         parts = [p.strip() for p in line.split('|')]
         if len(parts) < 2:
             continue
-        structure_id, entity_id = parts[0], parts[1]
-        for dim_id in structure_to_dims.get(structure_id, set()):
-            add(entity_id, dim_id)
+        biome_id, entity_id = parts[0], parts[1]
+        for dim_id in biome_to_dims.get(biome_id, set()):
+            _add_row(entity_id, dim_id, all_entities, all_dimensions, seen, rows)
+    return rows, seen
 
-# ── Write ─────────────────────────────────────────────────────────────────────
 
-rows.sort()
-print(f'EntityDimension rows : {len(rows)}')
+def _collect_from_structure_spawns(
+    structure_to_dims: dict,
+    all_entities: set,
+    all_dimensions: set,
+    seen: set,
+    rows: list,
+) -> None:
+    for source_file in ('structure_spawns.txt', 'structure_nbt_entities.txt'):
+        for line in load_pipe_file(LISTS, source_file):
+            parts = [p.strip() for p in line.split('|')]
+            if len(parts) < 2:
+                continue
+            structure_id, entity_id = parts[0], parts[1]
+            for dim_id in structure_to_dims.get(structure_id, set()):
+                _add_row(entity_id, dim_id, all_entities, all_dimensions, seen, rows)
 
-write_sql(OUTPUT, '17 - Entity-dimension mapping (derived from biome + structure spawns)', [
-    ('EntityDimension — derived via biome spawns and structure spawns',
-     insert_rows(
-         'EntityDimension',
-         ['entity_namespace', 'entity_name', 'dimension_namespace', 'dimension_name'],
-         rows,
-     )),
-])
+
+def main() -> None:
+    all_entities   = load_registry(LISTS, 'mobs.txt')
+    all_dimensions = load_registry(LISTS, 'dimensions.txt')
+
+    biome_to_dims     = _build_biome_to_dims(all_dimensions)
+    structure_to_dims = _build_structure_to_dims(biome_to_dims)
+
+    rows, seen = _collect_from_biome_spawns(biome_to_dims, all_entities, all_dimensions)
+    _collect_from_structure_spawns(structure_to_dims, all_entities, all_dimensions, seen, rows)
+
+    rows.sort()
+    print(f'EntityDimension rows : {len(rows)}')
+
+    write_sql(OUTPUT, '17 - Entity-dimension mapping (derived from biome + structure spawns)', [
+        ('EntityDimension — derived via biome spawns and structure spawns',
+         insert_rows(
+             'EntityDimension',
+             ['entity_namespace', 'entity_name', 'dimension_namespace', 'dimension_name'],
+             rows,
+         )),
+    ])
+
+
+main()

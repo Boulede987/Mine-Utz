@@ -28,34 +28,35 @@ from lib.loaders import load_registry
 
 OUTPUT = SQL_INSERTS / '04_mc_entities.sql'
 
-# ── Load and filter ───────────────────────────────────────────────────────────
-
-all_mobs = load_registry(LISTS, 'mobs.txt')
-mc_mobs  = sorted(e for e in all_mobs if e.startswith('minecraft:'))
-
-print(f'Found {len(mc_mobs)} vanilla entities.')
-
-# ── Build rows ────────────────────────────────────────────────────────────────
 # Columns: namespace, name, behavior, type, healthPoints, armorPoints,
 #          attackDamage, attackSpeed, attackRange, speed,
 #          knockbackResistance, weakness, hitboxSize, loottable_id
 
-rows = [
-    ('minecraft', name.split(':', 1)[1],
-     None, None, None, None, None, None, None, None, None, None, None, None)
-    for name in mc_mobs
-]
 
-# ── Write ─────────────────────────────────────────────────────────────────────
+def _load_vanilla_entity_rows() -> list[tuple]:
+    all_mobs = load_registry(LISTS, 'mobs.txt')
+    mc_mobs  = sorted(e for e in all_mobs if e.startswith('minecraft:'))
+    print(f'Found {len(mc_mobs)} vanilla entities.')
+    return [
+        ('minecraft', name.split(':', 1)[1],
+         None, None, None, None, None, None, None, None, None, None, None, None)
+        for name in mc_mobs
+    ]
 
-write_sql(OUTPUT, '04 - Minecraft entities', [
-    ('Entity — vanilla 1.21.1  (all stats are NULL — not in registry dump)',
-     insert_rows(
-         'Entity',
-         ['namespace', 'name', 'behavior', 'type',
-          'healthPoints', 'armorPoints', 'attackDamage', 'attackSpeed',
-          'attackRange', 'speed', 'knockbackResistance', 'weakness',
-          'hitboxSize', 'loottable_id'],
-         rows,
-     )),
-])
+
+def main() -> None:
+    rows = _load_vanilla_entity_rows()
+    write_sql(OUTPUT, '04 - Minecraft entities', [
+        ('Entity — vanilla 1.21.1  (all stats are NULL — not in registry dump)',
+         insert_rows(
+             'Entity',
+             ['namespace', 'name', 'behavior', 'type',
+              'healthPoints', 'armorPoints', 'attackDamage', 'attackSpeed',
+              'attackRange', 'speed', 'knockbackResistance', 'weakness',
+              'hitboxSize', 'loottable_id'],
+             rows,
+         )),
+    ])
+
+
+main()
