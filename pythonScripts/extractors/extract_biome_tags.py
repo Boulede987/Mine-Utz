@@ -37,37 +37,33 @@ from lib.paths       import MODS_DIR, LISTS, VANILLA_JAR
 from lib.io_utils    import write_txt
 from lib.jar_scanner import iter_jars
 
-TAG_PREFIX   = 'data/'
-TAG_INFIX    = '/tags/worldgen/biome/'
-TAG_SUFFIX   = '.json'
+TAG_PREFIX = 'data/'
+TAG_INFIX  = '/tags/worldgen/biome/'
+TAG_SUFFIX = '.json'
 
 
-def scan_tag_file(zip_file: zipfile.ZipFile, entry_name: str, tag_map: dict[str, list[str]]) -> None:
+def _merge_tag_file(zip_file: zipfile.ZipFile, entry_name: str, tag_map: dict[str, list[str]]) -> None:
     """Parse one tag JSON file and merge its values into tag_map."""
-    # entry_name: data/<ns>/tags/worldgen/biome/<path>.json
     parts = entry_name.split('/', 2)
     if len(parts) < 3:
         return
-    namespace  = parts[1]
-    relative   = parts[2]          # tags/worldgen/biome/<path>.json
-    tag_path   = relative[len('tags/worldgen/biome/'):].removesuffix('.json')
-    tag_id     = f'{namespace}:{tag_path}'
+    namespace = parts[1]
+    relative  = parts[2]   # tags/worldgen/biome/<path>.json
+    tag_path  = relative[len('tags/worldgen/biome/'):].removesuffix('.json')
+    tag_id    = f'{namespace}:{tag_path}'
 
     try:
         data = json.loads(zip_file.read(entry_name))
     except Exception:
         return
 
-    replace = data.get('replace', False)
-
-    # Values may be plain strings OR objects like {"id": "minecraft:plains", "required": false}
+    replace    = data.get('replace', False)
     raw_values = data.get('values', [])
-    values = []
-    for v in raw_values:
-        if isinstance(v, str):
-            values.append(v)
-        elif isinstance(v, dict) and 'id' in v:
-            values.append(v['id'])
+    values     = [
+        value if isinstance(value, str) else value['id']
+        for value in raw_values
+        if isinstance(value, str) or (isinstance(value, dict) and 'id' in value)
+    ]
 
     if replace:
         tag_map[tag_id] = values
@@ -75,54 +71,61 @@ def scan_tag_file(zip_file: zipfile.ZipFile, entry_name: str, tag_map: dict[str,
         tag_map.setdefault(tag_id, []).extend(values)
 
 
-# ── Scan ──────────────────────────────────────────────────────────────────────
+def _scan_jars_for_tags() -> dict[str, list[str]]:
+    tag_map: dict[str, list[str]] = {}
+    jars = iter_jars(MODS_DIR, extra_jars=[VANILLA_JAR])
+    print(f'Scanning {len(jars)} jar(s) for biome tag files...\n')
 
-tag_map: dict[str, list[str]] = {}   # tag_id -> [values]
-jars = iter_jars(MODS_DIR, extra_jars=[VANILLA_JAR])
-print(f'Scanning {len(jars)} jar(s) for biome tag files...\n')
+    for jar_path in jars:
+        label = 'vanilla' if jar_path == VANILLA_JAR else jar_path.name
+        try:
+            with zipfile.ZipFile(jar_path, 'r') as zip_file:
+                tag_entries = [
+                    entry for entry in zip_file.namelist()
+                    if entry.startswith(TAG_PREFIX)
+                    and TAG_INFIX in entry
+                    and entry.endswith(TAG_SUFFIX)
+                ]
+                if tag_entries:
+                    print(f'  {label[:60]:60s}  {len(tag_entries)} tag file(s)')
+                for entry in tag_entries:
+                    _merge_tag_file(zip_file, entry, tag_map)
+        except zipfile.BadZipFile:
+            print(f'  !! Bad zip: {label}')
+        except Exception as error:
+            print(f'  !! Error in {label}: {error}')
 
-for jar_path in jars:
-    label = 'vanilla' if jar_path == VANILLA_JAR else jar_path.name
-    try:
-        with zipfile.ZipFile(jar_path, 'r') as zip_file:
-            tag_entries = [
-                entry for entry in zip_file.namelist()
-                if entry.startswith(TAG_PREFIX)
-                and TAG_INFIX in entry
-                and entry.endswith(TAG_SUFFIX)
-            ]
-            if tag_entries:
-                print(f'  {label[:60]:60s}  {len(tag_entries)} tag file(s)')
-            for entry in tag_entries:
-                scan_tag_file(zip_file, entry, tag_map)
+    return tag_map
 
-    except zipfile.BadZipFile:
-        print(f'  !! Bad zip: {label}')
-    except Exception as error:
-        print(f'  !! Error in {label}: {error}')
 
-# ── Deduplicate values per tag ────────────────────────────────────────────────
+def _deduplicate_tags(tag_map: dict[str, list[str]]) -> dict[str, list[str]]:
+    return {
+        tag: list(dict.fromkeys(values))  # preserve order, remove dupes
+        for tag, values in sorted(tag_map.items())
+    }
 
-deduped: dict[str, list[str]] = {
-    tag: list(dict.fromkeys(values))          # preserve order, remove dupes
-    for tag, values in sorted(tag_map.items())
-}
 
-total_values = sum(len(v) for v in deduped.values())
-print(f'\nUnique tags collected : {len(deduped)}')
-print(f'Total tag values      : {total_values}')
+def _write_tags(deduped: dict[str, list[str]]) -> None:
+    total_values = sum(len(v) for v in deduped.values())
+    print(f'\nUnique tags collected : {len(deduped)}')
+    print(f'Total tag values      : {total_values}')
 
-# ── Write ─────────────────────────────────────────────────────────────────────
+    rows = [
+        f'{tag} | {value}'
+        for tag, values in deduped.items()
+        for value in values
+    ]
+    write_txt(LISTS, 'biome_tags.txt', [(
+        'BIOME TAGS  format: tag_id | biome_or_subtag',
+        rows,
+    )])
 
-rows = [
-    f'{tag} | {value}'
-    for tag, values in deduped.items()
-    for value in values
-]
 
-write_txt(LISTS, 'biome_tags.txt', [(
-    'BIOME TAGS  format: tag_id | biome_or_subtag',
-    rows,
-)])
+def main() -> None:
+    tag_map = _scan_jars_for_tags()
+    deduped = _deduplicate_tags(tag_map)
+    _write_tags(deduped)
+    print('Done.')
 
-print('Done.')
+
+main()

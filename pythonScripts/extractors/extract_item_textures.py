@@ -33,18 +33,21 @@ from lib.jar_scanner import iter_jars
 
 TARGET_SIZE = 32
 
-# ── Load item IDs ─────────────────────────────────────────────────────────────
 
-all_items = load_registry(LISTS, 'items.txt')
-print(f'Loaded {len(all_items)} item IDs from items.txt')
+def _scan_jars_for_textures() -> dict[tuple[str, str, str], bytes]:
+    tex_map: dict[tuple[str, str, str], bytes] = {}
+    jars = iter_jars(MODS_DIR, extra_jars=[VANILLA_JAR])
+    print(f'Scanning {len(jars)} jar(s)...')
+    for jar in jars:
+        new_count = _scan_jar_for_item_textures(jar, tex_map)
+        if new_count:
+            label = 'vanilla' if jar == VANILLA_JAR else jar.name
+            print(f'  {new_count:5d}  {label}')
+    print(f'  {len(tex_map)} total texture entries\n')
+    return tex_map
 
-# ── Scan jars for item + block textures ───────────────────────────────────────
-# Maps: (ns, 'item', rel_name) -> bytes  and  (ns, 'block', rel_name) -> bytes
 
-tex_map: dict[tuple[str, str, str], bytes] = {}
-
-
-def _scan_jar_for_item_textures(jar_path: Path) -> int:
+def _scan_jar_for_item_textures(jar_path: Path, tex_map: dict) -> int:
     count = 0
     try:
         with zipfile.ZipFile(jar_path, 'r') as zip_file:
@@ -57,7 +60,7 @@ def _scan_jar_for_item_textures(jar_path: Path) -> int:
                         continue
                     idx               = entry.index(infix)
                     texture_namespace = entry[len('assets/'):idx]
-                    relative          = entry[idx + len(infix):]  # e.g. "diamond_sword.png"
+                    relative          = entry[idx + len(infix):]
                     key               = (texture_namespace, texture_type, relative)
                     if key not in tex_map:
                         tex_map[key] = zip_file.read(entry)
@@ -69,27 +72,15 @@ def _scan_jar_for_item_textures(jar_path: Path) -> int:
     return count
 
 
-jars = iter_jars(MODS_DIR, extra_jars=[VANILLA_JAR])
+def _build_texture_index(tex_map: dict) -> dict[tuple[str, str], dict[str, bytes]]:
+    by_namespace_and_type: dict[tuple[str, str], dict[str, bytes]] = {}
+    for (texture_namespace, texture_type, relative), data in tex_map.items():
+        key = (texture_namespace, texture_type)
+        by_namespace_and_type.setdefault(key, {})[relative] = data
+    return by_namespace_and_type
 
-print(f'Scanning {len(jars)} jar(s)...')
-for jar in jars:
-    new_count = _scan_jar_for_item_textures(jar)
-    if new_count:
-        label = 'vanilla' if jar == VANILLA_JAR else jar.name
-        print(f'  {new_count:5d}  {label}')
 
-print(f'  {len(tex_map)} total texture entries\n')
-
-# ── Index by namespace for fast lookup ────────────────────────────────────────
-
-by_namespace_and_type: dict[tuple[str, str], dict[str, bytes]] = {}
-for (texture_namespace, texture_type, relative), data in tex_map.items():
-    key = (texture_namespace, texture_type)
-    by_namespace_and_type.setdefault(key, {})[relative] = data
-
-# ── Sprite extraction ─────────────────────────────────────────────────────────
-
-def crop_and_encode(raw: bytes) -> str | None:
+def _crop_and_encode(raw: bytes) -> str | None:
     try:
         img = Image.open(io.BytesIO(raw)).convert('RGBA')
         width, height = img.size
@@ -104,8 +95,7 @@ def crop_and_encode(raw: bytes) -> str | None:
         return None
 
 
-def find_texture(namespace: str, name: str) -> str | None:
-    """Try item/ then block/ locations for a given (namespace, name)."""
+def _find_texture(namespace: str, name: str, texture_index: dict) -> str | None:
     candidates = [
         (namespace, 'item',  f'{name}.png'),
         (namespace, 'block', f'{name}.png'),
@@ -113,29 +103,41 @@ def find_texture(namespace: str, name: str) -> str | None:
         (namespace, 'block', f'{name}_side.png'),
     ]
     for (texture_namespace, texture_type, relative) in candidates:
-        raw = by_namespace_and_type.get((texture_namespace, texture_type), {}).get(relative)
+        raw = texture_index.get((texture_namespace, texture_type), {}).get(relative)
         if raw:
-            return crop_and_encode(raw)
+            return _crop_and_encode(raw)
     return None
 
-# ── Match items to textures ───────────────────────────────────────────────────
 
-print('Matching items to textures...')
-lines   = ['===== ITEM TEXTURES  format: item_id | base64_png =====']
-found   = 0
-missing = 0
+def _match_items_to_textures(all_items: set, texture_index: dict) -> list[str]:
+    print('Matching items to textures...')
+    lines   = ['===== ITEM TEXTURES  format: item_id | base64_png =====']
+    found   = 0
+    missing = 0
+    for item_id in sorted(all_items):
+        if ':' not in item_id:
+            continue
+        namespace, name = item_id.split(':', 1)
+        encoded_png = _find_texture(namespace, name, texture_index)
+        if encoded_png:
+            lines.append(f'{item_id} | {encoded_png}')
+            found += 1
+        else:
+            missing += 1
+    print(f'Done: {found} found, {missing} missing')
+    return lines
 
-for item_id in sorted(all_items):
-    if ':' not in item_id:
-        continue
-    namespace, name = item_id.split(':', 1)
-    encoded_png = find_texture(namespace, name)
-    if encoded_png:
-        lines.append(f'{item_id} | {encoded_png}')
-        found += 1
-    else:
-        missing += 1
 
-out = LISTS / 'item_textures.txt'
-out.write_text('\n'.join(lines), encoding='utf-8')
-print(f'Done: {found} found, {missing} missing → lists/item_textures.txt')
+def main() -> None:
+    all_items     = load_registry(LISTS, 'items.txt')
+    print(f'Loaded {len(all_items)} item IDs from items.txt')
+
+    tex_map       = _scan_jars_for_textures()
+    texture_index = _build_texture_index(tex_map)
+    lines         = _match_items_to_textures(all_items, texture_index)
+
+    out = LISTS / 'item_textures.txt'
+    out.write_text('\n'.join(lines), encoding='utf-8')
+
+
+main()

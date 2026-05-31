@@ -39,26 +39,30 @@ SCRIPTS = [
     '17_mc_entity_dimension.py',
 ]
 
-failures = []
 
-for script_name in SCRIPTS:
-    script_path = SQL_GEN / script_name
+def _run_script(script_name: str) -> bool:
     print(f'\n{"="*55}')
     print(f'  {script_name}')
     print(f'{"="*55}')
     sys.stdout.flush()
-
-    result = subprocess.run([sys.executable, str(script_path)])
-
+    result = subprocess.run([sys.executable, str(SQL_GEN / script_name)])
     if result.returncode != 0:
         print(f'  !! FAILED (exit {result.returncode})')
-        failures.append(script_name)
+        return False
+    return True
 
-print(f'\n{"="*55}')
-if failures:
-    print(f'DONE — {len(failures)} script(s) failed:')
-    for f in failures:
-        print(f'  - {f}')
-    sys.exit(1)
-else:
-    print(f'DONE — all {len(SCRIPTS)} scripts completed successfully.')
+
+def main() -> None:
+    failed_scripts = [s for s in SCRIPTS if not _run_script(s)]
+
+    print(f'\n{"="*55}')
+    if failed_scripts:
+        print(f'DONE — {len(failed_scripts)} script(s) failed:')
+        for failed_script in failed_scripts:
+            print(f'  - {failed_script}')
+        sys.exit(1)
+    else:
+        print(f'DONE — all {len(SCRIPTS)} scripts completed successfully.')
+
+
+main()

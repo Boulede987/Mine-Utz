@@ -61,72 +61,78 @@ def depth_section(depth: list | float) -> str:
     return 'underground'
 
 
-log_text = LATEST_LOG.read_text(encoding='utf-8', errors='replace')
-lines    = [_strip_log_prefix(line) for line in log_text.splitlines()]
-clean    = '\n'.join(lines)
+def _read_clean_log() -> str:
+    log_text = LATEST_LOG.read_text(encoding='utf-8', errors='replace')
+    lines    = [_strip_log_prefix(line) for line in log_text.splitlines()]
+    return '\n'.join(lines)
 
-# ── Parse log — prefer /dump_all_noise, fall back to /dump_overworld_noise ────
 
-all_match = re.search(
-    r'===== ALL NOISE PARAMS START =====\n(.+?)\n===== NOISE PARAMS END =====',
-    clean, re.DOTALL
-)
-# also try variant marker
-if not all_match:
+def _parse_noise_data(clean: str) -> dict[str, list]:
     all_match = re.search(
-        r'===== ALL NOISE PARAMS START =====\n(.+?)\n===== ALL NOISE PARAMS END =====',
+        r'===== ALL NOISE PARAMS START =====\n(.+?)\n===== NOISE PARAMS END =====',
+        clean, re.DOTALL
+    )
+    if not all_match:
+        all_match = re.search(
+            r'===== ALL NOISE PARAMS START =====\n(.+?)\n===== ALL NOISE PARAMS END =====',
+            clean, re.DOTALL
+        )
+
+    overworld_match = re.search(
+        r'===== OVERWORLD NOISE PARAMS START =====\n(.+?)\n===== OVERWORLD NOISE PARAMS END =====',
         clean, re.DOTALL
     )
 
-ow_match = re.search(
-    r'===== OVERWORLD NOISE PARAMS START =====\n(.+?)\n===== OVERWORLD NOISE PARAMS END =====',
-    clean, re.DOTALL
-)
+    if all_match:
+        raw      = json.loads(all_match.group(1).strip())
+        dim_data = dict(raw.items())
+        total    = sum(len(v) for v in dim_data.values())
+        print(f'Loaded {len(dim_data)} dimension(s), {total} total entries  [/dump_all_noise]')
+        return dim_data
 
-if all_match:
-    raw = json.loads(all_match.group(1).strip())
-    # raw = { "minecraft:overworld": [...entries...], ... }
-    dim_data = {dim_id: entries for dim_id, entries in raw.items()}
-    total = sum(len(v) for v in dim_data.values())
-    print(f'Loaded {len(dim_data)} dimension(s), {total} total entries  [/dump_all_noise]')
-elif ow_match:
-    raw = json.loads(ow_match.group(1).strip())
-    dim_data = {'minecraft:overworld': raw['biomes']}
-    print(f'Loaded {len(dim_data["minecraft:overworld"])} entries  [/dump_overworld_noise fallback]')
-else:
+    if overworld_match:
+        raw      = json.loads(overworld_match.group(1).strip())
+        dim_data = {'minecraft:overworld': raw['biomes']}
+        print(f'Loaded {len(dim_data["minecraft:overworld"])} entries  [/dump_overworld_noise fallback]')
+        return dim_data
+
     print('ERROR: no noise params found in log.')
     print('  Run /dump_all_noise in-game, then re-run this script.')
     raise SystemExit(1)
 
-# ── Group by namespace → dimension → depth section ────────────────────────────
 
-# by_ns[namespace][dim_id][section] = [entries]
-by_ns = defaultdict(lambda: defaultdict(_empty_sections))
+def _group_by_namespace(dim_data: dict) -> dict:
+    by_namespace = defaultdict(lambda: defaultdict(_empty_sections))
+    for dim_id, entries in dim_data.items():
+        for entry in entries:
+            namespace = entry['biome'].split(':')[0]
+            section   = depth_section(entry['parameters']['depth'])
+            by_namespace[namespace][dim_id][section].append(entry)
+    for namespace_dims in by_namespace.values():
+        for sections in namespace_dims.values():
+            for section_list in sections.values():
+                section_list.sort(key=lambda entry: entry['biome'])
+    return by_namespace
 
-for dim_id, entries in dim_data.items():
-    for entry in entries:
-        ns      = entry['biome'].split(':')[0]
-        section = depth_section(entry['parameters']['depth'])
-        by_ns[ns][dim_id][section].append(entry)
 
-# Sort each section alphabetically
-for ns_dims in by_ns.values():
-    for sections in ns_dims.values():
-        for lst in sections.values():
-            lst.sort(key=lambda e: e['biome'])
+def _write_output(by_namespace: dict) -> None:
+    OUT_DIR.mkdir(exist_ok=True)
+    for namespace, dims in sorted(by_namespace.items()):
+        output = {'namespace': namespace, 'dimensions': {}}
+        for dim_id, sections in sorted(dims.items()):
+            output['dimensions'][dim_id] = sections
+            counts = '  '.join(f'{k}: {len(v)}' for k, v in sections.items() if v)
+            print(f'  {namespace}  {dim_id}  ({counts})')
+        path = OUT_DIR / f'{namespace}.json'
+        path.write_text(json.dumps(output, indent=2), encoding='utf-8')
+    print(f'\nWritten {len(by_namespace)} file(s) to {OUT_DIR}/')
 
-# ── Write ─────────────────────────────────────────────────────────────────────
 
-OUT_DIR.mkdir(exist_ok=True)
+def main() -> None:
+    clean        = _read_clean_log()
+    dim_data     = _parse_noise_data(clean)
+    by_namespace = _group_by_namespace(dim_data)
+    _write_output(by_namespace)
 
-for ns, dims in sorted(by_ns.items()):
-    out  = {'namespace': ns, 'dimensions': {}}
-    for dim_id, sections in sorted(dims.items()):
-        out['dimensions'][dim_id] = sections
-        counts = '  '.join(f'{k}: {len(v)}' for k, v in sections.items() if v)
-        print(f'  {ns}  {dim_id}  ({counts})')
 
-    path = OUT_DIR / f'{ns}.json'
-    path.write_text(json.dumps(out, indent=2), encoding='utf-8')
-
-print(f'\nWritten {len(by_ns)} file(s) to {OUT_DIR}/')
+main()

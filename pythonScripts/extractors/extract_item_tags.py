@@ -32,10 +32,10 @@ from lib.paths       import MODS_DIR, LISTS, VANILLA_JAR
 from lib.io_utils    import write_txt
 from lib.jar_scanner import iter_jars
 
-TAG_PREFIX   = 'data/'
-TAG_SUFFIX   = '.json'
+TAG_PREFIX  = 'data/'
+TAG_SUFFIX  = '.json'
 # 1.21.1 vanilla + updated mods use singular 'item'; older mods use plural 'items'
-TAG_INFIXES  = ['/tags/item/', '/tags/items/']
+TAG_INFIXES = ['/tags/item/', '/tags/items/']
 
 
 def _strip_tag_infix(relative: str) -> str | None:
@@ -46,7 +46,7 @@ def _strip_tag_infix(relative: str) -> str | None:
     return None
 
 
-def scan_tag_file(zip_file: zipfile.ZipFile, entry_name: str, tag_map: dict[str, list[str]]) -> None:
+def _merge_tag_file(zip_file: zipfile.ZipFile, entry_name: str, tag_map: dict[str, list[str]]) -> None:
     parts = entry_name.split('/', 2)
     if len(parts) < 3:
         return
@@ -55,7 +55,7 @@ def scan_tag_file(zip_file: zipfile.ZipFile, entry_name: str, tag_map: dict[str,
     tag_path  = _strip_tag_infix(relative)
     if tag_path is None:
         return
-    tag_id    = f'{namespace}:{tag_path}'
+    tag_id = f'{namespace}:{tag_path}'
 
     try:
         data = json.loads(zip_file.read(entry_name))
@@ -64,10 +64,10 @@ def scan_tag_file(zip_file: zipfile.ZipFile, entry_name: str, tag_map: dict[str,
 
     replace    = data.get('replace', False)
     raw_values = data.get('values', [])
-    values = [
-        v if isinstance(v, str) else v['id']
-        for v in raw_values
-        if isinstance(v, str) or (isinstance(v, dict) and 'id' in v)
+    values     = [
+        value if isinstance(value, str) else value['id']
+        for value in raw_values
+        if isinstance(value, str) or (isinstance(value, dict) and 'id' in value)
     ]
 
     if replace:
@@ -76,54 +76,61 @@ def scan_tag_file(zip_file: zipfile.ZipFile, entry_name: str, tag_map: dict[str,
         tag_map.setdefault(tag_id, []).extend(values)
 
 
-# ── Scan ──────────────────────────────────────────────────────────────────────
+def _scan_jars_for_tags() -> dict[str, list[str]]:
+    tag_map: dict[str, list[str]] = {}
+    jars = iter_jars(MODS_DIR, extra_jars=[VANILLA_JAR])
+    print(f'Scanning {len(jars)} jar(s) for item tag files...\n')
 
-tag_map: dict[str, list[str]] = {}
-jars = iter_jars(MODS_DIR, extra_jars=[VANILLA_JAR])
-print(f'Scanning {len(jars)} jar(s) for item tag files...\n')
+    for jar_path in jars:
+        label = 'vanilla' if jar_path == VANILLA_JAR else jar_path.name
+        try:
+            with zipfile.ZipFile(jar_path, 'r') as zip_file:
+                tag_entries = [
+                    entry for entry in zip_file.namelist()
+                    if entry.startswith(TAG_PREFIX)
+                    and any(infix in entry for infix in TAG_INFIXES)
+                    and entry.endswith(TAG_SUFFIX)
+                ]
+                if tag_entries:
+                    print(f'  {label[:60]:60s}  {len(tag_entries)} tag file(s)')
+                for entry in tag_entries:
+                    _merge_tag_file(zip_file, entry, tag_map)
+        except zipfile.BadZipFile:
+            print(f'  !! Bad zip: {label}')
+        except Exception as error:
+            print(f'  !! Error in {label}: {error}')
 
-for jar_path in jars:
-    label = 'vanilla' if jar_path == VANILLA_JAR else jar_path.name
-    try:
-        with zipfile.ZipFile(jar_path, 'r') as zip_file:
-            tag_entries = [
-                entry for entry in zip_file.namelist()
-                if entry.startswith(TAG_PREFIX)
-                and any(infix in entry for infix in TAG_INFIXES)
-                and entry.endswith(TAG_SUFFIX)
-            ]
-            if tag_entries:
-                print(f'  {label[:60]:60s}  {len(tag_entries)} tag file(s)')
-            for entry in tag_entries:
-                scan_tag_file(zip_file, entry, tag_map)
+    return tag_map
 
-    except zipfile.BadZipFile:
-        print(f'  !! Bad zip: {label}')
-    except Exception as error:
-        print(f'  !! Error in {label}: {error}')
 
-# ── Deduplicate ───────────────────────────────────────────────────────────────
+def _deduplicate_tags(tag_map: dict[str, list[str]]) -> dict[str, list[str]]:
+    return {
+        tag: list(dict.fromkeys(values))
+        for tag, values in sorted(tag_map.items())
+    }
 
-deduped: dict[str, list[str]] = {
-    tag: list(dict.fromkeys(values))
-    for tag, values in sorted(tag_map.items())
-}
 
-total_values = sum(len(v) for v in deduped.values())
-print(f'\nUnique tags collected : {len(deduped)}')
-print(f'Total tag values      : {total_values}')
+def _write_tags(deduped: dict[str, list[str]]) -> None:
+    total_values = sum(len(v) for v in deduped.values())
+    print(f'\nUnique tags collected : {len(deduped)}')
+    print(f'Total tag values      : {total_values}')
 
-# ── Write ─────────────────────────────────────────────────────────────────────
+    rows = [
+        f'{tag} | {value}'
+        for tag, values in deduped.items()
+        for value in values
+    ]
+    write_txt(LISTS, 'item_tags.txt', [(
+        'ITEM TAGS  format: tag_id | member_or_subtag',
+        rows,
+    )])
 
-rows = [
-    f'{tag} | {value}'
-    for tag, values in deduped.items()
-    for value in values
-]
 
-write_txt(LISTS, 'item_tags.txt', [(
-    'ITEM TAGS  format: tag_id | member_or_subtag',
-    rows,
-)])
+def main() -> None:
+    tag_map = _scan_jars_for_tags()
+    deduped = _deduplicate_tags(tag_map)
+    _write_tags(deduped)
+    print('Done.')
 
-print('Done.')
+
+main()

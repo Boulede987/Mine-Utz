@@ -41,19 +41,21 @@ from lib.jar_scanner import iter_jars
 
 ENTITY_TEX_INFIX = '/textures/entity/'
 
-# ── Load entity IDs ───────────────────────────────────────────────────────────
 
-all_entities = load_registry(LISTS, 'mobs.txt')
-print(f'Loaded {len(all_entities)} entity IDs from mobs.txt\n')
+def _scan_jars_for_entity_textures() -> dict[tuple[str, str], bytes]:
+    texture_map: dict[tuple[str, str], bytes] = {}
+    jars = iter_jars(MODS_DIR, extra_jars=[VANILLA_JAR])
+    print(f'Scanning {len(jars)} jar(s) for entity textures...')
+    for jar in jars:
+        new_count = _scan_jar_for_textures(jar, texture_map)
+        if new_count:
+            label = 'vanilla' if jar == VANILLA_JAR else jar.name
+            print(f'  {new_count:4d}  {label}')
+    print(f'\nTotal textures in map: {len(texture_map)}')
+    return texture_map
 
-# ── Build texture map: (ns, rel_path) -> raw_bytes ────────────────────────────
-# rel_path is relative to assets/<ns>/textures/entity/
-# e.g. "zombie/zombie.png", "enderdragon/dragon.png"
 
-texture_map: dict[tuple[str, str], bytes] = {}
-
-
-def scan_jar_for_textures(jar_path: Path) -> int:
+def _scan_jar_for_textures(jar_path: Path, texture_map: dict) -> int:
     count = 0
     try:
         with zipfile.ZipFile(jar_path, 'r') as zip_file:
@@ -63,7 +65,6 @@ def scan_jar_for_textures(jar_path: Path) -> int:
                 idx       = entry.index(ENTITY_TEX_INFIX)
                 namespace = entry[len('assets/'):idx]
                 relative  = entry[idx + len(ENTITY_TEX_INFIX):]
-                # First writer wins — vanilla entries are loaded first
                 if (namespace, relative) not in texture_map:
                     texture_map[(namespace, relative)] = zip_file.read(entry)
                     count += 1
@@ -74,28 +75,16 @@ def scan_jar_for_textures(jar_path: Path) -> int:
     return count
 
 
-jars = iter_jars(MODS_DIR, extra_jars=[VANILLA_JAR])
+def _build_namespace_index(texture_map: dict) -> dict[str, dict[str, bytes]]:
+    by_namespace: dict[str, dict[str, bytes]] = defaultdict(dict)
+    for (namespace, relative), data in texture_map.items():
+        by_namespace[namespace][relative] = data
+    return by_namespace
 
-print(f'Scanning {len(jars)} jar(s) for entity textures...')
-for jar in jars:
-    new_count = scan_jar_for_textures(jar)
-    if new_count:
-        label = 'vanilla' if jar == VANILLA_JAR else jar.name
-        print(f'  {new_count:4d}  {label}')
 
-print(f'\nTotal textures in map: {len(texture_map)}')
-
-# ── Pre-index textures by namespace for fast lookup ───────────────────────────
-
-by_namespace: dict[str, dict[str, bytes]] = defaultdict(dict)
-for (namespace, relative), data in texture_map.items():
-    by_namespace[namespace][relative] = data
-
-# ── Texture lookup ────────────────────────────────────────────────────────────
-
-def find_entity_texture(namespace: str, name: str) -> bytes | None:
+def _find_entity_texture(namespace: str, name: str, by_namespace: dict) -> bytes | None:
     """
-    Given an entity registry ID (namespace, name), find the best-matching PNG.
+    Find the best-matching PNG for an entity registry ID.
 
     Priority:
       1. Exact conventional paths  (zombie/zombie.png, zombie.png)
@@ -131,9 +120,8 @@ def find_entity_texture(namespace: str, name: str) -> bytes | None:
 
     return None
 
-# ── Crop function ─────────────────────────────────────────────────────────────
 
-def crop_face(raw: bytes) -> bytes:
+def _crop_entity_face(raw: bytes) -> bytes:
     """
     Crop the front face of the head cube from a Minecraft entity texture sheet.
 
@@ -152,41 +140,48 @@ def crop_face(raw: bytes) -> bytes:
     crop = img.crop((x0, y0, x1, y1))
 
     stat = ImageStat.Stat(crop)
-    if stat.mean[3] < 25:       # mean alpha < ~10% → mostly transparent
-        crop = img              # fall back to full texture sheet
+    if stat.mean[3] < 25:   # mean alpha < ~10% → mostly transparent
+        crop = img          # fall back to full texture sheet
 
     out = crop.resize((64, 64), Image.NEAREST)
     buffer = io.BytesIO()
     out.save(buffer, format='PNG', optimize=True)
     return buffer.getvalue()
 
-# ── Process entities ──────────────────────────────────────────────────────────
 
-rows    = []
-matched = 0
-missing = 0
+def _encode_entity_textures(all_entities: set, by_namespace: dict) -> list[str]:
+    rows    = []
+    matched = 0
+    missing = 0
+    for entity_id in sorted(all_entities):
+        if ':' not in entity_id:
+            continue
+        namespace, name = entity_id.split(':', 1)
+        raw = _find_entity_texture(namespace, name, by_namespace)
+        if raw is None:
+            missing += 1
+            continue
+        encoded_png = base64.b64encode(_crop_entity_face(raw)).decode('ascii')
+        rows.append(f'{entity_id} | {encoded_png}')
+        matched += 1
+    print(f'\nMatched   : {matched}')
+    print(f'No texture: {missing}')
+    return rows
 
-for entity_id in sorted(all_entities):
-    if ':' not in entity_id:
-        continue
-    namespace, name = entity_id.split(':', 1)
-    raw = find_entity_texture(namespace, name)
-    if raw is None:
-        missing += 1
-        continue
-    png_bytes   = crop_face(raw)
-    encoded_png = base64.b64encode(png_bytes).decode('ascii')
-    rows.append(f'{entity_id} | {encoded_png}')
-    matched += 1
 
-print(f'\nMatched   : {matched}')
-print(f'No texture: {missing}')
+def main() -> None:
+    all_entities  = load_registry(LISTS, 'mobs.txt')
+    print(f'Loaded {len(all_entities)} entity IDs from mobs.txt\n')
 
-# ── Write output ──────────────────────────────────────────────────────────────
+    texture_map   = _scan_jars_for_entity_textures()
+    by_namespace  = _build_namespace_index(texture_map)
+    rows          = _encode_entity_textures(all_entities, by_namespace)
 
-write_txt(LISTS, 'entity_textures.txt', [(
-    'ENTITY TEXTURES  format: entity_id | base64_png',
-    rows,
-)])
+    write_txt(LISTS, 'entity_textures.txt', [(
+        'ENTITY TEXTURES  format: entity_id | base64_png',
+        rows,
+    )])
+    print('Done.')
 
-print('Done.')
+
+main()

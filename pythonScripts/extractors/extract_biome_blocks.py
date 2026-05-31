@@ -48,28 +48,23 @@ BLOCK_FEATURE_TYPES = {
     'minecraft:disk',
 }
 
-# ── Load biome → feature IDs from lists/biome_features.txt ───────────────────
 
-biome_features: dict[str, set[str]] = defaultdict(set)
-
-for row in load_pipe_file(LISTS, 'biome_features.txt'):
-    parts = [p.strip() for p in row.split('|', 1)]
-    if len(parts) == 2:
-        biome_features[parts[0]].add(parts[1])
-
-print(f'Biomes loaded          : {len(biome_features)}')
-print(f'Total biome->feature refs: {sum(len(v) for v in biome_features.values())}')
-
-# ── Scan jars for placed_feature and configured_feature JSONs ─────────────────
-
-# placed_feature_id → configured_feature_id
-placed_to_configured_feature: dict[str, str] = {}
-
-# configured_feature_id → set of block_ids
-configured_feature_to_blocks: dict[str, set[str]] = {}
+def _load_biome_features() -> dict[str, set[str]]:
+    biome_features: dict[str, set[str]] = defaultdict(set)
+    for row in load_pipe_file(LISTS, 'biome_features.txt'):
+        parts = [p.strip() for p in row.split('|', 1)]
+        if len(parts) == 2:
+            biome_features[parts[0]].add(parts[1])
+    print(f'Biomes loaded            : {len(biome_features)}')
+    print(f'Total biome->feature refs: {sum(len(v) for v in biome_features.values())}')
+    return biome_features
 
 
-def _scan_jar_for_features(jar_path: Path) -> None:
+def _scan_jar_for_features(
+    jar_path: Path,
+    placed_to_configured_feature: dict[str, str],
+    configured_feature_to_blocks: dict[str, set[str]],
+) -> None:
     try:
         with zipfile.ZipFile(jar_path, 'r') as zip_file:
             for entry in zip_file.namelist():
@@ -131,37 +126,47 @@ def _scan_jar_for_features(jar_path: Path) -> None:
         print(f'  !! {jar_path.name}: {error}')
 
 
-jars = iter_jars(MODS_DIR, extra_jars=[VANILLA_JAR])
+def _build_feature_maps() -> tuple[dict, dict]:
+    placed_to_configured_feature: dict[str, str]      = {}
+    configured_feature_to_blocks: dict[str, set[str]] = {}
+    jars = iter_jars(MODS_DIR, extra_jars=[VANILLA_JAR])
+    print(f'\nScanning {len(jars)} jar(s) for worldgen feature JSONs...')
+    for jar in jars:
+        _scan_jar_for_features(jar, placed_to_configured_feature, configured_feature_to_blocks)
+    print(f'placed_feature entries       : {len(placed_to_configured_feature)}')
+    print(f'configured_feature w/ blocks : {len(configured_feature_to_blocks)}')
+    return placed_to_configured_feature, configured_feature_to_blocks
 
-print(f'\nScanning {len(jars)} jar(s) for worldgen feature JSONs...')
-for jar in jars:
-    _scan_jar_for_features(jar)
 
-print(f'placed_feature entries       : {len(placed_to_configured_feature)}')
-print(f'configured_feature w/ blocks : {len(configured_feature_to_blocks)}')
+def _resolve_biome_blocks(
+    biome_features: dict,
+    placed_to_configured_feature: dict,
+    configured_feature_to_blocks: dict,
+) -> set[str]:
+    rows: set[str] = set()
+    for biome_id, feature_ids in biome_features.items():
+        for placed_feature_id in feature_ids:
+            configured_feature_id = placed_to_configured_feature.get(placed_feature_id)
+            if not configured_feature_id:
+                continue
+            blocks = configured_feature_to_blocks.get(configured_feature_id)
+            if not blocks:
+                continue
+            for block_id in blocks:
+                rows.add(f'{biome_id} | {block_id}')
+    print(f'Biome->block pairs           : {len(rows)}')
+    return rows
 
-# ── Resolve biome → block ─────────────────────────────────────────────────────
 
-rows: set[str] = set()
+def main() -> None:
+    biome_features                                     = _load_biome_features()
+    placed_to_configured_feature, configured_feature_to_blocks = _build_feature_maps()
+    rows = _resolve_biome_blocks(biome_features, placed_to_configured_feature, configured_feature_to_blocks)
+    write_txt(LISTS, 'biome_blocks.txt', [(
+        'BIOME BLOCKS  format: biome_id | block_id',
+        sorted(rows),
+    )])
+    print('Done.')
 
-for biome_id, feature_ids in biome_features.items():
-    for placed_feature_id in feature_ids:
-        configured_feature_id = placed_to_configured_feature.get(placed_feature_id)
-        if not configured_feature_id:
-            continue
-        blocks = configured_feature_to_blocks.get(configured_feature_id)
-        if not blocks:
-            continue
-        for block_id in blocks:
-            rows.add(f'{biome_id} | {block_id}')
 
-print(f'Biome->block pairs           : {len(rows)}')
-
-# ── Write output ──────────────────────────────────────────────────────────────
-
-write_txt(LISTS, 'biome_blocks.txt', [(
-    'BIOME BLOCKS  format: biome_id | block_id',
-    sorted(rows),
-)])
-
-print('Done.')
+main()
