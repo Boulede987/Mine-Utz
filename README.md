@@ -320,12 +320,40 @@ When you need the noise parameters for a specific vanilla biome as a copy-paste 
 5. **Update the registry dump**
    Copy the new dimension ID into `lists/dimensions.txt` and commit alongside the new JSON files.
 
+### Lost Cities city generation
+
+[Lost Cities](https://modrinth.com/mod/the-lost-cities) generates ruined city structures at world-gen time. It is configured to run in specific dimensions via `minecraft/config/lostcities-server.toml`:
+
+```toml
+dimensionsWithProfiles = [
+    "mineutz:zombie_city=mineutz_custom_profile",
+    "lostcities:lostcity=default",
+    "lostworlds:abyss=biosphere_caves"
+]
+```
+
+Format: `"<dimension_id>=<profile_name>"`. Each entry enables city generation in that dimension using the named profile. Profiles live in `minecraft/config/lostcities/profiles/`.
+
+**`mineutz_custom_profile.json`** — the custom profile for `zombie_city`. Key settings vs the stock `onlycities` profile:
+
+| Setting | mineutz_custom_profile | onlycities | Effect |
+|---|---|---|---|
+| `cityChance` | 0.03 | 0.2 | Much sparser cities |
+| `cityMaxRadius` | 128 | 256 | Smaller city footprints |
+| `buildingMinFloors` | 4 | 0 | All buildings always tall |
+| `buildingMaxFloors` | 10 | 8 | Taller maximum |
+| `buildingMaxCellars` | 5 | 3 | Deeper basements |
+| `generateSpawners` | false | true | No vanilla spawners (spawn rules handled by InControl instead) |
+
+To create a custom profile, use the GUI in Minecraft World Generation directly.
+To add city generation to a new custom dimension, add a `"<id>=<profile>"` entry to `dimensionsWithProfiles` and create a matching profile JSON if needed.
+
 ### Existing custom dimensions
 
-| Dimension ID | Type file | Notes |
-|---|---|---|
-| `mineutz:zombie_city` | `dimension_type/zombie_city.json` | Overworld-equivalent physics |
-| `mineutz:pokemon_dimension` | `dimension_type/pokemon_dimension.json` | Overworld-equivalent physics |
+| Dimension ID | Type file | Lost Cities profile | Notes |
+|---|---|---|---|
+| `mineutz:zombie_city` | `dimension_type/zombie_city.json` | `mineutz_custom_profile` | Sparse ruined cities, tall buildings |
+| `mineutz:pokemon_dimension` | `dimension_type/pokemon_dimension.json` | *(none)* | Overworld-equivalent physics |
 
 ---
 
