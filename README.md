@@ -12,6 +12,7 @@ A custom Minecraft modpack tracked with [packwiz](https://packwiz.infra.link/) a
 - [Adding Mods](#adding-mods)
 - [Testing](#testing)
 - [Registry Dumps](#registry-dumps)
+- [Custom Dimensions](#custom-dimensions)
 - [Configuration Mods](#configuration-mods)
 - [Graph Explorer](#graph-explorer)
 - [Making a Release](#making-a-release)
@@ -187,6 +188,144 @@ git commit -m "update lists after <mod name> update"
 ```
 
 This makes the Git history a reliable audit trail — you can always look back at any commit and know exactly what content was available in the pack at that point, which is especially useful when writing InControl spawn rules or datapack JSON that references specific IDs.
+
+---
+
+## Custom Dimensions
+
+Custom dimensions are delivered as a [Paxi](https://modrinth.com/mod/paxi) datapack so they load automatically without players needing to install anything separately. The datapack lives at:
+
+```
+minecraft/config/paxi/datapacks/mineutz/
+```
+
+### File structure
+
+Each dimension requires exactly two JSON files:
+
+```
+data/mineutz/
+├── dimension_type/
+│   └── <name>.json   # Physics and environment properties
+└── dimension/
+    └── <name>.json   # World generator (terrain noise + biome list)
+```
+
+The dimension's registry ID becomes `mineutz:<name>`.
+
+### dimension_type JSON
+
+Controls how the dimension behaves physically and visually. The current custom dimensions both use overworld-equivalent settings:
+
+```json
+{
+  "ultrawarm": false,
+  "natural": true,
+  "piglin_safe": false,
+  "bed_works": true,
+  "respawn_anchor_works": false,
+  "has_skylight": true,
+  "has_ceiling": false,
+  "has_raids": false,
+  "coordinate_scale": 1.0,
+  "ambient_light": 0.0,
+  "min_y": -64,
+  "height": 384,
+  "logical_height": 384,
+  "effects": "minecraft:overworld",
+  "infiniburn": "#minecraft:infiniburn_overworld",
+  "monster_spawn_block_light_limit": 0,
+  "monster_spawn_light_level": 7
+}
+```
+
+Key fields to adjust per dimension:
+
+| Field | Effect |
+|---|---|
+| `ultrawarm` | `true` → water evaporates (Nether behaviour) |
+| `has_skylight` | `false` → always dark (Nether / End) |
+| `has_ceiling` | `true` → bedrock ceiling |
+| `bed_works` | `false` → beds explode |
+| `effects` | Sky, fog and ambient sound profile (`minecraft:overworld / the_nether / the_end`) |
+| `coordinate_scale` | Position multiplier vs overworld (8.0 = Nether-style 1:8 ratio) |
+| `monster_spawn_light_level` | Max light level where monsters spawn (default 7) |
+
+### dimension JSON
+
+Defines the world generator and the biome list. The `biomes` array uses the same multi-noise parameter system as the vanilla overworld — each entry maps a climate parameter range to a biome ID.
+
+```json
+{
+  "type": "mineutz:zombie_city",
+  "generator": {
+    "type": "minecraft:noise",
+    "biome_source": {
+      "type": "minecraft:multi_noise",
+      "biomes": [
+        {
+          "biome": "minecraft:plains",
+          "parameters": {
+            "temperature":     [-0.15, 0.2],
+            "humidity":        [-0.35, 0.1],
+            "continentalness": [-0.11, 1.0],
+            "erosion":         [-1.0, 1.0],
+            "depth":           [0.0, 0.0],
+            "weirdness":       [-1.0, 1.0],
+            "offset": 0.0
+          }
+        }
+      ]
+    },
+    "settings": "minecraft:overworld"
+  }
+}
+```
+
+`"type"` must match the dimension's own registry ID (`mineutz:<name>`).
+
+### Managing the biome list
+
+The `biomes` array in each dimension JSON is managed **manually**. Use `dimension_biome_planner.xlsx` to plan which biomes go in which dimension, then edit the dimension JSON directly.
+
+When you need the noise parameters for a specific vanilla biome as a copy-paste reference, run:
+
+1. Load the game, run `/dump_overworld_noise` in-game
+2. Exit the game
+3. From the repo root:
+   ```bash
+   python pythonScripts/worldgen/extract_overworld_noise.py
+   ```
+4. This writes `worldgen_data/overworld_noise_reference.json` — the complete biome_source block for all overworld biomes. Copy individual biome entries from it into your dimension JSON.
+
+> This script no longer writes to the Paxi dimension files. Dimension JSONs are only edited by hand.
+
+### Adding a new custom dimension
+
+1. **Create the dimension type file**
+   Copy an existing `dimension_type/<name>.json` and adjust the fields for your dimension's physics. Save it as `data/mineutz/dimension_type/<new_name>.json`.
+
+2. **Create the dimension file**
+   Copy an existing `dimension/<name>.json`. Set `"type"` to `"mineutz:<new_name>"`. Populate the `biomes` array with your chosen biome IDs and their noise parameters — use `dimension_biome_planner.xlsx` to plan assignments.
+
+3. **Register the dimension in Paxi's load order** (if required)
+   Check `minecraft/config/paxi/datapack_load_order.json` — the `mineutz` datapack should already be listed; no changes needed unless you add a second datapack.
+
+4. **Launch the game and verify**
+   Run `/dump_dimensions` and check that `mineutz:<new_name>` appears in `logs/latest.log`. Teleport to the dimension to confirm:
+   ```
+   /execute in mineutz:<new_name> run tp @s ~ ~ ~
+   ```
+
+5. **Update the registry dump**
+   Copy the new dimension ID into `lists/dimensions.txt` and commit alongside the new JSON files.
+
+### Existing custom dimensions
+
+| Dimension ID | Type file | Notes |
+|---|---|---|
+| `mineutz:zombie_city` | `dimension_type/zombie_city.json` | Overworld-equivalent physics |
+| `mineutz:pokemon_dimension` | `dimension_type/pokemon_dimension.json` | Overworld-equivalent physics |
 
 ---
 
