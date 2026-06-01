@@ -2,11 +2,17 @@
 extract_overworld_noise.py
 ==========================
 Reads the overworld multi_noise biome parameter list dumped by /dump_overworld_noise
-from logs/latest.log, then writes two dimension JSON files to the Paxi datapack
-with mushroom_fields entries removed.
+from logs/latest.log and writes a reference JSON to worldgen_data/.
+
+Output: worldgen_data/overworld_noise_reference.json
+  Contains the complete biome_source block for all overworld biomes.
+  Use this as a copy-paste reference when manually authoring custom dimension JSONs.
+
+  Do NOT run this to populate dimension files — biome lists for custom dimensions
+  are managed manually via dimension_biome_planner.xlsx.
 
 Usage:
-    python pythonScripts/extract_overworld_noise.py
+    python pythonScripts/worldgen/extract_overworld_noise.py
 """
 
 import json
@@ -16,15 +22,10 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from lib.paths import LATEST_LOG, ROOT
+from lib.paths import LATEST_LOG
 
-PAXI            = ROOT / 'minecraft' / 'config' / 'paxi' / 'datapacks' / 'mineutz' / 'data' / 'mineutz' / 'dimension'
-EXCLUDED_BIOMES = {'minecraft:mushroom_fields', 'minecraft:mushroom_fields_shore'}
-
-DIMENSIONS = {
-    'pokemon_dimension': 'mineutz:pokemon_dimension',
-    'zombie_city':       'mineutz:zombie_city',
-}
+OUT_DIR  = Path('worldgen_data')
+OUT_FILE = OUT_DIR / 'overworld_noise_reference.json'
 
 
 def _strip_log_prefix(line: str) -> str:
@@ -50,15 +51,7 @@ def _load_overworld_biomes() -> list:
     return all_biomes
 
 
-def _filter_biomes(all_biomes: list) -> list:
-    filtered = [entry for entry in all_biomes if entry['biome'] not in EXCLUDED_BIOMES]
-    removed  = [entry['biome'] for entry in all_biomes if entry['biome'] in EXCLUDED_BIOMES]
-    print(f'Removed {len(removed)} entries: {removed}')
-    print(f'Remaining: {len(filtered)} entries.')
-    return filtered
-
-
-def _build_biome_source(filtered: list) -> dict:
+def _build_biome_source(all_biomes: list) -> dict:
     return {
         'type': 'minecraft:multi_noise',
         'biomes': [
@@ -74,32 +67,22 @@ def _build_biome_source(filtered: list) -> dict:
                     'offset':          entry['parameters']['offset'],
                 }
             }
-            for entry in filtered
+            for entry in all_biomes
         ]
     }
 
 
-def _write_dimension_files(biome_source: dict) -> None:
-    for dim_name, type_id in DIMENSIONS.items():
-        dim_json = {
-            'type': type_id,
-            'generator': {
-                'type': 'minecraft:noise',
-                'biome_source': biome_source,
-                'settings': 'minecraft:overworld',
-            }
-        }
-        out = PAXI / f'{dim_name}.json'
-        out.write_text(json.dumps(dim_json, indent=2), encoding='utf-8')
-        print(f'Written: {out}')
+def _write_reference(biome_source: dict) -> None:
+    OUT_DIR.mkdir(exist_ok=True)
+    OUT_FILE.write_text(json.dumps(biome_source, indent=2), encoding='utf-8')
+    print(f'Written reference -> {OUT_FILE}')
+    print('Copy individual biome entries from this file when editing dimension JSONs manually.')
 
 
 def main() -> None:
     all_biomes   = _load_overworld_biomes()
-    filtered     = _filter_biomes(all_biomes)
-    biome_source = _build_biome_source(filtered)
-    _write_dimension_files(biome_source)
-    print('\nDone. Restart the game to apply.')
+    biome_source = _build_biome_source(all_biomes)
+    _write_reference(biome_source)
 
 
 main()
