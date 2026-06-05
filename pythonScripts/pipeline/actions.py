@@ -11,6 +11,7 @@ from .paths import (
     EXTRACT_ITEM_TEXTURES, EXTRACT_DIMENSION_BIOMES, EXTRACT_FROM_LOG,
     GENERATE_SQL, CHECK_CONSISTENCY, EXPORT_TO_NEO4J,
     EXTRACT_NOISE, PARSE_BOP_NOISE, PARSE_BWG_NOISE, EXTRACT_PREHISTORIC_EXPANSION,
+    MERGE_BIOME_PARAMETERS, GENERATE_FILTER_REGION,
 )
 
 PYTHON_EXE  = sys.executable
@@ -115,6 +116,20 @@ def step_bwg_noise():
 def step_prehistoric_expansion():
     return run_script(EXTRACT_PREHISTORIC_EXPANSION, "Shineals Prehistoric Expansion -> worldgen_data/shineals_prehistoric_expansion.json")
 
+def step_merge_biome_parameters():
+    return run_script(MERGE_BIOME_PARAMETERS, "Merge biome params -> worldgen_data/merged/")
+
+def step_generate_filter_region():
+    section("STEP: Generate FilterRegion Java code")
+    print("  Enter biome IDs space-separated, e.g.:")
+    print("  shineals_prehistoric_expansion:ginkgo_forest biomeswevegone:white_mangrove_marshes")
+    biome_ids = input("  Biomes: ").strip().split()
+    if not biome_ids:
+        print("  No biomes entered.")
+        return False
+    subprocess.run([PYTHON_EXE, str(GENERATE_FILTER_REGION)] + biome_ids)
+    return True
+
 def step_full_pipeline():
     section("FULL PIPELINE")
     failures = []
@@ -168,4 +183,6 @@ STEPS = [
     ("18", "BiomesOPlenty noise params",                step_bop_noise),
     ("19", "Oh The Biomes We've Gone noise params",     step_bwg_noise),
     ("20", "Shineals Prehistoric Expansion biomes",    step_prehistoric_expansion),
+    ("21", "Merge biome params -> worldgen_data/merged/", step_merge_biome_parameters),
+    ("22", "Generate FilterRegion Java code",          step_generate_filter_region),
 ]

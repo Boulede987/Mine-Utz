@@ -1,0 +1,84 @@
+"""
+merge_biome_parameters.py
+=========================
+Reads worldgen_data/*.json and collapses all parameter entries for each biome
+into one merged entry (min-of-mins, max-of-maxes per axis).
+
+Writes one file per namespace to worldgen_data/merged/<namespace>.json,
+preserving the same structure as the source files.
+
+Usage:
+    python pythonScripts/worldgen/merge_biome_parameters.py
+"""
+
+import json
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
+WORLDGEN_DATA_DIR = Path('worldgen_data')
+MERGED_OUTPUT_DIR = WORLDGEN_DATA_DIR / 'merged'
+PARAMETER_AXES    = ['temperature', 'humidity', 'continentalness', 'erosion', 'depth', 'weirdness']
+
+
+def merge_parameter_entries(parameter_entries: list[dict]) -> dict:
+    merged = {}
+    for axis in PARAMETER_AXES:
+        all_values  = [entry[axis] for entry in parameter_entries]
+        merged[axis] = [
+            min(values[0] for values in all_values),
+            max(values[1] for values in all_values),
+        ]
+    merged['offset'] = parameter_entries[0].get('offset', 0.0)
+    return merged
+
+
+def merge_section(entries: list[dict]) -> list[dict]:
+    by_biome: dict[str, list[dict]] = {}
+    for entry in entries:
+        by_biome.setdefault(entry['biome'], []).append(entry['parameters'])
+
+    merged_entries = []
+    for biome_id, parameter_list in sorted(by_biome.items()):
+        merged_entries.append({
+            'biome':      biome_id,
+            'parameters': merge_parameter_entries(parameter_list),
+            'merged_from': len(parameter_list),
+        })
+    return merged_entries
+
+
+def process_namespace_file(source_path: Path) -> tuple[str, dict]:
+    data      = json.loads(source_path.read_text(encoding='utf-8'))
+    namespace = data['namespace']
+    output    = {'namespace': namespace, 'note': 'Parameters merged: one entry per biome (min-of-mins, max-of-maxes).', 'dimensions': {}}
+
+    for dimension_id, sections in data.get('dimensions', {}).items():
+        output['dimensions'][dimension_id] = {}
+        for section_name, entries in sections.items():
+            merged = merge_section(entries)
+            output['dimensions'][dimension_id][section_name] = merged
+            if merged:
+                print(f'  {namespace}  {dimension_id}  {section_name}: {len(entries)} -> {len(merged)} entries')
+
+    return namespace, output
+
+
+def main() -> None:
+    source_files = sorted(WORLDGEN_DATA_DIR.glob('*.json'))
+    if not source_files:
+        print(f'No JSON files found in {WORLDGEN_DATA_DIR}/')
+        raise SystemExit(1)
+
+    MERGED_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+
+    for source_path in source_files:
+        namespace, output = process_namespace_file(source_path)
+        destination = MERGED_OUTPUT_DIR / source_path.name
+        destination.write_text(json.dumps(output, indent=2), encoding='utf-8')
+
+    print(f'\nWritten {len(source_files)} file(s) to {MERGED_OUTPUT_DIR}/')
+
+
+main()
