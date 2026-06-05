@@ -10,7 +10,7 @@ from .paths import (
     EXTRACT_BIOME_BLOCKS, EXTRACT_ITEM_TAGS, EXTRACT_ENTITY_TEXTURES,
     EXTRACT_ITEM_TEXTURES, EXTRACT_DIMENSION_BIOMES, EXTRACT_FROM_LOG,
     GENERATE_SQL, CHECK_CONSISTENCY, EXPORT_TO_NEO4J,
-    EXTRACT_NOISE, PARSE_BOP_NOISE, PARSE_BWG_NOISE,
+    EXTRACT_NOISE, PARSE_BOP_NOISE, PARSE_BWG_NOISE, EXTRACT_PREHISTORIC_EXPANSION,
 )
 
 PYTHON_EXE  = sys.executable
@@ -111,6 +111,10 @@ def step_bop_noise():
 def step_bwg_noise():
     return run_script(PARSE_BWG_NOISE, "Oh The Biomes We've Gone noise -> worldgen_data/biomeswevegone.json")
 
+
+def step_prehistoric_expansion():
+    return run_script(EXTRACT_PREHISTORIC_EXPANSION, "Shineals Prehistoric Expansion -> worldgen_data/shineals_prehistoric_expansion.json")
+
 def step_full_pipeline():
     section("FULL PIPELINE")
     failures = []
@@ -163,4 +167,5 @@ STEPS = [
     ("17", "All noise params -> worldgen_data/  (run /dump_all_noise first)", step_worldgen_noise),
     ("18", "BiomesOPlenty noise params",                step_bop_noise),
     ("19", "Oh The Biomes We've Gone noise params",     step_bwg_noise),
+    ("20", "Shineals Prehistoric Expansion biomes",    step_prehistoric_expansion),
 ]
