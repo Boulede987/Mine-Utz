@@ -11,7 +11,7 @@ from .paths import (
     EXTRACT_ITEM_TEXTURES, EXTRACT_DIMENSION_BIOMES, EXTRACT_FROM_LOG,
     GENERATE_SQL, CHECK_CONSISTENCY, EXPORT_TO_NEO4J,
     EXTRACT_NOISE, PARSE_BOP_NOISE, PARSE_BWG_NOISE, EXTRACT_PREHISTORIC_EXPANSION,
-    MERGE_BIOME_PARAMETERS, GENERATE_FILTER_REGION,
+    MERGE_BIOME_PARAMETERS, COMPLETE_BIOME_PLANNER, GENERATE_FILTER_REGION,
 )
 
 PYTHON_EXE  = sys.executable
@@ -119,6 +119,9 @@ def step_prehistoric_expansion():
 def step_merge_biome_parameters():
     return run_script(MERGE_BIOME_PARAMETERS, "Merge biome params -> worldgen_data/merged/")
 
+def step_complete_biome_planner():
+    return run_script(COMPLETE_BIOME_PLANNER, "Complete dimension_biome_planner.xlsx with missing biomes")
+
 def step_generate_filter_region():
     section("STEP: Generate FilterRegion Java code")
     print("  Enter biome IDs space-separated, e.g.:")
@@ -184,5 +187,6 @@ STEPS = [
     ("19", "Oh The Biomes We've Gone noise params",     step_bwg_noise),
     ("20", "Shineals Prehistoric Expansion biomes",    step_prehistoric_expansion),
     ("21", "Merge biome params -> worldgen_data/merged/", step_merge_biome_parameters),
-    ("22", "Generate FilterRegion Java code",          step_generate_filter_region),
+    ("22", "Complete dimension_biome_planner.xlsx",    step_complete_biome_planner),
+    ("23", "Generate FilterRegion Java code",          step_generate_filter_region),
 ]
