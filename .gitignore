@@ -29,6 +29,10 @@ minecraft/mods/*
 
 # --- Config & scripts ---
 !minecraft/config/
+minecraft/config/*
+!minecraft/config/paxi/
+!minecraft/config/incontrol/
+!minecraft/config/lostcities/
 !minecraft/defaultconfigs/
 !minecraft/kubejs/
 !minecraft/resources/
@@ -40,10 +44,9 @@ minecraft/local/*
 minecraft/local/ftbquests/*
 !minecraft/local/ftbquests/quests/
 
-# --- Journeymap config only (not map data) ---
+# --- Journeymap (temporarily blacklisted) ---
 !minecraft/journeymap/
 minecraft/journeymap/*
-!minecraft/journeymap/config/
 
 # --- Coremods (NeoForge needs these) ---
 !minecraft/coremods/
