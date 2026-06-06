@@ -14,6 +14,7 @@ from .paths import (
     CREATE_MINEUTZ_OCEANS, COPY_BIOME,
     MERGE_BIOME_PARAMETERS, COMPLETE_BIOME_PLANNER, GENERATE_FILTER_REGION,
     GENERATE_DIMENSION_JSONS,
+    GENERATE_STRUCTURE_PLANNER,
 )
 
 PYTHON_EXE  = sys.executable
@@ -133,6 +134,9 @@ def step_copy_biome():
 def step_generate_dimension_jsons():
     return run_script(GENERATE_DIMENSION_JSONS, "Generate custom dimension JSONs from planner")
 
+def step_generate_structure_planner():
+    return run_script(GENERATE_STRUCTURE_PLANNER, "Generate structure_planner.xlsx")
+
 def step_generate_filter_region():
     return run_script(GENERATE_FILTER_REGION, "Generate FilterRegion.java from Overworld ✓ biomes")
 
@@ -195,4 +199,5 @@ STEPS = [
     ("22", "Complete dimension_biome_planner.xlsx",    step_complete_biome_planner),
     ("23", "Generate FilterRegion Java code",          step_generate_filter_region),
     ("24", "Generate custom dimension JSONs",          step_generate_dimension_jsons),
+    ("25", "Generate structure_planner.xlsx",          step_generate_structure_planner),
 ]
