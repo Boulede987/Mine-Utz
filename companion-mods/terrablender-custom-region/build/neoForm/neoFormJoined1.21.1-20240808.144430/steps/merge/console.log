@@ -1,0 +1,8 @@
+JVM Args:          
+Run Args:          "--client", "C:\Users\alixm\AppData\Roaming\PrismLauncher\instances\mineutze_DEV_INSTANCE\companion-mods\terrablender-custom-region\build\neoForm\neoFormJoined1.21.1-20240808.144430\steps\stripClient\output.jar", "--server", "C:\Users\alixm\AppData\Roaming\PrismLauncher\instances\mineutze_DEV_INSTANCE\companion-mods\terrablender-custom-region\build\neoForm\neoFormJoined1.21.1-20240808.144430\steps\stripServer\output.jar", "--ann", "1.21.1", "--output", "C:\Users\alixm\AppData\Roaming\PrismLauncher\instances\mineutze_DEV_INSTANCE\companion-mods\terrablender-custom-region\build\neoForm\neoFormJoined1.21.1-20240808.144430\steps\merge\output.jar", "--inject", "false"
+JVM:               C:\Users\alixm\.jdks\ms-21.0.7\bin\java.exe
+Classpath:         C:\Users\alixm\.gradle\caches\modules-2\files-2.1\net.neoforged\mergetool\2.0.3\85c096b0155715275f84922d41462484c9a0285c\mergetool-2.0.3-fatjar.jar
+Working Dir:       C:\Users\alixm\AppData\Roaming\PrismLauncher\instances\mineutze_DEV_INSTANCE\companion-mods\terrablender-custom-region\build\neoForm\neoFormJoined1.21.1-20240808.144430\steps\merge
+Main Class:        net.neoforged.mergetool.ConsoleMerger
+Program log file:  C:\Users\alixm\AppData\Roaming\PrismLauncher\instances\mineutze_DEV_INSTANCE\companion-mods\terrablender-custom-region\build\neoForm\neoFormJoined1.21.1-20240808.144430\steps\merge\log.log
+Output file:       C:\Users\alixm\AppData\Roaming\PrismLauncher\instances\mineutze_DEV_INSTANCE\companion-mods\terrablender-custom-region\build\neoForm\neoFormJoined1.21.1-20240808.144430\steps\merge\output.jar

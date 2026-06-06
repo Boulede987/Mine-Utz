@@ -1,0 +1,38 @@
+plugins {
+    id 'net.neoforged.gradle.userdev' version '7.0.145'
+    id 'java'
+}
+
+version = '1.0.0'
+group = 'com.mineutze'
+
+java {
+    toolchain.languageVersion = JavaLanguageVersion.of(21)
+}
+
+runs {
+    configureEach {
+        systemProperty 'forge.logging.console.level', 'debug'
+    }
+    server { }
+}
+
+dependencies {
+    implementation "net.neoforged:neoforge:${neoforge_version}"
+    // TerraBlender is already in the modpack's mods folder — reference it directly
+    compileOnly files('../../minecraft/mods/TerraBlender-neoforge-1.21.1-4.1.0.8.jar')
+}
+
+jar {
+    manifest {
+        attributes(['Implementation-Version': project.version])
+    }
+}
+
+// After building, copy the jar into the modpack's mods folder for testing
+tasks.register('deployMod', Copy) {
+    dependsOn jar
+    from jar.outputs
+    into '../../minecraft/mods'
+    rename { "mineutze-filter-mod-${project.version}.jar" }
+}
