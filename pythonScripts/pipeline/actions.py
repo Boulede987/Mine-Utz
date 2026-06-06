@@ -15,6 +15,7 @@ from .paths import (
     MERGE_BIOME_PARAMETERS, COMPLETE_BIOME_PLANNER, GENERATE_FILTER_REGION,
     GENERATE_DIMENSION_JSONS,
     GENERATE_STRUCTURE_PLANNER,
+    GENERATE_STRUCTURE_TAGS,
 )
 
 PYTHON_EXE  = sys.executable
@@ -137,6 +138,9 @@ def step_generate_dimension_jsons():
 def step_generate_structure_planner():
     return run_script(GENERATE_STRUCTURE_PLANNER, "Generate structure_planner.xlsx")
 
+def step_generate_structure_tags():
+    return run_script(GENERATE_STRUCTURE_TAGS, "Generate structure biome tag overrides from planner")
+
 def step_generate_filter_region():
     return run_script(GENERATE_FILTER_REGION, "Generate FilterRegion.java from Overworld ✓ biomes")
 
@@ -200,4 +204,5 @@ STEPS = [
     ("23", "Generate FilterRegion Java code",          step_generate_filter_region),
     ("24", "Generate custom dimension JSONs",          step_generate_dimension_jsons),
     ("25", "Generate structure_planner.xlsx",          step_generate_structure_planner),
+    ("26", "Generate structure biome tag overrides",   step_generate_structure_tags),
 ]
