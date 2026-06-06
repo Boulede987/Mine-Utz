@@ -30,3 +30,4 @@ EXTRACT_PREHISTORIC_EXPANSION = SCRIPTS / "worldgen/extract_prehistoric_expansio
 MERGE_BIOME_PARAMETERS        = SCRIPTS / "worldgen/merge_biome_parameters.py"
 COMPLETE_BIOME_PLANNER        = SCRIPTS / "worldgen/complete_biome_planner.py"
 GENERATE_FILTER_REGION        = SCRIPTS / "worldgen/generate_filter_region.py"
+GENERATE_DIMENSION_JSONS      = SCRIPTS / "worldgen/generate_dimension_jsons.py"

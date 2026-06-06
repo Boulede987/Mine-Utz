@@ -12,6 +12,7 @@ from .paths import (
     GENERATE_SQL, CHECK_CONSISTENCY, EXPORT_TO_NEO4J,
     EXTRACT_NOISE, PARSE_BOP_NOISE, PARSE_BWG_NOISE, EXTRACT_PREHISTORIC_EXPANSION,
     MERGE_BIOME_PARAMETERS, COMPLETE_BIOME_PLANNER, GENERATE_FILTER_REGION,
+    GENERATE_DIMENSION_JSONS,
 )
 
 PYTHON_EXE  = sys.executable
@@ -122,6 +123,9 @@ def step_merge_biome_parameters():
 def step_complete_biome_planner():
     return run_script(COMPLETE_BIOME_PLANNER, "Complete dimension_biome_planner.xlsx with missing biomes")
 
+def step_generate_dimension_jsons():
+    return run_script(GENERATE_DIMENSION_JSONS, "Generate custom dimension JSONs from planner")
+
 def step_generate_filter_region():
     section("STEP: Generate FilterRegion Java code")
     print("  Enter biome IDs space-separated, e.g.:")
@@ -189,4 +193,5 @@ STEPS = [
     ("21", "Merge biome params -> worldgen_data/merged/", step_merge_biome_parameters),
     ("22", "Complete dimension_biome_planner.xlsx",    step_complete_biome_planner),
     ("23", "Generate FilterRegion Java code",          step_generate_filter_region),
+    ("24", "Generate custom dimension JSONs",          step_generate_dimension_jsons),
 ]
