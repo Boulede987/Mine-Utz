@@ -120,6 +120,12 @@ lists/item_textures.txt
 .claude/
 
 # ===========================
+# Companion mods (Gradle)
+# ===========================
+companion-mods/**/.gradle/
+companion-mods/**/build/
+
+# ===========================
 # Python
 # ===========================
 __pycache__/
