@@ -11,6 +11,7 @@ from .paths import (
     EXTRACT_ITEM_TEXTURES, EXTRACT_DIMENSION_BIOMES, EXTRACT_FROM_LOG,
     GENERATE_SQL, CHECK_CONSISTENCY, EXPORT_TO_NEO4J,
     EXTRACT_NOISE, PARSE_BOP_NOISE, PARSE_BWG_NOISE, EXTRACT_PREHISTORIC_EXPANSION,
+    CREATE_MINEUTZ_OCEANS, COPY_BIOME,
     MERGE_BIOME_PARAMETERS, COMPLETE_BIOME_PLANNER, GENERATE_FILTER_REGION,
     GENERATE_DIMENSION_JSONS,
 )
@@ -123,19 +124,17 @@ def step_merge_biome_parameters():
 def step_complete_biome_planner():
     return run_script(COMPLETE_BIOME_PLANNER, "Complete dimension_biome_planner.xlsx with missing biomes")
 
+def step_create_mineutz_oceans():
+    return run_script(CREATE_MINEUTZ_OCEANS, "Create mineutz: ocean biome copies (run once per MC version)")
+
+def step_copy_biome():
+    return run_script(COPY_BIOME, "Copy any biome into mineutz: namespace (interactive)")
+
 def step_generate_dimension_jsons():
     return run_script(GENERATE_DIMENSION_JSONS, "Generate custom dimension JSONs from planner")
 
 def step_generate_filter_region():
-    section("STEP: Generate FilterRegion Java code")
-    print("  Enter biome IDs space-separated, e.g.:")
-    print("  shineals_prehistoric_expansion:ginkgo_forest biomeswevegone:white_mangrove_marshes")
-    biome_ids = input("  Biomes: ").strip().split()
-    if not biome_ids:
-        print("  No biomes entered.")
-        return False
-    subprocess.run([PYTHON_EXE, str(GENERATE_FILTER_REGION)] + biome_ids)
-    return True
+    return run_script(GENERATE_FILTER_REGION, "Generate FilterRegion.java from Overworld ✓ biomes")
 
 def step_full_pipeline():
     section("FULL PIPELINE")
@@ -190,6 +189,8 @@ STEPS = [
     ("18", "BiomesOPlenty noise params",                step_bop_noise),
     ("19", "Oh The Biomes We've Gone noise params",     step_bwg_noise),
     ("20", "Shineals Prehistoric Expansion biomes",    step_prehistoric_expansion),
+    ("20b","Create mineutz: ocean copies (once per MC version)", step_create_mineutz_oceans),
+    ("20c","Copy any biome into mineutz: namespace",            step_copy_biome),
     ("21", "Merge biome params -> worldgen_data/merged/", step_merge_biome_parameters),
     ("22", "Complete dimension_biome_planner.xlsx",    step_complete_biome_planner),
     ("23", "Generate FilterRegion Java code",          step_generate_filter_region),
