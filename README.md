@@ -13,6 +13,7 @@ A custom Minecraft modpack tracked with [packwiz](https://packwiz.infra.link/) a
 - [Testing](#testing)
 - [Registry Dumps](#registry-dumps)
 - [Custom Dimensions](#custom-dimensions)
+- [Biome Filtering & World Generation](#biome-filtering--world-generation)
 - [Configuration Mods](#configuration-mods)
 - [Graph Explorer](#graph-explorer)
 - [Making a Release](#making-a-release)
@@ -286,19 +287,7 @@ Defines the world generator and the biome list. The `biomes` array uses the same
 
 ### Managing the biome list
 
-The `biomes` array in each dimension JSON is managed **manually**. Use `dimension_biome_planner.xlsx` to plan which biomes go in which dimension, then edit the dimension JSON directly.
-
-When you need the noise parameters for a specific vanilla biome as a copy-paste reference, run:
-
-1. Load the game, run `/dump_overworld_noise` in-game
-2. Exit the game
-3. From the repo root:
-   ```bash
-   python pythonScripts/worldgen/extract_overworld_noise.py
-   ```
-4. This writes `worldgen_data/overworld_noise_reference.json` — the complete biome_source block for all overworld biomes. Copy individual biome entries from it into your dimension JSON.
-
-> This script no longer writes to the Paxi dimension files. Dimension JSONs are only edited by hand.
+The `biomes` array in each dimension JSON is generated from the pipeline — do not edit it by hand. See [Biome Filtering & World Generation](#biome-filtering--world-generation) for the full workflow.
 
 ### Adding a new custom dimension
 
@@ -354,6 +343,122 @@ To add city generation to a new custom dimension, add a `"<id>=<profile>"` entry
 |---|---|---|---|
 | `mineutz:zombie_city` | `dimension_type/zombie_city.json` | `mineutz_custom_profile` | Sparse ruined cities, tall buildings |
 | `mineutz:pokemon_dimension` | `dimension_type/pokemon_dimension.json` | *(none)* | Overworld-equivalent physics |
+
+---
+
+## Biome Filtering & World Generation
+
+Two separate mechanisms control which biomes appear where. They operate at different layers and must not be confused.
+
+### The 5D climate system
+
+Minecraft's overworld biome selection is a nearest-neighbour lookup in a 5-dimensional climate space:
+
+| Axis | Range | Controls |
+|---|---|---|
+| `temperature` | –1.0 → 1.0 | Frozen / Cold / Neutral / Warm / Hot zones |
+| `humidity` | –1.0 → 1.0 | Arid / Dry / Moderate / Humid / Wet zones |
+| `continentalness` | –1.0 → 1.0 | Ocean / coast / inland / far inland |
+| `erosion` | –1.0 → 1.0 | Flat / hilly / mountainous |
+| `weirdness` | –1.0 → 1.0 | Peak / valley / normal within a region |
+
+Each biome mod registers a set of `(parameter_point → biome)` entries. At any location the engine samples the noise, finds the registered entry with the smallest distance in this 5D space, and places that biome. Registering a biome with wide parameter ranges means it crowds out others in those zones.
+
+> **Why not Biome Replacer?** Biome Replacer is a post-selection label swap — it replaces one biome ID with another after the lookup, but cannot redistribute the climate space. Unwanted biomes (giant swamps, prehistoric biomes on the surface) cannot be removed this way; they still occupy their original climate slots. The configuration file at `minecraft/config/biome_replacer.properties` is intentionally left empty.
+
+---
+
+### Overworld filtering — TerraBlender companion mod
+
+The overworld biome list is controlled by a small companion NeoForge mod living in `companion-mods/terrablender-custom-region/`.
+
+**How it works**
+
+[TerraBlender](https://modrinth.com/mod/terrablender) divides the overworld into coarse noise regions. Each region contributes a provider to the biome lookup. The companion mod registers a single custom region with an enormous weight (`100_000_000`) compared to the default of `10`. At that ratio the custom region governs **~99.999998 %** of all biome selections in the overworld — vanilla, BoP, and BWG regions are reduced to statistical noise.
+
+The custom region's `addBiomes()` method explicitly registers only the biomes that should appear in the overworld, each mapped to merged climate parameters derived from the mod's own worldgen data. Any biome not listed simply cannot win the nearest-neighbour lookup under normal conditions.
+
+TerraBlender region weights are configured in `minecraft/config/terrablender.toml`:
+
+```toml
+vanilla_overworld_region_weight = 0
+```
+
+Setting vanilla weight to `0` removes vanilla biome regions entirely; the custom region is the sole provider.
+
+**Companion mod structure**
+
+```
+companion-mods/terrablender-custom-region/
+├── build.gradle                        # NeoForge userdev, Java 21 toolchain
+├── gradle.properties                   # MC 1.21.1, NeoForge 21.1.219
+└── src/main/java/com/mineutze/filtermod/
+    ├── FilterMod.java                  # Registers FilterRegion on mod bus
+    └── FilterRegion.java               # addBiomes() — one entry per allowed overworld biome
+```
+
+**Rebuilding after biome list changes**
+
+1. Open the project in IntelliJ IDEA (import the `companion-mods/terrablender-custom-region/` Gradle project)
+2. In the Gradle panel run `Tasks → build → deployMod`
+3. The task builds the jar and copies it to `minecraft/mods/`
+4. Relaunch the game
+
+**Generating the Java code**
+
+`FilterRegion.java` is generated from the pipeline. Do not edit it by hand.
+
+From the repo root, run the pipeline and choose step **21 → 22 → 23**:
+
+```
+21  Merge biome params → worldgen_data/merged/
+22  Complete dimension_biome_planner.xlsx
+23  Generate FilterRegion Java code
+```
+
+Step 21 collapses every climate slot per biome to one wide-range entry (min-of-mins, max-of-maxes per axis). Step 22 adds any biomes missing from the planner with default `✗` choices. Step 23 prompts for a space-separated list of biome IDs and prints ready-to-paste `addBiome()` calls — copy them into `FilterRegion.java`, rebuild, deploy.
+
+---
+
+### Custom dimension biomes — data pack (multi_noise)
+
+Custom dimensions do not go through TerraBlender. They use Minecraft's native `multi_noise` biome source, which takes an explicit `biomes` array in the dimension JSON. This is the correct tool for custom dimensions because:
+
+- No Java compilation — edit a JSON file, reload the world
+- Full control: only the listed biomes can ever appear in that dimension
+- Parameters come from the same `worldgen_data/merged/` files used for the overworld filter
+
+The structure is shown in the [Custom Dimensions](#custom-dimensions) section. The `biomes` array entries use the same climate parameter format produced by the pipeline.
+
+**Pipeline step 24**
+
+Run pipeline step **24 — Generate custom dimension JSONs** to regenerate all dimension files from the planner. The script reads `dimension_biome_planner.xlsx`, collects every biome marked `✓` per dimension column, looks up its merged climate parameters from `worldgen_data/merged/`, and writes a complete `multi_noise` dimension JSON for each column (except Overworld, which is handled by the companion mod).
+
+Output files: `minecraft/config/paxi/datapacks/mineutz/data/mineutz/dimension/<slug>.json`
+
+Re-run step 24 whenever `✓`/`✗` choices change in the planner.
+
+---
+
+### The dimension biome planner
+
+`dimension_biome_planner.xlsx` (sheet: *Biome Planner*) is the single source of truth for which biomes go where.
+
+| Column | Content |
+|---|---|
+| A | Biome registry ID (`namespace:name`) |
+| B | Source mod (BWG, BoP, Vanilla, …) |
+| C | Temperature label (Frozen / Cold / Neutral / Warm / Hot) |
+| D | Humidity label (Arid / Dry / Moderate / Humid / Wet) |
+| E+ | One column per dimension — `✓` (green) to include, `✗` (red) to exclude |
+
+Pipeline step 22 (`complete_biome_planner.py`) keeps the planner up to date:
+- Reads all sections (surface, underground, caves, deep) from `worldgen_data/merged/`
+- Adds any biomes not yet in the table with `✗` in every dimension column
+- Colorises `✓` green and `✗` red across all rows
+- Never removes or changes existing rows or choices
+
+Run step 22 whenever biome mods are added or their worldgen data is re-extracted.
 
 ---
 
