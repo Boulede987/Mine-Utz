@@ -4,7 +4,938 @@
     "type": "minecraft:noise",
     "biome_source": {
       "type": "minecraft:multi_noise",
-      "preset": "minecraft:overworld"
+      "biomes": [
+        {
+          "biome": "biomesoplenty:bog",
+          "parameters": {
+            "temperature": [
+              -0.45,
+              -0.15
+            ],
+            "humidity": [
+              -1.0,
+              1.0
+            ],
+            "continentalness": [
+              -0.11,
+              1.0
+            ],
+            "erosion": [
+              0.55,
+              1.0
+            ],
+            "depth": [
+              1.0,
+              1.0
+            ],
+            "weirdness": [
+              -1.0,
+              1.0
+            ],
+            "offset": 0.0
+          }
+        },
+        {
+          "biome": "biomesoplenty:cold_desert",
+          "parameters": {
+            "temperature": [
+              -1.0,
+              -0.45
+            ],
+            "humidity": [
+              -1.0,
+              -0.1
+            ],
+            "continentalness": [
+              -0.19,
+              1.0
+            ],
+            "erosion": [
+              -1.0,
+              1.0
+            ],
+            "depth": [
+              1.0,
+              1.0
+            ],
+            "weirdness": [
+              -1.0,
+              1.0
+            ],
+            "offset": 0.0
+          }
+        },
+        {
+          "biome": "biomesoplenty:dead_forest",
+          "parameters": {
+            "temperature": [
+              -1.0,
+              -0.45
+            ],
+            "humidity": [
+              0.3,
+              1.0
+            ],
+            "continentalness": [
+              -0.19,
+              1.0
+            ],
+            "erosion": [
+              -1.0,
+              1.0
+            ],
+            "depth": [
+              1.0,
+              1.0
+            ],
+            "weirdness": [
+              -1.0,
+              -0.05
+            ],
+            "offset": 0.0
+          }
+        },
+        {
+          "biome": "biomesoplenty:dryland",
+          "parameters": {
+            "temperature": [
+              0.55,
+              1.0
+            ],
+            "humidity": [
+              -1.0,
+              -0.1
+            ],
+            "continentalness": [
+              -0.19,
+              1.0
+            ],
+            "erosion": [
+              -1.0,
+              1.0
+            ],
+            "depth": [
+              1.0,
+              1.0
+            ],
+            "weirdness": [
+              -1.0,
+              1.0
+            ],
+            "offset": 0.0
+          }
+        },
+        {
+          "biome": "biomesoplenty:field",
+          "parameters": {
+            "temperature": [
+              -0.45,
+              -0.15
+            ],
+            "humidity": [
+              0.1,
+              1.0
+            ],
+            "continentalness": [
+              -0.19,
+              1.0
+            ],
+            "erosion": [
+              -1.0,
+              1.0
+            ],
+            "depth": [
+              1.0,
+              1.0
+            ],
+            "weirdness": [
+              -1.0,
+              1.0
+            ],
+            "offset": 0.0
+          }
+        },
+        {
+          "biome": "biomesoplenty:grassland",
+          "parameters": {
+            "temperature": [
+              -0.15,
+              0.2
+            ],
+            "humidity": [
+              0.3,
+              1.0
+            ],
+            "continentalness": [
+              -0.19,
+              1.0
+            ],
+            "erosion": [
+              -1.0,
+              1.0
+            ],
+            "depth": [
+              1.0,
+              1.0
+            ],
+            "weirdness": [
+              -0.05,
+              1.0
+            ],
+            "offset": 0.0
+          }
+        },
+        {
+          "biome": "biomesoplenty:gravel_beach",
+          "parameters": {
+            "temperature": [
+              -1.0,
+              -0.15
+            ],
+            "humidity": [
+              -1.0,
+              1.0
+            ],
+            "continentalness": [
+              -0.19,
+              -0.11
+            ],
+            "erosion": [
+              -0.2225,
+              1.0
+            ],
+            "depth": [
+              1.0,
+              1.0
+            ],
+            "weirdness": [
+              -1.0,
+              0.26666668
+            ],
+            "offset": 0.0
+          }
+        },
+        {
+          "biome": "biomesoplenty:moor",
+          "parameters": {
+            "temperature": [
+              -0.15,
+              0.2
+            ],
+            "humidity": [
+              0.3,
+              1.0
+            ],
+            "continentalness": [
+              0.03,
+              1.0
+            ],
+            "erosion": [
+              -0.78,
+              0.05
+            ],
+            "depth": [
+              1.0,
+              1.0
+            ],
+            "weirdness": [
+              0.26666668,
+              1.0
+            ],
+            "offset": 0.0
+          }
+        },
+        {
+          "biome": "biomesoplenty:muskeg",
+          "parameters": {
+            "temperature": [
+              -1.0,
+              -0.45
+            ],
+            "humidity": [
+              -0.1,
+              0.1
+            ],
+            "continentalness": [
+              -0.19,
+              1.0
+            ],
+            "erosion": [
+              -1.0,
+              1.0
+            ],
+            "depth": [
+              1.0,
+              1.0
+            ],
+            "weirdness": [
+              -1.0,
+              1.0
+            ],
+            "offset": 0.0
+          }
+        },
+        {
+          "biome": "biomesoplenty:old_growth_dead_forest",
+          "parameters": {
+            "temperature": [
+              -1.0,
+              -0.45
+            ],
+            "humidity": [
+              0.3,
+              1.0
+            ],
+            "continentalness": [
+              -0.19,
+              1.0
+            ],
+            "erosion": [
+              -1.0,
+              1.0
+            ],
+            "depth": [
+              1.0,
+              1.0
+            ],
+            "weirdness": [
+              -0.05,
+              1.0
+            ],
+            "offset": 0.0
+          }
+        },
+        {
+          "biome": "biomesoplenty:old_growth_woodland",
+          "parameters": {
+            "temperature": [
+              0.2,
+              0.55
+            ],
+            "humidity": [
+              -0.1,
+              0.1
+            ],
+            "continentalness": [
+              -0.19,
+              1.0
+            ],
+            "erosion": [
+              -1.0,
+              1.0
+            ],
+            "depth": [
+              1.0,
+              1.0
+            ],
+            "weirdness": [
+              -0.05,
+              1.0
+            ],
+            "offset": 0.0
+          }
+        },
+        {
+          "biome": "biomesoplenty:scrubland",
+          "parameters": {
+            "temperature": [
+              0.2,
+              0.55
+            ],
+            "humidity": [
+              -1.0,
+              -0.1
+            ],
+            "continentalness": [
+              -0.19,
+              1.0
+            ],
+            "erosion": [
+              -1.0,
+              1.0
+            ],
+            "depth": [
+              1.0,
+              1.0
+            ],
+            "weirdness": [
+              -1.0,
+              1.0
+            ],
+            "offset": 0.0
+          }
+        },
+        {
+          "biome": "biomesoplenty:tundra",
+          "parameters": {
+            "temperature": [
+              -1.0,
+              -0.45
+            ],
+            "humidity": [
+              -1.0,
+              -0.1
+            ],
+            "continentalness": [
+              -0.19,
+              1.0
+            ],
+            "erosion": [
+              -1.0,
+              1.0
+            ],
+            "depth": [
+              1.0,
+              1.0
+            ],
+            "weirdness": [
+              -1.0,
+              1.0
+            ],
+            "offset": 0.0
+          }
+        },
+        {
+          "biome": "biomesoplenty:wasteland",
+          "parameters": {
+            "temperature": [
+              0.55,
+              1.0
+            ],
+            "humidity": [
+              -1.0,
+              1.0
+            ],
+            "continentalness": [
+              -0.19,
+              1.0
+            ],
+            "erosion": [
+              -1.0,
+              1.0
+            ],
+            "depth": [
+              1.0,
+              1.0
+            ],
+            "weirdness": [
+              -1.0,
+              1.0
+            ],
+            "offset": 0.0
+          }
+        },
+        {
+          "biome": "biomesoplenty:wasteland_steppe",
+          "parameters": {
+            "temperature": [
+              0.55,
+              1.0
+            ],
+            "humidity": [
+              -1.0,
+              1.0
+            ],
+            "continentalness": [
+              -0.11,
+              1.0
+            ],
+            "erosion": [
+              -1.0,
+              0.05
+            ],
+            "depth": [
+              1.0,
+              1.0
+            ],
+            "weirdness": [
+              -1.0,
+              1.0
+            ],
+            "offset": 0.0
+          }
+        },
+        {
+          "biome": "biomeswevegone:amaranth_grassland",
+          "parameters": {
+            "temperature": [
+              0.2,
+              0.55
+            ],
+            "humidity": [
+              -0.1,
+              0.1
+            ],
+            "continentalness": [
+              -0.19,
+              1.0
+            ],
+            "erosion": [
+              -1.0,
+              1.0
+            ],
+            "depth": [
+              1.0,
+              1.0
+            ],
+            "weirdness": [
+              -1.0,
+              1.0
+            ],
+            "offset": 0.0
+          }
+        },
+        {
+          "biome": "biomeswevegone:atacama_outback",
+          "parameters": {
+            "temperature": [
+              0.55,
+              1.0
+            ],
+            "humidity": [
+              0.1,
+              0.3
+            ],
+            "continentalness": [
+              -0.19,
+              1.0
+            ],
+            "erosion": [
+              -1.0,
+              1.0
+            ],
+            "depth": [
+              1.0,
+              1.0
+            ],
+            "weirdness": [
+              -1.0,
+              1.0
+            ],
+            "offset": 0.0
+          }
+        },
+        {
+          "biome": "biomeswevegone:baobab_savanna",
+          "parameters": {
+            "temperature": [
+              0.2,
+              0.55
+            ],
+            "humidity": [
+              -1.0,
+              -0.1
+            ],
+            "continentalness": [
+              -0.19,
+              1.0
+            ],
+            "erosion": [
+              -1.0,
+              1.0
+            ],
+            "depth": [
+              1.0,
+              1.0
+            ],
+            "weirdness": [
+              -1.0,
+              1.0
+            ],
+            "offset": 0.0
+          }
+        },
+        {
+          "biome": "biomeswevegone:bayou",
+          "parameters": {
+            "temperature": [
+              -0.45,
+              0.2
+            ],
+            "humidity": [
+              -1.0,
+              1.0
+            ],
+            "continentalness": [
+              -0.11,
+              1.0
+            ],
+            "erosion": [
+              0.55,
+              1.0
+            ],
+            "depth": [
+              1.0,
+              1.0
+            ],
+            "weirdness": [
+              -1.0,
+              1.0
+            ],
+            "offset": 0.0
+          }
+        },
+        {
+          "biome": "biomeswevegone:black_forest",
+          "parameters": {
+            "temperature": [
+              -0.45,
+              -0.15
+            ],
+            "humidity": [
+              -0.1,
+              1.0
+            ],
+            "continentalness": [
+              0.03,
+              1.0
+            ],
+            "erosion": [
+              -0.78,
+              0.05
+            ],
+            "depth": [
+              1.0,
+              1.0
+            ],
+            "weirdness": [
+              -1.0,
+              1.0
+            ],
+            "offset": 0.0
+          }
+        },
+        {
+          "biome": "biomeswevegone:canadian_shield",
+          "parameters": {
+            "temperature": [
+              -0.45,
+              0.2
+            ],
+            "humidity": [
+              -0.1,
+              0.1
+            ],
+            "continentalness": [
+              -0.11,
+              1.0
+            ],
+            "erosion": [
+              -1.0,
+              -0.375
+            ],
+            "depth": [
+              1.0,
+              1.0
+            ],
+            "weirdness": [
+              -1.0,
+              1.0
+            ],
+            "offset": 0.0
+          }
+        },
+        {
+          "biome": "biomeswevegone:cika_woods",
+          "parameters": {
+            "temperature": [
+              -0.45,
+              -0.15
+            ],
+            "humidity": [
+              -0.1,
+              1.0
+            ],
+            "continentalness": [
+              -0.19,
+              1.0
+            ],
+            "erosion": [
+              -1.0,
+              1.0
+            ],
+            "depth": [
+              1.0,
+              1.0
+            ],
+            "weirdness": [
+              -1.0,
+              1.0
+            ],
+            "offset": 0.0
+          }
+        },
+        {
+          "biome": "biomeswevegone:coconino_meadow",
+          "parameters": {
+            "temperature": [
+              -0.45,
+              -0.15
+            ],
+            "humidity": [
+              -1.0,
+              -0.1
+            ],
+            "continentalness": [
+              -0.19,
+              1.0
+            ],
+            "erosion": [
+              -1.0,
+              1.0
+            ],
+            "depth": [
+              1.0,
+              1.0
+            ],
+            "weirdness": [
+              -1.0,
+              1.0
+            ],
+            "offset": 0.0
+          }
+        },
+        {
+          "biome": "biomeswevegone:crag_gardens",
+          "parameters": {
+            "temperature": [
+              0.2,
+              0.55
+            ],
+            "humidity": [
+              0.1,
+              1.0
+            ],
+            "continentalness": [
+              -0.19,
+              1.0
+            ],
+            "erosion": [
+              -1.0,
+              1.0
+            ],
+            "depth": [
+              1.0,
+              1.0
+            ],
+            "weirdness": [
+              -1.0,
+              1.0
+            ],
+            "offset": 0.0
+          }
+        },
+        {
+          "biome": "biomeswevegone:cypress_wetlands",
+          "parameters": {
+            "temperature": [
+              -0.45,
+              0.2
+            ],
+            "humidity": [
+              -1.0,
+              1.0
+            ],
+            "continentalness": [
+              -0.11,
+              1.0
+            ],
+            "erosion": [
+              0.55,
+              1.0
+            ],
+            "depth": [
+              1.0,
+              1.0
+            ],
+            "weirdness": [
+              -1.0,
+              1.0
+            ],
+            "offset": 0.0
+          }
+        },
+        {
+          "biome": "biomeswevegone:dacite_ridges",
+          "parameters": {
+            "temperature": [
+              -0.45,
+              0.2
+            ],
+            "humidity": [
+              0.1,
+              1.0
+            ],
+            "continentalness": [
+              -0.19,
+              1.0
+            ],
+            "erosion": [
+              -1.0,
+              1.0
+            ],
+            "depth": [
+              1.0,
+              1.0
+            ],
+            "weirdness": [
+              -1.0,
+              1.0
+            ],
+            "offset": 0.0
+          }
+        },
+        {
+          "biome": "biomeswevegone:howling_peaks",
+          "parameters": {
+            "temperature": [
+              -1.0,
+              0.55
+            ],
+            "humidity": [
+              -0.35,
+              1.0
+            ],
+            "continentalness": [
+              -0.19,
+              1.0
+            ],
+            "erosion": [
+              -1.0,
+              -0.375
+            ],
+            "depth": [
+              1.0,
+              1.0
+            ],
+            "weirdness": [
+              -1.0,
+              1.0
+            ],
+            "offset": 0.0
+          }
+        },
+        {
+          "biome": "biomeswevegone:redwood_thicket",
+          "parameters": {
+            "temperature": [
+              0.2,
+              0.55
+            ],
+            "humidity": [
+              -0.1,
+              0.3
+            ],
+            "continentalness": [
+              -0.11,
+              1.0
+            ],
+            "erosion": [
+              -1.0,
+              0.05
+            ],
+            "depth": [
+              1.0,
+              1.0
+            ],
+            "weirdness": [
+              -1.0,
+              1.0
+            ],
+            "offset": 0.0
+          }
+        },
+        {
+          "biome": "biomeswevegone:rugged_badlands",
+          "parameters": {
+            "temperature": [
+              0.55,
+              1.0
+            ],
+            "humidity": [
+              -0.35,
+              -0.1
+            ],
+            "continentalness": [
+              -0.19,
+              1.0
+            ],
+            "erosion": [
+              -1.0,
+              1.0
+            ],
+            "depth": [
+              1.0,
+              1.0
+            ],
+            "weirdness": [
+              -1.0,
+              1.0
+            ],
+            "offset": 0.0
+          }
+        },
+        {
+          "biome": "biomeswevegone:sierra_badlands",
+          "parameters": {
+            "temperature": [
+              0.2,
+              1.0
+            ],
+            "humidity": [
+              -1.0,
+              0.1
+            ],
+            "continentalness": [
+              -0.19,
+              1.0
+            ],
+            "erosion": [
+              -1.0,
+              0.05
+            ],
+            "depth": [
+              1.0,
+              1.0
+            ],
+            "weirdness": [
+              -1.0,
+              1.0
+            ],
+            "offset": 0.0
+          }
+        },
+        {
+          "biome": "biomeswevegone:white_mangrove_marshes",
+          "parameters": {
+            "temperature": [
+              0.2,
+              1.0
+            ],
+            "humidity": [
+              -1.0,
+              1.0
+            ],
+            "continentalness": [
+              -0.11,
+              1.0
+            ],
+            "erosion": [
+              0.55,
+              1.0
+            ],
+            "depth": [
+              1.0,
+              1.0
+            ],
+            "weirdness": [
+              -1.0,
+              1.0
+            ],
+            "offset": 0.0
+          }
+        }
+      ]
     },
     "settings": "minecraft:overworld"
   }
