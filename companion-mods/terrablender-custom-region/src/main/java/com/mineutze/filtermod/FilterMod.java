@@ -23,6 +23,7 @@ public class FilterMod {
                 ResourceLocation.fromNamespaceAndPath("mineutze_filter", "nether_filter"),
                 100_000_000
             ));
+            FilterEndBiomes.setup();
         });
     }
 }

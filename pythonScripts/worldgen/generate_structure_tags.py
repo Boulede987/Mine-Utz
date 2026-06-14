@@ -4,7 +4,7 @@ generate_structure_tags.py
 Reads structure_planner.xlsx (✓ cells) and writes biome tag override JSONs
 into the Paxi datapack so structures spawn in the chosen dimension biomes.
 
-Tag format (replace=false → additive, won't remove vanilla spawn biomes):
+Tag format (replace=true → restricts structures to exactly the selected biomes):
     data/<ns>/tags/worldgen/biome/<path>.json
 
 Structures that reference direct biomes (not a #tag) cannot be controlled
@@ -57,6 +57,8 @@ def load_structure_tags() -> dict[str, list[str]]:
         if not right.startswith('#'):
             continue
         tag = right[1:]           # strip '#'
+        if ':' not in tag:
+            continue              # malformed — no namespace
         result.setdefault(left, [])
         if tag not in result[left]:
             result[left].append(tag)
@@ -87,20 +89,23 @@ def load_dimension_biomes() -> dict[str, list[str]]:
     return result
 
 
-def load_structure_selections(dim_biomes: dict[str, list[str]]) -> dict[str, list[str]]:
+def load_structure_selections(dim_biomes: dict[str, list[str]]) -> tuple[dict[str, list[str]], set[str]]:
     """
     Reads structure_planner.xlsx.
-    Returns {structure_id: [biome_id, ...]} for every ✓ cell.
+    Returns:
+      selections  — {structure_id: [biome_id, ...]} for every ✓ cell
+      seen        — set of all structure_ids present in the planner
 
-    Biome columns (3+) map to the ordered biome list from the biome planner
-    for the matching dimension sheet.
+    Any structure in `seen` but not in `selections` (all ✗) gets an empty
+    biome tag written so it spawns nowhere.
     """
     if not STRUCTURE_PLANNER.exists():
         print(f'ERROR: {STRUCTURE_PLANNER} not found.')
         raise SystemExit(1)
 
-    wb = openpyxl.load_workbook(STRUCTURE_PLANNER)
+    wb   = openpyxl.load_workbook(STRUCTURE_PLANNER)
     result: dict[str, list[str]] = {}
+    seen: set[str] = set()
 
     for sheet_name in wb.sheetnames:
         ws = wb[sheet_name]
@@ -108,12 +113,13 @@ def load_structure_selections(dim_biomes: dict[str, list[str]]) -> dict[str, lis
             print(f'  WARNING: sheet "{sheet_name}" not in biome planner — skip.')
             continue
 
-        biome_ids = dim_biomes[sheet_name]   # ordered list, matches column 3, 4, ...
+        biome_ids = dim_biomes[sheet_name]
 
         for row in ws.iter_rows(min_row=2, values_only=True):
             structure_id = row[0]
             if not structure_id:
                 continue
+            seen.add(structure_id)
 
             for col_offset, biome_id in enumerate(biome_ids):
                 col_val = row[2 + col_offset] if 2 + col_offset < len(row) else None
@@ -122,7 +128,7 @@ def load_structure_selections(dim_biomes: dict[str, list[str]]) -> dict[str, lis
                     if biome_id not in result[structure_id]:
                         result[structure_id].append(biome_id)
 
-    return result
+    return result, seen
 
 
 # ---------------------------------------------------------------------------
@@ -165,11 +171,11 @@ def clean_previous(manifest: list[str]) -> None:
 # ---------------------------------------------------------------------------
 
 def main() -> None:
-    struct_tags = load_structure_tags()
-    dim_biomes  = load_dimension_biomes()
-    selections  = load_structure_selections(dim_biomes)
+    struct_tags          = load_structure_tags()
+    dim_biomes           = load_dimension_biomes()
+    selections, seen_all = load_structure_selections(dim_biomes)
 
-    # Build {tag_ref: set(biome_id)}
+    # Build {tag_ref: [biome_id, ...]} for ✓ structures
     tag_biomes: dict[str, list[str]] = {}
     skipped_no_tag: list[str] = []
 
@@ -183,6 +189,18 @@ def main() -> None:
                 if b not in tag_biomes[tag_ref]:
                     tag_biomes[tag_ref].append(b)
 
+    # Collect tags for all-✗ structures (in planner but zero ✓) → empty biome list
+    suppressed_tags: set[str] = set()
+    suppressed_structs: list[str] = []
+    for structure_id in seen_all:
+        if structure_id in selections:
+            continue                       # has ≥1 ✓, handled above
+        if structure_id not in struct_tags:
+            continue                       # no tag to override
+        suppressed_structs.append(structure_id)
+        for tag_ref in struct_tags[structure_id]:
+            suppressed_tags.add(tag_ref)
+
     if skipped_no_tag:
         print(f'  WARNING: {len(skipped_no_tag)} structure(s) marked ✓ but use direct biomes '
               f'(no tag override possible) — skipped:')
@@ -191,27 +209,43 @@ def main() -> None:
         if len(skipped_no_tag) > 10:
             print(f'    ... and {len(skipped_no_tag) - 10} more.')
 
+    if suppressed_structs:
+        print(f'  Suppressing {len(suppressed_structs)} all-✗ structure(s) '
+              f'({len(suppressed_tags)} tag(s) → empty biome list):')
+        for s in suppressed_structs[:10]:
+            print(f'    {s}')
+        if len(suppressed_structs) > 10:
+            print(f'    ... and {len(suppressed_structs) - 10} more.')
+
     # Clean old files
     manifest = load_manifest()
     clean_previous(manifest)
 
-    if not tag_biomes:
-        print('No ✓ selections found — no tag files written.')
-        save_manifest([])
-        return
-
     # Write tag files
     written: list[str] = []
+
     for tag_ref, biome_ids in sorted(tag_biomes.items()):
         out = tag_ref_to_path(tag_ref)
         out.parent.mkdir(parents=True, exist_ok=True)
-        payload = {"replace": False, "values": biome_ids}
-        out.write_text(json.dumps(payload, indent=2), encoding='utf-8')
+        out.write_text(json.dumps({"replace": True, "values": biome_ids}, indent=2), encoding='utf-8')
         written.append(str(out))
+
+    for tag_ref in sorted(suppressed_tags):
+        out = tag_ref_to_path(tag_ref)
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(json.dumps({"replace": True, "values": []}, indent=2), encoding='utf-8')
+        written.append(str(out))
+        print(f'  SUPPRESS {tag_ref}')
 
     save_manifest(written)
 
-    print(f'Wrote {len(written)} tag file(s) across {len(set(selections.keys()))} structure(s).')
+    if not written:
+        print('No structures in planner — no tag files written.')
+        return
+
+    active = len(tag_biomes)
+    suppressed = len(suppressed_tags)
+    print(f'Wrote {len(written)} tag file(s): {active} active, {suppressed} suppressed (empty).')
     for tag_ref, biome_ids in sorted(tag_biomes.items()):
         print(f'  {tag_ref}  ({len(biome_ids)} biome(s))')
 

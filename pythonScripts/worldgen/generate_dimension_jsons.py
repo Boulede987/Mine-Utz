@@ -28,7 +28,7 @@ MERGED_DATA_DIR = Path('worldgen_data') / 'merged'
 DIMENSION_DIR   = Path('minecraft/config/paxi/datapacks/mineutz/data/mineutz/dimension')
 NAMESPACE       = 'mineutz'
 
-SKIP_COLUMNS = {'Overworld'}
+SKIP_COLUMNS = {'Overworld', 'Nether', 'End'}  # handled by TerraBlender companion mod
 CHECK_MARK   = '✓'
 ALL_SECTIONS = ['surface', 'underground', 'caves', 'deep']
 

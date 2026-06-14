@@ -10,7 +10,7 @@ from .paths import (
     EXTRACT_BIOME_BLOCKS, EXTRACT_ITEM_TAGS, EXTRACT_ENTITY_TEXTURES,
     EXTRACT_ITEM_TEXTURES, EXTRACT_DIMENSION_BIOMES, EXTRACT_FROM_LOG,
     GENERATE_SQL, CHECK_CONSISTENCY, EXPORT_TO_NEO4J,
-    EXTRACT_NOISE, SCAN_TERRABLENDER, PARSE_BOP_NOISE, PARSE_BWG_NOISE, EXTRACT_PREHISTORIC_EXPANSION,
+    EXTRACT_NOISE, SCAN_TERRABLENDER, PARSE_BOP_NOISE, PARSE_BWG_NOISE, PARSE_NULLSCAPE, EXTRACT_PREHISTORIC_EXPANSION,
     CREATE_MINEUTZ_OCEANS, COPY_BIOME,
     MERGE_BIOME_PARAMETERS, COMPLETE_BIOME_PLANNER, GENERATE_FILTER_REGION,
     GENERATE_DIMENSION_JSONS,
@@ -119,6 +119,8 @@ def step_bop_noise():
 def step_bwg_noise():
     return run_script(PARSE_BWG_NOISE, "Oh The Biomes We've Gone noise -> worldgen_data/biomeswevegone.json")
 
+def step_nullscape():
+    return run_script(PARSE_NULLSCAPE, "Nullscape End biomes -> worldgen_data/nullscape.json")
 
 def step_prehistoric_expansion():
     return run_script(EXTRACT_PREHISTORIC_EXPANSION, "Shineals Prehistoric Expansion -> worldgen_data/shineals_prehistoric_expansion.json")
@@ -166,6 +168,8 @@ def step_worldgen_sequence():
         failures.append("BoP noise")
     if not run_script(PARSE_BWG_NOISE, "Oh The Biomes We've Gone noise params"):
         failures.append("BWG noise")
+    if not run_script(PARSE_NULLSCAPE, "Nullscape End biomes"):
+        failures.append("Nullscape")
     if not run_script(EXTRACT_PREHISTORIC_EXPANSION, "Shineals Prehistoric Expansion"):
         failures.append("Prehistoric Expansion")
     if not run_script(MERGE_BIOME_PARAMETERS, "Merge biome params → worldgen_data/merged/"):
@@ -247,6 +251,7 @@ STEPS = [
     ("17b","Auto-scan jars: nether/end biomes from new mods (skips bop/bwg)", step_scan_terrablender),
     ("18", "BiomesOPlenty noise params",                step_bop_noise),
     ("19", "Oh The Biomes We've Gone noise params",     step_bwg_noise),
+    ("19b","Nullscape End biomes",                     step_nullscape),
     ("20", "Shineals Prehistoric Expansion biomes",    step_prehistoric_expansion),
     ("20b","Create mineutz: ocean copies (once per MC version)", step_create_mineutz_oceans),
     ("20c","Copy any biome into mineutz: namespace",            step_copy_biome),
