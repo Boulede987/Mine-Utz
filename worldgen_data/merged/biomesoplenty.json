@@ -3922,6 +3922,25 @@
       "underground": [],
       "caves": [],
       "deep": []
+    },
+    "minecraft:the_end": {
+      "highlands": [
+        {
+          "biome": "biomesoplenty:end_corruption",
+          "weight": 3
+        },
+        {
+          "biome": "biomesoplenty:end_reef",
+          "weight": 6
+        },
+        {
+          "biome": "biomesoplenty:end_wilds",
+          "weight": 9
+        }
+      ],
+      "midlands": [],
+      "edge": [],
+      "islands": []
     }
   }
 }

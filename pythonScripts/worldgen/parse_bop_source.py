@@ -38,6 +38,28 @@ def _entry(biome: str, temp, hum, cont, erosion, depth, weird, offset) -> dict:
     }}
 
 
+# ── End biomes ──────────────────────────────────────────────────────────────
+# Decoded from ModBiomes.setupTerraBlender() bytecode.
+# Uses EndBiomeRegistry.registerHighlandsBiome(key, weight) — no noise params.
+_END_ENTRIES_RAW = [
+    # (biome_id, placement_type, weight)
+    ('biomesoplenty:end_wilds',      'highlands', 9),
+    ('biomesoplenty:end_reef',       'highlands', 6),
+    ('biomesoplenty:end_corruption', 'highlands', 3),
+]
+
+
+def collect_end_entries() -> dict:
+    """Returns {placement_type: [{biome, weight}]} for minecraft:the_end."""
+    sections: dict = {'highlands': [], 'midlands': [], 'edge': [], 'islands': []}
+    for biome, placement, weight in _END_ENTRIES_RAW:
+        sections[placement].append({'biome': biome, 'weight': weight})
+    for entries in sections.values():
+        entries.sort(key=lambda e: e['biome'])
+    return sections
+
+
+# ── Nether biomes ────────────────────────────────────────────────────────────
 # Decoded from BOPNetherRegionCommon and BOPNetherRegionRare class bytecode.
 # addBiome(consumer, temp, hum, cont, erosion, depth, weirdness, offset, biome)
 # All use Climate.Parameter.point(x) → stored as [x, x].
@@ -111,7 +133,8 @@ def group_by_section(entries: list) -> dict:
     return sections
 
 
-def write_output(overworld_sections: dict, nether_sections: dict, namespace_label: str) -> None:
+def write_output(overworld_sections: dict, nether_sections: dict,
+                 end_sections: dict, namespace_label: str) -> None:
     OUTPUT_DIR.mkdir(exist_ok=True)
     path = OUTPUT_DIR / f'{namespace_label}.json'
 
@@ -123,13 +146,17 @@ def write_output(overworld_sections: dict, nether_sections: dict, namespace_labe
 
     dims['minecraft:overworld'] = overworld_sections
     dims['minecraft:nether']    = nether_sections
+    dims['minecraft:the_end']   = end_sections
     output = {'namespace': namespace_label, 'dimensions': dims}
 
     ow_count = len({e['biome'] for s in overworld_sections.values() for e in s})
     ne_count = len({e['biome'] for s in nether_sections.values()    for e in s})
+    en_count = len({e['biome'] for s in end_sections.values()       for e in s})
     print(f"BiomesOPlenty overworld: {ow_count} unique biomes")
     print(f"BiomesOPlenty nether:    {ne_count} unique biomes — "
           f"{', '.join(e['biome'].split(':')[1] for s in nether_sections.values() for e in s if e['biome'].startswith('biomesoplenty:'))}")
+    print(f"BiomesOPlenty end:       {en_count} unique biomes — "
+          f"{', '.join(e['biome'].split(':')[1] for s in end_sections.values() for e in s)}")
     path.write_text(json.dumps(output, indent=2), encoding='utf-8')
     print(f"Written -> {path}")
 
@@ -142,7 +169,9 @@ def main():
     ne_entries  = collect_nether_entries()
     ne_sections = group_by_section(ne_entries)
 
-    write_output(ow_sections, ne_sections, 'biomesoplenty')
+    en_sections = collect_end_entries()
+
+    write_output(ow_sections, ne_sections, en_sections, 'biomesoplenty')
 
 
 main()

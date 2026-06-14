@@ -10,7 +10,7 @@ from .paths import (
     EXTRACT_BIOME_BLOCKS, EXTRACT_ITEM_TAGS, EXTRACT_ENTITY_TEXTURES,
     EXTRACT_ITEM_TEXTURES, EXTRACT_DIMENSION_BIOMES, EXTRACT_FROM_LOG,
     GENERATE_SQL, CHECK_CONSISTENCY, EXPORT_TO_NEO4J,
-    EXTRACT_NOISE, PARSE_BOP_NOISE, PARSE_BWG_NOISE, EXTRACT_PREHISTORIC_EXPANSION,
+    EXTRACT_NOISE, SCAN_TERRABLENDER, PARSE_BOP_NOISE, PARSE_BWG_NOISE, EXTRACT_PREHISTORIC_EXPANSION,
     CREATE_MINEUTZ_OCEANS, COPY_BIOME,
     MERGE_BIOME_PARAMETERS, COMPLETE_BIOME_PLANNER, GENERATE_FILTER_REGION,
     GENERATE_DIMENSION_JSONS,
@@ -110,6 +110,9 @@ def step_worldgen_noise():
     pause("Run  /dump_all_noise  in-game, then wait for the success message.")
     return run_script(EXTRACT_NOISE, "Extract noise -> worldgen_data/")
 
+def step_scan_terrablender():
+    return run_script(SCAN_TERRABLENDER, "Auto-scan jars for TerraBlender nether/end biomes (new mods)")
+
 def step_bop_noise():
     return run_script(PARSE_BOP_NOISE, "BiomesOPlenty noise -> worldgen_data/biomesoplenty.json")
 
@@ -143,6 +146,51 @@ def step_generate_structure_tags():
 
 def step_generate_filter_region():
     return run_script(GENERATE_FILTER_REGION, "Generate FilterRegion.java from Overworld ✓ biomes")
+
+
+def step_worldgen_sequence():
+    """End-to-end worldgen: dump → extract → parse → merge → planner → filter region."""
+    section("STEP: World gen sequence")
+    print("  Before starting:")
+    print("    1. Load your world and visit the Nether (biome sampling requires it).")
+    print("    2. Run  /dump_all_noise  in-game and wait for the success message.")
+    pause("  Press Enter when /dump_all_noise is complete...")
+
+    failures = []
+
+    if not run_script(EXTRACT_NOISE, "Extract noise → worldgen_data/"):
+        failures.append("noise extraction")
+    if not run_script(SCAN_TERRABLENDER, "Auto-scan jars for TerraBlender nether/end biomes"):
+        failures.append("terrablender scan")
+    if not run_script(PARSE_BOP_NOISE, "BiomesOPlenty noise params"):
+        failures.append("BoP noise")
+    if not run_script(PARSE_BWG_NOISE, "Oh The Biomes We've Gone noise params"):
+        failures.append("BWG noise")
+    if not run_script(EXTRACT_PREHISTORIC_EXPANSION, "Shineals Prehistoric Expansion"):
+        failures.append("Prehistoric Expansion")
+    if not run_script(MERGE_BIOME_PARAMETERS, "Merge biome params → worldgen_data/merged/"):
+        failures.append("merge")
+    if not run_script(COMPLETE_BIOME_PLANNER, "Complete dimension_biome_planner.xlsx"):
+        failures.append("complete planner")
+
+    if failures:
+        print(f"\n  !! Failed steps: {', '.join(failures)}")
+        print("     Fix the issues above before continuing to filter region generation.")
+        return False
+
+    print("\n  ── Review ──────────────────────────────────────────────────────────")
+    print("  Open dimension_biome_planner.xlsx and mark ✓ or ✗ for any new biomes.")
+    print("  CLOSE Excel completely before pressing Enter.")
+    pause("  Press Enter when xlsx is saved and closed...")
+
+    if not run_script(GENERATE_FILTER_REGION, "Generate filter region Java files"):
+        failures.append("filter region")
+        print("  !! Filter region generation failed.")
+        return False
+
+    print("\n  Worldgen sequence complete.")
+    print("  Rebuild the companion mod (deployMod in IntelliJ) to apply changes.")
+    return True
 
 def step_full_pipeline():
     section("FULL PIPELINE")
@@ -193,7 +241,10 @@ STEPS = [
     ("15", "Export to Neo4j",                           step_neo4j_export),
     ("16", "Launch web explorer  (opens browser)",      step_web_explorer),
     (None, "World gen",                                 None),
+    ("17s","World gen sequence  (dump → parse → merge → planner → filter region)", step_worldgen_sequence),
+    (None, "World gen — individual steps",              None),
     ("17", "All noise params -> worldgen_data/  (run /dump_all_noise first; visit nether beforehand)", step_worldgen_noise),
+    ("17b","Auto-scan jars: nether/end biomes from new mods (skips bop/bwg)", step_scan_terrablender),
     ("18", "BiomesOPlenty noise params",                step_bop_noise),
     ("19", "Oh The Biomes We've Gone noise params",     step_bwg_noise),
     ("20", "Shineals Prehistoric Expansion biomes",    step_prehistoric_expansion),

@@ -32,12 +32,14 @@ PLANNER_FILE    = Path('dimension_biome_planner.xlsx')
 SHEET_NAME      = 'Biome Planner'
 CROSS_MARK      = '✗'
 ALL_SECTIONS    = ['surface', 'underground', 'caves', 'deep']
+END_SECTIONS    = ['highlands', 'midlands', 'edge', 'islands']
 
-REQUIRED_DIMENSION_COLUMNS = ['Nether']
+REQUIRED_DIMENSION_COLUMNS = ['Nether', 'End']
 
 # When auto-adding a column, biomes found under this dimension key get ✓ by default.
 COLUMN_DIMENSION_AFFINITY = {
     'Nether': 'minecraft:nether',
+    'End':    'minecraft:the_end',
 }
 
 NAMESPACE_TO_SOURCE = {
@@ -114,7 +116,7 @@ def load_affinity_biomes() -> dict[str, set[str]]:
         for dim_id, sections in data['dimensions'].items():
             if dim_id not in result:
                 result[dim_id] = set()
-            for entries in sections.values():
+            for section_name, entries in sections.items():
                 for entry in entries:
                     result[dim_id].add(entry['biome'])
     return result
@@ -212,6 +214,16 @@ def load_all_biomes() -> list[dict]:
                             'namespace':  namespace,
                             'parameters': entry['parameters'],
                         })
+            for section_name in END_SECTIONS:
+                for entry in dimension_sections.get(section_name, []):
+                    biome_id = entry['biome']
+                    if biome_id not in seen:
+                        seen.add(biome_id)
+                        biomes.append({
+                            'biome':      biome_id,
+                            'namespace':  namespace,
+                            'parameters': None,
+                        })
     return biomes
 
 
@@ -299,11 +311,13 @@ def main() -> None:
         target_row_number = insert_at + index
         namespace  = biome_entry['namespace']
         parameters = biome_entry['parameters']
+        temp_lbl   = temperature_label(parameters['temperature']) if parameters else 'N/A'
+        hum_lbl    = humidity_label(parameters['humidity'])       if parameters else 'N/A'
         row_values = [
             biome_entry['biome'],
             NAMESPACE_TO_SOURCE.get(namespace, namespace),
-            temperature_label(parameters['temperature']),
-            humidity_label(parameters['humidity']),
+            temp_lbl,
+            hum_lbl,
         ] + [CROSS_MARK] * dimension_column_count
 
         for column_index, value in enumerate(row_values, start=1):

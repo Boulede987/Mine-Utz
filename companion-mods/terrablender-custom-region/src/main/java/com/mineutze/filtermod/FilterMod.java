@@ -19,6 +19,10 @@ public class FilterMod {
                 ResourceLocation.fromNamespaceAndPath("mineutze_filter", "overworld_filter"),
                 100_000_000
             ));
+            Regions.register(new FilterNetherRegion(
+                ResourceLocation.fromNamespaceAndPath("mineutze_filter", "nether_filter"),
+                100_000_000
+            ));
         });
     }
 }

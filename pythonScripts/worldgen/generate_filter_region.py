@@ -6,6 +6,7 @@ region Java files + FilterMod.java into the companion mod.
 
 Overworld → FilterRegion.java        (RegionType.OVERWORLD, always)
 Nether    → FilterNetherRegion.java  (RegionType.NETHER, only if ✓ biomes exist)
+End       → FilterEndBiomes.java     (EndBiomeRegistry calls, only if ✓ biomes exist)
 FilterMod.java is regenerated to register whichever regions were written.
 
 Run after steps 21 (merge) and 22 (complete planner).
@@ -26,8 +27,10 @@ PLANNER_FILE     = Path('dimension_biome_planner.xlsx')
 SHEET_NAME       = 'Biome Planner'
 OVERWORLD_HEADER = 'Overworld'
 NETHER_HEADER    = 'Nether'
+END_HEADER       = 'End'
 CHECK_MARK       = '✓'
 MERGED_DATA_DIR  = Path('worldgen_data') / 'merged'
+END_SECTIONS     = ['highlands', 'midlands', 'edge', 'islands']
 
 MOD_SRC = Path(
     'companion-mods/terrablender-custom-region'
@@ -35,6 +38,7 @@ MOD_SRC = Path(
 )
 FILTER_REGION        = MOD_SRC / 'FilterRegion.java'
 FILTER_NETHER_REGION = MOD_SRC / 'FilterNetherRegion.java'
+FILTER_END_BIOMES    = MOD_SRC / 'FilterEndBiomes.java'
 FILTER_MOD           = MOD_SRC / 'FilterMod.java'
 
 PARAMETER_AXES = ['temperature', 'humidity', 'continentalness', 'erosion', 'depth', 'weirdness']
@@ -63,6 +67,27 @@ public class {class_name} extends Region {{
     @Override
     public void addBiomes(Registry<Biome> registry, Consumer<Pair<Climate.ParameterPoint, ResourceKey<Biome>>> mapper) {{
 {body}
+    }}
+}}
+"""
+
+_END_BIOMES_TEMPLATE = """\
+package com.mineutze.filtermod;
+
+import net.minecraft.core.registries.Registries;
+import net.minecraft.resources.ResourceKey;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.level.biome.Biome;
+import terrablender.api.EndBiomeRegistry;
+
+public class FilterEndBiomes {{
+
+    public static void setup() {{
+{calls}
+    }}
+
+    private static ResourceKey<Biome> key(String ns, String path) {{
+        return ResourceKey.create(Registries.BIOME, ResourceLocation.fromNamespaceAndPath(ns, path));
     }}
 }}
 """
@@ -97,6 +122,7 @@ _REGISTRATION = (
     '                100_000_000\n'
     '            ));'
 )
+_END_SETUP_CALL = '            FilterEndBiomes.setup();'
 
 
 # ---------------------------------------------------------------------------
@@ -134,6 +160,23 @@ def load_merged_params() -> dict:
                 for entry in dim_sections.get(section, []):
                     if entry['biome'] not in lookup:
                         lookup[entry['biome']] = entry['parameters']
+    return lookup
+
+
+def load_merged_end_data() -> dict:
+    """{biome_id: {placement_type, weight}} from minecraft:the_end across all merged files."""
+    if not MERGED_DATA_DIR.exists():
+        return {}
+
+    lookup: dict = {}
+    for json_file in sorted(MERGED_DATA_DIR.glob('*.json')):
+        data = json.loads(json_file.read_text(encoding='utf-8'))
+        end_sections = data.get('dimensions', {}).get('minecraft:the_end', {})
+        for placement_type in END_SECTIONS:
+            for entry in end_sections.get(placement_type, []):
+                biome = entry['biome']
+                if biome not in lookup:
+                    lookup[biome] = {'placement_type': placement_type, 'weight': entry['weight']}
     return lookup
 
 
@@ -186,6 +229,32 @@ def build_region(biome_ids: list[str], all_params: dict,
     return len(blocks)
 
 
+def build_end_biomes(biome_ids: list[str], end_data: dict, dest: Path) -> int:
+    """Write FilterEndBiomes.java. Returns number of biomes written."""
+    calls   = []
+    missing = []
+    for biome_id in biome_ids:
+        if biome_id not in end_data:
+            missing.append(biome_id)
+            continue
+        info     = end_data[biome_id]
+        ptype    = info['placement_type']
+        weight   = info['weight']
+        ns, path = biome_id.split(':', 1)
+        method   = f'register{ptype.capitalize()}Biome'
+        calls.append(f'        EndBiomeRegistry.{method}(key("{ns}", "{path}"), {weight});')
+
+    if missing:
+        print(f'  WARNING: {len(missing)} End biome(s) not in merged data — skipped:')
+        for m in missing:
+            print(f'    - {m}')
+
+    java = _END_BIOMES_TEMPLATE.format(calls='\n'.join(calls))
+    dest.write_text(java, encoding='utf-8')
+    print(f'  Wrote {len(calls)} biome(s) → {dest.name}')
+    return len(calls)
+
+
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
@@ -200,12 +269,14 @@ def main() -> None:
 
     overworld_biomes = load_column_biomes(ws, headers, OVERWORLD_HEADER)
     nether_biomes    = load_column_biomes(ws, headers, NETHER_HEADER)
+    end_biomes       = load_column_biomes(ws, headers, END_HEADER)
 
     if not overworld_biomes:
         print('No biomes marked ✓ in Overworld column — nothing to write.')
         raise SystemExit(0)
 
     all_params = load_merged_params()
+    end_data   = load_merged_end_data()
 
     # Overworld region (always)
     build_region(overworld_biomes, all_params, 'FilterRegion', 'OVERWORLD', FILTER_REGION)
@@ -218,6 +289,14 @@ def main() -> None:
         FILTER_NETHER_REGION.unlink()
         print(f'  Removed {FILTER_NETHER_REGION.name} (no Nether biomes selected).')
 
+    # End biomes (only if biomes exist)
+    has_end = bool(end_biomes)
+    if has_end:
+        build_end_biomes(end_biomes, end_data, FILTER_END_BIOMES)
+    elif FILTER_END_BIOMES.exists():
+        FILTER_END_BIOMES.unlink()
+        print(f'  Removed {FILTER_END_BIOMES.name} (no End biomes selected).')
+
     # FilterMod.java — register whichever regions exist
     registrations_list = [
         _REGISTRATION.format(class_name='FilterRegion', loc='overworld_filter'),
@@ -226,9 +305,17 @@ def main() -> None:
         registrations_list.append(
             _REGISTRATION.format(class_name='FilterNetherRegion', loc='nether_filter'),
         )
+    if has_end:
+        registrations_list.append(_END_SETUP_CALL)
+
+    dims_label = ' + '.join(filter(None, [
+        'overworld',
+        'nether' if has_nether else '',
+        'end'    if has_end    else '',
+    ]))
     registrations = '\n'.join(registrations_list)
     FILTER_MOD.write_text(_MOD_TEMPLATE.format(registrations=registrations), encoding='utf-8')
-    print(f'  Wrote FilterMod.java ({"overworld + nether" if has_nether else "overworld only"})')
+    print(f'  Wrote FilterMod.java ({dims_label})')
 
     print('\nRebuild the companion mod (deployMod in IntelliJ) to apply.')
 

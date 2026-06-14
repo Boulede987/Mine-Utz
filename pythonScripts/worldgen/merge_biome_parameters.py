@@ -20,6 +20,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 WORLDGEN_DATA_DIR = Path('worldgen_data')
 MERGED_OUTPUT_DIR = WORLDGEN_DATA_DIR / 'merged'
 PARAMETER_AXES    = ['temperature', 'humidity', 'continentalness', 'erosion', 'depth', 'weirdness']
+END_SECTIONS      = {'highlands', 'midlands', 'edge', 'islands'}
 
 
 def merge_parameter_entries(parameter_entries: list[dict]) -> dict:
@@ -49,6 +50,16 @@ def merge_section(entries: list[dict]) -> list[dict]:
     return merged_entries
 
 
+def merge_end_section(entries: list[dict]) -> list[dict]:
+    """Deduplicate End entries by biome ID; keep highest weight on collision."""
+    by_biome: dict[str, int] = {}
+    for entry in entries:
+        biome  = entry['biome']
+        weight = entry.get('weight', 1)
+        by_biome[biome] = max(by_biome.get(biome, 0), weight)
+    return [{'biome': b, 'weight': w} for b, w in sorted(by_biome.items())]
+
+
 def process_namespace_file(source_path: Path) -> tuple[str, dict] | None:
     data = json.loads(source_path.read_text(encoding='utf-8'))
     if not isinstance(data, dict) or 'namespace' not in data:
@@ -59,7 +70,10 @@ def process_namespace_file(source_path: Path) -> tuple[str, dict] | None:
     for dimension_id, sections in data.get('dimensions', {}).items():
         output['dimensions'][dimension_id] = {}
         for section_name, entries in sections.items():
-            merged = merge_section(entries)
+            if section_name in END_SECTIONS:
+                merged = merge_end_section(entries)
+            else:
+                merged = merge_section(entries)
             output['dimensions'][dimension_id][section_name] = merged
             if merged:
                 print(f'  {namespace}  {dimension_id}  {section_name}: {len(entries)} -> {len(merged)} entries')

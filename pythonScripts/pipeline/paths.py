@@ -24,6 +24,7 @@ EXPORT_TO_NEO4J         = SCRIPTS / "export_to_neo4j.py"
 
 # worldgen
 EXTRACT_NOISE                = SCRIPTS / "worldgen/extract_noise_to_json.py"
+SCAN_TERRABLENDER            = SCRIPTS / "worldgen/scan_terrablender.py"
 PARSE_BOP_NOISE              = SCRIPTS / "worldgen/parse_bop_source.py"
 PARSE_BWG_NOISE              = SCRIPTS / "worldgen/parse_bwg_source.py"
 EXTRACT_PREHISTORIC_EXPANSION = SCRIPTS / "worldgen/extract_prehistoric_expansion.py"

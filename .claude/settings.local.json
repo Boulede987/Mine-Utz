@@ -33,7 +33,11 @@
       "Bash(mkdir -p \"C:\\\\Users\\\\alixm\\\\AppData\\\\Local\\\\Temp\\\\bop_decompile\")",
       "Read(//c/Users/alixm/AppData/Local/Temp/bop_decompile/**)",
       "Bash(javap -p -c \"C:\\\\Users\\\\alixm\\\\AppData\\\\Local\\\\Temp\\\\bop_decompile\\\\biomesoplenty\\\\worldgen\\\\BOPNetherRegionCommon.class\")",
-      "Bash(javap *)"
+      "Bash(javap *)",
+      "Bash(dir minecraft/mods/)",
+      "Bash(findstr /i \"end aether\")",
+      "Bash(findstr /i \"bwg biomes\")",
+      "Bash(biomes\")"
     ]
   }
 }
