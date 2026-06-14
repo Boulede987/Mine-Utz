@@ -193,7 +193,7 @@ STEPS = [
     ("15", "Export to Neo4j",                           step_neo4j_export),
     ("16", "Launch web explorer  (opens browser)",      step_web_explorer),
     (None, "World gen",                                 None),
-    ("17", "All noise params -> worldgen_data/  (run /dump_all_noise first)", step_worldgen_noise),
+    ("17", "All noise params -> worldgen_data/  (run /dump_all_noise first; visit nether beforehand)", step_worldgen_noise),
     ("18", "BiomesOPlenty noise params",                step_bop_noise),
     ("19", "Oh The Biomes We've Gone noise params",     step_bwg_noise),
     ("20", "Shineals Prehistoric Expansion biomes",    step_prehistoric_expansion),

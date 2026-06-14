@@ -1,4 +1,4 @@
-// KubeJS Registry Dumper - 1.21.1 / NeoForge / KubeJS 6
+﻿// KubeJS Registry Dumper - 1.21.1 / NeoForge / KubeJS 6
 // Place in: kubejs/server_scripts/dump_registries.js
 // Reload with: /kubejs reload server_scripts
 //
@@ -46,7 +46,7 @@ ServerEvents.commandRegistry(event => {
         lines.push(`\n===== ${label} DUMP END (${total} total) =====`);
 
         console.log(lines.join('\n'));
-        ctx.source.sendSuccess(() => Component.literal(`§aDumped ${total} ${label.toLowerCase()}s to logs/latest.log`), false);
+        ctx.source.sendSuccess(Component.literal(`§aDumped ${total} ${label.toLowerCase()}s to logs/latest.log`), false);
     }
 
     function runDimDump(ctx) {
@@ -70,7 +70,7 @@ ServerEvents.commandRegistry(event => {
         lines.push(`\n===== DIMENSION DUMP END (${total} total) =====`);
 
         console.log(lines.join('\n'));
-        ctx.source.sendSuccess(() => Component.literal(`§aDumped ${total} dimensions to logs/latest.log`), false);
+        ctx.source.sendSuccess(Component.literal(`§aDumped ${total} dimensions to logs/latest.log`), false);
     }
 
     function runEntityLootDump(ctx) {
@@ -104,7 +104,7 @@ ServerEvents.commandRegistry(event => {
 
         lines.push(`\n===== ENTITY LOOTTABLE DUMP END (${total} total, ${missing} with no loot table) =====`);
         console.log(lines.join('\n'));
-        ctx.source.sendSuccess(() => Component.literal(`§aDumped ${total} entity loot tables to logs/latest.log`), false);
+        ctx.source.sendSuccess(Component.literal(`§aDumped ${total} entity loot tables to logs/latest.log`), false);
     }
 
     function runConsistencyCheck(ctx) {
@@ -178,7 +178,7 @@ ServerEvents.commandRegistry(event => {
 
         lines.push(`\n===== CONSISTENCY CHECK END (${issues} warnings) =====`);
         console.log(lines.join('\n'));
-        ctx.source.sendSuccess(() => Component.literal(
+        ctx.source.sendSuccess(Component.literal(
             issues > 0
                 ? `§e${issues} consistency warnings — check logs/latest.log`
                 : `§aNo consistency issues found`
@@ -222,7 +222,7 @@ ServerEvents.commandRegistry(event => {
 
         lines.push(`===== FOOD STATS DUMP END (${total} total, ${errors} errors) =====`);
         console.log(lines.join('\n'));
-        ctx.source.sendSuccess(() => Component.literal(`§aDumped ${total} food items (${errors} errors)`), false);
+        ctx.source.sendSuccess(Component.literal(`§aDumped ${total} food items (${errors} errors)`), false);
     }
 
     function runToolStatsDump(ctx) {
@@ -252,7 +252,7 @@ ServerEvents.commandRegistry(event => {
 
         lines.push(`===== TOOL STATS DUMP END (${total} total, ${errors} errors) =====`);
         console.log(lines.join('\n'));
-        ctx.source.sendSuccess(() => Component.literal(`§aDumped ${total} tool/weapon items (${errors} errors)`), false);
+        ctx.source.sendSuccess(Component.literal(`§aDumped ${total} tool/weapon items (${errors} errors)`), false);
     }
 
     function runArmorStatsDump(ctx) {
@@ -283,7 +283,7 @@ ServerEvents.commandRegistry(event => {
 
         lines.push(`===== ARMOR STATS DUMP END (${total} total, ${errors} errors) =====`);
         console.log(lines.join('\n'));
-        ctx.source.sendSuccess(() => Component.literal(`§aDumped ${total} armor items (${errors} errors)`), false);
+        ctx.source.sendSuccess(Component.literal(`§aDumped ${total} armor items (${errors} errors)`), false);
     }
 
     event.register(Commands.literal('dump_structures').requires(src => src.hasPermission(2)).executes(ctx => {
@@ -327,7 +327,7 @@ ServerEvents.commandRegistry(event => {
 
         lines.push('===== DEBUG END =====');
         console.log(lines.join('\n'));
-        ctx.source.sendSuccess(() => Component.literal('§aDebug done, check logs'), false);
+        ctx.source.sendSuccess(Component.literal('§aDebug done, check logs'), false);
     }
 
     event.register(Commands.literal('dump_debug').requires(src => src.hasPermission(2)).executes(ctx => {
@@ -416,7 +416,7 @@ ServerEvents.commandRegistry(event => {
             runToolStatsDump(ctx);
             runArmorStatsDump(ctx);
             runConsistencyCheck(ctx);
-            ctx.source.sendSuccess(() => Component.literal(`§aDumped everything to logs/latest.log`), false);
+            ctx.source.sendSuccess(Component.literal(`§aDumped everything to logs/latest.log`), false);
         } catch(e) { ctx.source.sendFailure(Component.literal(`§cFailed: ${e}`)); }
         return 1;
     }));

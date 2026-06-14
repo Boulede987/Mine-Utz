@@ -1,9 +1,12 @@
 """
 generate_filter_region.py
 =========================
-Reads the Overworld column of dimension_biome_planner.xlsx (✓ rows only),
-looks up merged climate parameters, and writes the addBiomes() method body
-directly into FilterRegion.java.
+Reads dimension_biome_planner.xlsx ✓ columns and generates TerraBlender
+region Java files + FilterMod.java into the companion mod.
+
+Overworld → FilterRegion.java        (RegionType.OVERWORLD, always)
+Nether    → FilterNetherRegion.java  (RegionType.NETHER, only if ✓ biomes exist)
+FilterMod.java is regenerated to register whichever regions were written.
 
 Run after steps 21 (merge) and 22 (complete planner).
 
@@ -19,18 +22,24 @@ import openpyxl
 
 sys.stdout.reconfigure(encoding='utf-8')
 
-PLANNER_FILE    = Path('dimension_biome_planner.xlsx')
-SHEET_NAME      = 'Biome Planner'
+PLANNER_FILE     = Path('dimension_biome_planner.xlsx')
+SHEET_NAME       = 'Biome Planner'
 OVERWORLD_HEADER = 'Overworld'
-CHECK_MARK      = '✓'
-MERGED_DATA_DIR = Path('worldgen_data') / 'merged'
-FILTER_REGION   = Path(
-    'companion-mods/terrablender-custom-region'
-    '/src/main/java/com/mineutze/filtermod/FilterRegion.java'
-)
-PARAMETER_AXES  = ['temperature', 'humidity', 'continentalness', 'erosion', 'depth', 'weirdness']
+NETHER_HEADER    = 'Nether'
+CHECK_MARK       = '✓'
+MERGED_DATA_DIR  = Path('worldgen_data') / 'merged'
 
-JAVA_TEMPLATE = """\
+MOD_SRC = Path(
+    'companion-mods/terrablender-custom-region'
+    '/src/main/java/com/mineutze/filtermod'
+)
+FILTER_REGION        = MOD_SRC / 'FilterRegion.java'
+FILTER_NETHER_REGION = MOD_SRC / 'FilterNetherRegion.java'
+FILTER_MOD           = MOD_SRC / 'FilterMod.java'
+
+PARAMETER_AXES = ['temperature', 'humidity', 'continentalness', 'erosion', 'depth', 'weirdness']
+
+_REGION_TEMPLATE = """\
 package com.mineutze.filtermod;
 
 import com.mojang.datafixers.util.Pair;
@@ -45,10 +54,10 @@ import terrablender.api.RegionType;
 
 import java.util.function.Consumer;
 
-public class FilterRegion extends Region {{
+public class {class_name} extends Region {{
 
-    public FilterRegion(ResourceLocation name, int weight) {{
-        super(name, RegionType.OVERWORLD, weight);
+    public {class_name}(ResourceLocation name, int weight) {{
+        super(name, RegionType.{region_type}, weight);
     }}
 
     @Override
@@ -58,38 +67,60 @@ public class FilterRegion extends Region {{
 }}
 """
 
+_MOD_TEMPLATE = """\
+package com.mineutze.filtermod;
 
-def load_overworld_biomes() -> list[str]:
-    """Return biome IDs marked ✓ in the Overworld column of the planner."""
-    if not PLANNER_FILE.exists():
-        print(f'ERROR: {PLANNER_FILE} not found.')
-        raise SystemExit(1)
+import net.minecraft.resources.ResourceLocation;
+import net.neoforged.bus.api.IEventBus;
+import net.neoforged.fml.common.Mod;
+import net.neoforged.fml.event.lifecycle.FMLCommonSetupEvent;
+import terrablender.api.Regions;
 
-    ws = openpyxl.load_workbook(PLANNER_FILE)[SHEET_NAME]
-    headers = [cell.value for cell in ws[1]]
+@Mod("mineutze_filter")
+public class FilterMod {{
 
+    public FilterMod(IEventBus modEventBus) {{
+        modEventBus.addListener(this::onCommonSetup);
+    }}
+
+    private void onCommonSetup(FMLCommonSetupEvent event) {{
+        event.enqueueWork(() -> {{
+{registrations}
+        }});
+    }}
+}}
+"""
+
+_REGISTRATION = (
+    '            Regions.register(new {class_name}(\n'
+    '                ResourceLocation.fromNamespaceAndPath("mineutze_filter", "{loc}"),\n'
+    '                100_000_000\n'
+    '            ));'
+)
+
+
+# ---------------------------------------------------------------------------
+# Loaders
+# ---------------------------------------------------------------------------
+
+def load_column_biomes(ws, headers: list, column_name: str) -> list[str]:
+    """Return biome IDs marked ✓ in the named column. Returns [] if column absent."""
     try:
-        overworld_col = headers.index(OVERWORLD_HEADER)
+        col_idx = headers.index(column_name)
     except ValueError:
-        print(f'ERROR: "{OVERWORLD_HEADER}" column not found in planner.')
-        raise SystemExit(1)
-
-    biomes = []
-    for row in ws.iter_rows(min_row=2, values_only=True):
-        biome_id = row[0]
-        if biome_id and ':' in str(biome_id) and row[overworld_col] == CHECK_MARK:
-            biomes.append(biome_id)
-    return biomes
+        return []
+    return [
+        str(row[0]) for row in ws.iter_rows(min_row=2, values_only=True)
+        if row[0] and ':' in str(row[0]) and row[col_idx] == CHECK_MARK
+    ]
 
 
 def load_merged_params() -> dict:
     """
-    Return {biome_id: parameters} across all merged namespace files.
-
+    {biome_id: parameters} across all merged namespace files.
     Section priority: surface > underground > caves > deep.
-    A biome's surface entry wins over its cave/underground entry so that
-    surface biomes (which mods also register at depth=1.0 for underground
-    binding) are not overwritten with depth=1.0 and pushed underground.
+    Surface entry wins so biomes that mods also register at depth=1.0 aren't
+    pushed underground.
     """
     if not MERGED_DATA_DIR.exists():
         print('ERROR: worldgen_data/merged/ not found. Run step 21 first.')
@@ -101,10 +132,14 @@ def load_merged_params() -> dict:
         for dim_sections in data.get('dimensions', {}).values():
             for section in ['surface', 'underground', 'caves', 'deep']:
                 for entry in dim_sections.get(section, []):
-                    if entry['biome'] not in lookup:   # first section found wins
+                    if entry['biome'] not in lookup:
                         lookup[entry['biome']] = entry['parameters']
     return lookup
 
+
+# ---------------------------------------------------------------------------
+# Formatters
+# ---------------------------------------------------------------------------
 
 def fmt_param(values: list) -> str:
     lo, hi = values[0], values[1]
@@ -128,15 +163,10 @@ def fmt_add_biome(biome_id: str, p: dict) -> str:
     )
 
 
-def main() -> None:
-    biome_ids = load_overworld_biomes()
-    if not biome_ids:
-        print('No biomes marked ✓ in the Overworld column — nothing to write.')
-        raise SystemExit(0)
-
-    all_params = load_merged_params()
-
-    blocks = []
+def build_region(biome_ids: list[str], all_params: dict,
+                 class_name: str, region_type: str, dest: Path) -> int:
+    """Write a region Java file. Returns number of biomes written."""
+    blocks  = []
     missing = []
     for biome_id in biome_ids:
         if biome_id not in all_params:
@@ -145,16 +175,62 @@ def main() -> None:
         blocks.append(fmt_add_biome(biome_id, all_params[biome_id]))
 
     if missing:
-        print(f'WARNING: {len(missing)} biome(s) not in merged data — skipped:')
+        print(f'  WARNING: {len(missing)} biome(s) not in merged data — skipped:')
         for m in missing:
-            print(f'  - {m}')
+            print(f'    - {m}')
 
     body = '\n\n'.join(blocks)
-    java = JAVA_TEMPLATE.format(body=body)
+    java = _REGION_TEMPLATE.format(class_name=class_name, region_type=region_type, body=body)
+    dest.write_text(java, encoding='utf-8')
+    print(f'  Wrote {len(blocks)} biome(s) → {dest.name}')
+    return len(blocks)
 
-    FILTER_REGION.write_text(java, encoding='utf-8')
-    print(f'Wrote {len(blocks)} biome(s) → {FILTER_REGION}')
-    print('Rebuild the companion mod (deployMod in IntelliJ) to apply.')
+
+# ---------------------------------------------------------------------------
+# Main
+# ---------------------------------------------------------------------------
+
+def main() -> None:
+    if not PLANNER_FILE.exists():
+        print(f'ERROR: {PLANNER_FILE} not found.')
+        raise SystemExit(1)
+
+    ws      = openpyxl.load_workbook(PLANNER_FILE)[SHEET_NAME]
+    headers = [cell.value for cell in ws[1]]
+
+    overworld_biomes = load_column_biomes(ws, headers, OVERWORLD_HEADER)
+    nether_biomes    = load_column_biomes(ws, headers, NETHER_HEADER)
+
+    if not overworld_biomes:
+        print('No biomes marked ✓ in Overworld column — nothing to write.')
+        raise SystemExit(0)
+
+    all_params = load_merged_params()
+
+    # Overworld region (always)
+    build_region(overworld_biomes, all_params, 'FilterRegion', 'OVERWORLD', FILTER_REGION)
+
+    # Nether region (only if biomes exist)
+    has_nether = bool(nether_biomes)
+    if has_nether:
+        build_region(nether_biomes, all_params, 'FilterNetherRegion', 'NETHER', FILTER_NETHER_REGION)
+    elif FILTER_NETHER_REGION.exists():
+        FILTER_NETHER_REGION.unlink()
+        print(f'  Removed {FILTER_NETHER_REGION.name} (no Nether biomes selected).')
+
+    # FilterMod.java — register whichever regions exist
+    registrations_list = [
+        _REGISTRATION.format(class_name='FilterRegion', loc='overworld_filter'),
+    ]
+    if has_nether:
+        registrations_list.append(
+            _REGISTRATION.format(class_name='FilterNetherRegion', loc='nether_filter'),
+        )
+    registrations = '\n'.join(registrations_list)
+    FILTER_MOD.write_text(_MOD_TEMPLATE.format(registrations=registrations), encoding='utf-8')
+    print(f'  Wrote FilterMod.java ({"overworld + nether" if has_nether else "overworld only"})')
+
+    print('\nRebuild the companion mod (deployMod in IntelliJ) to apply.')
 
 
 main()

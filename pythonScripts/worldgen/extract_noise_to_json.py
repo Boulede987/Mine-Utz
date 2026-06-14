@@ -49,7 +49,9 @@ def _strip_log_prefix(line: str) -> str:
     return re.sub(r'^\[[^\]]+\]\s+\[[^\]]+\]\s+\[[^\]]+\]:\s*', '', line)
 
 
-def depth_section(depth: list | float) -> str:
+def depth_section(depth) -> str:
+    if depth is None:
+        return 'surface'
     depth_min = depth[0] if isinstance(depth, list) else depth
     depth_max = depth[1] if isinstance(depth, list) else depth
     if depth_max <= 0.05:
@@ -84,14 +86,16 @@ def _parse_noise_data(clean: str) -> dict[str, list]:
     )
 
     if all_match:
-        raw      = json.loads(all_match.group(1).strip())
+        json_str = all_match.group(1).replace('\n', '').strip()
+        raw      = json.loads(json_str)
         dim_data = dict(raw.items())
         total    = sum(len(v) for v in dim_data.values())
         print(f'Loaded {len(dim_data)} dimension(s), {total} total entries  [/dump_all_noise]')
         return dim_data
 
     if overworld_match:
-        raw      = json.loads(overworld_match.group(1).strip())
+        json_str = overworld_match.group(1).replace('\n', '').strip()
+        raw      = json.loads(json_str)
         dim_data = {'minecraft:overworld': raw['biomes']}
         print(f'Loaded {len(dim_data["minecraft:overworld"])} entries  [/dump_overworld_noise fallback]')
         return dim_data
@@ -106,7 +110,8 @@ def _group_by_namespace(dim_data: dict) -> dict:
     for dim_id, entries in dim_data.items():
         for entry in entries:
             namespace = entry['biome'].split(':')[0]
-            section   = depth_section(entry['parameters']['depth'])
+            params    = entry.get('parameters')
+            section   = depth_section(params['depth'] if params else None)
             by_namespace[namespace][dim_id][section].append(entry)
     for namespace_dims in by_namespace.values():
         for sections in namespace_dims.values():

@@ -65,15 +65,22 @@ def group_by_section(entries: list) -> dict:
 
 def write_output(sections: dict, namespace_label: str) -> None:
     OUTPUT_DIR.mkdir(exist_ok=True)
-    output = {
-        'namespace':  namespace_label,
-        'dimensions': {'minecraft:overworld': sections},
-    }
+    path = OUTPUT_DIR / f'{namespace_label}.json'
+
+    # Merge with existing file so nether/other dims from KubeJS dump are preserved
+    if path.exists():
+        existing = json.loads(path.read_text(encoding='utf-8'))
+        dims = existing.get('dimensions', {})
+    else:
+        dims = {}
+
+    dims['minecraft:overworld'] = sections
+    output = {'namespace': namespace_label, 'dimensions': dims}
+
     totals       = {key: len(entries) for key, entries in sections.items()}
     unique_count = len({entry['biome'] for entries in sections.values() for entry in entries})
     print(f"Oh The Biomes We've Gone: {unique_count} unique biomes, {sum(totals.values())} total entries")
     print(f"  {totals}")
-    path = OUTPUT_DIR / f'{namespace_label}.json'
     path.write_text(json.dumps(output, indent=2), encoding='utf-8')
     print(f"Written -> {path}")
 

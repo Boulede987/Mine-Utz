@@ -33,6 +33,13 @@ SHEET_NAME      = 'Biome Planner'
 CROSS_MARK      = '✗'
 ALL_SECTIONS    = ['surface', 'underground', 'caves', 'deep']
 
+REQUIRED_DIMENSION_COLUMNS = ['Nether']
+
+# When auto-adding a column, biomes found under this dimension key get ✓ by default.
+COLUMN_DIMENSION_AFFINITY = {
+    'Nether': 'minecraft:nether',
+}
+
 NAMESPACE_TO_SOURCE = {
     'biomeswevegone':                 'BWG',
     'biomesoplenty':                  'BoP',
@@ -95,9 +102,92 @@ def load_primary_table_biome_ids(worksheet, primary_last_row: int) -> set[str]:
     return existing
 
 
+def load_affinity_biomes() -> dict[str, set[str]]:
+    """Returns {dimension_id: {biome_id, ...}} from merged data."""
+    result: dict[str, set[str]] = {}
+    if not MERGED_DATA_DIR.exists():
+        return result
+    for json_file in sorted(MERGED_DATA_DIR.glob('*.json')):
+        data = json.loads(json_file.read_text(encoding='utf-8'))
+        if not isinstance(data, dict) or 'dimensions' not in data:
+            continue
+        for dim_id, sections in data['dimensions'].items():
+            if dim_id not in result:
+                result[dim_id] = set()
+            for entries in sections.values():
+                for entry in entries:
+                    result[dim_id].add(entry['biome'])
+    return result
+
+
 def load_dimension_column_count(worksheet) -> int:
     headers = [cell.value for cell in worksheet[1]]
     return len(headers) - 4
+
+
+def ensure_dimension_columns(worksheet, last_data_row: int,
+                              affinity: dict[str, set[str]]) -> None:
+    """Add any REQUIRED_DIMENSION_COLUMNS that are missing from the header."""
+    from copy import copy as _copy
+    headers = [cell.value for cell in worksheet[1]]
+    present = set(headers)
+
+    for dim_name in REQUIRED_DIMENSION_COLUMNS:
+        if dim_name in present:
+            continue
+
+        new_col   = len(headers) + 1
+        headers.append(dim_name)
+        dim_biome_set = affinity.get(COLUMN_DIMENSION_AFFINITY.get(dim_name, ''), set())
+
+        template_header = next(
+            (worksheet.cell(row=1, column=i + 1) for i, h in enumerate(worksheet[1]) if i >= 4 and h.value),
+            None,
+        )
+        h_cell = worksheet.cell(row=1, column=new_col, value=dim_name)
+        if template_header and template_header.has_style:
+            h_cell.fill      = _copy(template_header.fill)
+            h_cell.font      = _copy(template_header.font)
+            h_cell.border    = _copy(template_header.border)
+            h_cell.alignment = _copy(template_header.alignment)
+
+        for row_idx in range(2, last_data_row + 1):
+            biome_id  = worksheet.cell(row=row_idx, column=1).value
+            val       = '✓' if biome_id in dim_biome_set else CROSS_MARK
+            template_data = worksheet.cell(row=row_idx, column=new_col - 1)
+            d_cell = worksheet.cell(row=row_idx, column=new_col, value=val)
+            if template_data.has_style:
+                d_cell.fill      = _copy(template_data.fill)
+                d_cell.font      = _copy(template_data.font)
+                d_cell.border    = _copy(template_data.border)
+                d_cell.alignment = _copy(template_data.alignment)
+
+        print(f'  Added dimension column: {dim_name}')
+
+
+def apply_affinity_defaults(worksheet, last_data_row: int,
+                             affinity: dict[str, set[str]]) -> None:
+    """
+    For columns that have a COLUMN_DIMENSION_AFFINITY mapping, set ✓ for any
+    biome row that is currently ✗ but belongs to that dimension in merged data.
+    Used as a repair pass when the column already exists but was created before
+    affinity logic was added.
+    """
+    headers = [cell.value for cell in worksheet[1]]
+    repaired = 0
+    for col_idx, col_name in enumerate(headers):
+        if col_name not in COLUMN_DIMENSION_AFFINITY:
+            continue
+        dim_biome_set = affinity.get(COLUMN_DIMENSION_AFFINITY[col_name], set())
+        col_num = col_idx + 1
+        for row_idx in range(2, last_data_row + 1):
+            biome_cell = worksheet.cell(row=row_idx, column=1)
+            val_cell   = worksheet.cell(row=row_idx, column=col_num)
+            if biome_cell.value in dim_biome_set and val_cell.value != '✓':
+                val_cell.value = '✓'
+                repaired += 1
+    if repaired:
+        print(f'  Applied affinity defaults: {repaired} cell(s) set to ✓')
 
 
 def load_all_biomes() -> list[dict]:
@@ -176,6 +266,9 @@ def main() -> None:
     primary_last_row       = find_primary_table_last_row(worksheet)
     misplaced_row_numbers  = find_misplaced_rows(worksheet, primary_last_row)
     primary_biome_ids      = load_primary_table_biome_ids(worksheet, primary_last_row)
+    affinity               = load_affinity_biomes()
+    ensure_dimension_columns(worksheet, primary_last_row, affinity)
+    apply_affinity_defaults(worksheet, primary_last_row, affinity)
     dimension_column_count = load_dimension_column_count(worksheet)
     all_biomes             = load_all_biomes()
 

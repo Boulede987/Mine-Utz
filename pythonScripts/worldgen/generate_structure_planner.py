@@ -112,8 +112,36 @@ def load_dimension_biomes() -> list[tuple[str, list[str]]]:
     return result
 
 
+def load_existing_selections(filepath: Path) -> dict[str, dict[str, dict[str, str]]]:
+    """
+    Read back user choices from an existing structure_planner.xlsx.
+    Returns {sheet_name: {structure_id: {biome_short_name: '✓'/'✗'}}}.
+    """
+    if not filepath.exists():
+        return {}
+    wb = openpyxl.load_workbook(filepath, data_only=True)
+    result: dict[str, dict[str, dict[str, str]]] = {}
+    for sheet_name in wb.sheetnames:
+        ws = wb[sheet_name]
+        headers    = [cell.value for cell in ws[1]]
+        biome_cols = headers[2:]   # col index 2+ are biome short names
+        sheet_data: dict[str, dict[str, str]] = {}
+        for row in ws.iter_rows(min_row=2, values_only=True):
+            sid = row[0]
+            if not sid or ':' not in str(sid):
+                continue
+            choices: dict[str, str] = {}
+            for i, bname in enumerate(biome_cols):
+                if bname and (2 + i) < len(row):
+                    choices[bname] = row[2 + i] or CROSS_MARK
+            sheet_data[str(sid)] = choices
+        result[sheet_name] = sheet_data
+    return result
+
+
 def build_sheet(wb: openpyxl.Workbook, sheet_name: str,
-                biomes: list[str], structures: list[str], sheet_idx: int) -> None:
+                biomes: list[str], structures: list[str], sheet_idx: int,
+                existing: dict[str, dict[str, str]]) -> None:
 
     ws = wb.create_sheet(title=sheet_name)
 
@@ -159,9 +187,13 @@ def build_sheet(wb: openpyxl.Workbook, sheet_name: str,
         c.fill = ROW_FILL; c.font = ROW_FONT
         c.alignment = CENTER; c.border = BORDER
 
-        for i in range(len(biomes)):
-            c = ws.cell(row=row_idx, column=3 + i, value=CROSS_MARK)
-            c.fill = CROSS_FILL; c.font = CROSS_FONT
+        prev = existing.get(structure_id, {})
+        for i, biome_label in enumerate(biome_labels):
+            val  = prev.get(biome_label, CROSS_MARK)
+            fill = CHECK_FILL if val == CHECK_MARK else CROSS_FILL
+            font = CHECK_FONT if val == CHECK_MARK else CROSS_FONT
+            c = ws.cell(row=row_idx, column=3 + i, value=val)
+            c.fill = fill; c.font = font
             c.alignment = CENTER; c.border = BORDER
 
         ws.row_dimensions[row_idx].height = 16
@@ -188,8 +220,9 @@ def build_sheet(wb: openpyxl.Workbook, sheet_name: str,
 
 
 def main() -> None:
-    structures  = load_structures()
-    dim_biomes  = load_dimension_biomes()
+    structures    = load_structures()
+    dim_biomes    = load_dimension_biomes()
+    existing_all  = load_existing_selections(OUTPUT_FILE)
 
     if not dim_biomes:
         print('No dimensions with ✓ biomes found in biome planner.')
@@ -199,7 +232,7 @@ def main() -> None:
     wb.remove(wb.active)   # remove default empty sheet
 
     for idx, (dim_header, biomes) in enumerate(dim_biomes):
-        build_sheet(wb, dim_header, biomes, structures, idx)
+        build_sheet(wb, dim_header, biomes, structures, idx, existing_all.get(dim_header, {}))
         print(f'  [{dim_header}]  {len(biomes)} biome columns')
 
     wb.save(OUTPUT_FILE)

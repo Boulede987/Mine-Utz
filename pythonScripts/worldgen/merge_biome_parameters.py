@@ -49,8 +49,10 @@ def merge_section(entries: list[dict]) -> list[dict]:
     return merged_entries
 
 
-def process_namespace_file(source_path: Path) -> tuple[str, dict]:
-    data      = json.loads(source_path.read_text(encoding='utf-8'))
+def process_namespace_file(source_path: Path) -> tuple[str, dict] | None:
+    data = json.loads(source_path.read_text(encoding='utf-8'))
+    if not isinstance(data, dict) or 'namespace' not in data:
+        return None
     namespace = data['namespace']
     output    = {'namespace': namespace, 'note': 'Parameters merged: one entry per biome (min-of-mins, max-of-maxes).', 'dimensions': {}}
 
@@ -73,12 +75,18 @@ def main() -> None:
 
     MERGED_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
+    written = 0
     for source_path in source_files:
-        namespace, output = process_namespace_file(source_path)
+        result = process_namespace_file(source_path)
+        if result is None:
+            print(f'  Skipping {source_path.name} (not a namespace file)')
+            continue
+        namespace, output = result
         destination = MERGED_OUTPUT_DIR / source_path.name
         destination.write_text(json.dumps(output, indent=2), encoding='utf-8')
+        written += 1
 
-    print(f'\nWritten {len(source_files)} file(s) to {MERGED_OUTPUT_DIR}/')
+    print(f'\nWritten {written} file(s) to {MERGED_OUTPUT_DIR}/')
 
 
 main()

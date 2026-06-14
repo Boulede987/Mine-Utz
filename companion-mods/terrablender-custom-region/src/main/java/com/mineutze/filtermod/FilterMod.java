@@ -14,11 +14,11 @@ public class FilterMod {
     }
 
     private void onCommonSetup(FMLCommonSetupEvent event) {
-        event.enqueueWork(() ->
+        event.enqueueWork(() -> {
             Regions.register(new FilterRegion(
                 ResourceLocation.fromNamespaceAndPath("mineutze_filter", "overworld_filter"),
                 100_000_000
-            ))
-        );
+            ));
+        });
     }
 }
