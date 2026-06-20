@@ -1,43 +1,57 @@
 {
   "permissions": {
     "allow": [
-      "Bash(python:*)",
+      "Bash(git status)",
+      "Bash(git diff*)",
+      "Bash(git log*)",
+      "Bash(git branch*)",
+      "Bash(git check-ignore *)",
+
+      "Bash(./gradlew build)",
+      "Bash(./gradlew test)",
+      "Bash(./gradlew --version)",
+      "Bash(./gradlew clean)",
+      "Bash(./gradlew runClient)",
+      "Bash(./gradlew runServer)",
+
+      "Bash(packwiz list)",
+      "Bash(packwiz refresh)",
+
+      "Bash(python pythonScripts/*)",
+      "Bash(python3 pythonScripts/*)",
+
       "Bash(mysql --version)",
-      "Bash(where mysql:*)",
       "Bash(mysql -u root -e \"SHOW DATABASES;\")",
-      "WebFetch(domain:api.github.com)",
-      "WebFetch(domain:raw.githubusercontent.com)",
-      "PowerShell(python -c $py)",
-      "Bash(Get-ChildItem -Recurse pythonScripts)",
-      "Bash(Select-Object FullName, Length)",
+
+      "Bash(jar tf *)",
+      "Bash(javap *)",
+
       "WebSearch",
       "WebFetch(domain:github.com)",
+      "WebFetch(domain:api.github.com)",
+      "WebFetch(domain:raw.githubusercontent.com)",
       "Bash(gh api *)",
-      "Bash(grep \"\\\\.java$\")",
-      "Bash(Get-ChildItem temp_decompile)",
-      "Bash(Select-Object Name, Length)",
+
+      "Read(./**)"
+    ],
+    "deny": [
       "Bash(del *)",
-      "Bash(Get-Content \"C:\\\\Users\\\\alixm\\\\AppData\\\\Roaming\\\\PrismLauncher\\\\instances\\\\mineutze_DEV_INSTANCE\\\\minecraft\\\\logs\\\\latest.log\")",
-      "Bash(Select-String \"ERROR|FATAL|Exception|Caused by|crash\")",
-      "Bash(Select-Object -Last 30)",
-      "Bash(python3 *)",
       "Bash(Remove-Item *)",
-      "PowerShell(Get-ChildItem -Recurse \"C:\\\\Users\\\\alixm\\\\AppData\\\\Roaming\\\\PrismLauncher\\\\instances\\\\mineutze_DEV_INSTANCE\\\\companion-mods\" | Where-Object { !$_.PSIsContainer } | ForEach-Object { $_.FullName.Replace\\(\"C:\\\\Users\\\\alixm\\\\AppData\\\\Roaming\\\\PrismLauncher\\\\instances\\\\mineutze_DEV_INSTANCE\\\\\", \"\"\\) })",
-      "Bash(git check-ignore *)",
-      "Bash(Measure-Object -Line)",
-      "PowerShell(\\(Get-Content \"C:\\\\Users\\\\alixm\\\\AppData\\\\Roaming\\\\PrismLauncher\\\\instances\\\\mineutze_DEV_INSTANCE\\\\minecraft\\\\logs\\\\latest.log\" | Measure-Object -Line\\).Lines)",
-      "Bash(jar tf *)",
-      "Bash(mkdir -p /tmp/bop_decompile)",
-      "Bash(jar xf *)",
-      "Bash(cp -r biomesoplenty /tmp/bop_decompile/)",
-      "Bash(mkdir -p \"C:\\\\Users\\\\alixm\\\\AppData\\\\Local\\\\Temp\\\\bop_decompile\")",
-      "Read(//c/Users/alixm/AppData/Local/Temp/bop_decompile/**)",
-      "Bash(javap -p -c \"C:\\\\Users\\\\alixm\\\\AppData\\\\Local\\\\Temp\\\\bop_decompile\\\\biomesoplenty\\\\worldgen\\\\BOPNetherRegionCommon.class\")",
-      "Bash(javap *)",
-      "Bash(dir minecraft/mods/)",
-      "Bash(findstr /i \"end aether\")",
-      "Bash(findstr /i \"bwg biomes\")",
-      "Bash(biomes\")"
+      "Bash(rm -rf*)",
+      "Bash(git push*)",
+      "Bash(git reset --hard*)",
+      "Bash(git add*)",
+      "Bash(git commit*)",
+      "Bash(packwiz update*)",
+      "Bash(packwiz remove*)",
+      "Bash(curl *)",
+      "Bash(wget *)",
+
+      "Read(./.env)",
+      "Read(./.env.*)",
+      "Read(**/*credentials*)",
+      "Read(**/db_password*)",
+      "Read(**/*.pem)"
     ]
   }
 }
