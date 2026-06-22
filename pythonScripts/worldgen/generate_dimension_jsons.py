@@ -6,6 +6,10 @@ For each custom dimension column, collects biomes marked ✓ and writes
 an explicit multi_noise biomes array into the matching Paxi datapack
 dimension JSON.
 
+Each biome contributes ALL of its parameter entries (not a merged bounding
+box) so that erosion/weirdness discrimination is preserved and sub-chunk
+biome variation can occur.
+
 Skips the Overworld column — overworld filtering is handled by the
 TerraBlender companion mod (companion-mods/terrablender-custom-region/).
 
@@ -28,7 +32,7 @@ MERGED_DATA_DIR = Path('worldgen_data') / 'merged'
 DIMENSION_DIR   = Path('minecraft/config/paxi/datapacks/mineutz/data/mineutz/dimension')
 NAMESPACE       = 'mineutz'
 
-SKIP_COLUMNS = {'Overworld', 'Nether', 'End'}  # handled by TerraBlender companion mod
+SKIP_COLUMNS = {'Overworld', 'Nether', 'End'}
 CHECK_MARK   = '✓'
 ALL_SECTIONS = ['surface', 'underground', 'caves', 'deep']
 
@@ -37,18 +41,18 @@ def slugify(header: str) -> str:
     return re.sub(r'[^a-z0-9]+', '_', header.lower()).strip('_')
 
 
-def load_merged_parameters() -> dict:
-    """Returns {biome_id: parameters} from all merged namespace files."""
+def load_all_parameters() -> dict[str, list[dict]]:
+    """Returns {biome_id: [parameters, ...]} from all merged namespace files."""
     if not MERGED_DATA_DIR.exists():
         print('ERROR: worldgen_data/merged/ not found. Run merge_biome_parameters.py first.')
         raise SystemExit(1)
-    params: dict = {}
+    params: dict[str, list[dict]] = {}
     for json_file in sorted(MERGED_DATA_DIR.glob('*.json')):
         data = json.loads(json_file.read_text(encoding='utf-8'))
         for dimension_sections in data.get('dimensions', {}).values():
             for section in ALL_SECTIONS:
                 for entry in dimension_sections.get(section, []):
-                    params[entry['biome']] = entry['parameters']
+                    params.setdefault(entry['biome'], []).append(entry['parameters'])
     return params
 
 
@@ -88,8 +92,8 @@ def main() -> None:
         print(f'ERROR: {PLANNER_FILE} not found.')
         raise SystemExit(1)
 
-    merged    = load_merged_parameters()
-    worksheet = openpyxl.load_workbook(PLANNER_FILE)[SHEET_NAME]
+    all_params  = load_all_parameters()
+    worksheet   = openpyxl.load_workbook(PLANNER_FILE)[SHEET_NAME]
     assignments = load_assignments(worksheet)
 
     DIMENSION_DIR.mkdir(parents=True, exist_ok=True)
@@ -102,25 +106,27 @@ def main() -> None:
             print(f'  [{header}] No ✓ biomes — skipped (would be empty)')
             continue
 
-        biome_entries = []
-        missing = []
+        biome_entries: list[dict] = []
+        missing:       list[str]  = []
+
         for biome_id in sorted(biome_ids):
-            if biome_id not in merged:
+            param_list = all_params.get(biome_id)
+            if not param_list:
                 missing.append(biome_id)
                 continue
-            p = merged[biome_id]
-            biome_entries.append({
-                'biome': biome_id,
-                'parameters': {
-                    'temperature':     p['temperature'],
-                    'humidity':        p['humidity'],
-                    'continentalness': p['continentalness'],
-                    'erosion':         p['erosion'],
-                    'depth':           p['depth'],
-                    'weirdness':       p['weirdness'],
-                    'offset':          p.get('offset', 0.0),
-                },
-            })
+            for p in param_list:
+                biome_entries.append({
+                    'biome': biome_id,
+                    'parameters': {
+                        'temperature':     p['temperature'],
+                        'humidity':        p['humidity'],
+                        'continentalness': p['continentalness'],
+                        'erosion':         p['erosion'],
+                        'depth':           p['depth'],
+                        'weirdness':       p['weirdness'],
+                        'offset':          p.get('offset', 0.0),
+                    },
+                })
 
         if missing:
             print(f'  [{header}] WARNING — {len(missing)} biome(s) not in merged data (no parameters):')
@@ -128,7 +134,8 @@ def main() -> None:
                 print(f'    - {m}')
 
         out_path.write_text(json.dumps(build_json(slug, biome_entries), indent=2), encoding='utf-8')
-        print(f'  [{header}] → {out_path}  ({len(biome_entries)} biomes)')
+        unique_biomes = len(set(e['biome'] for e in biome_entries))
+        print(f'  [{header}] → {out_path}  ({unique_biomes} biomes, {len(biome_entries)} entries)')
 
     print('\nDone.')
 

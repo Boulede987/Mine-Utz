@@ -60,13 +60,23 @@ import java.util.function.Consumer;
 
 public class {class_name} extends Region {{
 
+    @FunctionalInterface
+    private interface BiomeMapper extends Consumer<Pair<Climate.ParameterPoint, ResourceKey<Biome>>> {{}}
+
     public {class_name}(ResourceLocation name, int weight) {{
         super(name, RegionType.{region_type}, weight);
     }}
 
     @Override
     public void addBiomes(Registry<Biome> registry, Consumer<Pair<Climate.ParameterPoint, ResourceKey<Biome>>> mapper) {{
-{body}
+        BiomeMapper m = mapper::accept;
+{dispatcher}
+    }}
+
+{namespace_methods}
+    private static ResourceKey<Biome> biomeKey(String namespace, String path) {{
+        return ResourceKey.create(Registries.BIOME,
+            ResourceLocation.fromNamespaceAndPath(namespace, path));
     }}
 }}
 """
@@ -141,25 +151,19 @@ def load_column_biomes(ws, headers: list, column_name: str) -> list[str]:
     ]
 
 
-def load_merged_params() -> dict:
-    """
-    {biome_id: parameters} across all merged namespace files.
-    Section priority: surface > underground > caves > deep.
-    Surface entry wins so biomes that mods also register at depth=1.0 aren't
-    pushed underground.
-    """
+def load_all_params() -> dict[str, list[dict]]:
+    """Returns {biome_id: [parameters, ...]} across all merged namespace files."""
     if not MERGED_DATA_DIR.exists():
         print('ERROR: worldgen_data/merged/ not found. Run step 21 first.')
         raise SystemExit(1)
 
-    lookup: dict = {}
+    lookup: dict[str, list[dict]] = {}
     for json_file in sorted(MERGED_DATA_DIR.glob('*.json')):
         data = json.loads(json_file.read_text(encoding='utf-8'))
         for dim_sections in data.get('dimensions', {}).values():
             for section in ['surface', 'underground', 'caves', 'deep']:
                 for entry in dim_sections.get(section, []):
-                    if entry['biome'] not in lookup:
-                        lookup[entry['biome']] = entry['parameters']
+                    lookup.setdefault(entry['biome'], []).append(entry['parameters'])
     return lookup
 
 
@@ -184,64 +188,114 @@ def load_merged_end_data() -> dict:
 # Formatters
 # ---------------------------------------------------------------------------
 
-def fmt_param(values: list) -> str:
+def _fmt_param(values: list) -> str:
     lo, hi = values[0], values[1]
     if lo == hi:
         return f'Climate.Parameter.point({lo}f)'
     return f'Climate.Parameter.span({lo}f, {hi}f)'
 
 
-def fmt_add_biome(biome_id: str, p: dict) -> str:
-    namespace, path = biome_id.split(':', 1)
-    axes = ',\n'.join(f'                {fmt_param(p[ax])}' for ax in PARAMETER_AXES)
+def _fmt_add_biome_call(p: dict) -> str:
+    indent = '            '
+    params = ',\n'.join(f'{indent}{_fmt_param(p[ax])}' for ax in PARAMETER_AXES)
     return (
-        f'        addBiome(mapper,\n'
-        f'            Climate.parameters(\n'
-        f'{axes},\n'
-        f'                {p["offset"]}f\n'
-        f'            ),\n'
-        f'            ResourceKey.create(Registries.BIOME,\n'
-        f'                ResourceLocation.fromNamespaceAndPath("{namespace}", "{path}"))\n'
-        f'        );'
+        f'        addBiome(mapper, Climate.parameters(\n'
+        f'{params},\n'
+        f'{indent}{p["offset"]}f\n'
+        f'        ), key);'
     )
 
 
-def build_region(biome_ids: list[str], all_params: dict,
+def _fmt_per_biome_method(biome_id: str, params_list: list[dict]) -> str:
+    namespace, path = biome_id.split(':', 1)
+    method = f'{namespace}_{path}'
+    calls  = '\n'.join(_fmt_add_biome_call(p) for p in params_list)
+    return (
+        f'    private void {method}(BiomeMapper mapper) {{\n'
+        f'        var key = biomeKey("{namespace}", "{path}");\n'
+        f'{calls}\n'
+        f'    }}'
+    )
+
+
+def _fmt_namespace_method(namespace: str, paths: list[str]) -> str:
+    calls = '\n'.join(f'        {namespace}_{path}(mapper);' for path in paths)
+    return (
+        f'    private void add_{namespace}(BiomeMapper mapper) {{\n'
+        f'{calls}\n'
+        f'    }}'
+    )
+
+
+def _fmt_section_divider(namespace: str) -> str:
+    prefix = f'    // ── {namespace} '
+    return prefix + '─' * max(4, 80 - len(prefix))
+
+
+# ---------------------------------------------------------------------------
+# Builders
+# ---------------------------------------------------------------------------
+
+def build_region(biome_ids: list[str], all_params: dict[str, list[dict]],
                  class_name: str, region_type: str, dest: Path) -> int:
-    """Write a region Java file. Returns number of biomes written."""
-    blocks  = []
-    missing = []
+    by_namespace: dict[str, dict[str, list[dict]]] = {}
+    missing: list[str] = []
+
     for biome_id in biome_ids:
         if biome_id not in all_params:
             missing.append(biome_id)
             continue
-        blocks.append(fmt_add_biome(biome_id, all_params[biome_id]))
+        namespace, path = biome_id.split(':', 1)
+        by_namespace.setdefault(namespace, {})[path] = all_params[biome_id]
 
     if missing:
         print(f'  WARNING: {len(missing)} biome(s) not in merged data — skipped:')
         for m in missing:
             print(f'    - {m}')
 
-    body = '\n\n'.join(blocks)
-    java = _REGION_TEMPLATE.format(class_name=class_name, region_type=region_type, body=body)
+    namespaces = sorted(by_namespace.keys())
+
+    dispatcher = '\n'.join(f'        add_{ns}(m);' for ns in namespaces)
+
+    method_blocks: list[str] = []
+    for ns in namespaces:
+        paths = sorted(by_namespace[ns].keys())
+        method_blocks.append(_fmt_section_divider(ns))
+        method_blocks.append(_fmt_namespace_method(ns, paths))
+        for path in paths:
+            method_blocks.append(_fmt_per_biome_method(f'{ns}:{path}', by_namespace[ns][path]))
+
+    namespace_methods = '\n\n'.join(method_blocks) + '\n\n'
+
+    total_biomes  = sum(len(b) for b in by_namespace.values())
+    total_entries = sum(
+        len(ps) for paths in by_namespace.values() for ps in paths.values()
+    )
+
+    java = _REGION_TEMPLATE.format(
+        class_name=class_name,
+        region_type=region_type,
+        dispatcher=dispatcher,
+        namespace_methods=namespace_methods,
+    )
     dest.write_text(java, encoding='utf-8')
-    print(f'  Wrote {len(blocks)} biome(s) → {dest.name}')
-    return len(blocks)
+    print(f'  Wrote {total_biomes} biomes ({total_entries} entries) → {dest.name}')
+    return total_biomes
 
 
 def build_end_biomes(biome_ids: list[str], end_data: dict, dest: Path) -> int:
-    """Write FilterEndBiomes.java. Returns number of biomes written."""
-    calls   = []
-    missing = []
+    calls:   list[str] = []
+    missing: list[str] = []
+
     for biome_id in biome_ids:
         if biome_id not in end_data:
             missing.append(biome_id)
             continue
-        info     = end_data[biome_id]
-        ptype    = info['placement_type']
-        weight   = info['weight']
+        info   = end_data[biome_id]
+        ptype  = info['placement_type']
+        weight = info['weight']
         ns, path = biome_id.split(':', 1)
-        method   = f'register{ptype.capitalize()}Biome'
+        method = f'register{ptype.capitalize()}Biome'
         calls.append(f'        EndBiomeRegistry.{method}(key("{ns}", "{path}"), {weight});')
 
     if missing:
@@ -275,7 +329,7 @@ def main() -> None:
         print('No biomes marked ✓ in Overworld column — nothing to write.')
         raise SystemExit(0)
 
-    all_params = load_merged_params()
+    all_params = load_all_params()
     end_data   = load_merged_end_data()
 
     # Overworld region (always)

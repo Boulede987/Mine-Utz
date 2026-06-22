@@ -1,8 +1,9 @@
 """
 merge_biome_parameters.py
 =========================
-Reads worldgen_data/*.json and collapses all parameter entries for each biome
-into one merged entry (min-of-mins, max-of-maxes per axis).
+Reads worldgen_data/*.json and deduplicates parameter entries per biome.
+Exact duplicates (same biome + identical 6-axis parameters) are removed with
+a warning — they almost certainly indicate a generation error upstream.
 
 Writes one file per namespace to worldgen_data/merged/<namespace>.json,
 preserving the same structure as the source files.
@@ -23,34 +24,33 @@ PARAMETER_AXES    = ['temperature', 'humidity', 'continentalness', 'erosion', 'd
 END_SECTIONS      = {'highlands', 'midlands', 'edge', 'islands'}
 
 
-def merge_parameter_entries(parameter_entries: list[dict]) -> dict:
-    merged = {}
-    for axis in PARAMETER_AXES:
-        all_values  = [entry[axis] for entry in parameter_entries]
-        merged[axis] = [
-            min(values[0] for values in all_values),
-            max(values[1] for values in all_values),
-        ]
-    merged['offset'] = parameter_entries[0].get('offset', 0.0)
-    return merged
+def _params_key(parameters: dict) -> str:
+    return json.dumps({ax: parameters[ax] for ax in PARAMETER_AXES}, sort_keys=True)
 
 
-def merge_section(entries: list[dict]) -> list[dict]:
-    by_biome: dict[str, list[dict]] = {}
+def dedup_section(entries: list[dict]) -> list[dict]:
+    seen:       set[tuple]  = set()
+    result:     list[dict]  = []
+    duplicates: list[str]   = []
+
     for entry in entries:
-        by_biome.setdefault(entry['biome'], []).append(entry['parameters'])
+        key = (entry['biome'], _params_key(entry['parameters']))
+        if key in seen:
+            duplicates.append(entry['biome'])
+        else:
+            seen.add(key)
+            result.append({'biome': entry['biome'], 'parameters': entry['parameters']})
 
-    merged_entries = []
-    for biome_id, parameter_list in sorted(by_biome.items()):
-        merged_entries.append({
-            'biome':      biome_id,
-            'parameters': merge_parameter_entries(parameter_list),
-            'merged_from': len(parameter_list),
-        })
-    return merged_entries
+    if duplicates:
+        print(f'  WARNING: {len(duplicates)} exact duplicate(s) removed (likely a generation error):')
+        for biome in sorted(set(duplicates)):
+            count = duplicates.count(biome)
+            print(f'    - {biome}  ({count}x)')
+
+    return result
 
 
-def merge_end_section(entries: list[dict]) -> list[dict]:
+def dedup_end_section(entries: list[dict]) -> list[dict]:
     """Deduplicate End entries by biome ID; keep highest weight on collision."""
     by_biome: dict[str, int] = {}
     for entry in entries:
@@ -65,18 +65,18 @@ def process_namespace_file(source_path: Path) -> tuple[str, dict] | None:
     if not isinstance(data, dict) or 'namespace' not in data:
         return None
     namespace = data['namespace']
-    output    = {'namespace': namespace, 'note': 'Parameters merged: one entry per biome (min-of-mins, max-of-maxes).', 'dimensions': {}}
+    output    = {'namespace': namespace, 'dimensions': {}}
 
     for dimension_id, sections in data.get('dimensions', {}).items():
         output['dimensions'][dimension_id] = {}
         for section_name, entries in sections.items():
             if section_name in END_SECTIONS:
-                merged = merge_end_section(entries)
+                deduped = dedup_end_section(entries)
             else:
-                merged = merge_section(entries)
-            output['dimensions'][dimension_id][section_name] = merged
-            if merged:
-                print(f'  {namespace}  {dimension_id}  {section_name}: {len(entries)} -> {len(merged)} entries')
+                deduped = dedup_section(entries)
+            output['dimensions'][dimension_id][section_name] = deduped
+            if deduped:
+                print(f'  {namespace}  {dimension_id}  {section_name}: {len(entries)} -> {len(deduped)} entries')
 
     return namespace, output
 
