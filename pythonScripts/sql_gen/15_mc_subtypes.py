@@ -10,7 +10,7 @@ Sources
   lists/tool_stats.txt  — attackDamage, attackSpeed, durability  (from /dump_tool_stats)
   lists/armor_stats.txt — armorPoints, armorToughness, knockbackResistance, durability
   lists/food_stats.txt  — hungerRestoration, saturation          (from /dump_food_stats)
-  lists/item_extra.txt  — enchantability, miningEfficiency, miningLevel (from /dump_item_extra)
+  lists/item_extra.txt  — enchantability, miningEfficiency, miningTier (from /dump_item_extra)
 
 All stats files are optional: if absent, stat columns are NULL.
 
@@ -57,6 +57,7 @@ def _load_item_extra() -> dict[str, dict]:
     result: dict[str, dict] = {}
     def _i(v): return int(v)   if v not in ('null', 'None', '') else None
     def _f(v): return float(v) if v not in ('null', 'None', '') else None
+    def _s(v): return v        if v not in ('null', 'None', '') else None
     for line in load_pipe_file(LISTS, 'item_extra.txt'):
         parts = [p.strip() for p in line.split('|')]
         if len(parts) < 5:
@@ -65,7 +66,7 @@ def _load_item_extra() -> dict[str, dict]:
             'maxStackSize':     _i(parts[1]),
             'enchantability':   _i(parts[2]),
             'miningEfficiency': _f(parts[3]),
-            'miningLevel':      _i(parts[4]),
+            'miningTier':       _s(parts[4]) if parts[4] not in ('null', 'None', '') else None,
             # rarity (parts[5]) not used by subtypes
         }
     return result
@@ -133,10 +134,9 @@ def _build_tool_rows(tool_pairs: list, tool_stats: dict, item_extra: dict) -> li
     return [
         (ns, name,
          _stat(item_extra.get(f'minecraft:{name}'),  'miningEfficiency'),
-         _stat(item_extra.get(f'minecraft:{name}'),  'miningLevel'),
+         _stat(item_extra.get(f'minecraft:{name}'),  'miningTier'),
          _stat(tool_stats.get(f'minecraft:{name}'),  'attackDamage'),
          _stat(tool_stats.get(f'minecraft:{name}'),  'attackSpeed'),
-         None,                                        # attackRange not available
          _stat(tool_stats.get(f'minecraft:{name}'),  'durability'),
          _stat(item_extra.get(f'minecraft:{name}'),  'enchantability'))
         for ns, name in tool_pairs
@@ -173,8 +173,8 @@ def main() -> None:
          insert_rows(
              'Tool',
              ['item_namespace', 'item_name',
-              'miningEfficiency', 'miningLevel',
-              'attackDamage', 'attackSpeed', 'attackRange',
+              'miningEfficiency', 'miningTier',
+              'attackDamage', 'attackSpeed',
               'durability', 'enchantability'],
              _build_tool_rows(tool_pairs, data['tool_stats'], data['item_extra']),
          )),

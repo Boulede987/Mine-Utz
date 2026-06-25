@@ -14,7 +14,7 @@ Logic:
     (Station is a subtype of Item; Item row must exist first)
 
 Fields left NULL (not available from registry dumps):
-  Item  : rarity_id, renewable, stackable
+  Item  : (none — rarity_id and stackable from /dump_item_extra)
   Block : blastResistance, hardness, luminous, transparent, flammable
 
 Output: BDD/Scripts/inserts/03_mc_items.sql
@@ -78,7 +78,7 @@ def _load_item_extra() -> dict[str, dict]:
             'maxStackSize':     _i(parts[1]),
             'enchantability':   _i(parts[2]),
             'miningEfficiency': _f(parts[3]),
-            'miningLevel':      _i(parts[4]),
+            'miningTier':       _s(parts[4]),
             'rarity':           _s(parts[5]) if len(parts) >= 6 else None,
         }
     print(f'item_extra      : {len(result)} entries')
@@ -116,7 +116,7 @@ def _build_item_rows(mc_items: list[str], item_extra: dict) -> list[tuple]:
         stackable = (True if max_stack > 1 else False) if max_stack is not None else None
         rarity    = extra.get('rarity')
         rarity_id = _RARITY_IDS.get(rarity) if rarity else None
-        rows.append(('minecraft', name, rarity_id, None, stackable))
+        rows.append(('minecraft', name, rarity_id, stackable))
     return rows
 
 
@@ -150,10 +150,10 @@ def main() -> None:
     block_stats = _load_block_stats()
 
     write_sql(OUTPUT, '03 - Minecraft items, blocks and stations', [
-        ('Item — all vanilla items  (rarity, renewable are NULL; stackable from /dump_item_extra)',
+        ('Item — all vanilla items  (rarity_id and stackable from /dump_item_extra)',
          insert_rows(
              'Item',
-             ['namespace', 'name', 'rarity_id', 'renewable', 'stackable'],
+             ['namespace', 'name', 'rarity_id', 'stackable'],
              _build_item_rows(mc_items, item_extra),
          )),
 

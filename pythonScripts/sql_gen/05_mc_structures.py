@@ -6,8 +6,7 @@ Generates SQL inserts for the Structure table — vanilla Minecraft 1.21.1.
 Source : lists/structures.txt  (namespace:name, one per line)
 Filter : minecraft: namespace only
 
-loottable_id is left NULL here; it will be linkable once loot tables are
-inserted in a later step.
+Loot table links are in LootTableStructure (09_mc_loot_structure.py).
 
 Output: BDD/Scripts/inserts/05_mc_structures.sql
 
@@ -34,7 +33,7 @@ def _load_vanilla_structure_rows() -> list[tuple]:
     mc_structures  = sorted(s for s in all_structures if s.startswith('minecraft:'))
     print(f'Found {len(mc_structures)} vanilla structures.')
     return [
-        ('minecraft', name.split(':', 1)[1], None)
+        ('minecraft', name.split(':', 1)[1])
         for name in mc_structures
     ]
 
@@ -42,8 +41,8 @@ def _load_vanilla_structure_rows() -> list[tuple]:
 def main() -> None:
     rows = _load_vanilla_structure_rows()
     write_sql(OUTPUT, '05 - Minecraft structures', [
-        ('Structure — vanilla 1.21.1  (loottable_id is NULL — populated in loot step)',
-         insert_rows('Structure', ['namespace', 'name', 'loottable_id'], rows)),
+        ('Structure — vanilla 1.21.1',
+         insert_rows('Structure', ['namespace', 'name'], rows)),
     ])
 
 

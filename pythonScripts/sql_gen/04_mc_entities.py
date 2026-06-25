@@ -8,8 +8,8 @@ Sources : lists/mobs.txt         — namespace:name, one per line
                                    from /dump_entity_stats  (optional)
 Filter  : minecraft: namespace only
 
-Still NULL after this: behavior, type, attackSpeed, attackRange, weakness, loottable_id
-(loottable_id is back-filled by 07_mc_relations.py)
+Still NULL after this: behavior, type
+Loot table links are in LootTableEntity (06_mc_loot.py).
 
 Output: BDD/Scripts/inserts/04_mc_entities.sql
 
@@ -93,12 +93,9 @@ def _build_entity_rows(mc_mobs: list[str], entity_stats: dict, entity_behavior: 
                      s.get('healthPoints'),
                      s.get('armorPoints'),
                      s.get('attackDamage'),
-                     None, None,                    # attackSpeed, attackRange
                      s.get('speed'),
                      s.get('knockbackResistance'),
-                     None,                          # weakness
-                     hitbox,
-                     None))                         # loottable_id (set by 07_mc_relations.py)
+                     hitbox))
     return rows
 
 
@@ -110,13 +107,13 @@ def main() -> None:
     print(f'Found {len(mc_mobs)} vanilla entities.  ({len(entity_stats)} with stats, {len(entity_behavior)} with behavior)')
 
     write_sql(OUTPUT, '04 - Minecraft entities', [
-        ('Entity — vanilla 1.21.1  (behavior/type/weakness NULL; combat stats from /dump_entity_stats)',
+        ('Entity — vanilla 1.21.1  (behavior/type from biome spawners; combat stats from /dump_entity_stats)',
          insert_rows(
              'Entity',
              ['namespace', 'name', 'behavior', 'type',
-              'healthPoints', 'armorPoints', 'attackDamage', 'attackSpeed',
-              'attackRange', 'speed', 'knockbackResistance', 'weakness',
-              'hitboxSize', 'loottable_id'],
+              'healthPoints', 'armorPoints', 'attackDamage',
+              'speed', 'knockbackResistance',
+              'hitboxSize'],
              _build_entity_rows(mc_mobs, entity_stats, entity_behavior),
          )),
     ])

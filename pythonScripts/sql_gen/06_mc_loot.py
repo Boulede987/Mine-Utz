@@ -22,7 +22,6 @@ Outputs
                        deduplicated per (loottable_id, item): last row wins
   LootTableEntity    — junction: which entity is linked to which loot table
   LootTableReference — parent/child loot table nesting
-  UPDATE Entity      — sets Entity.loottable_id from entity_loottables.txt
 
 Note: LootTableStructure is handled in a later step (requires NBT-derived mapping).
 
@@ -100,9 +99,8 @@ def _build_comprises_rows(loot_id_map: dict) -> list[tuple]:
     return rows
 
 
-def _build_entity_loot_rows(loot_id_map: dict) -> tuple[list[tuple], list[str]]:
+def _build_entity_loot_rows(loot_id_map: dict) -> list[tuple]:
     entity_rows: list[tuple] = []
-    update_lines: list[str]  = []
     for line in load_pipe_file(LISTS, 'entity_loottables.txt'):
         parts = _parse_pipe_row(line)
         if len(parts) < 2:
@@ -115,12 +113,8 @@ def _build_entity_loot_rows(loot_id_map: dict) -> tuple[list[tuple], list[str]]:
         loot_id          = loot_id_map[loot_path]
         ent_ns, ent_name = entity.split(':', 1)
         entity_rows.append((loot_id, ent_ns, ent_name))
-        update_lines.append(
-            f"UPDATE Entity SET loottable_id = {loot_id}"
-            f" WHERE namespace = 'minecraft' AND name = '{ent_name}';"
-        )
     print(f'LootTableEntity entries       : {len(entity_rows)}')
-    return entity_rows, update_lines
+    return entity_rows
 
 
 def _build_reference_rows(loot_id_map: dict) -> list[tuple]:
@@ -140,10 +134,8 @@ def main() -> None:
     loot_id_map    = _build_loot_id_map()
     loottable_rows = [(loot_id_map[path],) for path in sorted(loot_id_map)]
     comprises_rows = _build_comprises_rows(loot_id_map)
-    entity_rows, update_lines = _build_entity_loot_rows(loot_id_map)
+    entity_rows    = _build_entity_loot_rows(loot_id_map)
     reference_rows = _build_reference_rows(loot_id_map)
-
-    entity_updates_sql = '\n'.join(update_lines) + '\n' if update_lines else '-- (none)\n'
 
     write_sql(OUTPUT, '06 - Minecraft loot tables', [
         ('LootTable — one row per unique minecraft: loot table path',
@@ -169,9 +161,6 @@ def main() -> None:
              ['parent_id', 'child_id'],
              reference_rows,
          )),
-
-        ('UPDATE Entity.loottable_id from entity_loottables.txt',
-         entity_updates_sql),
     ])
 
 

@@ -409,13 +409,14 @@ ServerEvents.commandRegistry(event => {
     }
 
     function runItemExtraDump(ctx) {
-        const ItemStack       = Java.loadClass('net.minecraft.world.item.ItemStack');
-        const Registries      = Java.loadClass('net.minecraft.core.registries.Registries');
-        const TieredItemClass = Java.loadClass('net.minecraft.world.item.TieredItem');
-        const itemRegistry    = ctx.source.getServer().registryAccess().registryOrThrow(Registries.ITEM);
+        const ItemStack    = Java.loadClass('net.minecraft.world.item.ItemStack');
+        const Registries   = Java.loadClass('net.minecraft.core.registries.Registries');
+        const itemRegistry = ctx.source.getServer().registryAccess().registryOrThrow(Registries.ITEM);
 
-        var TierSortingReg = null;
-        try { TierSortingReg = Java.loadClass('net.neoforged.neoforge.common.TierSortingRegistry'); } catch(e) {}
+        // MC 1.21+ tool component — replaces TieredItem class hierarchy
+        var DataComponentsClass = null;
+        try { DataComponentsClass = Java.loadClass('net.minecraft.core.component.DataComponents'); } catch(e) {}
+
 
         var lines  = ['===== ITEM EXTRA DUMP START ====='];
         var total  = 0;
@@ -432,23 +433,64 @@ ServerEvents.commandRegistry(event => {
                 var maxStack   = stack.getMaxStackSize();
                 var enchantVal = item.getEnchantmentValue();
 
-                var miningEff = null, miningLvl = null;
-                if (TieredItemClass.isInstance(item)) {
+                var miningEff = null, miningTier = null;
+                // Primary: DataComponents.TOOL (MC 1.21+)
+                // defaultMiningSpeed() = 1.0 fallback — actual tier speed is in rules
+                if (DataComponentsClass !== null) {
                     try {
-                        var tier = TieredItemClass.cast(item).getTier();
-                        miningEff = tier.getSpeed();
-                        if (TierSortingReg !== null) {
-                            var tiers = TierSortingReg.getTiersSortedByLevel();
-                            var idx   = tiers.indexOf(tier);
-                            miningLvl = idx >= 0 ? idx : null;
+                        var toolComp = stack.get(DataComponentsClass.TOOL);
+                        if (toolComp !== null) {
+                            var rules = toolComp.rules();
+                            var maxSpeed    = null;
+                            var denyTagName = null;
+                            for (var ri = 0; ri < rules.size(); ri++) {
+                                var rule = rules.get(ri);
+                                // Speed rule -> tier mining efficiency
+                                try {
+                                    var speedOpt = rule.speed();
+                                    if (speedOpt.isPresent()) {
+                                        var spd = speedOpt.get();
+                                        if (maxSpeed === null || spd > maxSpeed) maxSpeed = spd;
+                                    }
+                                } catch(e3) {}
+                                // Deny-drops rule -> tag name encodes tier level
+                                try {
+                                    var cfdOpt = rule.correctForDrops();
+                                    if (cfdOpt.isPresent() && !cfdOpt.get()) {
+                                        var unwrapped = rule.blocks().unwrapKey();
+                                        if (unwrapped.isPresent()) {
+                                            denyTagName = unwrapped.get().location().toString();
+                                        }
+                                    }
+                                } catch(e3) {}
+                            }
+                            if (maxSpeed !== null) miningEff = maxSpeed;
+                            if (denyTagName !== null) {
+                                // Extract tier name: "minecraft:incorrect_for_diamond_tool" -> "diamond"
+                                var tierMatch = denyTagName.match(/incorrect_for_(.+?)_tool/);
+                                miningTier = tierMatch ? tierMatch[1] : denyTagName;
+                            }
+                        }
+                    } catch(e2) {}
+                }
+                // Fallback: TieredItem (MC 1.20.x / older NeoForge)
+                if (miningEff === null) {
+                    try {
+                        var TieredItemClass = Java.loadClass('net.minecraft.world.item.TieredItem');
+                        if (TieredItemClass.isInstance(item)) {
+                            var tier  = TieredItemClass.cast(item).getTier();
+                            miningEff = tier.getSpeed();
+                            // TieredItem fallback: no tag name available, skip miningTier
                         }
                     } catch(e2) {}
                 }
 
                 var rarity = null;
-                try { rarity = item.getRarity(stack).name(); } catch(e2) {}
+                try { rarity = stack.getRarity().name(); } catch(e2) {
+                    try { rarity = item.getRarity(stack).name(); } catch(e3) {}
+                }
 
-                lines.push(loc + ' | ' + maxStack + ' | ' + enchantVal + ' | ' + miningEff + ' | ' + miningLvl + ' | ' + rarity);
+                lines.push(loc + ' | ' + maxStack + ' | ' + enchantVal + ' | ' + miningEff + ' | ' + miningTier + ' | ' + rarity);
                 total++;
             } catch(e) { errors++; }
         });

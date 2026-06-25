@@ -129,7 +129,6 @@ CREATE TABLE Item (
     namespace VARCHAR(100) NOT NULL,
     name      VARCHAR(100) NOT NULL,
     rarity_id INT,
-    renewable BOOLEAN DEFAULT NULL,
     stackable BOOLEAN DEFAULT NULL,
     PRIMARY KEY (namespace, name),
     FOREIGN KEY (namespace) REFERENCES `Mod`(namespace),
@@ -140,10 +139,9 @@ CREATE TABLE Tool (
     item_namespace   VARCHAR(100),
     item_name        VARCHAR(100),
     miningEfficiency FLOAT,
-    miningLevel      INT,
+    miningTier       VARCHAR(50),
     attackDamage     FLOAT,
     attackSpeed      FLOAT,
-    attackRange      FLOAT,
     durability       INT,
     enchantability   INT,
     PRIMARY KEY (item_namespace, item_name),
@@ -202,17 +200,12 @@ CREATE TABLE Entity (
     healthPoints        FLOAT,
     armorPoints         FLOAT,
     attackDamage        FLOAT,
-    attackSpeed         FLOAT,
-    attackRange         FLOAT,
     speed               FLOAT,
     knockbackResistance FLOAT,
-    weakness            VARCHAR(100),
     hitboxSize          VARCHAR(20) DEFAULT NULL,
-    loottable_id        INT,
     texture_b64         MEDIUMTEXT DEFAULT NULL,
     PRIMARY KEY (namespace, name),
-    FOREIGN KEY (namespace)    REFERENCES `Mod`(namespace),
-    FOREIGN KEY (loottable_id) REFERENCES LootTable(id)
+    FOREIGN KEY (namespace) REFERENCES `Mod`(namespace)
 ) ENGINE=InnoDB;
 
 CREATE TABLE BiomeSpawnTable (
