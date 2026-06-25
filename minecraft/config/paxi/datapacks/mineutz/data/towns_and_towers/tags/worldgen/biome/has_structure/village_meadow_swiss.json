@@ -1,4 +1,8 @@
 {
   "replace": true,
-  "values": []
+  "values": [
+    "biomesoplenty:orchard",
+    "biomesoplenty:pasture",
+    "minecraft:meadow"
+  ]
 }

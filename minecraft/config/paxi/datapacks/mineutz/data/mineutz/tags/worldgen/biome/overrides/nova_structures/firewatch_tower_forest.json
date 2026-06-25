@@ -1,0 +1,9 @@
+{
+  "replace": true,
+  "values": [
+    "biomesoplenty:maple_woods",
+    "biomesoplenty:jacaranda_glade",
+    "minecraft:windswept_forest",
+    "minecraft:forest"
+  ]
+}

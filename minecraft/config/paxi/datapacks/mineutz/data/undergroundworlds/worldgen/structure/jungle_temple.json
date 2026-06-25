@@ -1,0 +1,39 @@
+{
+	"type": "minecraft:jigsaw",
+	"biomes": "#mineutz:suppress",
+	"max_distance_from_center": 128,
+	"liquid_settings": "ignore_waterlogging",
+	"size": 1,
+	"start_height": {
+		"type": "minecraft:uniform",
+		"max_inclusive": {
+			"absolute": 24
+		},
+		"min_inclusive": {
+			"absolute": -32
+		}
+	},
+	"spawn_overrides": {
+		"monster": {
+			"bounding_box": "full",
+			"spawns": [
+				{
+					"type": "minecraft:bogged",
+					"maxCount": 1,
+					"minCount": 1,
+					"weight": 1
+				},
+				{
+					"type": "undergroundworlds:jungle_zombie",
+					"maxCount": 1,
+					"minCount": 1,
+					"weight": 1
+				}
+			]
+		}
+	},
+	"start_pool": "undergroundworlds:jungle_temple",
+	"step": "underground_structures",
+	"terrain_adaptation": "none",
+	"use_expansion_hack": false
+}

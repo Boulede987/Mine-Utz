@@ -1,4 +1,8 @@
 {
   "replace": true,
-  "values": []
+  "values": [
+    "biomeswevegone:sakura_grove",
+    "minecraft:windswept_forest",
+    "minecraft:windswept_hills"
+  ]
 }

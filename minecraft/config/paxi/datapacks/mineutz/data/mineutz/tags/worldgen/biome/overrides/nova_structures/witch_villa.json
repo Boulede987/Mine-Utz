@@ -1,0 +1,8 @@
+{
+  "replace": true,
+  "values": [
+    "biomesoplenty:pumpkin_patch",
+    "minecraft:swamp",
+    "minecraft:mangrove_swamp"
+  ]
+}

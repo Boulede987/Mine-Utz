@@ -1,0 +1,8 @@
+{
+  "replace": true,
+  "values": [
+    "biomeswevegone:sakura_grove",
+    "biomesoplenty:snowblossom_grove",
+    "minecraft:cherry_grove"
+  ]
+}

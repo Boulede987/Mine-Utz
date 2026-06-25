@@ -1,4 +1,7 @@
 {
   "replace": true,
-  "values": []
+  "values": [
+    "minecraft:windswept_gravelly_hills",
+    "minecraft:cherry_grove"
+  ]
 }

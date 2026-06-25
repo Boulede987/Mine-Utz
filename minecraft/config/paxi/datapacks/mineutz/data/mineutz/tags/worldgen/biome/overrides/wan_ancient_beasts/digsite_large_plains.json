@@ -1,0 +1,9 @@
+{
+  "replace": true,
+  "values": [
+    "biomeswevegone:rose_fields",
+    "biomesoplenty:lavender_field",
+    "biomesoplenty:pasture",
+    "minecraft:plains"
+  ]
+}

@@ -1,4 +1,7 @@
 {
   "replace": true,
-  "values": []
+  "values": [
+    "biomesoplenty:rocky_shrubland",
+    "biomesoplenty:shrubland"
+  ]
 }

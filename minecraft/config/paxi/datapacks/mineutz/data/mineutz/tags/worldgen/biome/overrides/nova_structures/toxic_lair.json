@@ -1,0 +1,8 @@
+{
+  "replace": true,
+  "values": [
+    "biomesoplenty:floodplain",
+    "minecraft:swamp",
+    "minecraft:mangrove_swamp"
+  ]
+}

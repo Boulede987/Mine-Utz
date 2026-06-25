@@ -1,0 +1,9 @@
+{
+  "replace": true,
+  "values": [
+    "biomesoplenty:rainforest",
+    "biomesoplenty:rocky_rainforest",
+    "minecraft:bamboo_jungle",
+    "minecraft:jungle"
+  ]
+}

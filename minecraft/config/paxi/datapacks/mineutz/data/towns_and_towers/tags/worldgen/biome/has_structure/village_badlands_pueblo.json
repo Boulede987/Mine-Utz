@@ -1,4 +1,7 @@
 {
   "replace": true,
-  "values": []
+  "values": [
+    "minecraft:badlands",
+    "minecraft:eroded_badlands"
+  ]
 }

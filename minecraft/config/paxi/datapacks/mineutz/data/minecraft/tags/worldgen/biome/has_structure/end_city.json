@@ -1,4 +1,11 @@
 {
   "replace": true,
-  "values": []
+  "values": [
+    "biomesoplenty:end_corruption",
+    "biomesoplenty:end_reef",
+    "biomesoplenty:end_wilds",
+    "nullscape:crystal_peaks",
+    "nullscape:shadowlands",
+    "nullscape:void_barrens"
+  ]
 }

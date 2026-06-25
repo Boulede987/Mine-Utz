@@ -1,0 +1,8 @@
+{
+  "replace": true,
+  "values": [
+    "biomesoplenty:forested_field",
+    "minecraft:dark_forest",
+    "minecraft:flower_forest"
+  ]
+}

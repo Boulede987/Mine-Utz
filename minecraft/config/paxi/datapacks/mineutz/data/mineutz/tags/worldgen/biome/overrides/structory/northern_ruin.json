@@ -1,0 +1,10 @@
+{
+  "replace": true,
+  "values": [
+    "biomesoplenty:forested_field",
+    "biomesoplenty:lavender_field",
+    "minecraft:grove",
+    "minecraft:frozen_peaks",
+    "minecraft:stony_peaks"
+  ]
+}

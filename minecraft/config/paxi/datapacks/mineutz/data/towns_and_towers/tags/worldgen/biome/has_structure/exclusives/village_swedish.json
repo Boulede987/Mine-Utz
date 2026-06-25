@@ -1,4 +1,8 @@
 {
   "replace": true,
-  "values": []
+  "values": [
+    "biomesoplenty:maple_woods",
+    "biomesoplenty:jacaranda_glade",
+    "minecraft:dark_forest"
+  ]
 }

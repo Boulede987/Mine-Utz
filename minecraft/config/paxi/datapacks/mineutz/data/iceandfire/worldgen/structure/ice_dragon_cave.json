@@ -1,0 +1,6 @@
+{
+	"type": "iceandfire:ice_dragon_cave",
+	"biomes": "#mineutz:overrides/iceandfire/ice_dragon_cave",
+	"spawn_overrides": {},
+	"step": "underground_structures"
+}

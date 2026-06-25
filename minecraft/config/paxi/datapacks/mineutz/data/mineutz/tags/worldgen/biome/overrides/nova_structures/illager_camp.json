@@ -1,0 +1,19 @@
+{
+  "replace": true,
+  "values": [
+    "biomeswevegone:dacite_shore",
+    "biomeswevegone:maple_taiga",
+    "biomesoplenty:snowy_maple_woods",
+    "biomesoplenty:pumpkin_patch",
+    "biomesoplenty:mediterranean_forest",
+    "minecraft:snowy_plains",
+    "minecraft:snowy_taiga",
+    "minecraft:stony_shore",
+    "minecraft:savanna",
+    "minecraft:savanna_plateau",
+    "minecraft:stony_peaks",
+    "minecraft:badlands",
+    "minecraft:eroded_badlands",
+    "minecraft:wooded_badlands"
+  ]
+}

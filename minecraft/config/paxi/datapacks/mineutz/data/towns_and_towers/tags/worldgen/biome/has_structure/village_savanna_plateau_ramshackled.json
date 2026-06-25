@@ -1,4 +1,6 @@
 {
   "replace": true,
-  "values": []
+  "values": [
+    "minecraft:savanna_plateau"
+  ]
 }
