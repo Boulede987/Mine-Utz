@@ -53,7 +53,10 @@ def _build_handlers() -> tuple[dict, dict]:
     mod_meta_rows        = []
     lang_dict            = {}
 
-    collect_biome                            = make_biome_collector(biome_spawn_rows, biome_feature_rows)
+    biome_stat_rows  = []
+    entity_cat_dict  = {}   # entity_id -> primary spawn category
+
+    collect_biome = make_biome_collector(biome_spawn_rows, biome_feature_rows, biome_stat_rows, entity_cat_dict)
     collect_structure, collect_structure_set = make_structure_collector(structure_biome_rows, structure_spawn_rows)
 
     handlers = {
@@ -79,6 +82,8 @@ def _build_handlers() -> tuple[dict, dict]:
         'loot_reference_rows':  loot_reference_rows,
         'biome_spawn_rows':     biome_spawn_rows,
         'biome_feature_rows':   biome_feature_rows,
+        'biome_stat_rows':      biome_stat_rows,
+        'entity_cat_dict':      entity_cat_dict,
         'structure_biome_rows': structure_biome_rows,
         'structure_spawn_rows': structure_spawn_rows,
         'mod_meta_rows':        mod_meta_rows,
@@ -123,6 +128,18 @@ def _write_output_files(buckets: dict) -> None:
     write_txt(LISTS, 'biome_features.txt', [(
         'BIOME FEATURES  format: biome | feature_id',
         buckets['biome_feature_rows'],
+    )])
+    write_txt(LISTS, 'biome_stats.txt', [(
+        'BIOME STATS  format: biome_id | temperature | mainColor (#RRGGBB fog)',
+        buckets['biome_stat_rows'],
+    )])
+    entity_behavior_rows = [
+        f"{eid} | {cat}"
+        for eid, cat in sorted(buckets['entity_cat_dict'].items())
+    ]
+    write_txt(LISTS, 'entity_behavior.txt', [(
+        'ENTITY BEHAVIOR  format: entity_id | spawn_category',
+        entity_behavior_rows,
     )])
     write_txt(LISTS, 'structure_biomes.txt', [(
         'STRUCTURE -> BIOME  format: structure | biome_or_tag',

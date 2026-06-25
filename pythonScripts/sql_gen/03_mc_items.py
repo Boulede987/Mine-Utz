@@ -61,19 +61,79 @@ def _load_vanilla_stations(mc_items_set: set[str]) -> set[str]:
     return stations
 
 
-def _build_item_rows(mc_items: list[str]) -> list[tuple]:
-    return [
-        ('minecraft', name.split(':', 1)[1], None, None, None)
-        for name in mc_items
-    ]
+_RARITY_IDS = {'COMMON': 1, 'UNCOMMON': 2, 'RARE': 3, 'EPIC': 4}
 
 
-def _build_block_rows(mc_blocks: list[str], mc_items_set: set[str]) -> list[tuple]:
-    return [
-        ('minecraft', name.split(':', 1)[1], None, None, None, None, None)
-        for name in mc_blocks
-        if name in mc_items_set
-    ]
+def _load_item_extra() -> dict[str, dict]:
+    """Parse item_extra.txt into {item_id: {key: value}} from /dump_item_extra."""
+    result: dict[str, dict] = {}
+    def _i(v): return int(v)   if v not in ('null', 'None', '') else None
+    def _f(v): return float(v) if v not in ('null', 'None', '') else None
+    def _s(v): return v        if v not in ('null', 'None', '') else None
+    for line in load_pipe_file(LISTS, 'item_extra.txt'):
+        parts = [p.strip() for p in line.split('|')]
+        if len(parts) < 5:
+            continue
+        result[parts[0]] = {
+            'maxStackSize':     _i(parts[1]),
+            'enchantability':   _i(parts[2]),
+            'miningEfficiency': _f(parts[3]),
+            'miningLevel':      _i(parts[4]),
+            'rarity':           _s(parts[5]) if len(parts) >= 6 else None,
+        }
+    print(f'item_extra      : {len(result)} entries')
+    return result
+
+
+def _load_block_stats() -> dict[str, dict]:
+    """Parse block_stats.txt into {block_id: {key: value}} from /dump_block_stats."""
+    result: dict[str, dict] = {}
+    def _f(v): return float(v) if v not in ('null', 'None', '') else None
+    def _b(v):
+        if v in ('null', 'None', ''): return None
+        return v.lower() == 'true'
+    for line in load_pipe_file(LISTS, 'block_stats.txt'):
+        parts = [p.strip() for p in line.split('|')]
+        if len(parts) < 6:
+            continue
+        result[parts[0]] = {
+            'blastResistance': _f(parts[1]),
+            'hardness':        _f(parts[2]),
+            'luminous':        _b(parts[3]),
+            'transparent':     _b(parts[4]),
+            'flammable':       _b(parts[5]),
+        }
+    print(f'block_stats     : {len(result)} entries')
+    return result
+
+
+def _build_item_rows(mc_items: list[str], item_extra: dict) -> list[tuple]:
+    rows = []
+    for item_id in mc_items:
+        name = item_id.split(':', 1)[1]
+        extra     = item_extra.get(item_id, {})
+        max_stack = extra.get('maxStackSize')
+        stackable = (True if max_stack > 1 else False) if max_stack is not None else None
+        rarity    = extra.get('rarity')
+        rarity_id = _RARITY_IDS.get(rarity) if rarity else None
+        rows.append(('minecraft', name, rarity_id, None, stackable))
+    return rows
+
+
+def _build_block_rows(mc_blocks: list[str], mc_items_set: set[str], block_stats: dict) -> list[tuple]:
+    rows = []
+    for block_id in mc_blocks:
+        if block_id not in mc_items_set:
+            continue
+        name = block_id.split(':', 1)[1]
+        s = block_stats.get(block_id, {})
+        rows.append(('minecraft', name,
+                     s.get('blastResistance'),
+                     s.get('hardness'),
+                     s.get('luminous'),
+                     s.get('transparent'),
+                     s.get('flammable')))
+    return rows
 
 
 def _build_station_rows(mc_stations: set[str]) -> list[tuple]:
@@ -86,20 +146,22 @@ def _build_station_rows(mc_stations: set[str]) -> list[tuple]:
 def main() -> None:
     mc_items, mc_blocks, mc_items_set = _load_vanilla_items()
     mc_stations = _load_vanilla_stations(mc_items_set)
+    item_extra  = _load_item_extra()
+    block_stats = _load_block_stats()
 
     write_sql(OUTPUT, '03 - Minecraft items, blocks and stations', [
-        ('Item — all vanilla items  (rarity, renewable, stackable are NULL)',
+        ('Item — all vanilla items  (rarity, renewable are NULL; stackable from /dump_item_extra)',
          insert_rows(
              'Item',
              ['namespace', 'name', 'rarity_id', 'renewable', 'stackable'],
-             _build_item_rows(mc_items),
+             _build_item_rows(mc_items, item_extra),
          )),
 
-        ('Block — vanilla blocks that have an item form  (physical properties are NULL)',
+        ('Block — vanilla blocks that have an item form  (physical properties from /dump_block_stats)',
          insert_rows(
              'Block',
              ['namespace', 'name', 'blastResistance', 'hardness', 'luminous', 'transparent', 'flammable'],
-             _build_block_rows(mc_blocks, mc_items_set),
+             _build_block_rows(mc_blocks, mc_items_set, block_stats),
          )),
 
         ('Station — vanilla crafting stations derived from the station column of recipes.txt',

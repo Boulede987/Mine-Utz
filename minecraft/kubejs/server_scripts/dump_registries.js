@@ -13,6 +13,13 @@
 //   /dump_effects
 //   /dump_sounds
 //   /dump_entity_loottables
+//   /dump_food_stats
+//   /dump_tool_stats
+//   /dump_armor_stats
+//   /dump_block_stats
+//   /dump_entity_stats
+//   /dump_biome_stats
+//   /dump_item_extra
 //   /dump_check
 //   /dump_all
 //
@@ -286,6 +293,171 @@ ServerEvents.commandRegistry(event => {
         ctx.source.sendSuccess(Component.literal(`§aDumped ${total} armor items (${errors} errors)`), false);
     }
 
+    function runBlockStatsDump(ctx) {
+        const Registries    = Java.loadClass('net.minecraft.core.registries.Registries');
+        const blockRegistry = ctx.source.getServer().registryAccess().registryOrThrow(Registries.BLOCK);
+
+        var lines  = ['===== BLOCK STATS DUMP START ====='];
+        var total  = 0;
+        var errors = 0;
+
+        blockRegistry.keySet().forEach(function(loc) {
+            try {
+                var opt = blockRegistry.getOptional(loc);
+                if (!opt.isPresent()) return;
+                var holder = opt.get();
+                var block  = holder.value ? holder.value() : holder;
+                var state  = block.defaultBlockState();
+
+                var blastRes = null, hardness = null, luminous = null, transparent = null, flammable = null;
+                try { blastRes    = block.getExplosionResistance(); } catch(e2) {}
+                try { hardness    = block.defaultDestroyTime();     } catch(e2) {}
+                try { luminous    = state.getLightEmission() > 0;   } catch(e2) {}
+                try { transparent = !state.canOcclude();            } catch(e2) {}
+                try { flammable   = state.ignitedByLava();          } catch(e2) {}
+
+                lines.push(loc + ' | ' + blastRes + ' | ' + hardness + ' | ' + luminous + ' | ' + transparent + ' | ' + flammable);
+                total++;
+            } catch(e) { errors++; }
+        });
+
+        lines.push('===== BLOCK STATS DUMP END (' + total + ' total, ' + errors + ' errors) =====');
+        console.log(lines.join('\n'));
+        ctx.source.sendSuccess(Component.literal('§aDumped ' + total + ' block stats (' + errors + ' errors)'), false);
+    }
+
+    function runEntityStatsDump(ctx) {
+        const Registries     = Java.loadClass('net.minecraft.core.registries.Registries');
+        const DefaultAttribs = Java.loadClass('net.minecraft.world.entity.ai.attributes.DefaultAttributes');
+        const Attributes     = Java.loadClass('net.minecraft.world.entity.ai.attributes.Attributes');
+        const entityRegistry = ctx.source.getServer().registryAccess().registryOrThrow(Registries.ENTITY_TYPE);
+
+        function safeAttr(supplier, attr) {
+            try { return supplier.hasAttribute(attr) ? supplier.getBaseValue(attr) : null; } catch(e) { return null; }
+        }
+
+        var lines  = ['===== ENTITY STATS DUMP START ====='];
+        var total  = 0;
+        var errors = 0;
+
+        entityRegistry.keySet().forEach(function(loc) {
+            try {
+                var opt = entityRegistry.getOptional(loc);
+                if (!opt.isPresent()) return;
+                var holder = opt.get();
+                var entityType = holder.value ? holder.value() : holder;
+
+                if (!DefaultAttribs.hasSupplier(entityType)) return;
+                var supplier = DefaultAttribs.getSupplier(entityType);
+                var hp = safeAttr(supplier, Attributes.MAX_HEALTH);
+                if (hp === null) return;
+
+                var armor  = safeAttr(supplier, Attributes.ARMOR);
+                var atkDmg = safeAttr(supplier, Attributes.ATTACK_DAMAGE);
+                var speed  = safeAttr(supplier, Attributes.MOVEMENT_SPEED);
+                var kbRes  = safeAttr(supplier, Attributes.KNOCKBACK_RESISTANCE);
+
+                var dims = entityType.getDimensions();
+                var w = null, h = null;
+                try { w = dims.width(); h = dims.height(); } catch(e2) {
+                try { w = dims.width;   h = dims.height;   } catch(e3) {} }
+                // Reject non-numeric (Rhino may return method object instead of float)
+                if (typeof w !== 'number') w = null;
+                if (typeof h !== 'number') h = null;
+
+                lines.push(loc + ' | ' + hp + ' | ' + armor + ' | ' + atkDmg + ' | ' + speed + ' | ' + kbRes + ' | ' + w + ' | ' + h);
+                total++;
+            } catch(e) { errors++; }
+        });
+
+        lines.push('===== ENTITY STATS DUMP END (' + total + ' total, ' + errors + ' errors) =====');
+        console.log(lines.join('\n'));
+        ctx.source.sendSuccess(Component.literal('§aDumped ' + total + ' entity stats (' + errors + ' errors)'), false);
+    }
+
+    function runBiomeStatsDump(ctx) {
+        const Registries = Java.loadClass('net.minecraft.core.registries.Registries');
+
+        var lines  = ['===== BIOME STATS DUMP START ====='];
+        var total  = 0;
+        var errors = 0;
+
+        try {
+            var biomeRegistry = ctx.source.getServer().registryAccess().registryOrThrow(Registries.BIOME);
+
+            biomeRegistry.keySet().forEach(function(loc) {
+                try {
+                    var biome = biomeRegistry.get(loc);
+                    if (!biome) return;
+
+                    var temp   = biome.getBaseTemperature();
+                    var fogInt = biome.getSpecialEffects().getFogColor();
+                    var fogHex = '#' + ('000000' + (fogInt & 0xFFFFFF).toString(16).toUpperCase()).slice(-6);
+
+                    lines.push(loc + ' | ' + temp + ' | ' + fogHex);
+                    total++;
+                } catch(e) { errors++; }
+            });
+        } catch(e) {
+            errors++;
+            lines.push('# ERROR: ' + e);
+        }
+
+        lines.push('===== BIOME STATS DUMP END (' + total + ' total, ' + errors + ' errors) =====');
+        console.log(lines.join('\n'));
+        ctx.source.sendSuccess(Component.literal('§aDumped ' + total + ' biome stats (' + errors + ' errors)'), false);
+    }
+
+    function runItemExtraDump(ctx) {
+        const ItemStack       = Java.loadClass('net.minecraft.world.item.ItemStack');
+        const Registries      = Java.loadClass('net.minecraft.core.registries.Registries');
+        const TieredItemClass = Java.loadClass('net.minecraft.world.item.TieredItem');
+        const itemRegistry    = ctx.source.getServer().registryAccess().registryOrThrow(Registries.ITEM);
+
+        var TierSortingReg = null;
+        try { TierSortingReg = Java.loadClass('net.neoforged.neoforge.common.TierSortingRegistry'); } catch(e) {}
+
+        var lines  = ['===== ITEM EXTRA DUMP START ====='];
+        var total  = 0;
+        var errors = 0;
+
+        itemRegistry.keySet().forEach(function(loc) {
+            try {
+                var opt = itemRegistry.getOptional(loc);
+                if (!opt.isPresent()) return;
+                var holder = opt.get();
+                var item   = holder.value ? holder.value() : holder;
+                var stack  = new ItemStack(item);
+
+                var maxStack   = stack.getMaxStackSize();
+                var enchantVal = item.getEnchantmentValue();
+
+                var miningEff = null, miningLvl = null;
+                if (TieredItemClass.isInstance(item)) {
+                    try {
+                        var tier = TieredItemClass.cast(item).getTier();
+                        miningEff = tier.getSpeed();
+                        if (TierSortingReg !== null) {
+                            var tiers = TierSortingReg.getTiersSortedByLevel();
+                            var idx   = tiers.indexOf(tier);
+                            miningLvl = idx >= 0 ? idx : null;
+                        }
+                    } catch(e2) {}
+                }
+
+                var rarity = null;
+                try { rarity = item.getRarity(stack).name(); } catch(e2) {}
+
+                lines.push(loc + ' | ' + maxStack + ' | ' + enchantVal + ' | ' + miningEff + ' | ' + miningLvl + ' | ' + rarity);
+                total++;
+            } catch(e) { errors++; }
+        });
+
+        lines.push('===== ITEM EXTRA DUMP END (' + total + ' total, ' + errors + ' errors) =====');
+        console.log(lines.join('\n'));
+        ctx.source.sendSuccess(Component.literal('§aDumped ' + total + ' item extras (' + errors + ' errors)'), false);
+    }
+
     event.register(Commands.literal('dump_structures').requires(src => src.hasPermission(2)).executes(ctx => {
         try { runDump(ctx, 'STRUCTURE', 'STRUCTURE'); } catch(e) { ctx.source.sendFailure(Component.literal(`§cFailed: ${e}`)); }
         return 1;
@@ -400,6 +572,26 @@ ServerEvents.commandRegistry(event => {
         return 1;
     }));
 
+    event.register(Commands.literal('dump_block_stats').requires(src => src.hasPermission(2)).executes(ctx => {
+        try { runBlockStatsDump(ctx); } catch(e) { ctx.source.sendFailure(Component.literal(`§cFailed: ${e}`)); }
+        return 1;
+    }));
+
+    event.register(Commands.literal('dump_entity_stats').requires(src => src.hasPermission(2)).executes(ctx => {
+        try { runEntityStatsDump(ctx); } catch(e) { ctx.source.sendFailure(Component.literal(`§cFailed: ${e}`)); }
+        return 1;
+    }));
+
+    event.register(Commands.literal('dump_biome_stats').requires(src => src.hasPermission(2)).executes(ctx => {
+        try { runBiomeStatsDump(ctx); } catch(e) { ctx.source.sendFailure(Component.literal(`§cFailed: ${e}`)); }
+        return 1;
+    }));
+
+    event.register(Commands.literal('dump_item_extra').requires(src => src.hasPermission(2)).executes(ctx => {
+        try { runItemExtraDump(ctx); } catch(e) { ctx.source.sendFailure(Component.literal(`§cFailed: ${e}`)); }
+        return 1;
+    }));
+
     event.register(Commands.literal('dump_all').requires(src => src.hasPermission(2)).executes(ctx => {
         try {
             runDump(ctx, 'STRUCTURE',   'STRUCTURE');
@@ -415,6 +607,10 @@ ServerEvents.commandRegistry(event => {
             runFoodStatsDump(ctx);
             runToolStatsDump(ctx);
             runArmorStatsDump(ctx);
+            runBlockStatsDump(ctx);
+            runEntityStatsDump(ctx);
+            runBiomeStatsDump(ctx);
+            runItemExtraDump(ctx);
             runConsistencyCheck(ctx);
             ctx.source.sendSuccess(Component.literal(`§aDumped everything to logs/latest.log`), false);
         } catch(e) { ctx.source.sendFailure(Component.literal(`§cFailed: ${e}`)); }

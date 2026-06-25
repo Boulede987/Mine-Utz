@@ -32,6 +32,10 @@ LABEL_TO_FILE = {
     'FOOD STATS':       'food_stats.txt',
     'TOOL STATS':       'tool_stats.txt',
     'ARMOR STATS':      'armor_stats.txt',
+    'BLOCK STATS':      'block_stats.txt',
+    'ENTITY STATS':     'entity_stats.txt',
+    'BIOME STATS':      'biome_stats.txt',
+    'ITEM EXTRA':       'item_extra.txt',
 }
 
 DUMP_PATTERN = re.compile(

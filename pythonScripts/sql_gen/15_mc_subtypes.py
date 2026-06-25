@@ -10,10 +10,9 @@ Sources
   lists/tool_stats.txt  — attackDamage, attackSpeed, durability  (from /dump_tool_stats)
   lists/armor_stats.txt — armorPoints, armorToughness, knockbackResistance, durability
   lists/food_stats.txt  — hungerRestoration, saturation          (from /dump_food_stats)
+  lists/item_extra.txt  — enchantability, miningEfficiency, miningLevel (from /dump_item_extra)
 
-Stats files are optional: if absent, stat columns are NULL.
-Run /dump_tool_stats, /dump_armor_stats, /dump_food_stats in-game then
-extract_from_log.py to produce them.
+All stats files are optional: if absent, stat columns are NULL.
 
 Output: BDD/Scripts/inserts/15_mc_subtypes.sql
 """
@@ -53,6 +52,25 @@ def _load_stats(filename: str, columns: list[str]) -> dict[str, dict]:
     return result
 
 
+def _load_item_extra() -> dict[str, dict]:
+    """Parse item_extra.txt into {item_id: {key: value}} from /dump_item_extra."""
+    result: dict[str, dict] = {}
+    def _i(v): return int(v)   if v not in ('null', 'None', '') else None
+    def _f(v): return float(v) if v not in ('null', 'None', '') else None
+    for line in load_pipe_file(LISTS, 'item_extra.txt'):
+        parts = [p.strip() for p in line.split('|')]
+        if len(parts) < 5:
+            continue
+        result[parts[0]] = {
+            'maxStackSize':     _i(parts[1]),
+            'enchantability':   _i(parts[2]),
+            'miningEfficiency': _f(parts[3]),
+            'miningLevel':      _i(parts[4]),
+            # rarity (parts[5]) not used by subtypes
+        }
+    return result
+
+
 def _items_from_tags(tags: list[str], tag_map: dict, mc_items: set) -> list[tuple[str, str]]:
     resolved: set[str] = set()
     for tag in tags:
@@ -74,15 +92,18 @@ def _load_data() -> dict:
     tool_stats  = _load_stats('tool_stats.txt',  ['attackDamage', 'attackSpeed', 'durability'])
     armor_stats = _load_stats('armor_stats.txt', ['armorPoints', 'armorToughness', 'knockbackResistance', 'durability'])
     food_stats  = _load_stats('food_stats.txt',  ['hungerRestoration', 'saturation'])
+    item_extra  = _load_item_extra()
     print(f'tool_stats  entries : {len(tool_stats)}')
     print(f'armor_stats entries : {len(armor_stats)}')
     print(f'food_stats  entries : {len(food_stats)}')
+    print(f'item_extra  entries : {len(item_extra)}')
     return {
         'mc_items':    mc_items,
         'tag_map':     tag_map,
         'tool_stats':  tool_stats,
         'armor_stats': armor_stats,
         'food_stats':  food_stats,
+        'item_extra':  item_extra,
     }
 
 
@@ -108,26 +129,27 @@ def _classify_items(data: dict) -> tuple[list, list, list]:
     return tool_pairs, armor_pairs, food_pairs
 
 
-def _build_tool_rows(tool_pairs: list, tool_stats: dict) -> list[tuple]:
+def _build_tool_rows(tool_pairs: list, tool_stats: dict, item_extra: dict) -> list[tuple]:
     return [
         (ns, name,
-         None, None,
-         _stat(tool_stats.get(f'minecraft:{name}'), 'attackDamage'),
-         _stat(tool_stats.get(f'minecraft:{name}'), 'attackSpeed'),
-         None,
-         _stat(tool_stats.get(f'minecraft:{name}'), 'durability'),
-         None)
+         _stat(item_extra.get(f'minecraft:{name}'),  'miningEfficiency'),
+         _stat(item_extra.get(f'minecraft:{name}'),  'miningLevel'),
+         _stat(tool_stats.get(f'minecraft:{name}'),  'attackDamage'),
+         _stat(tool_stats.get(f'minecraft:{name}'),  'attackSpeed'),
+         None,                                        # attackRange not available
+         _stat(tool_stats.get(f'minecraft:{name}'),  'durability'),
+         _stat(item_extra.get(f'minecraft:{name}'),  'enchantability'))
         for ns, name in tool_pairs
     ]
 
 
-def _build_armor_rows(armor_pairs: list, armor_stats: dict) -> list[tuple]:
+def _build_armor_rows(armor_pairs: list, armor_stats: dict, item_extra: dict) -> list[tuple]:
     return [
         (ns, name,
          _stat(armor_stats.get(f'minecraft:{name}'), 'armorPoints'),
          _stat(armor_stats.get(f'minecraft:{name}'), 'armorToughness'),
          _stat(armor_stats.get(f'minecraft:{name}'), 'durability'),
-         None,
+         _stat(item_extra.get(f'minecraft:{name}'),  'enchantability'),
          _stat(armor_stats.get(f'minecraft:{name}'), 'knockbackResistance'))
         for ns, name in armor_pairs
     ]
@@ -147,23 +169,23 @@ def main() -> None:
     tool_pairs, armor_pairs, food_pairs = _classify_items(data)
 
     write_sql(OUTPUT, '15 - Minecraft item subtypes (Tool, Armor, Food)', [
-        ('Tool — classified via item tags; attack stats from /dump_tool_stats when available',
+        ('Tool — classified via item tags; attack stats from /dump_tool_stats, tier stats from /dump_item_extra',
          insert_rows(
              'Tool',
              ['item_namespace', 'item_name',
               'miningEfficiency', 'miningLevel',
               'attackDamage', 'attackSpeed', 'attackRange',
               'durability', 'enchantability'],
-             _build_tool_rows(tool_pairs, data['tool_stats']),
+             _build_tool_rows(tool_pairs, data['tool_stats'], data['item_extra']),
          )),
 
-        ('Armor — classified via item tags; stats from /dump_armor_stats when available',
+        ('Armor — classified via item tags; stats from /dump_armor_stats, enchantability from /dump_item_extra',
          insert_rows(
              'Armor',
              ['item_namespace', 'item_name',
               'armorPoints', 'armorToughness',
               'durability', 'enchantability', 'knockbackResistance'],
-             _build_armor_rows(armor_pairs, data['armor_stats']),
+             _build_armor_rows(armor_pairs, data['armor_stats'], data['item_extra']),
          )),
 
         ('Food — from /dump_food_stats when available, else item tags',

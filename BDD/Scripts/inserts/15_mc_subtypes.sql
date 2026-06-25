@@ -4,7 +4,7 @@
 
 USE MineutzDB;
 
--- Tool — classified via item tags; attack stats from /dump_tool_stats when available
+-- Tool — classified via item tags; attack stats from /dump_tool_stats, tier stats from /dump_item_extra
 INSERT INTO Tool (item_namespace, item_name, miningEfficiency, miningLevel, attackDamage, attackSpeed, attackRange, durability, enchantability) VALUES
   ('minecraft', 'diamond_axe', NULL, NULL, 8.0, -3.0, NULL, 1561.0, NULL),
   ('minecraft', 'diamond_hoe', NULL, NULL, 0.0, 0.0, NULL, 1561.0, NULL),
@@ -37,7 +37,7 @@ INSERT INTO Tool (item_namespace, item_name, miningEfficiency, miningLevel, atta
   ('minecraft', 'wooden_shovel', NULL, NULL, 1.5, -3.0, NULL, 59.0, NULL),
   ('minecraft', 'wooden_sword', NULL, NULL, 3.0, -2.4000000953674316, NULL, 59.0, NULL);
 
--- Armor — classified via item tags; stats from /dump_armor_stats when available
+-- Armor — classified via item tags; stats from /dump_armor_stats, enchantability from /dump_item_extra
 INSERT INTO Armor (item_namespace, item_name, armorPoints, armorToughness, durability, enchantability, knockbackResistance) VALUES
   ('minecraft', 'chainmail_boots', 1.0, 0.0, 195.0, NULL, 0.0),
   ('minecraft', 'chainmail_chestplate', 5.0, 0.0, 240.0, NULL, 0.0),
