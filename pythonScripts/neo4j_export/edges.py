@@ -1,5 +1,5 @@
 from .db import run_batch
-from .readers import read_ids, read_pipe, parse_kv, resolve_biome, loot_path_to_block_id, node_rows
+from .readers import read_ids, read_pipe, parse_kv, resolve_biome, loot_path_to_block_id
 
 _PRODUCES_QUERY = """
     UNWIND $rows AS r
@@ -56,12 +56,6 @@ _STRUCTURE_SPAWNS_QUERY = """
     UNWIND $rows AS r
     MATCH (st:Structure {id:r.structure}), (e:Entity {id:r.entity})
     MERGE (e)-[:FOUND_IN_STRUCTURE]->(st)
-"""
-
-_MERGE_BLOCKS_QUERY = """
-    UNWIND $rows AS r
-    MERGE (b:Block {id: r.id})
-    SET b.namespace = r.namespace, b.name = r.name
 """
 
 _BLOCK_DROPS_QUERY = """
@@ -240,12 +234,10 @@ def export_structure_spawns(session, structure_ids: set[str], entity_ids: set[st
 
 
 def export_block_drops(session, item_ids: set[str]) -> None:
-    block_ids = read_ids('blocks.txt')
-    loot_entries, blocks_with_loot = _load_block_loot_entries(block_ids, item_ids)
-    block_node_rows = node_rows(blocks_with_loot)
-    run_batch(session, _MERGE_BLOCKS_QUERY, block_node_rows)
+    block_ids = read_ids('blocks.txt') & item_ids  # Block is Item subtype — blocks-only excluded
+    loot_entries, _ = _load_block_loot_entries(block_ids, item_ids)
     run_batch(session, _BLOCK_DROPS_QUERY, loot_entries)
-    print(f"  {len(block_node_rows)} blocks, {len(loot_entries)} block->item drop edges")
+    print(f"  {len(loot_entries)} block->item drop edges")
 
 
 def _load_block_loot_entries(block_ids: set[str], item_ids: set[str]) -> tuple[list[dict], set[str]]:

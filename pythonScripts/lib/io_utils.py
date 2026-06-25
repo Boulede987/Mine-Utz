@@ -9,10 +9,36 @@ import zipfile
 from pathlib import Path
 
 
+def _strip_comments(text: str) -> str:
+    # Strip // comments outside of strings (simplified: not inside string values)
+    result = []
+    in_string = False
+    i = 0
+    while i < len(text):
+        c = text[i]
+        if c == '"' and (i == 0 or text[i - 1] != '\\'):
+            in_string = not in_string
+            result.append(c)
+        elif not in_string and c == '/' and i + 1 < len(text) and text[i + 1] == '/':
+            while i < len(text) and text[i] != '\n':
+                i += 1
+            continue
+        else:
+            result.append(c)
+        i += 1
+    return ''.join(result)
+
+
 def read_json(zip_file: zipfile.ZipFile, entry_name: str) -> dict | None:
     """Parse a JSON entry from an open ZipFile. Returns None on any error."""
     try:
-        return json.loads(zip_file.read(entry_name).decode('utf-8', errors='ignore'))
+        raw = zip_file.read(entry_name).decode('utf-8', errors='ignore')
+        return json.loads(raw)
+    except json.JSONDecodeError:
+        try:
+            return json.loads(_strip_comments(raw))
+        except Exception:
+            return None
     except Exception:
         return None
 

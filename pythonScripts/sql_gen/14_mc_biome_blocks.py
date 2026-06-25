@@ -33,7 +33,8 @@ OUTPUT = SQL_INSERTS / '14_mc_biome_blocks.sql'
 def _load_valid_sets() -> tuple[set[str], set[str]]:
     mc_biomes = {b for b in load_registry(LISTS, 'biomes.txt') if b.startswith('minecraft:')}
     mc_blocks = {b for b in load_registry(LISTS, 'blocks.txt') if b.startswith('minecraft:')}
-    return mc_biomes, mc_blocks
+    mc_items  = {i for i in load_registry(LISTS, 'items.txt')  if i.startswith('minecraft:')}
+    return mc_biomes, mc_blocks & mc_items
 
 
 def _parse_biome_block_rows(mc_biomes: set, mc_blocks: set) -> list[tuple]:

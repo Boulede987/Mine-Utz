@@ -32,7 +32,8 @@ OUTPUT = SQL_INSERTS / '13_mc_structure_blocks.sql'
 def _load_valid_sets() -> tuple[set[str], set[str]]:
     mc_structures = {s for s in load_registry(LISTS, 'structures.txt') if s.startswith('minecraft:')}
     mc_blocks     = {b for b in load_registry(LISTS, 'blocks.txt')     if b.startswith('minecraft:')}
-    return mc_structures, mc_blocks
+    mc_items      = {i for i in load_registry(LISTS, 'items.txt')      if i.startswith('minecraft:')}
+    return mc_structures, mc_blocks & mc_items
 
 
 def _aggregate_block_counts(mc_structures: set, mc_blocks: set) -> list[tuple]:

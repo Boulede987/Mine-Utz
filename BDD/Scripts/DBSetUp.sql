@@ -180,7 +180,7 @@ CREATE TABLE Block (
     transparent     BOOLEAN DEFAULT NULL,
     flammable       BOOLEAN DEFAULT NULL,
     PRIMARY KEY (namespace, name),
-    FOREIGN KEY (namespace) REFERENCES `Mod`(namespace)
+    FOREIGN KEY (namespace, name) REFERENCES Item(namespace, name)
 ) ENGINE=InnoDB;
 
 CREATE TABLE Station (
@@ -207,7 +207,7 @@ CREATE TABLE Entity (
     speed               FLOAT,
     knockbackResistance FLOAT,
     weakness            VARCHAR(100),
-    hitboxSize          FLOAT,
+    hitboxSize          VARCHAR(20) DEFAULT NULL,
     loottable_id        INT,
     texture_b64         MEDIUMTEXT DEFAULT NULL,
     PRIMARY KEY (namespace, name),
@@ -280,6 +280,15 @@ CREATE TABLE LootTableEntity (
     PRIMARY KEY (loottable_id, entity_namespace, entity_name),
     FOREIGN KEY (loottable_id)                REFERENCES LootTable(id),
     FOREIGN KEY (entity_namespace, entity_name) REFERENCES Entity(namespace, name)
+) ENGINE=InnoDB;
+
+CREATE TABLE LootTableBlock (
+    loottable_id    INT,
+    block_namespace VARCHAR(100),
+    block_name      VARCHAR(100),
+    PRIMARY KEY (loottable_id, block_namespace, block_name),
+    FOREIGN KEY (loottable_id)                REFERENCES LootTable(id),
+    FOREIGN KEY (block_namespace, block_name) REFERENCES Block(namespace, name)
 ) ENGINE=InnoDB;
 
 -- =====================================

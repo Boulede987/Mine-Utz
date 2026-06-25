@@ -68,10 +68,11 @@ def _build_item_rows(mc_items: list[str]) -> list[tuple]:
     ]
 
 
-def _build_block_rows(mc_blocks: list[str]) -> list[tuple]:
+def _build_block_rows(mc_blocks: list[str], mc_items_set: set[str]) -> list[tuple]:
     return [
         ('minecraft', name.split(':', 1)[1], None, None, None, None, None)
         for name in mc_blocks
+        if name in mc_items_set
     ]
 
 
@@ -94,11 +95,11 @@ def main() -> None:
              _build_item_rows(mc_items),
          )),
 
-        ('Block — all vanilla blocks  (physical properties are NULL)',
+        ('Block — vanilla blocks that have an item form  (physical properties are NULL)',
          insert_rows(
              'Block',
              ['namespace', 'name', 'blastResistance', 'hardness', 'luminous', 'transparent', 'flammable'],
-             _build_block_rows(mc_blocks),
+             _build_block_rows(mc_blocks, mc_items_set),
          )),
 
         ('Station — vanilla crafting stations derived from the station column of recipes.txt',

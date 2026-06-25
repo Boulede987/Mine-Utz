@@ -45,6 +45,8 @@ from lib.loaders import load_pipe_file
 
 OUTPUT = SQL_INSERTS / '06_mc_loot.sql'
 
+# GOTCHA: 18_mc_loot_block.py duplicates this list to rebuild the same loot_id_map.
+# If you add/remove a file here, mirror the change there or LootTableBlock IDs will be wrong.
 LOOT_FILES = ['loot_entities.txt', 'loot_chests.txt', 'loot_blocks.txt', 'loot_other.txt']
 
 
