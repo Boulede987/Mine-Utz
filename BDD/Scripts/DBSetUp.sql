@@ -195,8 +195,6 @@ CREATE TABLE Station (
 CREATE TABLE Entity (
     namespace           VARCHAR(100) NOT NULL,
     name                VARCHAR(100) NOT NULL,
-    behavior            VARCHAR(100),
-    type                VARCHAR(50),
     healthPoints        FLOAT,
     armorPoints         FLOAT,
     attackDamage        FLOAT,
