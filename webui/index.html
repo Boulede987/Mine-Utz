@@ -5,9 +5,10 @@
   <title>Mineutze Graph Explorer</title>
   <link rel="stylesheet" href="css/style.css">
   <script src="https://unpkg.com/neo4j-driver@5/lib/browser/neo4j-web.min.js"></script>
-  <script src="https://unpkg.com/cytoscape/dist/cytoscape.min.js"></script>
-  <script src="https://unpkg.com/dagre/dist/dagre.min.js"></script>
-  <script src="https://unpkg.com/cytoscape-dagre/cytoscape-dagre.js"></script>
+  <script src="https://unpkg.com/cytoscape@3.30.2/dist/cytoscape.min.js"></script>
+  <script src="https://unpkg.com/dagre@0.8.5/dist/dagre.min.js"></script>
+  <script src="https://unpkg.com/cytoscape-dagre@2.5.0/cytoscape-dagre.js"></script>
+  <script>if (typeof cytoscapeDagre !== 'undefined') cytoscape.use(cytoscapeDagre);</script>
 </head>
 <body>
 
