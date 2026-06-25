@@ -50,7 +50,45 @@ def _load_valid_mc_items() -> set[str]:
     }
 
 
-def _parse_all_recipe_rows(mc_items: set[str]) -> tuple[list, list, list, list]:
+def _load_tag_map(mc_items: set[str]) -> dict[str, str]:
+    """Build tag_id -> first valid minecraft item mapping from item_tags.txt."""
+    raw: dict[str, list[str]] = {}
+    tag_file = LISTS / 'item_tags.txt'
+    if not tag_file.exists():
+        return {}
+    for line in tag_file.read_text(encoding='utf-8').splitlines():
+        if '|' not in line or line.startswith('='):
+            continue
+        tag_id, member = (p.strip() for p in line.split('|', 1))
+        raw.setdefault(tag_id, []).append(member)
+
+    resolved: dict[str, str] = {}
+
+    def resolve(tag_id: str, seen: set[str]) -> str | None:
+        if tag_id in resolved:
+            return resolved[tag_id]
+        if tag_id in seen:
+            return None
+        seen = seen | {tag_id}
+        for member in raw.get(tag_id, []):
+            if member.startswith('#'):
+                candidate = resolve(member[1:], seen)
+            elif member in mc_items:
+                candidate = member
+            else:
+                candidate = None
+            if candidate:
+                resolved[tag_id] = candidate
+                return candidate
+        return None
+
+    for tag_id in raw:
+        resolve(tag_id, set())
+
+    return resolved
+
+
+def _parse_all_recipe_rows(mc_items: set[str], tag_map: dict[str, str]) -> tuple[list, list, list, list]:
     recipe_rows:      list[tuple] = []
     output_rows:      list[tuple] = []
     ingredient_rows:  list[tuple] = []
@@ -93,9 +131,15 @@ def _parse_all_recipe_rows(mc_items: set[str]) -> tuple[list, list, list, list]:
                 seen_stations.add(key)
                 station_rows.append((rec_ns, rec_name, sta_ns, sta_name))
 
-        for raw in ingredients_str.split(','):
-            ingredient = raw.strip()
-            if not ingredient or ingredient.startswith('#') or ingredient not in mc_items:
+        for raw_ing in ingredients_str.split(','):
+            ingredient = raw_ing.strip()
+            if not ingredient:
+                continue
+            if ingredient.startswith('#'):
+                ingredient = tag_map.get(ingredient[1:], '')
+            elif ingredient not in mc_items:
+                ingredient = tag_map.get(ingredient, '')
+            if not ingredient:
                 continue
             ing_ns, ing_name = ingredient.split(':', 1)
             key = (rec_ns, rec_name, ing_ns, ing_name)
@@ -112,7 +156,9 @@ def _parse_all_recipe_rows(mc_items: set[str]) -> tuple[list, list, list, list]:
 
 def main() -> None:
     mc_items = _load_valid_mc_items()
-    recipe_rows, output_rows, station_rows, ingredient_rows = _parse_all_recipe_rows(mc_items)
+    tag_map  = _load_tag_map(mc_items)
+    print(f'Tag map entries    : {len(tag_map)}')
+    recipe_rows, output_rows, station_rows, ingredient_rows = _parse_all_recipe_rows(mc_items, tag_map)
 
     write_sql(OUTPUT, '08 - Minecraft recipes', [
         ('Recipe — vanilla crafting, smelting, stonecutting, smithing',
