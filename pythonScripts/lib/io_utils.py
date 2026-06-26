@@ -10,22 +10,22 @@ from pathlib import Path
 
 
 def _strip_comments(text: str) -> str:
-    # Strip // comments outside of strings (simplified: not inside string values)
+    # Strip // comments outside of string values
     result = []
     in_string = False
-    i = 0
-    while i < len(text):
-        c = text[i]
-        if c == '"' and (i == 0 or text[i - 1] != '\\'):
+    pos = 0
+    while pos < len(text):
+        char = text[pos]
+        if char == '"' and (pos == 0 or text[pos - 1] != '\\'):
             in_string = not in_string
-            result.append(c)
-        elif not in_string and c == '/' and i + 1 < len(text) and text[i + 1] == '/':
-            while i < len(text) and text[i] != '\n':
-                i += 1
+            result.append(char)
+        elif not in_string and char == '/' and pos + 1 < len(text) and text[pos + 1] == '/':
+            while pos < len(text) and text[pos] != '\n':
+                pos += 1
             continue
         else:
-            result.append(c)
-        i += 1
+            result.append(char)
+        pos += 1
     return ''.join(result)
 
 
