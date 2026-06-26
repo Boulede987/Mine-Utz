@@ -22,7 +22,11 @@ import zipfile
 from dataclasses import dataclass, field
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
 import openpyxl
+
+from worldgen.constants import CHECK_MARK
 
 sys.stdout.reconfigure(encoding='utf-8')
 
@@ -35,7 +39,6 @@ MODS_DIR           = Path('minecraft/mods')
 MANIFEST           = Path('worldgen_data/generated_structure_tags.json')
 SUPPRESS_TAG       = '#mineutz:suppress'
 OVERWORLD_SHEET    = 'Overworld'
-CHECK_MARK         = '✓'
 BIOME_COLUMN_OFFSET = 4
 
 

@@ -19,7 +19,11 @@ import json
 import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
 import openpyxl
+
+from worldgen.constants import CHECK_MARK
 
 sys.stdout.reconfigure(encoding='utf-8')
 
@@ -28,7 +32,6 @@ SHEET_NAME       = 'Biome Planner'
 OVERWORLD_HEADER = 'Overworld'
 NETHER_HEADER    = 'Nether'
 END_HEADER       = 'End'
-CHECK_MARK       = '✓'
 MERGED_DATA_DIR  = Path('worldgen_data') / 'merged'
 END_SECTIONS     = ['highlands', 'midlands', 'edge', 'islands']
 

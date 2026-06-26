@@ -21,16 +21,19 @@ import sys
 from copy import copy
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
 import openpyxl
 from openpyxl.styles import Font
 from openpyxl.worksheet.datavalidation import DataValidation
+
+from worldgen.constants import CHECK_MARK, CROSS_MARK, NAMESPACE_TO_SOURCE
 
 sys.stdout.reconfigure(encoding='utf-8')
 
 MERGED_DATA_DIR = Path('worldgen_data') / 'merged'
 PLANNER_FILE    = Path('dimension_biome_planner.xlsx')
 SHEET_NAME      = 'Biome Planner'
-CROSS_MARK      = '✗'
 ALL_SECTIONS    = ['surface', 'underground', 'caves', 'deep']
 END_SECTIONS    = ['highlands', 'midlands', 'edge', 'islands']
 
@@ -41,15 +44,6 @@ COLUMN_DIMENSION_AFFINITY = {
     'Nether': 'minecraft:nether',
     'End':    'minecraft:the_end',
 }
-
-NAMESPACE_TO_SOURCE = {
-    'biomeswevegone':                 'BWG',
-    'biomesoplenty':                  'BoP',
-    'shineals_prehistoric_expansion': 'Shineals',
-    'minecraft':                      'Vanilla',
-    'undergroundworlds':              'Underground Worlds',
-}
-
 
 def temperature_label(temperature_range: list[float]) -> str:
     midpoint = (temperature_range[0] + temperature_range[1]) / 2
@@ -155,7 +149,7 @@ def ensure_dimension_columns(worksheet, last_data_row: int,
 
         for row_idx in range(2, last_data_row + 1):
             biome_id  = worksheet.cell(row=row_idx, column=1).value
-            val       = '✓' if biome_id in dim_biome_set else CROSS_MARK
+            val       = CHECK_MARK if biome_id in dim_biome_set else CROSS_MARK
             template_data = worksheet.cell(row=row_idx, column=new_col - 1)
             d_cell = worksheet.cell(row=row_idx, column=new_col, value=val)
             if template_data.has_style:
@@ -185,7 +179,7 @@ def apply_affinity_defaults(worksheet, last_data_row: int,
         for row_idx in range(2, last_data_row + 1):
             biome_cell = worksheet.cell(row=row_idx, column=1)
             val_cell   = worksheet.cell(row=row_idx, column=col_num)
-            if biome_cell.value in dim_biome_set and val_cell.value != '✓':
+            if biome_cell.value in dim_biome_set and val_cell.value != CHECK_MARK:
                 val_cell.value = '✓'
                 repaired += 1
     if repaired:
@@ -249,9 +243,9 @@ def colorize_checkmarks(worksheet, last_data_row: int, dimension_column_count: i
                                    min_col=dimension_start_column,
                                    max_col=dimension_end_column):
         for cell in row:
-            if cell.value == '✓':
+            if cell.value == CHECK_MARK:
                 cell.font = Font(color=CHECK_MARK_COLOR, bold=cell.font.bold if cell.font else False)
-            elif cell.value == '✗':
+            elif cell.value == CROSS_MARK:
                 cell.font = Font(color=CROSS_MARK_COLOR, bold=cell.font.bold if cell.font else False)
 
 

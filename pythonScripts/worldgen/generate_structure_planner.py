@@ -17,11 +17,15 @@ Usage:
 import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
 import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
 from openpyxl.worksheet.datavalidation import DataValidation
 from openpyxl.worksheet.table import Table, TableStyleInfo
+
+from worldgen.constants import CHECK_MARK, CROSS_MARK, NAMESPACE_TO_SOURCE
 
 sys.stdout.reconfigure(encoding='utf-8')
 
@@ -29,9 +33,6 @@ STRUCTURES_FILE    = Path('lists/structures.txt')
 BIOME_PLANNER_FILE = Path('dimension_biome_planner.xlsx')
 OUTPUT_FILE        = Path('structure_planner.xlsx')
 BIOME_SHEET_NAME   = 'Biome Planner'
-
-CHECK_MARK = '✓'
-CROSS_MARK = '✗'
 
 FIXED_HEADER_FILL = PatternFill('solid', fgColor='1F4E79')
 FIXED_HEADER_FONT = Font(bold=True, color='FFFFFF')
@@ -49,36 +50,6 @@ LEFT_WRAP = Alignment(horizontal='left',   vertical='center', wrap_text=True)
 
 THIN   = Side(style='thin', color='AAAAAA')
 BORDER = Border(left=THIN, right=THIN, top=THIN, bottom=THIN)
-
-NAMESPACE_TO_SOURCE = {
-    'minecraft':                      'Vanilla',
-    'biomesoplenty':                  'BoP',
-    'biomeswevegone':                 'BWG',
-    'shineals_prehistoric_expansion': 'Shineals',
-    'undergroundworlds':              'Underground Worlds',
-    'repurposed_structures':          'Repurposed Structs',
-    'dungeons_arise':                 'Dungeons Arise',
-    'towns_and_towers':               'Towns & Towers',
-    'structory':                      'Structory',
-    'structory_towers':               'Structory Towers',
-    'bettermineshafts':               'Better Mineshafts',
-    'betterstrongholds':              'Better Strongholds',
-    'betterfortresses':               'Better Fortresses',
-    'betterdungeons':                 'Better Dungeons',
-    'betterdeserttemples':            'Better Desert Temples',
-    'betteroceanmonuments':           'Better Ocean Monuments',
-    'mostructures':                   'Mo Structures',
-    'lostcities':                     'Lost Cities',
-    'aether':                         'Aether',
-    'twilightforest':                 'Twilight Forest',
-    'deeperdarker':                   'Deeper & Darker',
-    'apotheosis':                     'Apotheosis',
-    'irons_spellbooks':               "Iron's Spellbooks",
-    'iceandfire':                     'Ice & Fire',
-    'cataclysm':                      'Cataclysm',
-    'cobblemon':                      'Cobblemon',
-}
-
 
 def load_structures() -> list[str]:
     ids = []
