@@ -126,7 +126,6 @@ def load_dimension_column_count(worksheet) -> int:
 def ensure_dimension_columns(worksheet, last_data_row: int,
                               affinity: dict[str, set[str]]) -> None:
     """Add any REQUIRED_DIMENSION_COLUMNS that are missing from the header."""
-    from copy import copy as _copy
     headers = [cell.value for cell in worksheet[1]]
     present = set(headers)
 
@@ -139,15 +138,15 @@ def ensure_dimension_columns(worksheet, last_data_row: int,
         dim_biome_set = affinity.get(COLUMN_DIMENSION_AFFINITY.get(dim_name, ''), set())
 
         template_header = next(
-            (worksheet.cell(row=1, column=i + 1) for i, h in enumerate(worksheet[1]) if i >= 4 and h.value),
+            (worksheet.cell(row=1, column=i + 1) for i, h in enumerate(worksheet[1]) if i >= BIOME_PLANNER_FIXED_COLUMN_COUNT and h.value),
             None,
         )
         h_cell = worksheet.cell(row=1, column=new_col, value=dim_name)
         if template_header and template_header.has_style:
-            h_cell.fill      = _copy(template_header.fill)
-            h_cell.font      = _copy(template_header.font)
-            h_cell.border    = _copy(template_header.border)
-            h_cell.alignment = _copy(template_header.alignment)
+            h_cell.fill      = copy(template_header.fill)
+            h_cell.font      = copy(template_header.font)
+            h_cell.border    = copy(template_header.border)
+            h_cell.alignment = copy(template_header.alignment)
 
         for row_idx in range(2, last_data_row + 1):
             biome_id  = worksheet.cell(row=row_idx, column=1).value
@@ -155,10 +154,10 @@ def ensure_dimension_columns(worksheet, last_data_row: int,
             template_data = worksheet.cell(row=row_idx, column=new_col - 1)
             d_cell = worksheet.cell(row=row_idx, column=new_col, value=val)
             if template_data.has_style:
-                d_cell.fill      = _copy(template_data.fill)
-                d_cell.font      = _copy(template_data.font)
-                d_cell.border    = _copy(template_data.border)
-                d_cell.alignment = _copy(template_data.alignment)
+                d_cell.fill      = copy(template_data.fill)
+                d_cell.font      = copy(template_data.font)
+                d_cell.border    = copy(template_data.border)
+                d_cell.alignment = copy(template_data.alignment)
 
         print(f'  Added dimension column: {dim_name}')
 
@@ -182,10 +181,29 @@ def apply_affinity_defaults(worksheet, last_data_row: int,
             biome_cell = worksheet.cell(row=row_idx, column=1)
             val_cell   = worksheet.cell(row=row_idx, column=col_num)
             if biome_cell.value in dim_biome_set and val_cell.value != CHECK_MARK:
-                val_cell.value = '✓'
+                val_cell.value = CHECK_MARK
                 repaired += 1
     if repaired:
         print(f'  Applied affinity defaults: {repaired} cell(s) set to ✓')
+
+
+def _add_biome_entry_if_new(
+    biome_id: str, namespace: str, parameters, seen: set[str], biomes: list[dict],
+) -> None:
+    if biome_id not in seen:
+        seen.add(biome_id)
+        biomes.append({'biome': biome_id, 'namespace': namespace, 'parameters': parameters})
+
+
+def _collect_biomes_from_file(data: dict, seen: set[str], biomes: list[dict]) -> None:
+    namespace = data['namespace']
+    for dimension_sections in data.get('dimensions', {}).values():
+        for section_name in ALL_SECTIONS:
+            for entry in dimension_sections.get(section_name, []):
+                _add_biome_entry_if_new(entry['biome'], namespace, entry['parameters'], seen, biomes)
+        for section_name in END_SECTIONS:
+            for entry in dimension_sections.get(section_name, []):
+                _add_biome_entry_if_new(entry['biome'], namespace, None, seen, biomes)
 
 
 def load_all_biomes() -> list[dict]:
@@ -197,29 +215,7 @@ def load_all_biomes() -> list[dict]:
     seen: set[str] = set()
     biomes = []
     for json_file in sorted(MERGED_DATA_DIR.glob('*.json')):
-        data      = json.loads(json_file.read_text(encoding='utf-8'))
-        namespace = data['namespace']
-        for dimension_sections in data.get('dimensions', {}).values():
-            for section_name in ALL_SECTIONS:
-                for entry in dimension_sections.get(section_name, []):
-                    biome_id = entry['biome']
-                    if biome_id not in seen:
-                        seen.add(biome_id)
-                        biomes.append({
-                            'biome':      biome_id,
-                            'namespace':  namespace,
-                            'parameters': entry['parameters'],
-                        })
-            for section_name in END_SECTIONS:
-                for entry in dimension_sections.get(section_name, []):
-                    biome_id = entry['biome']
-                    if biome_id not in seen:
-                        seen.add(biome_id)
-                        biomes.append({
-                            'biome':      biome_id,
-                            'namespace':  namespace,
-                            'parameters': None,
-                        })
+        _collect_biomes_from_file(json.loads(json_file.read_text(encoding='utf-8')), seen, biomes)
     return biomes
 
 
@@ -263,6 +259,28 @@ def extend_data_validation(worksheet, new_last_data_row: int, dimension_column_c
     ))
 
 
+def _insert_biome_row(
+    worksheet, template_row, row_number: int, biome_entry: dict, dimension_column_count: int,
+) -> None:
+    namespace  = biome_entry['namespace']
+    parameters = biome_entry['parameters']
+    temp_lbl   = temperature_label(parameters['temperature']) if parameters else 'N/A'
+    hum_lbl    = humidity_label(parameters['humidity'])       if parameters else 'N/A'
+    row_values = [
+        biome_entry['biome'],
+        NAMESPACE_TO_SOURCE.get(namespace, namespace),
+        temp_lbl,
+        hum_lbl,
+    ] + [CROSS_MARK] * dimension_column_count
+
+    for column_index, value in enumerate(row_values, start=1):
+        worksheet.cell(row=row_number, column=column_index, value=value)
+
+    target_row = list(worksheet.iter_rows(min_row=row_number, max_row=row_number))[0]
+    copy_row_format(template_row, target_row)
+    print(f'  Added: {biome_entry["biome"]} ({NAMESPACE_TO_SOURCE.get(namespace, namespace)})')
+
+
 def main() -> None:
     if not PLANNER_FILE.exists():
         print(f'ERROR: {PLANNER_FILE} not found.')
@@ -285,10 +303,7 @@ def main() -> None:
         for row_number in sorted(misplaced_row_numbers, reverse=True):
             worksheet.delete_rows(row_number, 1)
 
-    missing_biomes = [
-        entry for entry in all_biomes
-        if entry['biome'] not in primary_biome_ids
-    ]
+    missing_biomes = [entry for entry in all_biomes if entry['biome'] not in primary_biome_ids]
 
     if not missing_biomes:
         print('No missing biomes — colorizing existing rows only.')
@@ -298,30 +313,12 @@ def main() -> None:
 
     missing_biomes.sort(key=lambda entry: (entry['namespace'], entry['biome']))
 
-    insert_at = primary_last_row + 1
+    insert_at    = primary_last_row + 1
+    template_row = list(worksheet.iter_rows(min_row=primary_last_row, max_row=primary_last_row))[0]
     worksheet.insert_rows(insert_at, amount=len(missing_biomes))
 
-    template_row = list(worksheet.iter_rows(min_row=primary_last_row, max_row=primary_last_row))[0]
-
     for index, biome_entry in enumerate(missing_biomes):
-        target_row_number = insert_at + index
-        namespace  = biome_entry['namespace']
-        parameters = biome_entry['parameters']
-        temp_lbl   = temperature_label(parameters['temperature']) if parameters else 'N/A'
-        hum_lbl    = humidity_label(parameters['humidity'])       if parameters else 'N/A'
-        row_values = [
-            biome_entry['biome'],
-            NAMESPACE_TO_SOURCE.get(namespace, namespace),
-            temp_lbl,
-            hum_lbl,
-        ] + [CROSS_MARK] * dimension_column_count
-
-        for column_index, value in enumerate(row_values, start=1):
-            worksheet.cell(row=target_row_number, column=column_index, value=value)
-
-        target_row = list(worksheet.iter_rows(min_row=target_row_number, max_row=target_row_number))[0]
-        copy_row_format(template_row, target_row)
-        print(f'  Added: {biome_entry["biome"]} ({NAMESPACE_TO_SOURCE.get(namespace, namespace)})')
+        _insert_biome_row(worksheet, template_row, insert_at + index, biome_entry, dimension_column_count)
 
     new_last_data_row = insert_at + len(missing_biomes) - 1
     extend_data_validation(worksheet, new_last_data_row, dimension_column_count)

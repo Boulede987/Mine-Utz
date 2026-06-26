@@ -103,6 +103,32 @@ def load_dimension_biomes() -> dict[str, list[str]]:
     return result
 
 
+def _process_structure_row(
+    row,
+    biome_ids: list[str],
+    is_overworld: bool,
+    seen_all: set[str],
+    selections: dict[str, list[str]],
+    overworld_checked: set[str],
+    overworld_biomes_by_structure: dict[str, list[str]],
+) -> None:
+    structure_id = row[0]
+    if not structure_id:
+        return
+    seen_all.add(structure_id)
+    for col_offset, biome_id in enumerate(biome_ids):
+        col_index = STRUCTURE_PLANNER_FIXED_COLUMN_COUNT + col_offset
+        col_val   = row[col_index] if col_index < len(row) else None
+        if col_val != CHECK_MARK:
+            continue
+        if biome_id not in selections.setdefault(structure_id, []):
+            selections[structure_id].append(biome_id)
+        if is_overworld:
+            overworld_checked.add(structure_id)
+            if biome_id not in overworld_biomes_by_structure.setdefault(structure_id, []):
+                overworld_biomes_by_structure[structure_id].append(biome_id)
+
+
 def load_structure_selections(
     dim_biomes: dict[str, list[str]],
 ) -> tuple[dict[str, list[str]], set[str], set[str], dict[str, list[str]]]:
@@ -129,28 +155,11 @@ def load_structure_selections(
         if sheet_name not in dim_biomes:
             print(f'  WARNING: sheet "{sheet_name}" not in biome planner — skip.')
             continue
-
-        is_overworld = (sheet_name == OVERWORLD_SHEET)
-        biome_ids = dim_biomes[sheet_name]
-
         for row in worksheet.iter_rows(min_row=2, values_only=True):
-            structure_id = row[0]
-            if not structure_id:
-                continue
-            seen_all.add(structure_id)
-
-            for col_offset, biome_id in enumerate(biome_ids):
-                col_val = row[STRUCTURE_PLANNER_FIXED_COLUMN_COUNT + col_offset] if STRUCTURE_PLANNER_FIXED_COLUMN_COUNT + col_offset < len(row) else None
-                if col_val != CHECK_MARK:
-                    continue
-                selections.setdefault(structure_id, [])
-                if biome_id not in selections[structure_id]:
-                    selections[structure_id].append(biome_id)
-                if is_overworld:
-                    overworld_checked.add(structure_id)
-                    overworld_biomes_by_structure.setdefault(structure_id, [])
-                    if biome_id not in overworld_biomes_by_structure[structure_id]:
-                        overworld_biomes_by_structure[structure_id].append(biome_id)
+            _process_structure_row(
+                row, dim_biomes[sheet_name], sheet_name == OVERWORLD_SHEET,
+                seen_all, selections, overworld_checked, overworld_biomes_by_structure,
+            )
 
     return selections, seen_all, overworld_checked, overworld_biomes_by_structure
 
@@ -158,6 +167,13 @@ def load_structure_selections(
 # ---------------------------------------------------------------------------
 # Structure JSON helpers
 # ---------------------------------------------------------------------------
+
+def _parse_json_lenient(raw: str) -> dict:
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError:
+        return json.loads(strip_comments(raw))
+
 
 def find_structure_json_in_jars(structure_id: str) -> dict | None:
     """Scan all JARs for data/<ns>/worldgen/structure/<path>.json and return parsed content."""
@@ -170,11 +186,7 @@ def find_structure_json_in_jars(structure_id: str) -> dict | None:
             with zipfile.ZipFile(jar_path, 'r') as archive:
                 if entry not in archive.namelist():
                     continue
-                raw = archive.read(entry).decode('utf-8', errors='ignore')
-                try:
-                    return json.loads(raw)
-                except json.JSONDecodeError:
-                    return json.loads(strip_comments(raw))
+                return _parse_json_lenient(archive.read(entry).decode('utf-8', errors='ignore'))
         except (zipfile.BadZipFile, OSError):
             continue
     return None
