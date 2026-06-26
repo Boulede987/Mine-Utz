@@ -29,7 +29,7 @@ from openpyxl.worksheet.datavalidation import DataValidation
 
 from worldgen.constants import (
     CHECK_MARK, CROSS_MARK, NAMESPACE_TO_SOURCE, BIOME_PLANNER_FIXED_COLUMN_COUNT,
-    BIOME_BIOME_PLANNER_FILE, BIOME_PLANNER_SHEET,
+    BIOME_PLANNER_FILE, BIOME_PLANNER_SHEET,
 )
 
 sys.stdout.reconfigure(encoding='utf-8')

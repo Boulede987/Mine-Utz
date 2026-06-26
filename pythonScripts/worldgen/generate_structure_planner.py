@@ -27,7 +27,7 @@ from openpyxl.worksheet.table import Table, TableStyleInfo
 
 from worldgen.constants import (
     CHECK_MARK, CROSS_MARK, NAMESPACE_TO_SOURCE,
-    BIOME_PLANNER_FIXED_COLUMN_COUNT, STRUCTURE_PLANNER_FIXED_COLUMN_COUNT,
+    STRUCTURE_PLANNER_FIXED_COLUMN_COUNT,
     STRUCTURE_PLANNER_FILE,
 )
 from worldgen.loaders import load_dimension_biomes
@@ -53,6 +53,12 @@ LEFT_WRAP = Alignment(horizontal='left',   vertical='center', wrap_text=True)
 THIN   = Side(style='thin', color='AAAAAA')
 BORDER = Border(left=THIN, right=THIN, top=THIN, bottom=THIN)
 
+STRUCTURE_COLUMN_WIDTH = 48
+SOURCE_COLUMN_WIDTH    = 20
+BIOME_COLUMN_WIDTH     = 14
+HEADER_ROW_HEIGHT      = 80
+DATA_ROW_HEIGHT        = 16
+
 def load_structures() -> list[str]:
     ids = []
     for line in STRUCTURES_FILE.read_text(encoding='utf-8').splitlines():
@@ -62,7 +68,6 @@ def load_structures() -> list[str]:
         if ':' in line:
             ids.append(line)
     return ids
-
 
 
 def load_existing_selections(filepath: Path) -> dict[str, dict[str, dict[str, str]]]:
@@ -92,17 +97,7 @@ def load_existing_selections(filepath: Path) -> dict[str, dict[str, dict[str, st
     return result
 
 
-def build_sheet(workbook: openpyxl.Workbook, sheet_name: str,
-                biomes: list[str], structures: list[str], sheet_idx: int,
-                existing: dict[str, dict[str, str]]) -> None:
-
-    worksheet = workbook.create_sheet(title=sheet_name)
-
-    biome_labels = [b.split(':', 1)[1] if ':' in b else b for b in biomes]
-    total_cols   = STRUCTURE_PLANNER_FIXED_COLUMN_COUNT + len(biomes)
-    last_row     = 1 + len(structures)
-
-    # --- Header row ---
+def _write_header_row(worksheet, biome_labels: list[str]) -> None:
     for col, (label, fill, font) in enumerate([
         ('Structure', FIXED_HEADER_FILL, FIXED_HEADER_FONT),
         ('Source',    FIXED_HEADER_FILL, FIXED_HEADER_FONT),
@@ -117,17 +112,23 @@ def build_sheet(workbook: openpyxl.Workbook, sheet_name: str,
         cell.fill = BIOME_HEADER_FILL; cell.font = BIOME_HEADER_FONT
         cell.alignment = CENTER; cell.border = BORDER
 
-    worksheet.row_dimensions[1].height = 80
+    worksheet.row_dimensions[1].height = HEADER_ROW_HEIGHT
 
-    # --- Column widths ---
-    worksheet.column_dimensions['A'].width = 48
-    worksheet.column_dimensions['B'].width = 20
-    for i in range(len(biomes)):
-        worksheet.column_dimensions[get_column_letter(STRUCTURE_PLANNER_FIXED_COLUMN_COUNT + 1 + i)].width = 14
 
+def _apply_column_layout(worksheet, biome_count: int) -> None:
+    worksheet.column_dimensions['A'].width = STRUCTURE_COLUMN_WIDTH
+    worksheet.column_dimensions['B'].width = SOURCE_COLUMN_WIDTH
+    for i in range(biome_count):
+        worksheet.column_dimensions[get_column_letter(STRUCTURE_PLANNER_FIXED_COLUMN_COUNT + 1 + i)].width = BIOME_COLUMN_WIDTH
     worksheet.freeze_panes = worksheet.cell(row=2, column=STRUCTURE_PLANNER_FIXED_COLUMN_COUNT + 1)
 
-    # --- Data rows ---
+
+def _write_data_rows(
+    worksheet,
+    structures: list[str],
+    biome_labels: list[str],
+    existing: dict[str, dict[str, str]],
+) -> None:
     for row_idx, structure_id in enumerate(structures, start=2):
         namespace = structure_id.split(':')[0]
         source    = NAMESPACE_TO_SOURCE.get(namespace, namespace)
@@ -149,9 +150,10 @@ def build_sheet(workbook: openpyxl.Workbook, sheet_name: str,
             cell.fill = fill; cell.font = font
             cell.alignment = CENTER; cell.border = BORDER
 
-        worksheet.row_dimensions[row_idx].height = 16
+        worksheet.row_dimensions[row_idx].height = DATA_ROW_HEIGHT
 
-    # --- Excel Table ---
+
+def _add_excel_table(worksheet, sheet_name: str, total_cols: int, last_row: int) -> None:
     table_name = 'T_' + ''.join(char for char in sheet_name if char.isalnum())
     table_ref  = f'A1:{get_column_letter(total_cols)}{last_row}'
     table      = Table(displayName=table_name, ref=table_ref)
@@ -162,7 +164,8 @@ def build_sheet(workbook: openpyxl.Workbook, sheet_name: str,
     )
     worksheet.add_table(table)
 
-    # --- Data validation ---
+
+def _add_data_validation(worksheet, total_cols: int, last_row: int) -> None:
     first_biome = get_column_letter(STRUCTURE_PLANNER_FIXED_COLUMN_COUNT + 1)
     last_biome  = get_column_letter(total_cols)
     data_validation = DataValidation(
@@ -170,6 +173,25 @@ def build_sheet(workbook: openpyxl.Workbook, sheet_name: str,
         sqref=f'{first_biome}2:{last_biome}{last_row}',
     )
     worksheet.add_data_validation(data_validation)
+
+
+def build_sheet(
+    workbook: openpyxl.Workbook,
+    sheet_name: str,
+    biomes: list[str],
+    structures: list[str],
+    existing: dict[str, dict[str, str]],
+) -> None:
+    worksheet    = workbook.create_sheet(title=sheet_name)
+    biome_labels = [b.split(':', 1)[1] if ':' in b else b for b in biomes]
+    total_cols   = STRUCTURE_PLANNER_FIXED_COLUMN_COUNT + len(biomes)
+    last_row     = 1 + len(structures)
+
+    _write_header_row(worksheet, biome_labels)
+    _apply_column_layout(worksheet, len(biomes))
+    _write_data_rows(worksheet, structures, biome_labels, existing)
+    _add_excel_table(worksheet, sheet_name, total_cols, last_row)
+    _add_data_validation(worksheet, total_cols, last_row)
 
 
 def main() -> None:
@@ -184,8 +206,8 @@ def main() -> None:
     workbook = openpyxl.Workbook()
     workbook.remove(workbook.active)   # remove default empty sheet
 
-    for idx, (dim_header, biomes) in enumerate(dim_biomes.items()):
-        build_sheet(workbook, dim_header, biomes, structures, idx, existing_all.get(dim_header, {}))
+    for dim_header, biomes in dim_biomes.items():
+        build_sheet(workbook, dim_header, biomes, structures, existing_all.get(dim_header, {}))
         print(f'  [{dim_header}]  {len(biomes)} biome columns')
 
     workbook.save(STRUCTURE_PLANNER_FILE)

@@ -23,7 +23,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import openpyxl
 
-from worldgen.constants import CHECK_MARK, BIOME_BIOME_PLANNER_FILE, BIOME_PLANNER_SHEET
+from worldgen.constants import CHECK_MARK, BIOME_PLANNER_FILE, BIOME_PLANNER_SHEET
 
 sys.stdout.reconfigure(encoding='utf-8')
 
