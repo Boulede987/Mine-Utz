@@ -9,6 +9,31 @@ Nether    → FilterNetherRegion.java  (RegionType.NETHER, only if ✓ biomes ex
 End       → FilterEndBiomes.java     (EndBiomeRegistry calls, only if ✓ biomes exist)
 FilterMod.java is regenerated to register whichever regions were written.
 
+## Why this exists
+
+TerraBlender lets mods register custom biomes by claiming climate parameter slots.
+Without filtering, BiomedOPlenty and similar mods register ALL their biomes in ALL
+dimensions — including biomes the modpack doesn't want. This mod acts as a whitelist:
+only biomes marked ✓ in dimension_biome_planner.xlsx are re-registered.
+
+## Why wide climate spans cause square biome borders
+
+BiomedOPlenty registers each biome at multiple specific, narrow climate positions.
+If we collapse those into one wide span (e.g. temperature [0.2, 1.0]) to simplify,
+the biome dominates a huge region of the 6D climate space. TerraBlender resolves
+nearest-neighbor ties at exact chunk boundaries, so wide spans produce chunk-aligned
+square borders. The fix: keep every distinct specific position from the raw scan data
+(merge_biome_parameters.py dedup mode), then emit one addBiome call per position.
+A biome with 116 original positions gets 116 addBiome calls — which is correct.
+
+## Pipeline
+
+    jar scan → worldgen_data/*.json
+    step 21: merge_biome_parameters.py  → worldgen_data/merged/*.json  (dedup, all positions)
+    step 22: dimension_biome_planner.xlsx  (mark ✓ which biomes to include per dimension)
+    this script  → FilterRegion.java / FilterNetherRegion.java / FilterEndBiomes.java / FilterMod.java
+    IntelliJ deployMod → companion mod jar → load in game
+
 Run after steps 21 (merge) and 22 (complete planner).
 
 Usage:

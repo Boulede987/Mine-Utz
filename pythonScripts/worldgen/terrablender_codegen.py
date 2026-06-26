@@ -12,6 +12,24 @@ PARAMETER_AXES             = ['temperature', 'humidity', 'continentalness', 'ero
 _JAVA_PARAM_INDENT         = '            '
 
 _REGION_TEMPLATE = """\
+// GENERATED FILE — do not edit directly. Run generate_filter_region.py to regenerate.
+//
+// This TerraBlender Region registers each selected biome at the EXACT same climate parameter
+// positions that the originating mod used. Mirroring those specific positions is what allows
+// TerraBlender to route climate lookups to the correct biome without distorting its natural range.
+//
+// Why specific positions matter: registering a biome with a single wide Climate.Parameter.span
+// (e.g. temperature [0.2, 1.0] instead of the original two narrower spans) makes it dominate
+// a huge region of climate space. TerraBlender resolves ties at chunk boundaries, so wide spans
+// produce chunk-aligned square biome borders. Using all distinct specific positions keeps
+// transitions smooth and natural.
+//
+// Data pipeline:
+//   jar scan → worldgen_data/*.json
+//   → merge_biome_parameters.py (dedup, keeps all distinct entries per biome)
+//   → worldgen_data/merged/*.json
+//   → generate_filter_region.py (reads planner ✓ column, calls build_region here)
+//   → this file
 package com.mineutze.filtermod;
 
 import com.mojang.datafixers.util.Pair;
@@ -37,7 +55,7 @@ public class {class_name} extends Region {{
 
     @Override
     public void addBiomes(Registry<Biome> registry, Consumer<Pair<Climate.ParameterPoint, ResourceKey<Biome>>> mapper) {{
-        BiomeMapper m = mapper::accept;
+        BiomeMapper biomeMapper = mapper::accept;
 {dispatcher}
     }}
 
@@ -103,6 +121,11 @@ _REGISTRATION = (
 _END_SETUP_CALL = '            FilterEndBiomes.setup();'
 
 
+def _to_camel_case(snake: str) -> str:
+    parts = snake.split('_')
+    return parts[0] + ''.join(word.capitalize() for word in parts[1:])
+
+
 def _fmt_param(values: list) -> str:
     lo, hi = values[0], values[1]
     if lo == hi:
@@ -122,7 +145,7 @@ def _fmt_add_biome_call(param: dict) -> str:
 
 def _fmt_per_biome_method(biome_id: str, params_list: list[dict]) -> str:
     namespace, path = biome_id.split(':', 1)
-    method = f'{namespace}_{path}'
+    method = _to_camel_case(f'{namespace}_{path}')
     calls  = '\n'.join(_fmt_add_biome_call(param) for param in params_list)
     return (
         f'    private void {method}(BiomeMapper mapper) {{\n'
@@ -133,9 +156,10 @@ def _fmt_per_biome_method(biome_id: str, params_list: list[dict]) -> str:
 
 
 def _fmt_namespace_method(namespace: str, paths: list[str]) -> str:
-    calls = '\n'.join(f'        {namespace}_{path}(mapper);' for path in paths)
+    group_method = _to_camel_case(f'add_{namespace}')
+    calls = '\n'.join(f'        {_to_camel_case(f"{namespace}_{path}")}(mapper);' for path in paths)
     return (
-        f'    private void add_{namespace}(BiomeMapper mapper) {{\n'
+        f'    private void {group_method}(BiomeMapper mapper) {{\n'
         f'{calls}\n'
         f'    }}'
     )
@@ -169,7 +193,7 @@ def build_region(
             print(f'    - {missing_id}')
 
     namespaces    = sorted(by_namespace.keys())
-    dispatcher    = '\n'.join(f'        add_{ns}(m);' for ns in namespaces)
+    dispatcher    = '\n'.join(f'        {_to_camel_case(f"add_{ns}")}(biomeMapper);' for ns in namespaces)
     method_blocks: list[str] = []
     for ns in namespaces:
         paths = sorted(by_namespace[ns].keys())
@@ -223,12 +247,13 @@ def build_end_biomes(biome_ids: list[str], end_data: dict, dest: Path) -> int:
 
 
 def build_filter_mod(dest: Path, has_nether: bool, has_end: bool) -> None:
+    weight_literal = f'{TERRABLENDER_REGION_WEIGHT:_}'
     registrations_list = [
-        _REGISTRATION.format(class_name='FilterRegion', loc='overworld_filter', weight=TERRABLENDER_REGION_WEIGHT),
+        _REGISTRATION.format(class_name='FilterRegion', loc='overworld_filter', weight=weight_literal),
     ]
     if has_nether:
         registrations_list.append(
-            _REGISTRATION.format(class_name='FilterNetherRegion', loc='nether_filter', weight=TERRABLENDER_REGION_WEIGHT),
+            _REGISTRATION.format(class_name='FilterNetherRegion', loc='nether_filter', weight=weight_literal),
         )
     if has_end:
         registrations_list.append(_END_SETUP_CALL)
