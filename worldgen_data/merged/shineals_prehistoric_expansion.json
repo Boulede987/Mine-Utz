@@ -1,6 +1,5 @@
 {
   "namespace": "shineals_prehistoric_expansion",
-  "note": "Parameters merged: one entry per biome (min-of-mins, max-of-maxes).",
   "dimensions": {
     "minecraft:overworld": {
       "surface": [
@@ -32,8 +31,7 @@
               1.0
             ],
             "offset": 0.0
-          },
-          "merged_from": 1
+          }
         },
         {
           "biome": "shineals_prehistoric_expansion:juniper_forest",
@@ -63,8 +61,7 @@
               1.0
             ],
             "offset": 0.0
-          },
-          "merged_from": 1
+          }
         }
       ],
       "underground": [],

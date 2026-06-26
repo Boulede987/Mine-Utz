@@ -1,383 +1,10 @@
 {
   "namespace": "mineutz",
-  "note": "Parameters merged: one entry per biome (min-of-mins, max-of-maxes).",
   "dimensions": {
     "minecraft:overworld": {
       "surface": [
         {
-          "biome": "mineutz:cold_ocean",
-          "parameters": {
-            "temperature": [
-              -0.45,
-              -0.15
-            ],
-            "humidity": [
-              -1.0,
-              1.0
-            ],
-            "continentalness": [
-              -0.455,
-              -0.19
-            ],
-            "erosion": [
-              -1.0,
-              1.0
-            ],
-            "depth": [
-              1.0,
-              1.0
-            ],
-            "weirdness": [
-              -1.0,
-              1.0
-            ],
-            "offset": 0.0
-          },
-          "merged_from": 1
-        },
-        {
-          "biome": "mineutz:deep_cold_ocean",
-          "parameters": {
-            "temperature": [
-              -0.45,
-              -0.15
-            ],
-            "humidity": [
-              -1.0,
-              1.0
-            ],
-            "continentalness": [
-              -1.05,
-              -0.455
-            ],
-            "erosion": [
-              -1.0,
-              1.0
-            ],
-            "depth": [
-              1.0,
-              1.0
-            ],
-            "weirdness": [
-              -1.0,
-              1.0
-            ],
-            "offset": 0.0
-          },
-          "merged_from": 1
-        },
-        {
-          "biome": "mineutz:deep_frozen_ocean",
-          "parameters": {
-            "temperature": [
-              -1.0,
-              -0.45
-            ],
-            "humidity": [
-              -1.0,
-              1.0
-            ],
-            "continentalness": [
-              -1.05,
-              -0.455
-            ],
-            "erosion": [
-              -1.0,
-              1.0
-            ],
-            "depth": [
-              1.0,
-              1.0
-            ],
-            "weirdness": [
-              -1.0,
-              1.0
-            ],
-            "offset": 0.0
-          },
-          "merged_from": 1
-        },
-        {
-          "biome": "mineutz:deep_lukewarm_ocean",
-          "parameters": {
-            "temperature": [
-              0.2,
-              0.55
-            ],
-            "humidity": [
-              -1.0,
-              1.0
-            ],
-            "continentalness": [
-              -1.05,
-              -0.455
-            ],
-            "erosion": [
-              -1.0,
-              1.0
-            ],
-            "depth": [
-              1.0,
-              1.0
-            ],
-            "weirdness": [
-              -1.0,
-              1.0
-            ],
-            "offset": 0.0
-          },
-          "merged_from": 1
-        },
-        {
-          "biome": "mineutz:deep_ocean",
-          "parameters": {
-            "temperature": [
-              -0.15,
-              0.2
-            ],
-            "humidity": [
-              -1.0,
-              1.0
-            ],
-            "continentalness": [
-              -1.05,
-              -0.455
-            ],
-            "erosion": [
-              -1.0,
-              1.0
-            ],
-            "depth": [
-              1.0,
-              1.0
-            ],
-            "weirdness": [
-              -1.0,
-              1.0
-            ],
-            "offset": 0.0
-          },
-          "merged_from": 1
-        },
-        {
-          "biome": "mineutz:fantasy_dimension_cold_ocean",
-          "parameters": {
-            "temperature": [
-              -0.45,
-              -0.15
-            ],
-            "humidity": [
-              -1.0,
-              1.0
-            ],
-            "continentalness": [
-              -0.455,
-              -0.19
-            ],
-            "erosion": [
-              -1.0,
-              1.0
-            ],
-            "depth": [
-              1.0,
-              1.0
-            ],
-            "weirdness": [
-              -1.0,
-              1.0
-            ],
-            "offset": 0.0
-          },
-          "merged_from": 1
-        },
-        {
-          "biome": "mineutz:fantasy_dimension_deep_cold_ocean",
-          "parameters": {
-            "temperature": [
-              -0.45,
-              -0.15
-            ],
-            "humidity": [
-              -1.0,
-              1.0
-            ],
-            "continentalness": [
-              -1.05,
-              -0.455
-            ],
-            "erosion": [
-              -1.0,
-              1.0
-            ],
-            "depth": [
-              1.0,
-              1.0
-            ],
-            "weirdness": [
-              -1.0,
-              1.0
-            ],
-            "offset": 0.0
-          },
-          "merged_from": 1
-        },
-        {
-          "biome": "mineutz:fantasy_dimension_deep_frozen_ocean",
-          "parameters": {
-            "temperature": [
-              -1.0,
-              -0.45
-            ],
-            "humidity": [
-              -1.0,
-              1.0
-            ],
-            "continentalness": [
-              -1.05,
-              -0.455
-            ],
-            "erosion": [
-              -1.0,
-              1.0
-            ],
-            "depth": [
-              1.0,
-              1.0
-            ],
-            "weirdness": [
-              -1.0,
-              1.0
-            ],
-            "offset": 0.0
-          },
-          "merged_from": 1
-        },
-        {
-          "biome": "mineutz:fantasy_dimension_deep_lukewarm_ocean",
-          "parameters": {
-            "temperature": [
-              0.2,
-              0.55
-            ],
-            "humidity": [
-              -1.0,
-              1.0
-            ],
-            "continentalness": [
-              -1.05,
-              -0.455
-            ],
-            "erosion": [
-              -1.0,
-              1.0
-            ],
-            "depth": [
-              1.0,
-              1.0
-            ],
-            "weirdness": [
-              -1.0,
-              1.0
-            ],
-            "offset": 0.0
-          },
-          "merged_from": 1
-        },
-        {
-          "biome": "mineutz:fantasy_dimension_deep_ocean",
-          "parameters": {
-            "temperature": [
-              -0.15,
-              0.2
-            ],
-            "humidity": [
-              -1.0,
-              1.0
-            ],
-            "continentalness": [
-              -1.05,
-              -0.455
-            ],
-            "erosion": [
-              -1.0,
-              1.0
-            ],
-            "depth": [
-              1.0,
-              1.0
-            ],
-            "weirdness": [
-              -1.0,
-              1.0
-            ],
-            "offset": 0.0
-          },
-          "merged_from": 1
-        },
-        {
-          "biome": "mineutz:fantasy_dimension_frozen_ocean",
-          "parameters": {
-            "temperature": [
-              -1.0,
-              -0.45
-            ],
-            "humidity": [
-              -1.0,
-              1.0
-            ],
-            "continentalness": [
-              -0.455,
-              -0.19
-            ],
-            "erosion": [
-              -1.0,
-              1.0
-            ],
-            "depth": [
-              1.0,
-              1.0
-            ],
-            "weirdness": [
-              -1.0,
-              1.0
-            ],
-            "offset": 0.0
-          },
-          "merged_from": 1
-        },
-        {
-          "biome": "mineutz:fantasy_dimension_lukewarm_ocean",
-          "parameters": {
-            "temperature": [
-              0.2,
-              0.55
-            ],
-            "humidity": [
-              -1.0,
-              1.0
-            ],
-            "continentalness": [
-              -0.455,
-              -0.19
-            ],
-            "erosion": [
-              -1.0,
-              1.0
-            ],
-            "depth": [
-              1.0,
-              1.0
-            ],
-            "weirdness": [
-              -1.0,
-              1.0
-            ],
-            "offset": 0.0
-          },
-          "merged_from": 1
-        },
-        {
-          "biome": "mineutz:fantasy_dimension_ocean",
+          "biome": "mineutz:zombie_city_ocean",
           "parameters": {
             "temperature": [
               -0.15,
@@ -404,566 +31,7 @@
               1.0
             ],
             "offset": 0.0
-          },
-          "merged_from": 1
-        },
-        {
-          "biome": "mineutz:fantasy_dimension_warm_ocean",
-          "parameters": {
-            "temperature": [
-              0.55,
-              1.0
-            ],
-            "humidity": [
-              -1.0,
-              1.0
-            ],
-            "continentalness": [
-              -1.05,
-              -0.19
-            ],
-            "erosion": [
-              -1.0,
-              1.0
-            ],
-            "depth": [
-              1.0,
-              1.0
-            ],
-            "weirdness": [
-              -1.0,
-              1.0
-            ],
-            "offset": 0.0
-          },
-          "merged_from": 1
-        },
-        {
-          "biome": "mineutz:frozen_ocean",
-          "parameters": {
-            "temperature": [
-              -1.0,
-              -0.45
-            ],
-            "humidity": [
-              -1.0,
-              1.0
-            ],
-            "continentalness": [
-              -0.455,
-              -0.19
-            ],
-            "erosion": [
-              -1.0,
-              1.0
-            ],
-            "depth": [
-              1.0,
-              1.0
-            ],
-            "weirdness": [
-              -1.0,
-              1.0
-            ],
-            "offset": 0.0
-          },
-          "merged_from": 1
-        },
-        {
-          "biome": "mineutz:lukewarm_ocean",
-          "parameters": {
-            "temperature": [
-              0.2,
-              0.55
-            ],
-            "humidity": [
-              -1.0,
-              1.0
-            ],
-            "continentalness": [
-              -0.455,
-              -0.19
-            ],
-            "erosion": [
-              -1.0,
-              1.0
-            ],
-            "depth": [
-              1.0,
-              1.0
-            ],
-            "weirdness": [
-              -1.0,
-              1.0
-            ],
-            "offset": 0.0
-          },
-          "merged_from": 1
-        },
-        {
-          "biome": "mineutz:ocean",
-          "parameters": {
-            "temperature": [
-              -0.15,
-              0.2
-            ],
-            "humidity": [
-              -1.0,
-              1.0
-            ],
-            "continentalness": [
-              -0.455,
-              -0.19
-            ],
-            "erosion": [
-              -1.0,
-              1.0
-            ],
-            "depth": [
-              1.0,
-              1.0
-            ],
-            "weirdness": [
-              -1.0,
-              1.0
-            ],
-            "offset": 0.0
-          },
-          "merged_from": 1
-        },
-        {
-          "biome": "mineutz:pokemon_dimension_cold_ocean",
-          "parameters": {
-            "temperature": [
-              -0.45,
-              -0.15
-            ],
-            "humidity": [
-              -1.0,
-              1.0
-            ],
-            "continentalness": [
-              -0.455,
-              -0.19
-            ],
-            "erosion": [
-              -1.0,
-              1.0
-            ],
-            "depth": [
-              1.0,
-              1.0
-            ],
-            "weirdness": [
-              -1.0,
-              1.0
-            ],
-            "offset": 0.0
-          },
-          "merged_from": 1
-        },
-        {
-          "biome": "mineutz:pokemon_dimension_deep_cold_ocean",
-          "parameters": {
-            "temperature": [
-              -0.45,
-              -0.15
-            ],
-            "humidity": [
-              -1.0,
-              1.0
-            ],
-            "continentalness": [
-              -1.05,
-              -0.455
-            ],
-            "erosion": [
-              -1.0,
-              1.0
-            ],
-            "depth": [
-              1.0,
-              1.0
-            ],
-            "weirdness": [
-              -1.0,
-              1.0
-            ],
-            "offset": 0.0
-          },
-          "merged_from": 1
-        },
-        {
-          "biome": "mineutz:pokemon_dimension_deep_frozen_ocean",
-          "parameters": {
-            "temperature": [
-              -1.0,
-              -0.45
-            ],
-            "humidity": [
-              -1.0,
-              1.0
-            ],
-            "continentalness": [
-              -1.05,
-              -0.455
-            ],
-            "erosion": [
-              -1.0,
-              1.0
-            ],
-            "depth": [
-              1.0,
-              1.0
-            ],
-            "weirdness": [
-              -1.0,
-              1.0
-            ],
-            "offset": 0.0
-          },
-          "merged_from": 1
-        },
-        {
-          "biome": "mineutz:pokemon_dimension_deep_lukewarm_ocean",
-          "parameters": {
-            "temperature": [
-              0.2,
-              0.55
-            ],
-            "humidity": [
-              -1.0,
-              1.0
-            ],
-            "continentalness": [
-              -1.05,
-              -0.455
-            ],
-            "erosion": [
-              -1.0,
-              1.0
-            ],
-            "depth": [
-              1.0,
-              1.0
-            ],
-            "weirdness": [
-              -1.0,
-              1.0
-            ],
-            "offset": 0.0
-          },
-          "merged_from": 1
-        },
-        {
-          "biome": "mineutz:pokemon_dimension_deep_ocean",
-          "parameters": {
-            "temperature": [
-              -0.15,
-              0.2
-            ],
-            "humidity": [
-              -1.0,
-              1.0
-            ],
-            "continentalness": [
-              -1.05,
-              -0.455
-            ],
-            "erosion": [
-              -1.0,
-              1.0
-            ],
-            "depth": [
-              1.0,
-              1.0
-            ],
-            "weirdness": [
-              -1.0,
-              1.0
-            ],
-            "offset": 0.0
-          },
-          "merged_from": 1
-        },
-        {
-          "biome": "mineutz:pokemon_dimension_frozen_ocean",
-          "parameters": {
-            "temperature": [
-              -1.0,
-              -0.45
-            ],
-            "humidity": [
-              -1.0,
-              1.0
-            ],
-            "continentalness": [
-              -0.455,
-              -0.19
-            ],
-            "erosion": [
-              -1.0,
-              1.0
-            ],
-            "depth": [
-              1.0,
-              1.0
-            ],
-            "weirdness": [
-              -1.0,
-              1.0
-            ],
-            "offset": 0.0
-          },
-          "merged_from": 1
-        },
-        {
-          "biome": "mineutz:pokemon_dimension_lukewarm_ocean",
-          "parameters": {
-            "temperature": [
-              0.2,
-              0.55
-            ],
-            "humidity": [
-              -1.0,
-              1.0
-            ],
-            "continentalness": [
-              -0.455,
-              -0.19
-            ],
-            "erosion": [
-              -1.0,
-              1.0
-            ],
-            "depth": [
-              1.0,
-              1.0
-            ],
-            "weirdness": [
-              -1.0,
-              1.0
-            ],
-            "offset": 0.0
-          },
-          "merged_from": 1
-        },
-        {
-          "biome": "mineutz:pokemon_dimension_ocean",
-          "parameters": {
-            "temperature": [
-              -0.15,
-              0.2
-            ],
-            "humidity": [
-              -1.0,
-              1.0
-            ],
-            "continentalness": [
-              -0.455,
-              -0.19
-            ],
-            "erosion": [
-              -1.0,
-              1.0
-            ],
-            "depth": [
-              1.0,
-              1.0
-            ],
-            "weirdness": [
-              -1.0,
-              1.0
-            ],
-            "offset": 0.0
-          },
-          "merged_from": 1
-        },
-        {
-          "biome": "mineutz:pokemon_dimension_warm_ocean",
-          "parameters": {
-            "temperature": [
-              0.55,
-              1.0
-            ],
-            "humidity": [
-              -1.0,
-              1.0
-            ],
-            "continentalness": [
-              -1.05,
-              -0.19
-            ],
-            "erosion": [
-              -1.0,
-              1.0
-            ],
-            "depth": [
-              1.0,
-              1.0
-            ],
-            "weirdness": [
-              -1.0,
-              1.0
-            ],
-            "offset": 0.0
-          },
-          "merged_from": 1
-        },
-        {
-          "biome": "mineutz:warm_ocean",
-          "parameters": {
-            "temperature": [
-              0.55,
-              1.0
-            ],
-            "humidity": [
-              -1.0,
-              1.0
-            ],
-            "continentalness": [
-              -1.05,
-              -0.19
-            ],
-            "erosion": [
-              -1.0,
-              1.0
-            ],
-            "depth": [
-              1.0,
-              1.0
-            ],
-            "weirdness": [
-              -1.0,
-              1.0
-            ],
-            "offset": 0.0
-          },
-          "merged_from": 1
-        },
-        {
-          "biome": "mineutz:zombie_city_cold_ocean",
-          "parameters": {
-            "temperature": [
-              -0.45,
-              -0.15
-            ],
-            "humidity": [
-              -1.0,
-              1.0
-            ],
-            "continentalness": [
-              -0.455,
-              -0.19
-            ],
-            "erosion": [
-              -1.0,
-              1.0
-            ],
-            "depth": [
-              1.0,
-              1.0
-            ],
-            "weirdness": [
-              -1.0,
-              1.0
-            ],
-            "offset": 0.0
-          },
-          "merged_from": 1
-        },
-        {
-          "biome": "mineutz:zombie_city_deep_cold_ocean",
-          "parameters": {
-            "temperature": [
-              -0.45,
-              -0.15
-            ],
-            "humidity": [
-              -1.0,
-              1.0
-            ],
-            "continentalness": [
-              -1.05,
-              -0.455
-            ],
-            "erosion": [
-              -1.0,
-              1.0
-            ],
-            "depth": [
-              1.0,
-              1.0
-            ],
-            "weirdness": [
-              -1.0,
-              1.0
-            ],
-            "offset": 0.0
-          },
-          "merged_from": 1
-        },
-        {
-          "biome": "mineutz:zombie_city_deep_frozen_ocean",
-          "parameters": {
-            "temperature": [
-              -1.0,
-              -0.45
-            ],
-            "humidity": [
-              -1.0,
-              1.0
-            ],
-            "continentalness": [
-              -1.05,
-              -0.455
-            ],
-            "erosion": [
-              -1.0,
-              1.0
-            ],
-            "depth": [
-              1.0,
-              1.0
-            ],
-            "weirdness": [
-              -1.0,
-              1.0
-            ],
-            "offset": 0.0
-          },
-          "merged_from": 1
-        },
-        {
-          "biome": "mineutz:zombie_city_deep_lukewarm_ocean",
-          "parameters": {
-            "temperature": [
-              0.2,
-              0.55
-            ],
-            "humidity": [
-              -1.0,
-              1.0
-            ],
-            "continentalness": [
-              -1.05,
-              -0.455
-            ],
-            "erosion": [
-              -1.0,
-              1.0
-            ],
-            "depth": [
-              1.0,
-              1.0
-            ],
-            "weirdness": [
-              -1.0,
-              1.0
-            ],
-            "offset": 0.0
-          },
-          "merged_from": 1
+          }
         },
         {
           "biome": "mineutz:zombie_city_deep_ocean",
@@ -993,8 +61,67 @@
               1.0
             ],
             "offset": 0.0
-          },
-          "merged_from": 1
+          }
+        },
+        {
+          "biome": "mineutz:zombie_city_cold_ocean",
+          "parameters": {
+            "temperature": [
+              -0.45,
+              -0.15
+            ],
+            "humidity": [
+              -1.0,
+              1.0
+            ],
+            "continentalness": [
+              -0.455,
+              -0.19
+            ],
+            "erosion": [
+              -1.0,
+              1.0
+            ],
+            "depth": [
+              1.0,
+              1.0
+            ],
+            "weirdness": [
+              -1.0,
+              1.0
+            ],
+            "offset": 0.0
+          }
+        },
+        {
+          "biome": "mineutz:zombie_city_deep_cold_ocean",
+          "parameters": {
+            "temperature": [
+              -0.45,
+              -0.15
+            ],
+            "humidity": [
+              -1.0,
+              1.0
+            ],
+            "continentalness": [
+              -1.05,
+              -0.455
+            ],
+            "erosion": [
+              -1.0,
+              1.0
+            ],
+            "depth": [
+              1.0,
+              1.0
+            ],
+            "weirdness": [
+              -1.0,
+              1.0
+            ],
+            "offset": 0.0
+          }
         },
         {
           "biome": "mineutz:zombie_city_frozen_ocean",
@@ -1024,8 +151,37 @@
               1.0
             ],
             "offset": 0.0
-          },
-          "merged_from": 1
+          }
+        },
+        {
+          "biome": "mineutz:zombie_city_deep_frozen_ocean",
+          "parameters": {
+            "temperature": [
+              -1.0,
+              -0.45
+            ],
+            "humidity": [
+              -1.0,
+              1.0
+            ],
+            "continentalness": [
+              -1.05,
+              -0.455
+            ],
+            "erosion": [
+              -1.0,
+              1.0
+            ],
+            "depth": [
+              1.0,
+              1.0
+            ],
+            "weirdness": [
+              -1.0,
+              1.0
+            ],
+            "offset": 0.0
+          }
         },
         {
           "biome": "mineutz:zombie_city_lukewarm_ocean",
@@ -1055,23 +211,22 @@
               1.0
             ],
             "offset": 0.0
-          },
-          "merged_from": 1
+          }
         },
         {
-          "biome": "mineutz:zombie_city_ocean",
+          "biome": "mineutz:zombie_city_deep_lukewarm_ocean",
           "parameters": {
             "temperature": [
-              -0.15,
-              0.2
+              0.2,
+              0.55
             ],
             "humidity": [
               -1.0,
               1.0
             ],
             "continentalness": [
-              -0.455,
-              -0.19
+              -1.05,
+              -0.455
             ],
             "erosion": [
               -1.0,
@@ -1086,8 +241,7 @@
               1.0
             ],
             "offset": 0.0
-          },
-          "merged_from": 1
+          }
         },
         {
           "biome": "mineutz:zombie_city_warm_ocean",
@@ -1117,8 +271,817 @@
               1.0
             ],
             "offset": 0.0
-          },
-          "merged_from": 1
+          }
+        },
+        {
+          "biome": "mineutz:pokemon_dimension_ocean",
+          "parameters": {
+            "temperature": [
+              -0.15,
+              0.2
+            ],
+            "humidity": [
+              -1.0,
+              1.0
+            ],
+            "continentalness": [
+              -0.455,
+              -0.19
+            ],
+            "erosion": [
+              -1.0,
+              1.0
+            ],
+            "depth": [
+              1.0,
+              1.0
+            ],
+            "weirdness": [
+              -1.0,
+              1.0
+            ],
+            "offset": 0.0
+          }
+        },
+        {
+          "biome": "mineutz:pokemon_dimension_deep_ocean",
+          "parameters": {
+            "temperature": [
+              -0.15,
+              0.2
+            ],
+            "humidity": [
+              -1.0,
+              1.0
+            ],
+            "continentalness": [
+              -1.05,
+              -0.455
+            ],
+            "erosion": [
+              -1.0,
+              1.0
+            ],
+            "depth": [
+              1.0,
+              1.0
+            ],
+            "weirdness": [
+              -1.0,
+              1.0
+            ],
+            "offset": 0.0
+          }
+        },
+        {
+          "biome": "mineutz:pokemon_dimension_cold_ocean",
+          "parameters": {
+            "temperature": [
+              -0.45,
+              -0.15
+            ],
+            "humidity": [
+              -1.0,
+              1.0
+            ],
+            "continentalness": [
+              -0.455,
+              -0.19
+            ],
+            "erosion": [
+              -1.0,
+              1.0
+            ],
+            "depth": [
+              1.0,
+              1.0
+            ],
+            "weirdness": [
+              -1.0,
+              1.0
+            ],
+            "offset": 0.0
+          }
+        },
+        {
+          "biome": "mineutz:pokemon_dimension_deep_cold_ocean",
+          "parameters": {
+            "temperature": [
+              -0.45,
+              -0.15
+            ],
+            "humidity": [
+              -1.0,
+              1.0
+            ],
+            "continentalness": [
+              -1.05,
+              -0.455
+            ],
+            "erosion": [
+              -1.0,
+              1.0
+            ],
+            "depth": [
+              1.0,
+              1.0
+            ],
+            "weirdness": [
+              -1.0,
+              1.0
+            ],
+            "offset": 0.0
+          }
+        },
+        {
+          "biome": "mineutz:pokemon_dimension_frozen_ocean",
+          "parameters": {
+            "temperature": [
+              -1.0,
+              -0.45
+            ],
+            "humidity": [
+              -1.0,
+              1.0
+            ],
+            "continentalness": [
+              -0.455,
+              -0.19
+            ],
+            "erosion": [
+              -1.0,
+              1.0
+            ],
+            "depth": [
+              1.0,
+              1.0
+            ],
+            "weirdness": [
+              -1.0,
+              1.0
+            ],
+            "offset": 0.0
+          }
+        },
+        {
+          "biome": "mineutz:pokemon_dimension_deep_frozen_ocean",
+          "parameters": {
+            "temperature": [
+              -1.0,
+              -0.45
+            ],
+            "humidity": [
+              -1.0,
+              1.0
+            ],
+            "continentalness": [
+              -1.05,
+              -0.455
+            ],
+            "erosion": [
+              -1.0,
+              1.0
+            ],
+            "depth": [
+              1.0,
+              1.0
+            ],
+            "weirdness": [
+              -1.0,
+              1.0
+            ],
+            "offset": 0.0
+          }
+        },
+        {
+          "biome": "mineutz:pokemon_dimension_lukewarm_ocean",
+          "parameters": {
+            "temperature": [
+              0.2,
+              0.55
+            ],
+            "humidity": [
+              -1.0,
+              1.0
+            ],
+            "continentalness": [
+              -0.455,
+              -0.19
+            ],
+            "erosion": [
+              -1.0,
+              1.0
+            ],
+            "depth": [
+              1.0,
+              1.0
+            ],
+            "weirdness": [
+              -1.0,
+              1.0
+            ],
+            "offset": 0.0
+          }
+        },
+        {
+          "biome": "mineutz:pokemon_dimension_deep_lukewarm_ocean",
+          "parameters": {
+            "temperature": [
+              0.2,
+              0.55
+            ],
+            "humidity": [
+              -1.0,
+              1.0
+            ],
+            "continentalness": [
+              -1.05,
+              -0.455
+            ],
+            "erosion": [
+              -1.0,
+              1.0
+            ],
+            "depth": [
+              1.0,
+              1.0
+            ],
+            "weirdness": [
+              -1.0,
+              1.0
+            ],
+            "offset": 0.0
+          }
+        },
+        {
+          "biome": "mineutz:pokemon_dimension_warm_ocean",
+          "parameters": {
+            "temperature": [
+              0.55,
+              1.0
+            ],
+            "humidity": [
+              -1.0,
+              1.0
+            ],
+            "continentalness": [
+              -1.05,
+              -0.19
+            ],
+            "erosion": [
+              -1.0,
+              1.0
+            ],
+            "depth": [
+              1.0,
+              1.0
+            ],
+            "weirdness": [
+              -1.0,
+              1.0
+            ],
+            "offset": 0.0
+          }
+        },
+        {
+          "biome": "mineutz:ocean",
+          "parameters": {
+            "temperature": [
+              -0.15,
+              0.2
+            ],
+            "humidity": [
+              -1.0,
+              1.0
+            ],
+            "continentalness": [
+              -0.455,
+              -0.19
+            ],
+            "erosion": [
+              -1.0,
+              1.0
+            ],
+            "depth": [
+              1.0,
+              1.0
+            ],
+            "weirdness": [
+              -1.0,
+              1.0
+            ],
+            "offset": 0.0
+          }
+        },
+        {
+          "biome": "mineutz:deep_ocean",
+          "parameters": {
+            "temperature": [
+              -0.15,
+              0.2
+            ],
+            "humidity": [
+              -1.0,
+              1.0
+            ],
+            "continentalness": [
+              -1.05,
+              -0.455
+            ],
+            "erosion": [
+              -1.0,
+              1.0
+            ],
+            "depth": [
+              1.0,
+              1.0
+            ],
+            "weirdness": [
+              -1.0,
+              1.0
+            ],
+            "offset": 0.0
+          }
+        },
+        {
+          "biome": "mineutz:cold_ocean",
+          "parameters": {
+            "temperature": [
+              -0.45,
+              -0.15
+            ],
+            "humidity": [
+              -1.0,
+              1.0
+            ],
+            "continentalness": [
+              -0.455,
+              -0.19
+            ],
+            "erosion": [
+              -1.0,
+              1.0
+            ],
+            "depth": [
+              1.0,
+              1.0
+            ],
+            "weirdness": [
+              -1.0,
+              1.0
+            ],
+            "offset": 0.0
+          }
+        },
+        {
+          "biome": "mineutz:deep_cold_ocean",
+          "parameters": {
+            "temperature": [
+              -0.45,
+              -0.15
+            ],
+            "humidity": [
+              -1.0,
+              1.0
+            ],
+            "continentalness": [
+              -1.05,
+              -0.455
+            ],
+            "erosion": [
+              -1.0,
+              1.0
+            ],
+            "depth": [
+              1.0,
+              1.0
+            ],
+            "weirdness": [
+              -1.0,
+              1.0
+            ],
+            "offset": 0.0
+          }
+        },
+        {
+          "biome": "mineutz:frozen_ocean",
+          "parameters": {
+            "temperature": [
+              -1.0,
+              -0.45
+            ],
+            "humidity": [
+              -1.0,
+              1.0
+            ],
+            "continentalness": [
+              -0.455,
+              -0.19
+            ],
+            "erosion": [
+              -1.0,
+              1.0
+            ],
+            "depth": [
+              1.0,
+              1.0
+            ],
+            "weirdness": [
+              -1.0,
+              1.0
+            ],
+            "offset": 0.0
+          }
+        },
+        {
+          "biome": "mineutz:deep_frozen_ocean",
+          "parameters": {
+            "temperature": [
+              -1.0,
+              -0.45
+            ],
+            "humidity": [
+              -1.0,
+              1.0
+            ],
+            "continentalness": [
+              -1.05,
+              -0.455
+            ],
+            "erosion": [
+              -1.0,
+              1.0
+            ],
+            "depth": [
+              1.0,
+              1.0
+            ],
+            "weirdness": [
+              -1.0,
+              1.0
+            ],
+            "offset": 0.0
+          }
+        },
+        {
+          "biome": "mineutz:lukewarm_ocean",
+          "parameters": {
+            "temperature": [
+              0.2,
+              0.55
+            ],
+            "humidity": [
+              -1.0,
+              1.0
+            ],
+            "continentalness": [
+              -0.455,
+              -0.19
+            ],
+            "erosion": [
+              -1.0,
+              1.0
+            ],
+            "depth": [
+              1.0,
+              1.0
+            ],
+            "weirdness": [
+              -1.0,
+              1.0
+            ],
+            "offset": 0.0
+          }
+        },
+        {
+          "biome": "mineutz:deep_lukewarm_ocean",
+          "parameters": {
+            "temperature": [
+              0.2,
+              0.55
+            ],
+            "humidity": [
+              -1.0,
+              1.0
+            ],
+            "continentalness": [
+              -1.05,
+              -0.455
+            ],
+            "erosion": [
+              -1.0,
+              1.0
+            ],
+            "depth": [
+              1.0,
+              1.0
+            ],
+            "weirdness": [
+              -1.0,
+              1.0
+            ],
+            "offset": 0.0
+          }
+        },
+        {
+          "biome": "mineutz:warm_ocean",
+          "parameters": {
+            "temperature": [
+              0.55,
+              1.0
+            ],
+            "humidity": [
+              -1.0,
+              1.0
+            ],
+            "continentalness": [
+              -1.05,
+              -0.19
+            ],
+            "erosion": [
+              -1.0,
+              1.0
+            ],
+            "depth": [
+              1.0,
+              1.0
+            ],
+            "weirdness": [
+              -1.0,
+              1.0
+            ],
+            "offset": 0.0
+          }
+        },
+        {
+          "biome": "mineutz:fantasy_dimension_ocean",
+          "parameters": {
+            "temperature": [
+              -0.15,
+              0.2
+            ],
+            "humidity": [
+              -1.0,
+              1.0
+            ],
+            "continentalness": [
+              -0.455,
+              -0.19
+            ],
+            "erosion": [
+              -1.0,
+              1.0
+            ],
+            "depth": [
+              1.0,
+              1.0
+            ],
+            "weirdness": [
+              -1.0,
+              1.0
+            ],
+            "offset": 0.0
+          }
+        },
+        {
+          "biome": "mineutz:fantasy_dimension_deep_ocean",
+          "parameters": {
+            "temperature": [
+              -0.15,
+              0.2
+            ],
+            "humidity": [
+              -1.0,
+              1.0
+            ],
+            "continentalness": [
+              -1.05,
+              -0.455
+            ],
+            "erosion": [
+              -1.0,
+              1.0
+            ],
+            "depth": [
+              1.0,
+              1.0
+            ],
+            "weirdness": [
+              -1.0,
+              1.0
+            ],
+            "offset": 0.0
+          }
+        },
+        {
+          "biome": "mineutz:fantasy_dimension_cold_ocean",
+          "parameters": {
+            "temperature": [
+              -0.45,
+              -0.15
+            ],
+            "humidity": [
+              -1.0,
+              1.0
+            ],
+            "continentalness": [
+              -0.455,
+              -0.19
+            ],
+            "erosion": [
+              -1.0,
+              1.0
+            ],
+            "depth": [
+              1.0,
+              1.0
+            ],
+            "weirdness": [
+              -1.0,
+              1.0
+            ],
+            "offset": 0.0
+          }
+        },
+        {
+          "biome": "mineutz:fantasy_dimension_deep_cold_ocean",
+          "parameters": {
+            "temperature": [
+              -0.45,
+              -0.15
+            ],
+            "humidity": [
+              -1.0,
+              1.0
+            ],
+            "continentalness": [
+              -1.05,
+              -0.455
+            ],
+            "erosion": [
+              -1.0,
+              1.0
+            ],
+            "depth": [
+              1.0,
+              1.0
+            ],
+            "weirdness": [
+              -1.0,
+              1.0
+            ],
+            "offset": 0.0
+          }
+        },
+        {
+          "biome": "mineutz:fantasy_dimension_frozen_ocean",
+          "parameters": {
+            "temperature": [
+              -1.0,
+              -0.45
+            ],
+            "humidity": [
+              -1.0,
+              1.0
+            ],
+            "continentalness": [
+              -0.455,
+              -0.19
+            ],
+            "erosion": [
+              -1.0,
+              1.0
+            ],
+            "depth": [
+              1.0,
+              1.0
+            ],
+            "weirdness": [
+              -1.0,
+              1.0
+            ],
+            "offset": 0.0
+          }
+        },
+        {
+          "biome": "mineutz:fantasy_dimension_deep_frozen_ocean",
+          "parameters": {
+            "temperature": [
+              -1.0,
+              -0.45
+            ],
+            "humidity": [
+              -1.0,
+              1.0
+            ],
+            "continentalness": [
+              -1.05,
+              -0.455
+            ],
+            "erosion": [
+              -1.0,
+              1.0
+            ],
+            "depth": [
+              1.0,
+              1.0
+            ],
+            "weirdness": [
+              -1.0,
+              1.0
+            ],
+            "offset": 0.0
+          }
+        },
+        {
+          "biome": "mineutz:fantasy_dimension_lukewarm_ocean",
+          "parameters": {
+            "temperature": [
+              0.2,
+              0.55
+            ],
+            "humidity": [
+              -1.0,
+              1.0
+            ],
+            "continentalness": [
+              -0.455,
+              -0.19
+            ],
+            "erosion": [
+              -1.0,
+              1.0
+            ],
+            "depth": [
+              1.0,
+              1.0
+            ],
+            "weirdness": [
+              -1.0,
+              1.0
+            ],
+            "offset": 0.0
+          }
+        },
+        {
+          "biome": "mineutz:fantasy_dimension_deep_lukewarm_ocean",
+          "parameters": {
+            "temperature": [
+              0.2,
+              0.55
+            ],
+            "humidity": [
+              -1.0,
+              1.0
+            ],
+            "continentalness": [
+              -1.05,
+              -0.455
+            ],
+            "erosion": [
+              -1.0,
+              1.0
+            ],
+            "depth": [
+              1.0,
+              1.0
+            ],
+            "weirdness": [
+              -1.0,
+              1.0
+            ],
+            "offset": 0.0
+          }
+        },
+        {
+          "biome": "mineutz:fantasy_dimension_warm_ocean",
+          "parameters": {
+            "temperature": [
+              0.55,
+              1.0
+            ],
+            "humidity": [
+              -1.0,
+              1.0
+            ],
+            "continentalness": [
+              -1.05,
+              -0.19
+            ],
+            "erosion": [
+              -1.0,
+              1.0
+            ],
+            "depth": [
+              1.0,
+              1.0
+            ],
+            "weirdness": [
+              -1.0,
+              1.0
+            ],
+            "offset": 0.0
+          }
         }
       ]
     }

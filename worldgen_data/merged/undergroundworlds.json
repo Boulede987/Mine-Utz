@@ -1,6 +1,5 @@
 {
   "namespace": "undergroundworlds",
-  "note": "Parameters merged: one entry per biome (min-of-mins, max-of-maxes).",
   "dimensions": {
     "minecraft:overworld": {
       "surface": [],
@@ -34,8 +33,7 @@
               1.0
             ],
             "offset": 0.0
-          },
-          "merged_from": 1
+          }
         },
         {
           "biome": "undergroundworlds:underground_desert",
@@ -65,8 +63,7 @@
               1.0
             ],
             "offset": 0.0
-          },
-          "merged_from": 1
+          }
         },
         {
           "biome": "undergroundworlds:underground_jungle",
@@ -96,8 +93,7 @@
               1.0
             ],
             "offset": 0.0
-          },
-          "merged_from": 1
+          }
         },
         {
           "biome": "undergroundworlds:underground_tundra",
@@ -127,8 +123,7 @@
               1.0
             ],
             "offset": 0.0
-          },
-          "merged_from": 1
+          }
         }
       ],
       "deep": []
