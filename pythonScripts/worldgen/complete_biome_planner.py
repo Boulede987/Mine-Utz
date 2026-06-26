@@ -27,7 +27,7 @@ import openpyxl
 from openpyxl.styles import Font
 from openpyxl.worksheet.datavalidation import DataValidation
 
-from worldgen.constants import CHECK_MARK, CROSS_MARK, NAMESPACE_TO_SOURCE
+from worldgen.constants import CHECK_MARK, CROSS_MARK, NAMESPACE_TO_SOURCE, BIOME_PLANNER_FIXED_COLUMN_COUNT
 
 sys.stdout.reconfigure(encoding='utf-8')
 
@@ -36,6 +36,8 @@ PLANNER_FILE    = Path('dimension_biome_planner.xlsx')
 SHEET_NAME      = 'Biome Planner'
 ALL_SECTIONS    = ['surface', 'underground', 'caves', 'deep']
 END_SECTIONS    = ['highlands', 'midlands', 'edge', 'islands']
+
+FIRST_DIMENSION_COLUMN_LETTER = chr(ord('A') + BIOME_PLANNER_FIXED_COLUMN_COUNT)
 
 REQUIRED_DIMENSION_COLUMNS = ['Nether', 'End']
 
@@ -118,7 +120,7 @@ def load_affinity_biomes() -> dict[str, set[str]]:
 
 def load_dimension_column_count(worksheet) -> int:
     headers = [cell.value for cell in worksheet[1]]
-    return len(headers) - 4
+    return len(headers) - BIOME_PLANNER_FIXED_COLUMN_COUNT
 
 
 def ensure_dimension_columns(worksheet, last_data_row: int,
@@ -237,8 +239,8 @@ CROSS_MARK_COLOR = 'FF0000'
 
 def colorize_checkmarks(worksheet, last_data_row: int, dimension_column_count: int) -> None:
     """Set ✓ cells green and ✗ cells red across all data rows."""
-    dimension_start_column = 5
-    dimension_end_column   = 4 + dimension_column_count
+    dimension_start_column = BIOME_PLANNER_FIXED_COLUMN_COUNT + 1
+    dimension_end_column   = BIOME_PLANNER_FIXED_COLUMN_COUNT + dimension_column_count
     for row in worksheet.iter_rows(min_row=2, max_row=last_data_row,
                                    min_col=dimension_start_column,
                                    max_col=dimension_end_column):
@@ -250,8 +252,8 @@ def colorize_checkmarks(worksheet, last_data_row: int, dimension_column_count: i
 
 
 def extend_data_validation(worksheet, new_last_data_row: int, dimension_column_count: int) -> None:
-    dimension_column_end = chr(ord('E') + dimension_column_count - 1)
-    new_sqref = f'E2:{dimension_column_end}{new_last_data_row}'
+    dimension_column_end = chr(ord(FIRST_DIMENSION_COLUMN_LETTER) + dimension_column_count - 1)
+    new_sqref = f'{FIRST_DIMENSION_COLUMN_LETTER}2:{dimension_column_end}{new_last_data_row}'
     for data_validation in worksheet.data_validations.dataValidation:
         if data_validation.type == 'list' and '✓' in (data_validation.formula1 or ''):
             data_validation.sqref = new_sqref

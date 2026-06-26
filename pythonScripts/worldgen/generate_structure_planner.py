@@ -25,7 +25,10 @@ from openpyxl.utils import get_column_letter
 from openpyxl.worksheet.datavalidation import DataValidation
 from openpyxl.worksheet.table import Table, TableStyleInfo
 
-from worldgen.constants import CHECK_MARK, CROSS_MARK, NAMESPACE_TO_SOURCE
+from worldgen.constants import (
+    CHECK_MARK, CROSS_MARK, NAMESPACE_TO_SOURCE,
+    BIOME_PLANNER_FIXED_COLUMN_COUNT, STRUCTURE_PLANNER_FIXED_COLUMN_COUNT,
+)
 
 sys.stdout.reconfigure(encoding='utf-8')
 
@@ -70,7 +73,7 @@ def load_dimension_biomes() -> list[tuple[str, list[str]]]:
 
     ws      = openpyxl.load_workbook(BIOME_PLANNER_FILE)[BIOME_SHEET_NAME]
     headers = [cell.value for cell in ws[1]]
-    dim_cols = [(i, h) for i, h in enumerate(headers) if i >= 4 and h]
+    dim_cols = [(i, h) for i, h in enumerate(headers) if i >= BIOME_PLANNER_FIXED_COLUMN_COUNT and h]
 
     result = []
     for col_idx, header in dim_cols:
@@ -95,7 +98,7 @@ def load_existing_selections(filepath: Path) -> dict[str, dict[str, dict[str, st
     for sheet_name in wb.sheetnames:
         ws = wb[sheet_name]
         headers    = [cell.value for cell in ws[1]]
-        biome_cols = headers[2:]   # col index 2+ are biome short names
+        biome_cols = headers[STRUCTURE_PLANNER_FIXED_COLUMN_COUNT:]
         sheet_data: dict[str, dict[str, str]] = {}
         for row in ws.iter_rows(min_row=2, values_only=True):
             sid = row[0]
@@ -103,8 +106,8 @@ def load_existing_selections(filepath: Path) -> dict[str, dict[str, dict[str, st
                 continue
             choices: dict[str, str] = {}
             for i, bname in enumerate(biome_cols):
-                if bname and (2 + i) < len(row):
-                    choices[bname] = row[2 + i] or CROSS_MARK
+                if bname and (STRUCTURE_PLANNER_FIXED_COLUMN_COUNT + i) < len(row):
+                    choices[bname] = row[STRUCTURE_PLANNER_FIXED_COLUMN_COUNT + i] or CROSS_MARK
             sheet_data[str(sid)] = choices
         result[sheet_name] = sheet_data
     return result
@@ -117,7 +120,7 @@ def build_sheet(wb: openpyxl.Workbook, sheet_name: str,
     ws = wb.create_sheet(title=sheet_name)
 
     biome_labels = [b.split(':', 1)[1] if ':' in b else b for b in biomes]
-    total_cols   = 2 + len(biomes)
+    total_cols   = STRUCTURE_PLANNER_FIXED_COLUMN_COUNT + len(biomes)
     last_row     = 1 + len(structures)
 
     # --- Header row ---
@@ -130,7 +133,7 @@ def build_sheet(wb: openpyxl.Workbook, sheet_name: str,
         cell.alignment = CENTER; cell.border = BORDER
 
     for i, label in enumerate(biome_labels):
-        col  = 3 + i
+        col  = STRUCTURE_PLANNER_FIXED_COLUMN_COUNT + 1 + i
         cell = ws.cell(row=1, column=col, value=label)
         cell.fill = BIOME_HEADER_FILL; cell.font = BIOME_HEADER_FONT
         cell.alignment = CENTER; cell.border = BORDER
@@ -141,9 +144,9 @@ def build_sheet(wb: openpyxl.Workbook, sheet_name: str,
     ws.column_dimensions['A'].width = 48
     ws.column_dimensions['B'].width = 20
     for i in range(len(biomes)):
-        ws.column_dimensions[get_column_letter(3 + i)].width = 14
+        ws.column_dimensions[get_column_letter(STRUCTURE_PLANNER_FIXED_COLUMN_COUNT + 1 + i)].width = 14
 
-    ws.freeze_panes = ws.cell(row=2, column=3)
+    ws.freeze_panes = ws.cell(row=2, column=STRUCTURE_PLANNER_FIXED_COLUMN_COUNT + 1)
 
     # --- Data rows ---
     for row_idx, structure_id in enumerate(structures, start=2):
@@ -163,7 +166,7 @@ def build_sheet(wb: openpyxl.Workbook, sheet_name: str,
             val  = prev.get(biome_label, CROSS_MARK)
             fill = CHECK_FILL if val == CHECK_MARK else CROSS_FILL
             font = CHECK_FONT if val == CHECK_MARK else CROSS_FONT
-            c = ws.cell(row=row_idx, column=3 + i, value=val)
+            c = ws.cell(row=row_idx, column=STRUCTURE_PLANNER_FIXED_COLUMN_COUNT + 1 + i, value=val)
             c.fill = fill; c.font = font
             c.alignment = CENTER; c.border = BORDER
 
@@ -181,7 +184,7 @@ def build_sheet(wb: openpyxl.Workbook, sheet_name: str,
     ws.add_table(table)
 
     # --- Data validation ---
-    first_biome = get_column_letter(3)
+    first_biome = get_column_letter(STRUCTURE_PLANNER_FIXED_COLUMN_COUNT + 1)
     last_biome  = get_column_letter(total_cols)
     dv = DataValidation(
         type='list', formula1='"✓,✗"', allow_blank=True,

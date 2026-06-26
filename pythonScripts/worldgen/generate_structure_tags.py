@@ -26,7 +26,10 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import openpyxl
 
-from worldgen.constants import CHECK_MARK
+from worldgen.constants import (
+    CHECK_MARK,
+    BIOME_PLANNER_FIXED_COLUMN_COUNT, STRUCTURE_PLANNER_FIXED_COLUMN_COUNT,
+)
 from lib.io_utils import strip_comments
 
 sys.stdout.reconfigure(encoding='utf-8')
@@ -40,7 +43,6 @@ MODS_DIR           = Path('minecraft/mods')
 MANIFEST           = Path('worldgen_data/generated_structure_tags.json')
 SUPPRESS_TAG       = '#mineutz:suppress'
 OVERWORLD_SHEET    = 'Overworld'
-BIOME_COLUMN_OFFSET = 4
 
 
 # ---------------------------------------------------------------------------
@@ -89,7 +91,7 @@ def load_dimension_biomes() -> dict[str, list[str]]:
     dim_cols  = [
         (col_idx, header)
         for col_idx, header in enumerate(headers)
-        if col_idx >= BIOME_COLUMN_OFFSET and header
+        if col_idx >= BIOME_PLANNER_FIXED_COLUMN_COUNT and header
     ]
 
     result: dict[str, list[str]] = {}
@@ -138,7 +140,7 @@ def load_structure_selections(
             seen_all.add(structure_id)
 
             for col_offset, biome_id in enumerate(biome_ids):
-                col_val = row[2 + col_offset] if 2 + col_offset < len(row) else None
+                col_val = row[STRUCTURE_PLANNER_FIXED_COLUMN_COUNT + col_offset] if STRUCTURE_PLANNER_FIXED_COLUMN_COUNT + col_offset < len(row) else None
                 if col_val != CHECK_MARK:
                     continue
                 selections.setdefault(structure_id, [])

@@ -6,6 +6,8 @@ Shared helpers for generating SQL INSERT statements.
 
 from pathlib import Path
 
+SQL_SEPARATOR_WIDTH = 50
+
 
 def val(value) -> str:
     """Format a Python value as a SQL literal."""
@@ -46,9 +48,9 @@ def write_sql(output_path: Path, title: str, blocks: list[tuple[str, str]]) -> N
     blocks is a list of (comment, sql_statement) pairs.
     """
     header = (
-        f'-- {"=" * 50}\n'
+        f'-- {"=" * SQL_SEPARATOR_WIDTH}\n'
         f'-- {title}\n'
-        f'-- {"=" * 50}\n\n'
+        f'-- {"=" * SQL_SEPARATOR_WIDTH}\n\n'
         'USE MineutzDB;\n\n'
     )
     body = '\n'.join(

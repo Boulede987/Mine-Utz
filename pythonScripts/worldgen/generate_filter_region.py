@@ -44,7 +44,9 @@ FILTER_NETHER_REGION = MOD_SRC / 'FilterNetherRegion.java'
 FILTER_END_BIOMES    = MOD_SRC / 'FilterEndBiomes.java'
 FILTER_MOD           = MOD_SRC / 'FilterMod.java'
 
-PARAMETER_AXES = ['temperature', 'humidity', 'continentalness', 'erosion', 'depth', 'weirdness']
+PARAMETER_AXES             = ['temperature', 'humidity', 'continentalness', 'erosion', 'depth', 'weirdness']
+TERRABLENDER_REGION_WEIGHT = 100_000_000
+_JAVA_PARAM_INDENT         = '            '
 
 _REGION_TEMPLATE = """\
 package com.mineutze.filtermod;
@@ -132,7 +134,7 @@ public class FilterMod {{
 _REGISTRATION = (
     '            Regions.register(new {class_name}(\n'
     '                ResourceLocation.fromNamespaceAndPath("mineutze_filter", "{loc}"),\n'
-    '                100_000_000\n'
+    '                {weight}\n'
     '            ));'
 )
 _END_SETUP_CALL = '            FilterEndBiomes.setup();'
@@ -199,12 +201,11 @@ def _fmt_param(values: list) -> str:
 
 
 def _fmt_add_biome_call(p: dict) -> str:
-    indent = '            '
-    params = ',\n'.join(f'{indent}{_fmt_param(p[ax])}' for ax in PARAMETER_AXES)
+    params = ',\n'.join(f'{_JAVA_PARAM_INDENT}{_fmt_param(p[ax])}' for ax in PARAMETER_AXES)
     return (
         f'        addBiome(mapper, Climate.parameters(\n'
         f'{params},\n'
-        f'{indent}{p["offset"]}f\n'
+        f'{_JAVA_PARAM_INDENT}{p["offset"]}f\n'
         f'        ), key);'
     )
 
@@ -356,11 +357,11 @@ def main() -> None:
 
     # FilterMod.java — register whichever regions exist
     registrations_list = [
-        _REGISTRATION.format(class_name='FilterRegion', loc='overworld_filter'),
+        _REGISTRATION.format(class_name='FilterRegion', loc='overworld_filter', weight=TERRABLENDER_REGION_WEIGHT),
     ]
     if has_nether:
         registrations_list.append(
-            _REGISTRATION.format(class_name='FilterNetherRegion', loc='nether_filter'),
+            _REGISTRATION.format(class_name='FilterNetherRegion', loc='nether_filter', weight=TERRABLENDER_REGION_WEIGHT),
         )
     if has_end:
         registrations_list.append(_END_SETUP_CALL)

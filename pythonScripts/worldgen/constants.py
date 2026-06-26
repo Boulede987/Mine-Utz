@@ -1,6 +1,9 @@
 CHECK_MARK = '✓'
 CROSS_MARK = '✗'
 
+BIOME_PLANNER_FIXED_COLUMN_COUNT     = 4
+STRUCTURE_PLANNER_FIXED_COLUMN_COUNT = 2
+
 NAMESPACE_TO_SOURCE = {
     'minecraft':                      'Vanilla',
     'biomesoplenty':                  'BoP',
