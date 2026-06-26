@@ -144,14 +144,14 @@ _END_SETUP_CALL = '            FilterEndBiomes.setup();'
 # Loaders
 # ---------------------------------------------------------------------------
 
-def load_column_biomes(ws, headers: list, column_name: str) -> list[str]:
+def load_column_biomes(worksheet, headers: list, column_name: str) -> list[str]:
     """Return biome IDs marked ✓ in the named column. Returns [] if column absent."""
     try:
         col_idx = headers.index(column_name)
     except ValueError:
         return []
     return [
-        str(row[0]) for row in ws.iter_rows(min_row=2, values_only=True)
+        str(row[0]) for row in worksheet.iter_rows(min_row=2, values_only=True)
         if row[0] and ':' in str(row[0]) and row[col_idx] == CHECK_MARK
     ]
 
@@ -322,12 +322,12 @@ def main() -> None:
         print(f'ERROR: {PLANNER_FILE} not found.')
         raise SystemExit(1)
 
-    ws      = openpyxl.load_workbook(PLANNER_FILE)[SHEET_NAME]
-    headers = [cell.value for cell in ws[1]]
+    worksheet = openpyxl.load_workbook(PLANNER_FILE)[SHEET_NAME]
+    headers   = [cell.value for cell in worksheet[1]]
 
-    overworld_biomes = load_column_biomes(ws, headers, OVERWORLD_HEADER)
-    nether_biomes    = load_column_biomes(ws, headers, NETHER_HEADER)
-    end_biomes       = load_column_biomes(ws, headers, END_HEADER)
+    overworld_biomes = load_column_biomes(worksheet, headers, OVERWORLD_HEADER)
+    nether_biomes    = load_column_biomes(worksheet, headers, NETHER_HEADER)
+    end_biomes       = load_column_biomes(worksheet, headers, END_HEADER)
 
     if not overworld_biomes:
         print('No biomes marked ✓ in Overworld column — nothing to write.')

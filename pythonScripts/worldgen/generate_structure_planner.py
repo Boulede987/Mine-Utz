@@ -71,14 +71,14 @@ def load_dimension_biomes() -> list[tuple[str, list[str]]]:
         print(f'ERROR: {BIOME_PLANNER_FILE} not found.')
         raise SystemExit(1)
 
-    ws      = openpyxl.load_workbook(BIOME_PLANNER_FILE)[BIOME_SHEET_NAME]
-    headers = [cell.value for cell in ws[1]]
-    dim_cols = [(i, h) for i, h in enumerate(headers) if i >= BIOME_PLANNER_FIXED_COLUMN_COUNT and h]
+    worksheet = openpyxl.load_workbook(BIOME_PLANNER_FILE)[BIOME_SHEET_NAME]
+    headers   = [cell.value for cell in worksheet[1]]
+    dim_cols  = [(i, h) for i, h in enumerate(headers) if i >= BIOME_PLANNER_FIXED_COLUMN_COUNT and h]
 
     result = []
     for col_idx, header in dim_cols:
         biomes = [
-            row[0] for row in ws.iter_rows(min_row=2, values_only=True)
+            row[0] for row in worksheet.iter_rows(min_row=2, values_only=True)
             if row[0] and ':' in str(row[0]) and row[col_idx] == CHECK_MARK
         ]
         if biomes:
@@ -93,14 +93,14 @@ def load_existing_selections(filepath: Path) -> dict[str, dict[str, dict[str, st
     """
     if not filepath.exists():
         return {}
-    wb = openpyxl.load_workbook(filepath, data_only=True)
+    workbook = openpyxl.load_workbook(filepath, data_only=True)
     result: dict[str, dict[str, dict[str, str]]] = {}
-    for sheet_name in wb.sheetnames:
-        ws = wb[sheet_name]
-        headers    = [cell.value for cell in ws[1]]
+    for sheet_name in workbook.sheetnames:
+        worksheet = workbook[sheet_name]
+        headers    = [cell.value for cell in worksheet[1]]
         biome_cols = headers[STRUCTURE_PLANNER_FIXED_COLUMN_COUNT:]
         sheet_data: dict[str, dict[str, str]] = {}
-        for row in ws.iter_rows(min_row=2, values_only=True):
+        for row in worksheet.iter_rows(min_row=2, values_only=True):
             sid = row[0]
             if not sid or ':' not in str(sid):
                 continue
@@ -113,11 +113,11 @@ def load_existing_selections(filepath: Path) -> dict[str, dict[str, dict[str, st
     return result
 
 
-def build_sheet(wb: openpyxl.Workbook, sheet_name: str,
+def build_sheet(workbook: openpyxl.Workbook, sheet_name: str,
                 biomes: list[str], structures: list[str], sheet_idx: int,
                 existing: dict[str, dict[str, str]]) -> None:
 
-    ws = wb.create_sheet(title=sheet_name)
+    worksheet = workbook.create_sheet(title=sheet_name)
 
     biome_labels = [b.split(':', 1)[1] if ':' in b else b for b in biomes]
     total_cols   = STRUCTURE_PLANNER_FIXED_COLUMN_COUNT + len(biomes)
@@ -128,52 +128,52 @@ def build_sheet(wb: openpyxl.Workbook, sheet_name: str,
         ('Structure', FIXED_HEADER_FILL, FIXED_HEADER_FONT),
         ('Source',    FIXED_HEADER_FILL, FIXED_HEADER_FONT),
     ], start=1):
-        cell = ws.cell(row=1, column=col, value=label)
+        cell = worksheet.cell(row=1, column=col, value=label)
         cell.fill = fill; cell.font = font
         cell.alignment = CENTER; cell.border = BORDER
 
     for i, label in enumerate(biome_labels):
         col  = STRUCTURE_PLANNER_FIXED_COLUMN_COUNT + 1 + i
-        cell = ws.cell(row=1, column=col, value=label)
+        cell = worksheet.cell(row=1, column=col, value=label)
         cell.fill = BIOME_HEADER_FILL; cell.font = BIOME_HEADER_FONT
         cell.alignment = CENTER; cell.border = BORDER
 
-    ws.row_dimensions[1].height = 80
+    worksheet.row_dimensions[1].height = 80
 
     # --- Column widths ---
-    ws.column_dimensions['A'].width = 48
-    ws.column_dimensions['B'].width = 20
+    worksheet.column_dimensions['A'].width = 48
+    worksheet.column_dimensions['B'].width = 20
     for i in range(len(biomes)):
-        ws.column_dimensions[get_column_letter(STRUCTURE_PLANNER_FIXED_COLUMN_COUNT + 1 + i)].width = 14
+        worksheet.column_dimensions[get_column_letter(STRUCTURE_PLANNER_FIXED_COLUMN_COUNT + 1 + i)].width = 14
 
-    ws.freeze_panes = ws.cell(row=2, column=STRUCTURE_PLANNER_FIXED_COLUMN_COUNT + 1)
+    worksheet.freeze_panes = worksheet.cell(row=2, column=STRUCTURE_PLANNER_FIXED_COLUMN_COUNT + 1)
 
     # --- Data rows ---
     for row_idx, structure_id in enumerate(structures, start=2):
         namespace = structure_id.split(':')[0]
         source    = NAMESPACE_TO_SOURCE.get(namespace, namespace)
 
-        c = ws.cell(row=row_idx, column=1, value=structure_id)
-        c.fill = ROW_FILL; c.font = ROW_FONT
-        c.alignment = LEFT_WRAP; c.border = BORDER
+        cell = worksheet.cell(row=row_idx, column=1, value=structure_id)
+        cell.fill = ROW_FILL; cell.font = ROW_FONT
+        cell.alignment = LEFT_WRAP; cell.border = BORDER
 
-        c = ws.cell(row=row_idx, column=2, value=source)
-        c.fill = ROW_FILL; c.font = ROW_FONT
-        c.alignment = CENTER; c.border = BORDER
+        cell = worksheet.cell(row=row_idx, column=2, value=source)
+        cell.fill = ROW_FILL; cell.font = ROW_FONT
+        cell.alignment = CENTER; cell.border = BORDER
 
         prev = existing.get(structure_id, {})
         for i, biome_label in enumerate(biome_labels):
             val  = prev.get(biome_label, CROSS_MARK)
             fill = CHECK_FILL if val == CHECK_MARK else CROSS_FILL
             font = CHECK_FONT if val == CHECK_MARK else CROSS_FONT
-            c = ws.cell(row=row_idx, column=STRUCTURE_PLANNER_FIXED_COLUMN_COUNT + 1 + i, value=val)
-            c.fill = fill; c.font = font
-            c.alignment = CENTER; c.border = BORDER
+            cell = worksheet.cell(row=row_idx, column=STRUCTURE_PLANNER_FIXED_COLUMN_COUNT + 1 + i, value=val)
+            cell.fill = fill; cell.font = font
+            cell.alignment = CENTER; cell.border = BORDER
 
-        ws.row_dimensions[row_idx].height = 16
+        worksheet.row_dimensions[row_idx].height = 16
 
     # --- Excel Table ---
-    table_name = 'T_' + ''.join(c for c in sheet_name if c.isalnum())
+    table_name = 'T_' + ''.join(char for char in sheet_name if char.isalnum())
     table_ref  = f'A1:{get_column_letter(total_cols)}{last_row}'
     table      = Table(displayName=table_name, ref=table_ref)
     table.tableStyleInfo = TableStyleInfo(
@@ -181,16 +181,16 @@ def build_sheet(wb: openpyxl.Workbook, sheet_name: str,
         showFirstColumn=False, showLastColumn=False,
         showRowStripes=False, showColumnStripes=False,
     )
-    ws.add_table(table)
+    worksheet.add_table(table)
 
     # --- Data validation ---
     first_biome = get_column_letter(STRUCTURE_PLANNER_FIXED_COLUMN_COUNT + 1)
     last_biome  = get_column_letter(total_cols)
-    dv = DataValidation(
+    data_validation = DataValidation(
         type='list', formula1='"✓,✗"', allow_blank=True,
         sqref=f'{first_biome}2:{last_biome}{last_row}',
     )
-    ws.add_data_validation(dv)
+    worksheet.add_data_validation(data_validation)
 
 
 def main() -> None:
@@ -202,14 +202,14 @@ def main() -> None:
         print('No dimensions with ✓ biomes found in biome planner.')
         raise SystemExit(1)
 
-    wb = openpyxl.Workbook()
-    wb.remove(wb.active)   # remove default empty sheet
+    workbook = openpyxl.Workbook()
+    workbook.remove(workbook.active)   # remove default empty sheet
 
     for idx, (dim_header, biomes) in enumerate(dim_biomes):
-        build_sheet(wb, dim_header, biomes, structures, idx, existing_all.get(dim_header, {}))
+        build_sheet(workbook, dim_header, biomes, structures, idx, existing_all.get(dim_header, {}))
         print(f'  [{dim_header}]  {len(biomes)} biome columns')
 
-    wb.save(OUTPUT_FILE)
+    workbook.save(OUTPUT_FILE)
     print(f'\nWrote {OUTPUT_FILE}  ({len(structures)} structures, {len(dim_biomes)} sheets)')
 
 
