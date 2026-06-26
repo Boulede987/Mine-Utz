@@ -19,7 +19,6 @@ Usage:
 import json
 import sys
 import zipfile
-from dataclasses import dataclass, field
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -28,10 +27,11 @@ import openpyxl
 
 from worldgen.constants import (
     CHECK_MARK,
-    BIOME_PLANNER_FIXED_COLUMN_COUNT, STRUCTURE_PLANNER_FILE_FIXED_COLUMN_COUNT,
-    STRUCTURE_PLANNER_FILE_FILE,
+    STRUCTURE_PLANNER_FIXED_COLUMN_COUNT,
+    STRUCTURE_PLANNER_FILE,
 )
 from worldgen.loaders import load_dimension_biomes
+from worldgen.structure_classifier import StructureClassification, classify_all_structures
 from lib.io_utils import strip_comments
 
 sys.stdout.reconfigure(encoding='utf-8')
@@ -75,7 +75,6 @@ def load_structure_tags() -> dict[str, list[str]]:
     return result
 
 
-
 def _process_structure_row(
     row,
     biome_ids: list[str],
@@ -90,7 +89,7 @@ def _process_structure_row(
         return
     seen_all.add(structure_id)
     for col_offset, biome_id in enumerate(biome_ids):
-        col_index = STRUCTURE_PLANNER_FILE_FIXED_COLUMN_COUNT + col_offset
+        col_index = STRUCTURE_PLANNER_FIXED_COLUMN_COUNT + col_offset
         col_val   = row[col_index] if col_index < len(row) else None
         if col_val != CHECK_MARK:
             continue
@@ -251,126 +250,6 @@ def clean_previous(manifest: list[str]) -> None:
             removed += 1
     if removed:
         print(f'  Cleaned {removed} old tag file(s).')
-
-
-# ---------------------------------------------------------------------------
-# Structure classification
-# ---------------------------------------------------------------------------
-
-@dataclass
-class StructureClassification:
-    exclusive_tag_biomes: dict[str, list[str]]        = field(default_factory=dict)
-    shared_active_structs: list[tuple[str, list[str]]] = field(default_factory=list)
-    skipped_no_tag: list[str]                         = field(default_factory=list)
-    direct_suppressed: list[str]                      = field(default_factory=list)
-    suppressed_tags: set[str]                         = field(default_factory=set)
-    suppressed_structs: list[str]                     = field(default_factory=list)
-    shared_conflicts: list[tuple[str, str]]           = field(default_factory=list)
-
-
-def _map_active_structures_to_tags(
-    selections: dict[str, list[str]],
-    struct_tags: dict[str, list[str]],
-    overworld_checked_structures: set[str],
-) -> tuple[list[str], list[str], dict[str, list[tuple[str, list[str]]]]]:
-    """
-    For each selected (✓) structure, determine whether it is tag-based or direct-biome.
-    Returns (skipped_no_tag, direct_suppressed, tag_to_active).
-    """
-    skipped_no_tag: list[str] = []
-    direct_suppressed: list[str] = []
-    tag_to_active: dict[str, list[tuple[str, list[str]]]] = {}
-
-    for structure_id, biome_ids in selections.items():
-        if structure_id not in struct_tags:
-            if structure_id in overworld_checked_structures:
-                skipped_no_tag.append(structure_id)
-            else:
-                direct_suppressed.append(structure_id)
-            continue
-        for tag_ref in struct_tags[structure_id]:
-            tag_to_active.setdefault(tag_ref, []).append((structure_id, biome_ids))
-
-    return skipped_no_tag, direct_suppressed, tag_to_active
-
-
-def _split_tags_by_exclusivity(
-    tag_to_active: dict[str, list[tuple[str, list[str]]]],
-) -> tuple[dict[str, list[str]], list[tuple[str, list[str]]]]:
-    """
-    Returns (exclusive_tag_biomes, shared_active_structs).
-    Tags owned by exactly one active structure get their biomes written directly.
-    Tags shared by multiple active structures → each gets a controlled per-structure override.
-    """
-    exclusive_tag_biomes: dict[str, list[str]] = {}
-    shared_active_structs: list[tuple[str, list[str]]] = []
-
-    for tag_ref, entries in tag_to_active.items():
-        if len(entries) == 1:
-            structure_id, biome_ids = entries[0]
-            exclusive_tag_biomes[tag_ref] = biome_ids
-        else:
-            for structure_id, biome_ids in entries:
-                shared_active_structs.append((structure_id, biome_ids))
-
-    return exclusive_tag_biomes, shared_active_structs
-
-
-def _collect_inactive_suppressions(
-    seen_all: set[str],
-    selections: dict[str, list[str]],
-    struct_tags: dict[str, list[str]],
-    tag_to_active: dict[str, list[tuple[str, list[str]]]],
-) -> tuple[set[str], list[str], list[str], list[tuple[str, str]]]:
-    """
-    For structures with no ✓ (all-✗), determine whether suppression is via biome tag
-    or structure JSON override (when the tag is shared with an active structure).
-    Returns (suppressed_tags, suppressed_structs, additional_direct_suppressed, shared_conflicts).
-    """
-    suppressed_tags: set[str] = set()
-    suppressed_structs: list[str] = []
-    additional_direct_suppressed: list[str] = []
-    shared_conflicts: list[tuple[str, str]] = []
-
-    for structure_id in seen_all:
-        if structure_id in selections:
-            continue
-        if structure_id not in struct_tags:
-            additional_direct_suppressed.append(structure_id)
-            continue
-        suppressed_structs.append(structure_id)
-        for tag_ref in struct_tags[structure_id]:
-            if tag_ref in tag_to_active:
-                shared_conflicts.append((structure_id, tag_ref))
-            else:
-                suppressed_tags.add(tag_ref)
-
-    return suppressed_tags, suppressed_structs, additional_direct_suppressed, shared_conflicts
-
-
-def classify_all_structures(
-    struct_tags: dict[str, list[str]],
-    selections: dict[str, list[str]],
-    seen_all: set[str],
-    overworld_checked_structures: set[str],
-) -> StructureClassification:
-    """Classify every structure in the planner into one suppression/override category."""
-    skipped_no_tag, direct_suppressed, tag_to_active = _map_active_structures_to_tags(
-        selections, struct_tags, overworld_checked_structures,
-    )
-    exclusive_tag_biomes, shared_active_structs = _split_tags_by_exclusivity(tag_to_active)
-    suppressed_tags, suppressed_structs, additional_direct_suppressed, shared_conflicts = (
-        _collect_inactive_suppressions(seen_all, selections, struct_tags, tag_to_active)
-    )
-    return StructureClassification(
-        exclusive_tag_biomes  = exclusive_tag_biomes,
-        shared_active_structs = shared_active_structs,
-        skipped_no_tag        = skipped_no_tag,
-        direct_suppressed     = direct_suppressed + additional_direct_suppressed,
-        suppressed_tags       = suppressed_tags,
-        suppressed_structs    = suppressed_structs,
-        shared_conflicts      = shared_conflicts,
-    )
 
 
 # ---------------------------------------------------------------------------
