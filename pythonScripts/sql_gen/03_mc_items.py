@@ -61,25 +61,41 @@ def _load_vanilla_stations(mc_items_set: set[str]) -> set[str]:
     return stations
 
 
-_RARITY_IDS = {'COMMON': 1, 'UNCOMMON': 2, 'RARE': 3, 'EPIC': 4}
+_RARITY_IDS  = {'COMMON': 1, 'UNCOMMON': 2, 'RARE': 3, 'EPIC': 4}
+_NULL_VALUES = ('null', 'None', '')
+
+
+def _parse_int_or_none(value: str) -> int | None:
+    return int(value) if value not in _NULL_VALUES else None
+
+
+def _parse_float_or_none(value: str) -> float | None:
+    return float(value) if value not in _NULL_VALUES else None
+
+
+def _parse_str_or_none(value: str) -> str | None:
+    return value if value not in _NULL_VALUES else None
+
+
+def _parse_bool_or_none(value: str) -> bool | None:
+    if value in _NULL_VALUES:
+        return None
+    return value.lower() == 'true'
 
 
 def _load_item_extra() -> dict[str, dict]:
     """Parse item_extra.txt into {item_id: {key: value}} from /dump_item_extra."""
     result: dict[str, dict] = {}
-    def _i(v): return int(v)   if v not in ('null', 'None', '') else None
-    def _f(v): return float(v) if v not in ('null', 'None', '') else None
-    def _s(v): return v        if v not in ('null', 'None', '') else None
     for line in load_pipe_file(LISTS, 'item_extra.txt'):
         parts = [p.strip() for p in line.split('|')]
         if len(parts) < 5:
             continue
         result[parts[0]] = {
-            'maxStackSize':     _i(parts[1]),
-            'enchantability':   _i(parts[2]),
-            'miningEfficiency': _f(parts[3]),
-            'miningTier':       _s(parts[4]),
-            'rarity':           _s(parts[5]) if len(parts) >= 6 else None,
+            'maxStackSize':     _parse_int_or_none(parts[1]),
+            'enchantability':   _parse_int_or_none(parts[2]),
+            'miningEfficiency': _parse_float_or_none(parts[3]),
+            'miningTier':       _parse_str_or_none(parts[4]),
+            'rarity':           _parse_str_or_none(parts[5]) if len(parts) >= 6 else None,
         }
     print(f'item_extra      : {len(result)} entries')
     return result
@@ -88,20 +104,16 @@ def _load_item_extra() -> dict[str, dict]:
 def _load_block_stats() -> dict[str, dict]:
     """Parse block_stats.txt into {block_id: {key: value}} from /dump_block_stats."""
     result: dict[str, dict] = {}
-    def _f(v): return float(v) if v not in ('null', 'None', '') else None
-    def _b(v):
-        if v in ('null', 'None', ''): return None
-        return v.lower() == 'true'
     for line in load_pipe_file(LISTS, 'block_stats.txt'):
         parts = [p.strip() for p in line.split('|')]
         if len(parts) < 6:
             continue
         result[parts[0]] = {
-            'blastResistance': _f(parts[1]),
-            'hardness':        _f(parts[2]),
-            'luminous':        _b(parts[3]),
-            'transparent':     _b(parts[4]),
-            'flammable':       _b(parts[5]),
+            'blastResistance': _parse_float_or_none(parts[1]),
+            'hardness':        _parse_float_or_none(parts[2]),
+            'luminous':        _parse_bool_or_none(parts[3]),
+            'transparent':     _parse_bool_or_none(parts[4]),
+            'flammable':       _parse_bool_or_none(parts[5]),
         }
     print(f'block_stats     : {len(result)} entries')
     return result
