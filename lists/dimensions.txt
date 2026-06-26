@@ -38,6 +38,7 @@ minecraft:the_end
 minecraft:the_nether
 
 --- mineutz ---
+mineutz:fantasy_dimension
 mineutz:pokemon_dimension
 mineutz:zombie_city
 

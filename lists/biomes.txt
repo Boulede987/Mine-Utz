@@ -279,6 +279,44 @@ minecraft:windswept_hills
 minecraft:windswept_savanna
 minecraft:wooded_badlands
 
+--- mineutz ---
+mineutz:cold_ocean
+mineutz:deep_cold_ocean
+mineutz:deep_frozen_ocean
+mineutz:deep_lukewarm_ocean
+mineutz:deep_ocean
+mineutz:fantasy_dimension_cold_ocean
+mineutz:fantasy_dimension_deep_cold_ocean
+mineutz:fantasy_dimension_deep_frozen_ocean
+mineutz:fantasy_dimension_deep_lukewarm_ocean
+mineutz:fantasy_dimension_deep_ocean
+mineutz:fantasy_dimension_frozen_ocean
+mineutz:fantasy_dimension_lukewarm_ocean
+mineutz:fantasy_dimension_ocean
+mineutz:fantasy_dimension_warm_ocean
+mineutz:frozen_ocean
+mineutz:lukewarm_ocean
+mineutz:ocean
+mineutz:pokemon_dimension_cold_ocean
+mineutz:pokemon_dimension_deep_cold_ocean
+mineutz:pokemon_dimension_deep_frozen_ocean
+mineutz:pokemon_dimension_deep_lukewarm_ocean
+mineutz:pokemon_dimension_deep_ocean
+mineutz:pokemon_dimension_frozen_ocean
+mineutz:pokemon_dimension_lukewarm_ocean
+mineutz:pokemon_dimension_ocean
+mineutz:pokemon_dimension_warm_ocean
+mineutz:warm_ocean
+mineutz:zombie_city_cold_ocean
+mineutz:zombie_city_deep_cold_ocean
+mineutz:zombie_city_deep_frozen_ocean
+mineutz:zombie_city_deep_lukewarm_ocean
+mineutz:zombie_city_deep_ocean
+mineutz:zombie_city_frozen_ocean
+mineutz:zombie_city_lukewarm_ocean
+mineutz:zombie_city_ocean
+mineutz:zombie_city_warm_ocean
+
 --- nullscape ---
 nullscape:crystal_peaks
 nullscape:shadowlands

@@ -3033,5 +3033,25 @@ undergroundworlds:underground_tundra | minecraft:witch | weight:5 | min:1 | max:
 undergroundworlds:underground_tundra | minecraft:zombie | weight:10 | min:4 | max:4
 undergroundworlds:underground_tundra | undergroundworlds:frozen_zombie | weight:90 | min:4 | max:4
 undergroundworlds:underground_tundra | undergroundworlds:icy_creeper | weight:80 | min:4 | max:4
-===== END (3034 total) =====
+yungscavebiomes:frosted_caves | minecraft:bat | weight:10 | min:8 | max:8
+yungscavebiomes:frosted_caves | minecraft:creeper | weight:100 | min:4 | max:4
+yungscavebiomes:frosted_caves | minecraft:enderman | weight:10 | min:1 | max:4
+yungscavebiomes:frosted_caves | minecraft:glow_squid | weight:10 | min:4 | max:6
+yungscavebiomes:frosted_caves | minecraft:skeleton | weight:100 | min:4 | max:4
+yungscavebiomes:frosted_caves | minecraft:spider | weight:100 | min:4 | max:4
+yungscavebiomes:frosted_caves | minecraft:stray | weight:100 | min:4 | max:4
+yungscavebiomes:frosted_caves | minecraft:witch | weight:5 | min:1 | max:1
+yungscavebiomes:frosted_caves | minecraft:zombie | weight:95 | min:4 | max:4
+yungscavebiomes:frosted_caves | minecraft:zombie_villager | weight:5 | min:1 | max:1
+yungscavebiomes:frosted_caves | yungscavebiomes:ice_cube | weight:100 | min:2 | max:4
+yungscavebiomes:lost_caves | minecraft:bat | weight:10 | min:8 | max:8
+yungscavebiomes:lost_caves | minecraft:creeper | weight:100 | min:4 | max:4
+yungscavebiomes:lost_caves | minecraft:enderman | weight:10 | min:1 | max:4
+yungscavebiomes:lost_caves | minecraft:husk | weight:100 | min:4 | max:4
+yungscavebiomes:lost_caves | minecraft:skeleton | weight:100 | min:4 | max:4
+yungscavebiomes:lost_caves | minecraft:spider | weight:100 | min:4 | max:4
+yungscavebiomes:lost_caves | minecraft:witch | weight:5 | min:1 | max:1
+yungscavebiomes:lost_caves | minecraft:zombie_villager | weight:5 | min:1 | max:1
+yungscavebiomes:lost_caves | yungscavebiomes:sand_snapper | weight:50 | min:1 | max:2
+===== END (3054 total) =====
 

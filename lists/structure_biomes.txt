@@ -483,9 +483,13 @@ iceandfire:mausoleum | #iceandfire:structure_gen/mausoleum
 iceandfire:pixie_village | #iceandfire:structure_gen/pixie_village
 iceandfire:siren_island | #iceandfire:structure_gen/siren_island
 irons_spellbooks:ancient_battleground | #minecraft:has_structure/bastion_remnant
+irons_spellbooks:catacombs | #irons_spellbooks:has_structure/catacombs
 irons_spellbooks:citadel | #minecraft:has_structure/bastion_remnant
+irons_spellbooks:evoker_fort | #irons_spellbooks:has_structure/evoker_fort
 irons_spellbooks:ice_spider_den | #irons_spellbooks:has_structure/ice_spider_den
 irons_spellbooks:impaled_icebreaker | #irons_spellbooks:has_structure/impaled_icebreaker
+irons_spellbooks:mangrove_hut | #irons_spellbooks:has_structure/mangrove_hut
+irons_spellbooks:mountain_tower | #irons_spellbooks:has_structure/mountain_tower
 irons_spellbooks:pyromancer_tower | #irons_spellbooks:has_structure/pyromancer_tower
 legends_untold:mew_ruins | #cobblemon:is_jungle
 legends_untold:psychic_den | #minecraft:is_overworld
@@ -1151,5 +1155,5 @@ wan_ancient_beasts:digsite_taiga | #wan_ancient_beasts:has_structure/digsite_tai
 wan_ancient_beasts:ice_spike_castle | #wan_ancient_beasts:has_structure/ice_spike_castle
 wan_ancient_beasts:mesa_temple | #wan_ancient_beasts:has_structure/mesa_temple
 wan_ancient_beasts:mesa_temple_small | #wan_ancient_beasts:has_structure/mesa_temple
-===== END (1152 total) =====
+===== END (1156 total) =====
 

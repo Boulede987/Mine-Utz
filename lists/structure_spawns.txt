@@ -57,6 +57,11 @@ friendsandfoes:iceologer_cabin | friendsandfoes:iceologer | weight:1 | min:1 | m
 friendsandfoes:illusioner_shack | friendsandfoes:illusioner | weight:1 | min:1 | max:1
 friendsandfoes:illusioner_training_grounds | friendsandfoes:illusioner | weight:1 | min:1 | max:1
 friendsandfoes:illusioner_training_grounds | minecraft:pillager | weight:2 | min:1 | max:2
+irons_spellbooks:catacombs | irons_spellbooks:catacombs_zombie | weight:10 | min:1 | max:1
+irons_spellbooks:catacombs | irons_spellbooks:necromancer | weight:2 | min:1 | max:1
+irons_spellbooks:catacombs | minecraft:skeleton | weight:5 | min:1 | max:1
+irons_spellbooks:evoker_fort | minecraft:pillager | weight:10 | min:2 | max:3
+irons_spellbooks:evoker_fort | minecraft:vindicator | weight:5 | min:4 | max:4
 minecraft:fortress | minecraft:blaze | weight:10 | min:2 | max:3
 minecraft:fortress | minecraft:magma_cube | weight:3 | min:4 | max:4
 minecraft:fortress | minecraft:skeleton | weight:2 | min:5 | max:5
@@ -251,5 +256,5 @@ undergroundworlds:jungle_temple | undergroundworlds:jungle_zombie | weight:1 | m
 villagesandpillages:village_witch | minecraft:cat | weight:1 | min:2 | max:4
 villagesandpillages:village_witch | minecraft:witch | weight:1 | min:4 | max:8
 wan_ancient_beasts:digsite_badlands | wan_ancient_beasts:paleontologist | weight:400 | min:1 | max:1
-===== END (252 total) =====
+===== END (257 total) =====
 

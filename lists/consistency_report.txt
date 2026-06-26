@@ -9,14 +9,14 @@ Info     : 8
   OK  : items.txt  (25812 entries)
   OK  : blocks.txt  (15987 entries)
   OK  : mobs.txt  (1491 entries)
-  OK  : biomes.txt  (325 entries)
+  OK  : biomes.txt  (361 entries)
   OK  : structures.txt  (985 entries)
   OK  : recipes.txt  (34618 entries)
   OK  : loot_entities.txt  (1347 entries)
   OK  : loot_chests.txt  (15228 entries)
   OK  : loot_blocks.txt  (30979 entries)
-  OK  : biome_spawns.txt  (3034 entries)
-  OK  : structure_biomes.txt  (1152 entries)
+  OK  : biome_spawns.txt  (3054 entries)
+  OK  : structure_biomes.txt  (1156 entries)
   OK  : entity_loottables.txt  (1491 entries)
   OK  : mod_meta.txt  (31 entries)
   OK  : lang_names.txt  (94199 entries)
@@ -24,7 +24,7 @@ Info     : 8
 ============================================================
   NAMESPACE COVERAGE
 ============================================================
-  WARN: 95 namespaces found in registries but not in mod_meta.txt
+  WARN: 96 namespaces found in registries but not in mod_meta.txt
     - ae2
     - aether
     - amendments
@@ -45,13 +45,14 @@ Info     : 8
     - cobblemon
     - cobblemonboxlink
     - cobblemonsizevariation
-    ... and 75 more
+    ... and 76 more
   WARN: 3 namespaces have entities but no items
     - blueprint
     - corpse
     - gunsmithlib
-  WARN: 3 namespaces have biomes but no items
+  WARN: 4 namespaces have biomes but no items
     - blueprint
+    - mineutz
     - nullscape
     - terrablender
 
@@ -202,7 +203,7 @@ Info     : 8
     - mythsandlegends:old_camp
     - mythsandlegends:scorched_nest
     - mythsandlegends:sepulcrum_ignitum
-  INFO: 591 structure-biome entries use biome tags (cannot cross-reference)
+  INFO: 595 structure-biome entries use biome tags (cannot cross-reference)
 
 ============================================================
   LANG NAME COVERAGE
