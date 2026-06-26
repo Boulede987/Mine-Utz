@@ -27,6 +27,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 import openpyxl
 
 from worldgen.constants import CHECK_MARK
+from lib.io_utils import strip_comments
 
 sys.stdout.reconfigure(encoding='utf-8')
 
@@ -156,23 +157,6 @@ def load_structure_selections(
 # Structure JSON helpers
 # ---------------------------------------------------------------------------
 
-def _strip_comments(text: str) -> str:
-    result: list[str] = []
-    in_string = False
-    pos = 0
-    while pos < len(text):
-        char = text[pos]
-        if char == '"' and (pos == 0 or text[pos - 1] != '\\'):
-            in_string = not in_string
-        elif not in_string and char == '/' and pos + 1 < len(text) and text[pos + 1] == '/':
-            while pos < len(text) and text[pos] != '\n':
-                pos += 1
-            continue
-        result.append(char)
-        pos += 1
-    return ''.join(result)
-
-
 def find_structure_json_in_jars(structure_id: str) -> dict | None:
     """Scan all JARs for data/<ns>/worldgen/structure/<path>.json and return parsed content."""
     if not MODS_DIR.exists():
@@ -188,7 +172,7 @@ def find_structure_json_in_jars(structure_id: str) -> dict | None:
                 try:
                     return json.loads(raw)
                 except json.JSONDecodeError:
-                    return json.loads(_strip_comments(raw))
+                    return json.loads(strip_comments(raw))
         except (zipfile.BadZipFile, OSError):
             continue
     return None

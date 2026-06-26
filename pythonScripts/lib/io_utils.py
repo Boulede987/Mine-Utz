@@ -9,7 +9,7 @@ import zipfile
 from pathlib import Path
 
 
-def _strip_comments(text: str) -> str:
+def strip_comments(text: str) -> str:
     # Strip // comments outside of string values
     result = []
     in_string = False
@@ -36,7 +36,7 @@ def read_json(zip_file: zipfile.ZipFile, entry_name: str) -> dict | None:
         return json.loads(raw)
     except json.JSONDecodeError:
         try:
-            return json.loads(_strip_comments(raw))
+            return json.loads(strip_comments(raw))
         except Exception:
             return None
     except Exception:
