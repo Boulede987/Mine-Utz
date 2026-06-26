@@ -1,0 +1,6 @@
+{
+  "feature": "cobblemon:berry_groves",
+  "placement": [
+    { "type": "minecraft:count", "count": 0 }
+  ]
+}
