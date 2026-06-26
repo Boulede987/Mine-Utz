@@ -36,7 +36,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import openpyxl
 
-from worldgen.constants import BIOME_PLANNER_FILE, BIOME_PLANNER_SHEET, BIOME_PLANNER_FIXED_COLUMN_COUNT
+from worldgen.constants import BIOME_PLANNER_FILE, BIOME_PLANNER_SHEET, BIOME_PLANNER_FIXED_COLUMN_COUNT, ALL_SECTIONS, OVERWORLD_PLANNER_HEADER
 
 sys.stdout.reconfigure(encoding='utf-8')
 
@@ -52,7 +52,6 @@ BIOME_DEST_DIR   = Path('minecraft/config/paxi/datapacks/mineutz/data/mineutz/wo
 
 # Overworld column is handled by FilterRegion (companion mod), not a dim JSON,
 # but we still generate plain mineutz:ocean* for it.
-OVERWORLD_HEADER = 'Overworld'
 
 OCEAN_NAMES = [
     'ocean',
@@ -88,7 +87,7 @@ def load_dimension_slugs() -> list[tuple[str, str | None]]:
     for h in headers:
         if not h:
             continue
-        if h == OVERWORLD_HEADER:
+        if h == OVERWORLD_PLANNER_HEADER:
             result.append(('', h))
         else:
             result.append((slugify(h) + '_', h))
@@ -120,7 +119,7 @@ def load_param_lookup() -> dict[str, dict]:
     data = json.loads(MERGED_MINECRAFT.read_text(encoding='utf-8'))
     lookup: dict = {}
     for dim_sections in data.get('dimensions', {}).values():
-        for section in ['surface', 'underground', 'caves', 'deep']:
+        for section in ALL_SECTIONS:
             for entry in dim_sections.get(section, []):
                 lookup[entry['biome']] = entry['parameters']
     return lookup

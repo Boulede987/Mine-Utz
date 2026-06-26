@@ -29,6 +29,7 @@ from worldgen.constants import (
     CHECK_MARK,
     STRUCTURE_PLANNER_FIXED_COLUMN_COUNT,
     STRUCTURE_PLANNER_FILE,
+    OVERWORLD_PLANNER_HEADER,
 )
 from worldgen.loaders import load_dimension_biomes
 from worldgen.structure_classifier import StructureClassification, classify_all_structures
@@ -40,13 +41,9 @@ STRUCTURE_BIOMES   = Path('lists/structure_biomes.txt')
 PAXI_DATA          = Path('minecraft/config/paxi/datapacks/mineutz/data')
 MODS_DIR           = Path('minecraft/mods')
 MANIFEST           = Path('worldgen_data/generated_structure_tags.json')
-SUPPRESS_TAG       = '#mineutz:suppress'
-OVERWORLD_SHEET    = 'Overworld'
+SUPPRESS_TAG                      = '#mineutz:suppress'
+CLASSIFICATION_SUMMARY_MAX_LISTED = 10
 
-
-# ---------------------------------------------------------------------------
-# Data loaders
-# ---------------------------------------------------------------------------
 
 def load_structure_tags() -> dict[str, list[str]]:
     """
@@ -129,16 +126,12 @@ def load_structure_selections(
             continue
         for row in worksheet.iter_rows(min_row=2, values_only=True):
             _process_structure_row(
-                row, dim_biomes[sheet_name], sheet_name == OVERWORLD_SHEET,
+                row, dim_biomes[sheet_name], sheet_name == OVERWORLD_PLANNER_HEADER,
                 seen_all, selections, overworld_checked, overworld_biomes_by_structure,
             )
 
     return selections, seen_all, overworld_checked, overworld_biomes_by_structure
 
-
-# ---------------------------------------------------------------------------
-# Structure JSON helpers
-# ---------------------------------------------------------------------------
 
 def _parse_json_lenient(raw: str) -> dict:
     try:
@@ -217,10 +210,6 @@ def ensure_suppress_tag() -> None:
         output_path.write_text(json.dumps({'replace': True, 'values': []}, indent=2), encoding='utf-8')
 
 
-# ---------------------------------------------------------------------------
-# Tag file helpers
-# ---------------------------------------------------------------------------
-
 def tag_ref_to_path(tag_ref: str) -> Path:
     """
     'minecraft:has_structure/village_plains'
@@ -251,10 +240,6 @@ def clean_previous(manifest: list[str]) -> None:
     if removed:
         print(f'  Cleaned {removed} old tag file(s).')
 
-
-# ---------------------------------------------------------------------------
-# Override writers
-# ---------------------------------------------------------------------------
 
 def _suppress_one_structure(
     structure_id: str,
@@ -347,20 +332,16 @@ def write_all_controlled_overrides(
     return controlled_count
 
 
-# ---------------------------------------------------------------------------
-# Reporting
-# ---------------------------------------------------------------------------
-
 def print_classification_summary(classification: StructureClassification) -> None:
     if classification.shared_conflicts:
         print(f'  {len(classification.shared_conflicts)} all-✗ structure(s) share a collection tag with an active '
               f'structure — writing Paxi structure JSON overrides to suppress individually:')
     if classification.suppressed_structs:
         print(f'  Suppressing {len(classification.suppressed_tags)} tag(s) from all-✗ structure(s):')
-        for structure_id in classification.suppressed_structs[:10]:
+        for structure_id in classification.suppressed_structs[:CLASSIFICATION_SUMMARY_MAX_LISTED]:
             print(f'    {structure_id}')
-        if len(classification.suppressed_structs) > 10:
-            print(f'    ... and {len(classification.suppressed_structs) - 10} more.')
+        if len(classification.suppressed_structs) > CLASSIFICATION_SUMMARY_MAX_LISTED:
+            print(f'    ... and {len(classification.suppressed_structs) - CLASSIFICATION_SUMMARY_MAX_LISTED} more.')
 
 
 def print_override_failures(override_failed: list[str]) -> None:
@@ -389,10 +370,6 @@ def print_final_summary(
     for tag_ref, biome_ids in sorted(classification.exclusive_tag_biomes.items()):
         print(f'  {tag_ref}  ({len(biome_ids)} biome(s))')
 
-
-# ---------------------------------------------------------------------------
-# Entry point
-# ---------------------------------------------------------------------------
 
 def main() -> None:
     struct_tags  = load_structure_tags()

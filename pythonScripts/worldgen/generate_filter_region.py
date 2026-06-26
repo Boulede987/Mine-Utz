@@ -23,16 +23,17 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import openpyxl
 
-from worldgen.constants import CHECK_MARK, BIOME_PLANNER_FILE, BIOME_PLANNER_SHEET
+from worldgen.constants import (
+    CHECK_MARK, BIOME_PLANNER_FILE, BIOME_PLANNER_SHEET,
+    ALL_SECTIONS, END_SECTIONS, OVERWORLD_PLANNER_HEADER,
+)
 from worldgen.terrablender_codegen import build_region, build_end_biomes, build_filter_mod
 
 sys.stdout.reconfigure(encoding='utf-8')
 
-OVERWORLD_HEADER = 'Overworld'
-NETHER_HEADER    = 'Nether'
-END_HEADER       = 'End'
-MERGED_DATA_DIR  = Path('worldgen_data') / 'merged'
-END_SECTIONS     = ['highlands', 'midlands', 'edge', 'islands']
+NETHER_HEADER   = 'Nether'
+END_HEADER      = 'End'
+MERGED_DATA_DIR = Path('worldgen_data') / 'merged'
 
 MOD_SRC = Path(
     'companion-mods/terrablender-custom-region'
@@ -66,7 +67,7 @@ def load_all_params() -> dict[str, list[dict]]:
     for json_file in sorted(MERGED_DATA_DIR.glob('*.json')):
         data = json.loads(json_file.read_text(encoding='utf-8'))
         for dim_sections in data.get('dimensions', {}).values():
-            for section in ['surface', 'underground', 'caves', 'deep']:
+            for section in ALL_SECTIONS:
                 for entry in dim_sections.get(section, []):
                     lookup.setdefault(entry['biome'], []).append(entry['parameters'])
     return lookup
@@ -97,7 +98,7 @@ def main() -> None:
     worksheet = openpyxl.load_workbook(BIOME_PLANNER_FILE)[BIOME_PLANNER_SHEET]
     headers   = [cell.value for cell in worksheet[1]]
 
-    overworld_biomes = load_column_biomes(worksheet, headers, OVERWORLD_HEADER)
+    overworld_biomes = load_column_biomes(worksheet, headers, OVERWORLD_PLANNER_HEADER)
     nether_biomes    = load_column_biomes(worksheet, headers, NETHER_HEADER)
     end_biomes       = load_column_biomes(worksheet, headers, END_HEADER)
 
@@ -108,10 +109,8 @@ def main() -> None:
     all_params = load_all_params()
     end_data   = load_merged_end_data()
 
-    # Overworld region (always)
     build_region(overworld_biomes, all_params, 'FilterRegion', 'OVERWORLD', FILTER_REGION)
 
-    # Nether region (only if biomes exist)
     has_nether = bool(nether_biomes)
     if has_nether:
         build_region(nether_biomes, all_params, 'FilterNetherRegion', 'NETHER', FILTER_NETHER_REGION)
@@ -119,7 +118,6 @@ def main() -> None:
         FILTER_NETHER_REGION.unlink()
         print(f'  Removed {FILTER_NETHER_REGION.name} (no Nether biomes selected).')
 
-    # End biomes (only if biomes exist)
     has_end = bool(end_biomes)
     if has_end:
         build_end_biomes(end_biomes, end_data, FILTER_END_BIOMES)

@@ -26,7 +26,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import openpyxl
 
-from worldgen.constants import CHECK_MARK, BIOME_PLANNER_FILE, BIOME_PLANNER_SHEET, BIOME_PLANNER_FIXED_COLUMN_COUNT
+from worldgen.constants import CHECK_MARK, BIOME_PLANNER_FILE, BIOME_PLANNER_SHEET, BIOME_PLANNER_FIXED_COLUMN_COUNT, ALL_SECTIONS
 
 sys.stdout.reconfigure(encoding='utf-8')
 
@@ -35,7 +35,6 @@ DIMENSION_DIR   = Path('minecraft/config/paxi/datapacks/mineutz/data/mineutz/dim
 NAMESPACE       = 'mineutz'
 
 SKIP_COLUMNS = {'Overworld', 'Nether', 'End'}
-ALL_SECTIONS = ['surface', 'underground', 'caves', 'deep']
 
 
 def slugify(header: str) -> str:

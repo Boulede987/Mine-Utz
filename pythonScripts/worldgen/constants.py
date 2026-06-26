@@ -10,6 +10,11 @@ BIOME_PLANNER_FILE     = Path('dimension_biome_planner.xlsx')
 BIOME_PLANNER_SHEET    = 'Biome Planner'
 STRUCTURE_PLANNER_FILE = Path('structure_planner.xlsx')
 
+OVERWORLD_PLANNER_HEADER = 'Overworld'
+
+ALL_SECTIONS = ['surface', 'underground', 'caves', 'deep']
+END_SECTIONS = ['highlands', 'midlands', 'edge', 'islands']
+
 NAMESPACE_TO_SOURCE = {
     'minecraft':                      'Vanilla',
     'biomesoplenty':                  'BoP',

@@ -30,13 +30,12 @@ from openpyxl.worksheet.datavalidation import DataValidation
 from worldgen.constants import (
     CHECK_MARK, CROSS_MARK, NAMESPACE_TO_SOURCE, BIOME_PLANNER_FIXED_COLUMN_COUNT,
     BIOME_PLANNER_FILE, BIOME_PLANNER_SHEET,
+    ALL_SECTIONS, END_SECTIONS,
 )
 
 sys.stdout.reconfigure(encoding='utf-8')
 
 MERGED_DATA_DIR = Path('worldgen_data') / 'merged'
-ALL_SECTIONS    = ['surface', 'underground', 'caves', 'deep']
-END_SECTIONS    = ['highlands', 'midlands', 'edge', 'islands']
 
 FIRST_DIMENSION_COLUMN_LETTER = chr(ord('A') + BIOME_PLANNER_FIXED_COLUMN_COUNT)
 

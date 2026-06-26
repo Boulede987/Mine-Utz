@@ -103,10 +103,6 @@ _REGISTRATION = (
 _END_SETUP_CALL = '            FilterEndBiomes.setup();'
 
 
-# ---------------------------------------------------------------------------
-# Formatters
-# ---------------------------------------------------------------------------
-
 def _fmt_param(values: list) -> str:
     lo, hi = values[0], values[1]
     if lo == hi:
@@ -149,10 +145,6 @@ def _fmt_section_divider(namespace: str) -> str:
     prefix = f'    // ── {namespace} '
     return prefix + '─' * max(4, 80 - len(prefix))
 
-
-# ---------------------------------------------------------------------------
-# Builders
-# ---------------------------------------------------------------------------
 
 def build_region(
     biome_ids: list[str],
