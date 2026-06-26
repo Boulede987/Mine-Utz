@@ -32,7 +32,11 @@ import sys
 import zipfile
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
 import openpyxl
+
+from worldgen.constants import BIOME_PLANNER_FILE, BIOME_PLANNER_SHEET, BIOME_PLANNER_FIXED_COLUMN_COUNT
 
 sys.stdout.reconfigure(encoding='utf-8')
 
@@ -45,8 +49,6 @@ VANILLA_JAR      = (
 MERGED_MINECRAFT = Path('worldgen_data') / 'merged' / 'minecraft.json'
 WORLDGEN_SOURCE  = Path('worldgen_data') / 'mineutz_oceans.json'
 BIOME_DEST_DIR   = Path('minecraft/config/paxi/datapacks/mineutz/data/mineutz/worldgen/biome')
-PLANNER_FILE     = Path('dimension_biome_planner.xlsx')
-SHEET_NAME       = 'Biome Planner'
 
 # Overworld column is handled by FilterRegion (companion mod), not a dim JSON,
 # but we still generate plain mineutz:ocean* for it.
@@ -75,12 +77,12 @@ def load_dimension_slugs() -> list[tuple[str, str | None]]:
     Overworld → prefix '' (plain names, no underscore prefix).
     Custom dims → prefix '<slug>_'.
     """
-    if not PLANNER_FILE.exists():
-        print(f'WARNING: {PLANNER_FILE} not found — using Overworld only.')
+    if not BIOME_PLANNER_FILE.exists():
+        print(f'WARNING: {BIOME_PLANNER_FILE} not found — using Overworld only.')
         return [('', OVERWORLD_HEADER)]
 
-    ws = openpyxl.load_workbook(PLANNER_FILE)[SHEET_NAME]
-    headers = [cell.value for cell in ws[1]][4:]  # E onward
+    worksheet = openpyxl.load_workbook(BIOME_PLANNER_FILE)[BIOME_PLANNER_SHEET]
+    headers = [cell.value for cell in worksheet[1]][BIOME_PLANNER_FIXED_COLUMN_COUNT:]
 
     result = []
     for h in headers:

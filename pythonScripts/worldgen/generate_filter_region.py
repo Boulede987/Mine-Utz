@@ -23,12 +23,10 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import openpyxl
 
-from worldgen.constants import CHECK_MARK
+from worldgen.constants import CHECK_MARK, BIOME_BIOME_PLANNER_FILE, BIOME_PLANNER_SHEET
 
 sys.stdout.reconfigure(encoding='utf-8')
 
-PLANNER_FILE     = Path('dimension_biome_planner.xlsx')
-SHEET_NAME       = 'Biome Planner'
 OVERWORLD_HEADER = 'Overworld'
 NETHER_HEADER    = 'Nether'
 END_HEADER       = 'End'
@@ -318,11 +316,11 @@ def build_end_biomes(biome_ids: list[str], end_data: dict, dest: Path) -> int:
 # ---------------------------------------------------------------------------
 
 def main() -> None:
-    if not PLANNER_FILE.exists():
-        print(f'ERROR: {PLANNER_FILE} not found.')
+    if not BIOME_PLANNER_FILE.exists():
+        print(f'ERROR: {BIOME_PLANNER_FILE} not found.')
         raise SystemExit(1)
 
-    worksheet = openpyxl.load_workbook(PLANNER_FILE)[SHEET_NAME]
+    worksheet = openpyxl.load_workbook(BIOME_PLANNER_FILE)[BIOME_PLANNER_SHEET]
     headers   = [cell.value for cell in worksheet[1]]
 
     overworld_biomes = load_column_biomes(worksheet, headers, OVERWORLD_HEADER)

@@ -27,13 +27,14 @@ import openpyxl
 from openpyxl.styles import Font
 from openpyxl.worksheet.datavalidation import DataValidation
 
-from worldgen.constants import CHECK_MARK, CROSS_MARK, NAMESPACE_TO_SOURCE, BIOME_PLANNER_FIXED_COLUMN_COUNT
+from worldgen.constants import (
+    CHECK_MARK, CROSS_MARK, NAMESPACE_TO_SOURCE, BIOME_PLANNER_FIXED_COLUMN_COUNT,
+    BIOME_BIOME_PLANNER_FILE, BIOME_PLANNER_SHEET,
+)
 
 sys.stdout.reconfigure(encoding='utf-8')
 
 MERGED_DATA_DIR = Path('worldgen_data') / 'merged'
-PLANNER_FILE    = Path('dimension_biome_planner.xlsx')
-SHEET_NAME      = 'Biome Planner'
 ALL_SECTIONS    = ['surface', 'underground', 'caves', 'deep']
 END_SECTIONS    = ['highlands', 'midlands', 'edge', 'islands']
 
@@ -282,12 +283,12 @@ def _insert_biome_row(
 
 
 def main() -> None:
-    if not PLANNER_FILE.exists():
-        print(f'ERROR: {PLANNER_FILE} not found.')
+    if not BIOME_PLANNER_FILE.exists():
+        print(f'ERROR: {BIOME_PLANNER_FILE} not found.')
         raise SystemExit(1)
 
-    workbook  = openpyxl.load_workbook(PLANNER_FILE)
-    worksheet = workbook[SHEET_NAME]
+    workbook  = openpyxl.load_workbook(BIOME_PLANNER_FILE)
+    worksheet = workbook[BIOME_PLANNER_SHEET]
 
     primary_last_row       = find_primary_table_last_row(worksheet)
     misplaced_row_numbers  = find_misplaced_rows(worksheet, primary_last_row)
@@ -308,7 +309,7 @@ def main() -> None:
     if not missing_biomes:
         print('No missing biomes — colorizing existing rows only.')
         colorize_checkmarks(worksheet, primary_last_row, dimension_column_count)
-        workbook.save(PLANNER_FILE)
+        workbook.save(BIOME_PLANNER_FILE)
         return
 
     missing_biomes.sort(key=lambda entry: (entry['namespace'], entry['biome']))
@@ -324,8 +325,8 @@ def main() -> None:
     extend_data_validation(worksheet, new_last_data_row, dimension_column_count)
     colorize_checkmarks(worksheet, new_last_data_row, dimension_column_count)
 
-    workbook.save(PLANNER_FILE)
-    print(f'\nAdded {len(missing_biomes)} biome(s) to {PLANNER_FILE}')
+    workbook.save(BIOME_PLANNER_FILE)
+    print(f'\nAdded {len(missing_biomes)} biome(s) to {BIOME_PLANNER_FILE}')
 
 
 main()

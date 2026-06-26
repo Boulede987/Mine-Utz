@@ -28,14 +28,13 @@ from openpyxl.worksheet.table import Table, TableStyleInfo
 from worldgen.constants import (
     CHECK_MARK, CROSS_MARK, NAMESPACE_TO_SOURCE,
     BIOME_PLANNER_FIXED_COLUMN_COUNT, STRUCTURE_PLANNER_FIXED_COLUMN_COUNT,
+    STRUCTURE_PLANNER_FILE,
 )
+from worldgen.loaders import load_dimension_biomes
 
 sys.stdout.reconfigure(encoding='utf-8')
 
-STRUCTURES_FILE    = Path('lists/structures.txt')
-BIOME_PLANNER_FILE = Path('dimension_biome_planner.xlsx')
-OUTPUT_FILE        = Path('structure_planner.xlsx')
-BIOME_SHEET_NAME   = 'Biome Planner'
+STRUCTURES_FILE = Path('lists/structures.txt')
 
 FIXED_HEADER_FILL = PatternFill('solid', fgColor='1F4E79')
 FIXED_HEADER_FONT = Font(bold=True, color='FFFFFF')
@@ -64,26 +63,6 @@ def load_structures() -> list[str]:
             ids.append(line)
     return ids
 
-
-def load_dimension_biomes() -> list[tuple[str, list[str]]]:
-    """Returns [(dim_header, [biome_id, ...]), ...] — biomes marked ✓ per dimension."""
-    if not BIOME_PLANNER_FILE.exists():
-        print(f'ERROR: {BIOME_PLANNER_FILE} not found.')
-        raise SystemExit(1)
-
-    worksheet = openpyxl.load_workbook(BIOME_PLANNER_FILE)[BIOME_SHEET_NAME]
-    headers   = [cell.value for cell in worksheet[1]]
-    dim_cols  = [(i, h) for i, h in enumerate(headers) if i >= BIOME_PLANNER_FIXED_COLUMN_COUNT and h]
-
-    result = []
-    for col_idx, header in dim_cols:
-        biomes = [
-            row[0] for row in worksheet.iter_rows(min_row=2, values_only=True)
-            if row[0] and ':' in str(row[0]) and row[col_idx] == CHECK_MARK
-        ]
-        if biomes:
-            result.append((header, biomes))
-    return result
 
 
 def load_existing_selections(filepath: Path) -> dict[str, dict[str, dict[str, str]]]:
@@ -195,8 +174,8 @@ def build_sheet(workbook: openpyxl.Workbook, sheet_name: str,
 
 def main() -> None:
     structures    = load_structures()
-    dim_biomes    = load_dimension_biomes()
-    existing_all  = load_existing_selections(OUTPUT_FILE)
+    dim_biomes    = {h: b for h, b in load_dimension_biomes().items() if b}
+    existing_all  = load_existing_selections(STRUCTURE_PLANNER_FILE)
 
     if not dim_biomes:
         print('No dimensions with ✓ biomes found in biome planner.')
@@ -205,12 +184,12 @@ def main() -> None:
     workbook = openpyxl.Workbook()
     workbook.remove(workbook.active)   # remove default empty sheet
 
-    for idx, (dim_header, biomes) in enumerate(dim_biomes):
+    for idx, (dim_header, biomes) in enumerate(dim_biomes.items()):
         build_sheet(workbook, dim_header, biomes, structures, idx, existing_all.get(dim_header, {}))
         print(f'  [{dim_header}]  {len(biomes)} biome columns')
 
-    workbook.save(OUTPUT_FILE)
-    print(f'\nWrote {OUTPUT_FILE}  ({len(structures)} structures, {len(dim_biomes)} sheets)')
+    workbook.save(STRUCTURE_PLANNER_FILE)
+    print(f'\nWrote {STRUCTURE_PLANNER_FILE}  ({len(structures)} structures, {len(dim_biomes)} sheets)')
 
 
 main()

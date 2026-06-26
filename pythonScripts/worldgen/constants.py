@@ -1,8 +1,14 @@
+from pathlib import Path
+
 CHECK_MARK = '✓'
 CROSS_MARK = '✗'
 
 BIOME_PLANNER_FIXED_COLUMN_COUNT     = 4
 STRUCTURE_PLANNER_FIXED_COLUMN_COUNT = 2
+
+BIOME_PLANNER_FILE     = Path('dimension_biome_planner.xlsx')
+BIOME_PLANNER_SHEET    = 'Biome Planner'
+STRUCTURE_PLANNER_FILE = Path('structure_planner.xlsx')
 
 NAMESPACE_TO_SOURCE = {
     'minecraft':                      'Vanilla',

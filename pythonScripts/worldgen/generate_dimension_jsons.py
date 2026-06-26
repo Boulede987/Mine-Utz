@@ -22,18 +22,19 @@ import re
 import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
 import openpyxl
+
+from worldgen.constants import CHECK_MARK, BIOME_PLANNER_FILE, BIOME_PLANNER_SHEET, BIOME_PLANNER_FIXED_COLUMN_COUNT
 
 sys.stdout.reconfigure(encoding='utf-8')
 
-PLANNER_FILE    = Path('dimension_biome_planner.xlsx')
-SHEET_NAME      = 'Biome Planner'
 MERGED_DATA_DIR = Path('worldgen_data') / 'merged'
 DIMENSION_DIR   = Path('minecraft/config/paxi/datapacks/mineutz/data/mineutz/dimension')
 NAMESPACE       = 'mineutz'
 
 SKIP_COLUMNS = {'Overworld', 'Nether', 'End'}
-CHECK_MARK   = '✓'
 ALL_SECTIONS = ['surface', 'underground', 'caves', 'deep']
 
 
@@ -59,15 +60,15 @@ def load_all_parameters() -> dict[str, list[dict]]:
 def load_assignments(worksheet) -> dict:
     """Returns {header: [biome_id, ...]} for each non-skipped dimension column."""
     headers = [cell.value for cell in worksheet[1]]
-    dim_headers = [h for h in headers[4:] if h and h not in SKIP_COLUMNS]
+    dim_headers = [h for h in headers[BIOME_PLANNER_FIXED_COLUMN_COUNT:] if h and h not in SKIP_COLUMNS]
     assignments: dict = {h: [] for h in dim_headers}
 
     for row in worksheet.iter_rows(min_row=2, values_only=True):
         biome_id = row[0]
         if not (biome_id and ':' in str(biome_id)):
             continue
-        for col_offset, header in enumerate(headers[4:]):
-            if header in assignments and row[4 + col_offset] == CHECK_MARK:
+        for col_offset, header in enumerate(headers[BIOME_PLANNER_FIXED_COLUMN_COUNT:]):
+            if header in assignments and row[BIOME_PLANNER_FIXED_COLUMN_COUNT + col_offset] == CHECK_MARK:
                 assignments[header].append(biome_id)
 
     return assignments
@@ -88,12 +89,12 @@ def build_json(slug: str, biome_entries: list) -> dict:
 
 
 def main() -> None:
-    if not PLANNER_FILE.exists():
-        print(f'ERROR: {PLANNER_FILE} not found.')
+    if not BIOME_PLANNER_FILE.exists():
+        print(f'ERROR: {BIOME_PLANNER_FILE} not found.')
         raise SystemExit(1)
 
     all_params  = load_all_parameters()
-    worksheet   = openpyxl.load_workbook(PLANNER_FILE)[SHEET_NAME]
+    worksheet   = openpyxl.load_workbook(BIOME_PLANNER_FILE)[BIOME_PLANNER_SHEET]
     assignments = load_assignments(worksheet)
 
     DIMENSION_DIR.mkdir(parents=True, exist_ok=True)

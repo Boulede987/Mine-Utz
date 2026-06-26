@@ -28,15 +28,14 @@ import openpyxl
 
 from worldgen.constants import (
     CHECK_MARK,
-    BIOME_PLANNER_FIXED_COLUMN_COUNT, STRUCTURE_PLANNER_FIXED_COLUMN_COUNT,
+    BIOME_PLANNER_FIXED_COLUMN_COUNT, STRUCTURE_PLANNER_FILE_FIXED_COLUMN_COUNT,
+    STRUCTURE_PLANNER_FILE_FILE,
 )
+from worldgen.loaders import load_dimension_biomes
 from lib.io_utils import strip_comments
 
 sys.stdout.reconfigure(encoding='utf-8')
 
-STRUCTURE_PLANNER  = Path('structure_planner.xlsx')
-BIOME_PLANNER      = Path('dimension_biome_planner.xlsx')
-BIOME_SHEET        = 'Biome Planner'
 STRUCTURE_BIOMES   = Path('lists/structure_biomes.txt')
 PAXI_DATA          = Path('minecraft/config/paxi/datapacks/mineutz/data')
 MODS_DIR           = Path('minecraft/mods')
@@ -76,32 +75,6 @@ def load_structure_tags() -> dict[str, list[str]]:
     return result
 
 
-def load_dimension_biomes() -> dict[str, list[str]]:
-    """
-    Returns {dim_header: [biome_id, ...]} — the ordered list of biomes
-    checked ✓ for each dimension column in the biome planner.
-    Order matches the structure planner's column order.
-    """
-    if not BIOME_PLANNER.exists():
-        print(f'ERROR: {BIOME_PLANNER} not found.')
-        raise SystemExit(1)
-
-    worksheet = openpyxl.load_workbook(BIOME_PLANNER)[BIOME_SHEET]
-    headers   = [cell.value for cell in worksheet[1]]
-    dim_cols  = [
-        (col_idx, header)
-        for col_idx, header in enumerate(headers)
-        if col_idx >= BIOME_PLANNER_FIXED_COLUMN_COUNT and header
-    ]
-
-    result: dict[str, list[str]] = {}
-    for col_idx, header in dim_cols:
-        result[header] = [
-            str(row[0]) for row in worksheet.iter_rows(min_row=2, values_only=True)
-            if row[0] and ':' in str(row[0]) and row[col_idx] == CHECK_MARK
-        ]
-    return result
-
 
 def _process_structure_row(
     row,
@@ -117,7 +90,7 @@ def _process_structure_row(
         return
     seen_all.add(structure_id)
     for col_offset, biome_id in enumerate(biome_ids):
-        col_index = STRUCTURE_PLANNER_FIXED_COLUMN_COUNT + col_offset
+        col_index = STRUCTURE_PLANNER_FILE_FIXED_COLUMN_COUNT + col_offset
         col_val   = row[col_index] if col_index < len(row) else None
         if col_val != CHECK_MARK:
             continue
@@ -140,11 +113,11 @@ def load_structure_selections(
       overworld_checked             — set of structure_ids with at least one ✓ in the Overworld sheet
       overworld_biomes_by_structure — {structure_id: [biome_id, ...]} ✓ cells from the Overworld sheet only
     """
-    if not STRUCTURE_PLANNER.exists():
-        print(f'ERROR: {STRUCTURE_PLANNER} not found.')
+    if not STRUCTURE_PLANNER_FILE.exists():
+        print(f'ERROR: {STRUCTURE_PLANNER_FILE} not found.')
         raise SystemExit(1)
 
-    workbook = openpyxl.load_workbook(STRUCTURE_PLANNER)
+    workbook = openpyxl.load_workbook(STRUCTURE_PLANNER_FILE)
     selections: dict[str, list[str]] = {}
     overworld_biomes_by_structure: dict[str, list[str]] = {}
     seen_all: set[str] = set()
