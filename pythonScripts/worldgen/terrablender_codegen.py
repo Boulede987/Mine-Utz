@@ -7,8 +7,9 @@ Templates, formatters, and builders — no file I/O except writing the final .ja
 
 from pathlib import Path
 
+from worldgen.constants import PARAMETER_AXES
+
 TERRABLENDER_REGION_WEIGHT = 100_000_000
-PARAMETER_AXES             = ['temperature', 'humidity', 'continentalness', 'erosion', 'depth', 'weirdness']
 _JAVA_PARAM_INDENT         = '            '
 
 _REGION_TEMPLATE = """\

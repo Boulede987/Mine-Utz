@@ -1,5 +1,7 @@
 from pathlib import Path
 
+PARAMETER_AXES = ['temperature', 'humidity', 'continentalness', 'erosion', 'depth', 'weirdness']
+
 CHECK_MARK = '✓'
 CROSS_MARK = '✗'
 
