@@ -30,12 +30,10 @@ from openpyxl.worksheet.datavalidation import DataValidation
 from worldgen.constants import (
     CHECK_MARK, CROSS_MARK, NAMESPACE_TO_SOURCE, BIOME_PLANNER_FIXED_COLUMN_COUNT,
     BIOME_PLANNER_FILE, BIOME_PLANNER_SHEET,
-    ALL_SECTIONS, END_SECTIONS,
+    ALL_SECTIONS, END_SECTIONS, MERGED_BIOME_DATA_DIR,
 )
 
 sys.stdout.reconfigure(encoding='utf-8')
-
-MERGED_DATA_DIR = Path('worldgen_data') / 'merged'
 
 FIRST_DIMENSION_COLUMN_LETTER = chr(ord('A') + BIOME_PLANNER_FIXED_COLUMN_COUNT)
 
@@ -103,9 +101,9 @@ def load_primary_table_biome_ids(worksheet, primary_last_row: int) -> set[str]:
 def load_affinity_biomes() -> dict[str, set[str]]:
     """Returns {dimension_id: {biome_id, ...}} from merged data."""
     result: dict[str, set[str]] = {}
-    if not MERGED_DATA_DIR.exists():
+    if not MERGED_BIOME_DATA_DIR.exists():
         return result
-    for json_file in sorted(MERGED_DATA_DIR.glob('*.json')):
+    for json_file in sorted(MERGED_BIOME_DATA_DIR.glob('*.json')):
         data = json.loads(json_file.read_text(encoding='utf-8'))
         if not isinstance(data, dict) or 'dimensions' not in data:
             continue
@@ -208,13 +206,13 @@ def _collect_biomes_from_file(data: dict, seen: set[str], biomes: list[dict]) ->
 
 def load_all_biomes() -> list[dict]:
     """One entry per unique biome across all sections and namespace files."""
-    if not MERGED_DATA_DIR.exists():
+    if not MERGED_BIOME_DATA_DIR.exists():
         print('ERROR: worldgen_data/merged/ not found. Run merge_biome_parameters.py first.')
         raise SystemExit(1)
 
     seen: set[str] = set()
     biomes = []
-    for json_file in sorted(MERGED_DATA_DIR.glob('*.json')):
+    for json_file in sorted(MERGED_BIOME_DATA_DIR.glob('*.json')):
         _collect_biomes_from_file(json.loads(json_file.read_text(encoding='utf-8')), seen, biomes)
     return biomes
 

@@ -30,12 +30,9 @@ except ImportError as missing:
     raise SystemExit(1)
 
 from worldgen.biome_colour import biome_color_rgb, build_rgb_image, compute_biome_coverage
-from worldgen.biome_nearest_neighbour import (
-    build_parameter_bounds, compute_nearest_entry_grid,
-    load_overworld_entries, load_planner_overworld_biomes,
-    MERGED_DATA_DIR,
-)
-from worldgen.constants import BIOME_PLANNER_FILE, PARAMETER_AXES
+from worldgen.biome_loader import load_overworld_entries, load_planner_overworld_biomes
+from worldgen.biome_nearest_neighbour import build_parameter_bounds, compute_nearest_entry_grid
+from worldgen.constants import BIOME_PLANNER_FILE, MERGED_BIOME_DATA_DIR, PARAMETER_AXES
 
 AXIS_VALUE_RANGES = {
     'temperature':     (-1.5,  1.5),
@@ -181,7 +178,7 @@ def print_coverage_report(biome_coverages: dict[str, dict[str, float]]) -> None:
 
 
 def main() -> None:
-    if not MERGED_DATA_DIR.exists():
+    if not MERGED_BIOME_DATA_DIR.exists():
         print('ERROR: worldgen_data/merged/ not found. Run merge_biome_parameters.py first.')
         raise SystemExit(1)
     if not BIOME_PLANNER_FILE.exists():

@@ -26,11 +26,12 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import openpyxl
 
-from worldgen.constants import CHECK_MARK, BIOME_PLANNER_FILE, BIOME_PLANNER_SHEET, BIOME_PLANNER_FIXED_COLUMN_COUNT, ALL_SECTIONS
+from worldgen.constants import (
+    CHECK_MARK, BIOME_PLANNER_FILE, BIOME_PLANNER_SHEET, BIOME_PLANNER_FIXED_COLUMN_COUNT,
+    ALL_SECTIONS, MERGED_BIOME_DATA_DIR,
+)
 
 sys.stdout.reconfigure(encoding='utf-8')
-
-MERGED_DATA_DIR = Path('worldgen_data') / 'merged'
 DIMENSION_DIR   = Path('minecraft/config/paxi/datapacks/mineutz/data/mineutz/dimension')
 NAMESPACE       = 'mineutz'
 
@@ -43,11 +44,11 @@ def slugify(header: str) -> str:
 
 def load_all_parameters() -> dict[str, list[dict]]:
     """Returns {biome_id: [parameters, ...]} from all merged namespace files."""
-    if not MERGED_DATA_DIR.exists():
+    if not MERGED_BIOME_DATA_DIR.exists():
         print('ERROR: worldgen_data/merged/ not found. Run merge_biome_parameters.py first.')
         raise SystemExit(1)
     params: dict[str, list[dict]] = {}
-    for json_file in sorted(MERGED_DATA_DIR.glob('*.json')):
+    for json_file in sorted(MERGED_BIOME_DATA_DIR.glob('*.json')):
         data = json.loads(json_file.read_text(encoding='utf-8'))
         for dimension_sections in data.get('dimensions', {}).values():
             for section in ALL_SECTIONS:

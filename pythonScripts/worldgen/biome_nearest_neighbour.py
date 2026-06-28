@@ -1,94 +1,19 @@
 """
 worldgen/biome_nearest_neighbour.py
 =====================================
-Shared data loading and nearest-neighbour computation for biome layout visualizers.
+Pure nearest-neighbour computation for biome layout visualizers.
 
 The fitness metric mirrors TerraBlender's Climate.ParameterPoint.fitness:
 sum of squared distances from each query value to its registered [lo, hi] range,
 zero when the query falls inside the range.
 """
 
-import json
-from pathlib import Path
-
 import numpy as np
-import openpyxl
 
-from worldgen.constants import (
-    ALL_SECTIONS, BIOME_PLANNER_FILE, BIOME_PLANNER_SHEET,
-    CHECK_MARK, OVERWORLD_PLANNER_HEADER, PARAMETER_AXES,
-)
-
-MERGED_DATA_DIR = Path('worldgen_data') / 'merged'
+from worldgen.constants import PARAMETER_AXES
 
 # Entries processed per numpy batch. Lower = less peak memory, more iterations.
 NEAREST_NEIGHBOUR_CHUNK_SIZE = 100
-
-# Depth value below which an entry is considered a surface entry.
-SURFACE_DEPTH_THRESHOLD = 0.1
-
-
-def load_planner_overworld_biomes() -> list[str]:
-    workbook  = openpyxl.load_workbook(BIOME_PLANNER_FILE)
-    worksheet = workbook[BIOME_PLANNER_SHEET]
-    headers   = [cell.value for cell in worksheet[1]]
-    try:
-        overworld_column_index = headers.index(OVERWORLD_PLANNER_HEADER)
-    except ValueError:
-        raise RuntimeError(f'Column "{OVERWORLD_PLANNER_HEADER}" not found in planner.')
-    return [
-        str(row[0])
-        for row in worksheet.iter_rows(min_row=2, values_only=True)
-        if row[0] and ':' in str(row[0]) and row[overworld_column_index] == CHECK_MARK
-    ]
-
-
-def load_overworld_entries(planner_biomes: list[str]) -> list[dict]:
-    """
-    Loads all overworld climate entries for the selected biomes.
-    All sections (surface, underground, caves, deep) are included — cave entries
-    lose naturally when visualising at depth=0 due to their depth-axis penalty.
-    """
-    included_biomes = set(planner_biomes)
-    entries: list[dict] = []
-    for json_file in sorted(MERGED_DATA_DIR.glob('*.json')):
-        data              = json.loads(json_file.read_text(encoding='utf-8'))
-        overworld_sections = data.get('dimensions', {}).get('minecraft:overworld', {})
-        for section in ALL_SECTIONS:
-            for entry in overworld_sections.get(section, []):
-                if entry['biome'] in included_biomes:
-                    entries.append({'biome': entry['biome'], 'parameters': entry['parameters']})
-    return entries
-
-
-def load_biome_parameter_defaults(planner_biomes: list[str]) -> dict[str, dict]:
-    """Returns per-biome parameter range defaults from actual registered entries.
-
-    Prefers surface entries (depth < SURFACE_DEPTH_THRESHOLD); falls back to all
-    entries for biomes that only register underground. Biomes with no data are omitted.
-    Each value is a flat dict: {'temperature_lo', 'temperature_hi', 'humidity_lo', ...}
-    """
-    all_entries     = load_overworld_entries(planner_biomes)
-    surface_entries = [e for e in all_entries if e['parameters']['depth'][0] < SURFACE_DEPTH_THRESHOLD]
-
-    defaults: dict[str, dict] = {}
-    for biome_id in planner_biomes:
-        biome_surface = [e for e in surface_entries if e['biome'] == biome_id]
-        biome_all     = [e for e in all_entries     if e['biome'] == biome_id]
-        source        = biome_surface if biome_surface else biome_all
-        if source:
-            defaults[biome_id] = _extract_parameter_ranges(source)
-    return defaults
-
-
-def _extract_parameter_ranges(entries: list[dict]) -> dict:
-    result: dict[str, float] = {}
-    for axis in PARAMETER_AXES:
-        lo_values      = [e['parameters'][axis][0] for e in entries]
-        hi_values      = [e['parameters'][axis][1] for e in entries]
-        result[f'{axis}_lo'] = min(lo_values)
-        result[f'{axis}_hi'] = max(hi_values)
-    return result
 
 
 def build_parameter_bounds(entries: list[dict]) -> tuple[np.ndarray, np.ndarray]:
@@ -109,8 +34,8 @@ def compute_nearest_entry_grid(
     query_grid:   np.ndarray,
     weight_array: np.ndarray | None = None,
 ) -> np.ndarray:
-    """
-    For each pixel in query_grid (shape H×W×6), finds the entry with minimum fitness.
+    """For each pixel in query_grid (shape H×W×6), finds the entry with minimum fitness.
+
     Returns (H, W) int32 array of entry indices into the original entries list.
 
     weight_array: optional (N_entries,) array. Zero-weight entries are excluded entirely.
@@ -204,6 +129,6 @@ def _merge_chunk_into_nearest(
     """Updates min_fitness and nearest_entry in-place from one chunk's results."""
     local_best       = np.argmin(chunk_fitness, axis=0)
     local_best_score = chunk_fitness[local_best, row_indices, col_indices]
-    improved              = local_best_score < min_fitness
-    min_fitness[improved] = local_best_score[improved]
-    nearest_entry[improved] = chunk_start + local_best[improved]
+    improved                 = local_best_score < min_fitness
+    min_fitness[improved]    = local_best_score[improved]
+    nearest_entry[improved]  = chunk_start + local_best[improved]

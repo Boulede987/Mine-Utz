@@ -50,15 +50,14 @@ import openpyxl
 
 from worldgen.constants import (
     CHECK_MARK, BIOME_PLANNER_FILE, BIOME_PLANNER_SHEET,
-    ALL_SECTIONS, END_SECTIONS, OVERWORLD_PLANNER_HEADER,
+    ALL_SECTIONS, END_SECTIONS, MERGED_BIOME_DATA_DIR, OVERWORLD_PLANNER_HEADER,
 )
 from worldgen.terrablender_codegen import build_region, build_end_biomes, build_filter_mod
 
 sys.stdout.reconfigure(encoding='utf-8')
 
-NETHER_HEADER   = 'Nether'
-END_HEADER      = 'End'
-MERGED_DATA_DIR = Path('worldgen_data') / 'merged'
+NETHER_HEADER = 'Nether'
+END_HEADER    = 'End'
 
 MOD_SRC = Path(
     'companion-mods/terrablender-custom-region'
@@ -84,12 +83,12 @@ def load_column_biomes(worksheet, headers: list, column_name: str) -> list[str]:
 
 def load_all_params() -> dict[str, list[dict]]:
     """Returns {biome_id: [parameters, ...]} across all merged namespace files."""
-    if not MERGED_DATA_DIR.exists():
+    if not MERGED_BIOME_DATA_DIR.exists():
         print('ERROR: worldgen_data/merged/ not found. Run step 21 first.')
         raise SystemExit(1)
 
     lookup: dict[str, list[dict]] = {}
-    for json_file in sorted(MERGED_DATA_DIR.glob('*.json')):
+    for json_file in sorted(MERGED_BIOME_DATA_DIR.glob('*.json')):
         data = json.loads(json_file.read_text(encoding='utf-8'))
         for dim_sections in data.get('dimensions', {}).values():
             for section in ALL_SECTIONS:
@@ -100,11 +99,11 @@ def load_all_params() -> dict[str, list[dict]]:
 
 def load_merged_end_data() -> dict:
     """{biome_id: {placement_type, weight}} from minecraft:the_end across all merged files."""
-    if not MERGED_DATA_DIR.exists():
+    if not MERGED_BIOME_DATA_DIR.exists():
         return {}
 
     lookup: dict = {}
-    for json_file in sorted(MERGED_DATA_DIR.glob('*.json')):
+    for json_file in sorted(MERGED_BIOME_DATA_DIR.glob('*.json')):
         data = json.loads(json_file.read_text(encoding='utf-8'))
         end_sections = data.get('dimensions', {}).get('minecraft:the_end', {})
         for placement_type in END_SECTIONS:
