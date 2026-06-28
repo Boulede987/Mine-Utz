@@ -34,11 +34,13 @@ LAND_CONTINENTALNESS_HI  =  1.0
 OCEAN_CONTINENTALNESS_LO = -1.1
 OCEAN_CONTINENTALNESS_HI = -0.11
 
-EROSION_LO      = -1.0
-EROSION_HI      =  1.0
-SURFACE_DEPTH   =  0.0
-WEIRDNESS_LO    = -1.0
-WEIRDNESS_HI    =  1.0
+EROSION_MIN   = -1.0
+EROSION_MAX   =  1.0
+DEPTH_MIN     = -1.0
+DEPTH_MAX     =  1.5
+SURFACE_DEPTH =  0.0
+WEIRDNESS_MIN = -1.0
+WEIRDNESS_MAX =  1.0
 
 # Fixed seed so cell ordering (and thus biome borders) is reproducible across
 # weight changes.  Change this to get a different layout with the same weights.
@@ -56,6 +58,14 @@ class GridCell:
     continentalness_hi: float
 
 
+def tile_map_to_entries(cell_to_biome: dict[GridCell, str]) -> list[dict]:
+    """Converts an explicit {GridCell: biome_id} mapping to TerraBlender entries."""
+    biome_to_cells: dict[str, list[GridCell]] = {}
+    for cell, biome_id in cell_to_biome.items():
+        biome_to_cells.setdefault(biome_id, []).append(cell)
+    return _assignments_to_entries(biome_to_cells, {})
+
+
 def generate_grid_entries(
     planner_biomes: list[str],
     weights:        dict[str, float],
@@ -68,7 +78,7 @@ def generate_grid_entries(
     land_assignments  = _assign_cells(build_land_cells(),  land_biomes,  weights, constraints)
     ocean_assignments = _assign_cells(build_ocean_cells(), ocean_biomes, weights, constraints)
 
-    return _assignments_to_entries({**land_assignments, **ocean_assignments})
+    return _assignments_to_entries({**land_assignments, **ocean_assignments}, constraints)
 
 
 def build_land_cells() -> list[GridCell]:
@@ -245,39 +255,48 @@ def _shuffled_cells(cells: list[GridCell]) -> list[GridCell]:
     return shuffled
 
 
-def _assignments_to_entries(assignments: dict[str, list[GridCell]]) -> list[dict]:
+def _assignments_to_entries(
+    assignments: dict[str, list[GridCell]],
+    constraints: dict[str, dict],
+) -> list[dict]:
     return [
         entry
         for biome_id, cells in assignments.items()
         for cell in cells
-        for entry in _cell_to_entries(biome_id, cell)
+        for entry in _cell_to_entries(biome_id, cell, constraints.get(biome_id, {}))
     ]
 
 
-def _cell_to_entries(biome_id: str, cell: GridCell) -> list[dict]:
+def _cell_to_entries(biome_id: str, cell: GridCell, constraint: dict) -> list[dict]:
     """Creates ANCHORS_PER_CELL point anchors for one grid cell.
 
     Temperature and humidity use the cell midpoint so Voronoi boundaries align with
-    cell edges.  Erosion and weirdness positions are random but reproducible per cell
-    (seeded from the cell's position), so adjacent cells belonging to different biomes
-    produce organic, non-axis-aligned borders rather than rectangular climate blocks.
+    cell edges.  Erosion and weirdness are sampled randomly within the biome's
+    constrained range (defaulting to the full axis range), seeded from the cell's
+    position so borders stay stable across weight changes.
     """
-    temp_mid  = (cell.temperature_lo + cell.temperature_hi) / 2.0
-    hum_mid   = (cell.humidity_lo    + cell.humidity_hi)    / 2.0
-    cell_seed = f'{CELL_SHUFFLE_SEED}:{cell.temperature_lo}:{cell.humidity_lo}:{cell.continentalness_lo}'
-    rng       = random.Random(cell_seed)
-    entries   = []
+    temp_mid     = (cell.temperature_lo + cell.temperature_hi) / 2.0
+    hum_mid      = (cell.humidity_lo    + cell.humidity_hi)    / 2.0
+    erosion_lo   = constraint.get('erosion_lo',   EROSION_MIN)
+    erosion_hi   = constraint.get('erosion_hi',   EROSION_MAX)
+    depth_lo     = constraint.get('depth_lo',     SURFACE_DEPTH)
+    depth_hi     = constraint.get('depth_hi',     SURFACE_DEPTH)
+    weirdness_lo = constraint.get('weirdness_lo', WEIRDNESS_MIN)
+    weirdness_hi = constraint.get('weirdness_hi', WEIRDNESS_MAX)
+    cell_seed    = f'{CELL_SHUFFLE_SEED}:{cell.temperature_lo}:{cell.humidity_lo}:{cell.continentalness_lo}'
+    rng          = random.Random(cell_seed)
+    entries      = []
     for _ in range(ANCHORS_PER_CELL):
-        erosion   = rng.uniform(EROSION_LO,  EROSION_HI)
-        weirdness = rng.uniform(WEIRDNESS_LO, WEIRDNESS_HI)
+        erosion   = rng.uniform(erosion_lo,   erosion_hi)
+        weirdness = rng.uniform(weirdness_lo, weirdness_hi)
         entries.append({
             'biome': biome_id,
             'parameters': {
-                'temperature':     [temp_mid, temp_mid],
-                'humidity':        [hum_mid,  hum_mid],
+                'temperature':     [temp_mid,  temp_mid],
+                'humidity':        [hum_mid,   hum_mid],
                 'continentalness': [cell.continentalness_lo, cell.continentalness_hi],
-                'erosion':         [erosion,  erosion],
-                'depth':           [SURFACE_DEPTH, SURFACE_DEPTH],
+                'erosion':         [erosion,   erosion],
+                'depth':           [depth_lo,  depth_hi],
                 'weirdness':       [weirdness, weirdness],
             },
         })

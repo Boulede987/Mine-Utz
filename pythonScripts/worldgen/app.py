@@ -16,6 +16,7 @@ Tabs:
   - World Map:          live 128×128 preview, updates on every weight or constraint change
   - Coverage:           horizontal bar chart of how much area each biome wins
   - Parameter Slices:   4 parameter-space cross-sections (recomputed on demand)
+  - Tile Map:           click-to-paint temperature×humidity grid editor
 """
 
 import io
@@ -40,10 +41,14 @@ from worldgen.app_data import (
     SLICE_CONFIGS, SLICE_RESOLUTION,
     WEIGHT_DEFAULT, WEIGHT_MAX, WEIGHT_MIN, WEIGHT_STEP,
 )
-from worldgen.biome_colour import build_highlighted_image, build_rgb_image, compute_biome_coverage
+from worldgen.biome_colour import (
+    build_highlighted_image, build_rgb_image,
+    compute_biome_coverage, compute_patch_stats,
+)
 from worldgen.biome_constraints import load_settings, save_settings
 from worldgen.biome_grid import (
-    HUMIDITY_MAX, HUMIDITY_MIN, TEMPERATURE_MAX, TEMPERATURE_MIN,
+    DEPTH_MAX, DEPTH_MIN, EROSION_MAX, EROSION_MIN, HUMIDITY_MAX, HUMIDITY_MIN,
+    SURFACE_DEPTH, TEMPERATURE_MAX, TEMPERATURE_MIN, WEIRDNESS_MAX, WEIRDNESS_MIN,
     ZONE_LAND, ZONE_OCEAN,
     default_zone, generate_grid_entries,
 )
@@ -54,9 +59,14 @@ from worldgen.biome_nearest_neighbour import (
 from worldgen.biome_noise import climate_maps_to_query_grid, generate_all_climate_maps
 from worldgen.constants import PARAMETER_AXES
 from worldgen.terrablender_codegen import build_region
+from worldgen.app_tile_editor import render_tile_map_tab
 
-TEMPERATURE_STEP   = 0.1
-HUMIDITY_STEP      = 0.1
+TEMPERATURE_STEP      = 0.1
+HUMIDITY_STEP         = 0.1
+EROSION_STEP          = 0.1
+DEPTH_STEP            = 0.05
+WEIRDNESS_STEP        = 0.1
+SLICE_FIXED_AXIS_STEP = 0.05
 FILTER_REGION_JAVA = Path(
     'companion-mods/terrablender-custom-region'
     '/src/main/java/com/mineutze/filtermod/FilterRegion.java'
@@ -112,24 +122,39 @@ def _init_session_state_from_settings(
             float(saved.get('humidity_lo', HUMIDITY_MIN)),
             float(saved.get('humidity_hi', HUMIDITY_MAX)),
         ))
+        st.session_state.setdefault(f'store_erosion_{biome_id}', (
+            float(saved.get('erosion_lo', EROSION_MIN)),
+            float(saved.get('erosion_hi', EROSION_MAX)),
+        ))
+        st.session_state.setdefault(f'store_depth_{biome_id}', (
+            float(saved.get('depth_lo', SURFACE_DEPTH)),
+            float(saved.get('depth_hi', SURFACE_DEPTH)),
+        ))
+        st.session_state.setdefault(f'store_weird_{biome_id}', (
+            float(saved.get('weirdness_lo', WEIRDNESS_MIN)),
+            float(saved.get('weirdness_hi', WEIRDNESS_MAX)),
+        ))
     st.session_state['settings_loaded'] = True
 
 
-def _render_biome_expander(biome_id: str) -> tuple[float, str, tuple, tuple]:
-    """Renders one biome expander. Returns (weight, zone, temp_range, hum_range).
+def _render_biome_expander(biome_id: str) -> tuple[float, str, tuple, tuple, tuple, tuple]:
+    """Renders one biome expander. Returns (weight, zone, temp_range, hum_range, erosion_range, weirdness_range).
 
     Values are seeded from store_ keys so the widget shows the correct value even
     after being hidden by the search filter (which causes Streamlit to delete the
     widget key from session_state).  The store_ keys are updated after each render
     so they always reflect the latest user interaction.
     """
-    stored_weight = st.session_state.get(f'store_bw_{biome_id}',   WEIGHT_DEFAULT)
-    stored_zone   = st.session_state.get(f'store_zone_{biome_id}',  default_zone(biome_id))
-    stored_temp   = st.session_state.get(f'store_temp_{biome_id}',  (float(TEMPERATURE_MIN), float(TEMPERATURE_MAX)))
-    stored_hum    = st.session_state.get(f'store_hum_{biome_id}',   (float(HUMIDITY_MIN),    float(HUMIDITY_MAX)))
+    stored_weight   = st.session_state.get(f'store_bw_{biome_id}',      WEIGHT_DEFAULT)
+    stored_zone     = st.session_state.get(f'store_zone_{biome_id}',     default_zone(biome_id))
+    stored_temp     = st.session_state.get(f'store_temp_{biome_id}',     (float(TEMPERATURE_MIN), float(TEMPERATURE_MAX)))
+    stored_hum      = st.session_state.get(f'store_hum_{biome_id}',      (float(HUMIDITY_MIN),    float(HUMIDITY_MAX)))
+    stored_erosion  = st.session_state.get(f'store_erosion_{biome_id}',  (float(EROSION_MIN),     float(EROSION_MAX)))
+    stored_depth    = st.session_state.get(f'store_depth_{biome_id}',    (float(SURFACE_DEPTH),   float(SURFACE_DEPTH)))
+    stored_weird    = st.session_state.get(f'store_weird_{biome_id}',    (float(WEIRDNESS_MIN),   float(WEIRDNESS_MAX)))
 
     with st.sidebar.expander(biome_id, expanded=False):
-        weight   = st.slider(
+        weight = st.slider(
             'Weight', WEIGHT_MIN, WEIGHT_MAX, stored_weight, WEIGHT_STEP,
             key=f'bw_{biome_id}',
         )
@@ -147,30 +172,57 @@ def _render_biome_expander(biome_id: str) -> tuple[float, str, tuple, tuple]:
             stored_hum, HUMIDITY_STEP,
             key=f'hum_{biome_id}',
         )
+        erosion = st.slider(
+            'Erosion range',
+            float(EROSION_MIN), float(EROSION_MAX),
+            stored_erosion, EROSION_STEP,
+            key=f'erosion_{biome_id}',
+        )
+        depth = st.slider(
+            'Depth range',
+            float(DEPTH_MIN), float(DEPTH_MAX),
+            stored_depth, DEPTH_STEP,
+            key=f'depth_{biome_id}',
+        )
+        weirdness = st.slider(
+            'Weirdness range',
+            float(WEIRDNESS_MIN), float(WEIRDNESS_MAX),
+            stored_weird, WEIRDNESS_STEP,
+            key=f'weird_{biome_id}',
+        )
 
-    st.session_state[f'store_bw_{biome_id}']   = weight
-    st.session_state[f'store_zone_{biome_id}']  = zone
-    st.session_state[f'store_temp_{biome_id}']  = temp
-    st.session_state[f'store_hum_{biome_id}']   = humidity
+    st.session_state[f'store_bw_{biome_id}']      = weight
+    st.session_state[f'store_zone_{biome_id}']     = zone
+    st.session_state[f'store_temp_{biome_id}']     = temp
+    st.session_state[f'store_hum_{biome_id}']      = humidity
+    st.session_state[f'store_erosion_{biome_id}']  = erosion
+    st.session_state[f'store_depth_{biome_id}']    = depth
+    st.session_state[f'store_weird_{biome_id}']    = weirdness
 
-    return weight, zone, temp, humidity
+    return weight, zone, temp, humidity, erosion, depth, weirdness
 
 
-def _read_biome_from_state(biome_id: str) -> tuple[float, str, tuple, tuple]:
+def _read_biome_from_state(biome_id: str) -> tuple[float, str, tuple, tuple, tuple, tuple, tuple]:
     """Reads biome settings from store_ keys for biomes not currently rendered."""
-    weight   = st.session_state.get(f'store_bw_{biome_id}',   WEIGHT_DEFAULT)
-    zone     = st.session_state.get(f'store_zone_{biome_id}',  default_zone(biome_id))
-    temp     = st.session_state.get(f'store_temp_{biome_id}',  (float(TEMPERATURE_MIN), float(TEMPERATURE_MAX)))
-    humidity = st.session_state.get(f'store_hum_{biome_id}',   (float(HUMIDITY_MIN),    float(HUMIDITY_MAX)))
-    return weight, zone, temp, humidity
+    weight    = st.session_state.get(f'store_bw_{biome_id}',      WEIGHT_DEFAULT)
+    zone      = st.session_state.get(f'store_zone_{biome_id}',     default_zone(biome_id))
+    temp      = st.session_state.get(f'store_temp_{biome_id}',     (float(TEMPERATURE_MIN), float(TEMPERATURE_MAX)))
+    humidity  = st.session_state.get(f'store_hum_{biome_id}',      (float(HUMIDITY_MIN),    float(HUMIDITY_MAX)))
+    erosion   = st.session_state.get(f'store_erosion_{biome_id}',  (float(EROSION_MIN),     float(EROSION_MAX)))
+    depth     = st.session_state.get(f'store_depth_{biome_id}',    (float(SURFACE_DEPTH),   float(SURFACE_DEPTH)))
+    weirdness = st.session_state.get(f'store_weird_{biome_id}',    (float(WEIRDNESS_MIN),   float(WEIRDNESS_MAX)))
+    return weight, zone, temp, humidity, erosion, depth, weirdness
 
 
 def _reset_all_biome_settings(planner_biomes: list[str]) -> None:
     for biome_id in planner_biomes:
-        st.session_state[f'store_bw_{biome_id}']   = WEIGHT_DEFAULT
-        st.session_state[f'store_zone_{biome_id}']  = default_zone(biome_id)
-        st.session_state[f'store_temp_{biome_id}']  = (float(TEMPERATURE_MIN), float(TEMPERATURE_MAX))
-        st.session_state[f'store_hum_{biome_id}']   = (float(HUMIDITY_MIN),    float(HUMIDITY_MAX))
+        st.session_state[f'store_bw_{biome_id}']      = WEIGHT_DEFAULT
+        st.session_state[f'store_zone_{biome_id}']     = default_zone(biome_id)
+        st.session_state[f'store_temp_{biome_id}']     = (float(TEMPERATURE_MIN), float(TEMPERATURE_MAX))
+        st.session_state[f'store_hum_{biome_id}']      = (float(HUMIDITY_MIN),    float(HUMIDITY_MAX))
+        st.session_state[f'store_erosion_{biome_id}']  = (float(EROSION_MIN),   float(EROSION_MAX))
+        st.session_state[f'store_depth_{biome_id}']    = (float(SURFACE_DEPTH), float(SURFACE_DEPTH))
+        st.session_state[f'store_weird_{biome_id}']    = (float(WEIRDNESS_MIN), float(WEIRDNESS_MAX))
     save_settings({})
 
 
@@ -193,9 +245,9 @@ def render_sidebar(planner_biomes: list[str]) -> tuple[dict[str, float], dict[st
     for biome_id in sorted(planner_biomes):
         is_visible = not search_query or search_query in biome_id.lower()
         if is_visible:
-            weight, zone, temp, humidity = _render_biome_expander(biome_id)
+            weight, zone, temp, humidity, erosion, depth, weirdness = _render_biome_expander(biome_id)
         else:
-            weight, zone, temp, humidity = _read_biome_from_state(biome_id)
+            weight, zone, temp, humidity, erosion, depth, weirdness = _read_biome_from_state(biome_id)
 
         biome_weights[biome_id] = weight
         constraints[biome_id]   = {
@@ -204,6 +256,12 @@ def render_sidebar(planner_biomes: list[str]) -> tuple[dict[str, float], dict[st
             'temperature_hi': temp[1],
             'humidity_lo':    humidity[0],
             'humidity_hi':    humidity[1],
+            'erosion_lo':     erosion[0],
+            'erosion_hi':     erosion[1],
+            'depth_lo':       depth[0],
+            'depth_hi':       depth[1],
+            'weirdness_lo':   weirdness[0],
+            'weirdness_hi':   weirdness[1],
         }
 
     return biome_weights, constraints
@@ -349,22 +407,86 @@ def render_world_map_tab(
 
 # ── Coverage tab ──────────────────────────────────────────────────────────────
 
-def render_coverage_tab(nearest_entry_grid: np.ndarray, entries: list[dict]) -> None:
-    _, biome_colors = build_rgb_image(nearest_entry_grid, entries)
-    coverage        = compute_biome_coverage(nearest_entry_grid, entries)
-
-    sorted_biomes = sorted(coverage, key=coverage.__getitem__, reverse=True)
-    values        = [coverage[biome] * 100 for biome in sorted_biomes]
-    colors        = [biome_colors.get(biome, (0.5, 0.5, 0.5)) for biome in sorted_biomes]
-
+def _render_coverage_chart(
+    sorted_biomes: list[str],
+    coverage_pcts: list[float],
+    biome_colors:  dict[str, tuple],
+) -> None:
+    colors = [biome_colors.get(biome, (0.5, 0.5, 0.5)) for biome in sorted_biomes]
     figure, axis = plt.subplots(figsize=(10, max(4, len(sorted_biomes) * 0.28)))
-    axis.barh(sorted_biomes, values, color=colors)
+    axis.barh(sorted_biomes, coverage_pcts, color=colors)
     axis.set_xlabel('Coverage (%)', fontsize=10)
     axis.invert_yaxis()
     axis.tick_params(axis='y', labelsize=8)
     figure.tight_layout()
     st.pyplot(figure, use_container_width=True)
     plt.close(figure)
+
+
+def _render_patch_stats_guide() -> None:
+    with st.expander('Column guide'):
+        st.markdown(
+            '| Column | What it tells you |\n'
+            '|---|---|\n'
+            '| **Coverage %** | Total map area this biome wins |\n'
+            '| **Patches** | Number of disconnected regions |\n'
+            '| **Median patch %** | Typical patch size — half are smaller, half bigger |\n'
+            '| **Largest patch %** | Biggest single contiguous region |\n'
+            '| **Avg patch %** | Mean patch size (Coverage ÷ Patches) |\n'
+            '| **Concentration** | Largest patch ÷ Coverage. Near **1.0** = one big blob. Near **0** = many tiny fragments. |'
+        )
+
+
+def _build_patch_stats_rows(
+    sorted_biomes: list[str],
+    coverage:      dict[str, float],
+    patch_stats:   dict[str, dict],
+) -> dict:
+    coverage_pcts  = [round(coverage[biome] * 100, 2) for biome in sorted_biomes]
+    patch_counts   = [patch_stats.get(biome, {}).get('patch_count', 0) for biome in sorted_biomes]
+    median_pcts    = [round(patch_stats.get(biome, {}).get('median_patch_pct', 0.0), 3) for biome in sorted_biomes]
+    largest_pcts   = [round(patch_stats.get(biome, {}).get('largest_patch_pct', 0.0), 2) for biome in sorted_biomes]
+    avg_pcts       = [
+        round(cov / patches, 3) if patches > 0 else 0.0
+        for cov, patches in zip(coverage_pcts, patch_counts)
+    ]
+    concentrations = [
+        round(largest / cov, 2) if cov > 0 else 0.0
+        for largest, cov in zip(largest_pcts, coverage_pcts)
+    ]
+    return {
+        'Biome':           sorted_biomes,
+        'Coverage %':      coverage_pcts,
+        'Patches':         patch_counts,
+        'Median patch %':  median_pcts,
+        'Largest patch %': largest_pcts,
+        'Avg patch %':     avg_pcts,
+        'Concentration':   concentrations,
+    }
+
+
+def _render_patch_stats_table(
+    sorted_biomes: list[str],
+    coverage:      dict[str, float],
+    patch_stats:   dict[str, dict],
+) -> None:
+    st.subheader('Patch Fragmentation')
+    _render_patch_stats_guide()
+    st.dataframe(_build_patch_stats_rows(sorted_biomes, coverage, patch_stats),
+                 use_container_width=True, hide_index=True)
+
+
+def render_coverage_tab(nearest_entry_grid: np.ndarray, entries: list[dict]) -> None:
+    _, biome_colors = build_rgb_image(nearest_entry_grid, entries)
+    coverage        = compute_biome_coverage(nearest_entry_grid, entries)
+    patch_stats     = compute_patch_stats(nearest_entry_grid, entries)
+
+    sorted_biomes = sorted(coverage, key=coverage.__getitem__, reverse=True)
+    coverage_pcts = [coverage[biome] * 100 for biome in sorted_biomes]
+
+    _render_coverage_chart(sorted_biomes, coverage_pcts, biome_colors)
+    st.divider()
+    _render_patch_stats_table(sorted_biomes, coverage, patch_stats)
 
 
 # ── Slices tab ────────────────────────────────────────────────────────────────
@@ -472,28 +594,44 @@ def render_single_slice(
     st.plotly_chart(figure, use_container_width=True)
 
 
+def _render_axis_selectors() -> tuple[str, str]:
+    col_x, col_y  = st.columns(2)
+    x_axis        = col_x.selectbox('X axis', PARAMETER_AXES, index=0, key='slice_x_axis')
+    y_default_idx = (PARAMETER_AXES.index(x_axis) + 1) % len(PARAMETER_AXES)
+    y_axis        = col_y.selectbox('Y axis', PARAMETER_AXES, index=y_default_idx, key='slice_y_axis')
+    return x_axis, y_axis
+
+
+def _render_fixed_axis_sliders(x_axis: str, y_axis: str) -> dict[str, float]:
+    fixed_axes   = [axis for axis in PARAMETER_AXES if axis not in (x_axis, y_axis)]
+    fixed_values: dict[str, float] = {}
+    columns      = st.columns(len(fixed_axes))
+    for column, axis in zip(columns, fixed_axes):
+        axis_lo, axis_hi  = AXIS_VALUE_RANGES[axis]
+        axis_midpoint     = round((axis_lo + axis_hi) / 2.0, 2)
+        fixed_values[axis] = column.slider(
+            axis,
+            float(axis_lo), float(axis_hi), float(axis_midpoint), SLICE_FIXED_AXIS_STEP,
+            key=f'slice_fixed_{axis}',
+        )
+    return fixed_values
+
+
 def render_slices_tab(
     preview_lo: np.ndarray,
     preview_hi: np.ndarray,
     entries:    list[dict],
 ) -> None:
-    st.caption(f'Parameter-space slices at {SLICE_RESOLUTION}×{SLICE_RESOLUTION} using current weights.')
-    if st.button('Compute slices'):
-        st.session_state['slices_lo']      = preview_lo
-        st.session_state['slices_hi']      = preview_hi
-        st.session_state['slices_entries'] = entries
-
-    if 'slices_lo' not in st.session_state:
-        st.info('Click "Compute slices" to render. Slices do not auto-update on weight changes.')
+    st.caption(f'Interactive parameter-space slice at {SLICE_RESOLUTION}×{SLICE_RESOLUTION}.')
+    x_axis, y_axis = _render_axis_selectors()
+    if x_axis == y_axis:
+        st.error('X and Y axes must be different.')
         return
-
-    stored_lo      = st.session_state['slices_lo']
-    stored_hi      = st.session_state['slices_hi']
-    stored_entries = st.session_state['slices_entries']
-    columns        = st.columns(2)
-    for index, slice_config in enumerate(SLICE_CONFIGS):
-        with columns[index % 2]:
-            render_single_slice(slice_config, stored_lo, stored_hi, stored_entries)
+    fixed_values = _render_fixed_axis_sliders(x_axis, y_axis)
+    render_single_slice(
+        {'x_axis': x_axis, 'y_axis': y_axis, 'fixed': fixed_values, 'title': f'{x_axis} × {y_axis}'},
+        preview_lo, preview_hi, entries,
+    )
 
 
 # ── Entry point ───────────────────────────────────────────────────────────────
@@ -518,7 +656,9 @@ def main() -> None:
 
     save_settings(_collect_settings(biome_weights, constraints))
 
-    map_tab, coverage_tab, slices_tab = st.tabs(['World Map', 'Coverage', 'Parameter Slices'])
+    map_tab, coverage_tab, slices_tab, tile_map_tab = st.tabs(
+        ['World Map', 'Coverage', 'Parameter Slices', 'Tile Map']
+    )
 
     with map_tab:
         render_world_map_tab(nearest_preview, entries, data, biome_weights, constraints)
@@ -526,6 +666,8 @@ def main() -> None:
         render_coverage_tab(nearest_preview, entries)
     with slices_tab:
         render_slices_tab(preview_lo, preview_hi, entries)
+    with tile_map_tab:
+        render_tile_map_tab(data['planner_biomes'])
 
 
 main()
