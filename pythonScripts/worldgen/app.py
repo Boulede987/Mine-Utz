@@ -39,7 +39,11 @@ from worldgen.app_data import (
 )
 from worldgen.app_slices import render_slices_tab
 from worldgen.app_world_map import render_world_map_tab
-from worldgen.app_world_paint import load_paint_assignments, paint_to_entries, render_world_paint_tab
+from worldgen.app_world_paint import (
+    load_paint_assignments, load_paint_seeds,
+    paint_covers_full_map, paint_to_entries, climate_seeds_to_entries,
+    render_world_paint_tab,
+)
 from worldgen.biome_constraints import load_settings, save_settings
 from worldgen.biome_grid import (
     DEPTH_MAX, DEPTH_MIN, EROSION_MAX, EROSION_MIN, HUMIDITY_MAX, HUMIDITY_MIN,
@@ -264,13 +268,27 @@ def main() -> None:
 
     if 'paint_loaded' not in st.session_state:
         st.session_state['paint_assignments'] = load_paint_assignments()
+        st.session_state['paint_seeds']       = load_paint_seeds()
         st.session_state['paint_loaded']      = True
 
     biome_weights, constraints = render_sidebar(data['planner_biomes'])
 
-    paint_entries  = paint_to_entries(st.session_state['paint_assignments'], data['preview_query'])
-    weight_entries = generate_grid_entries(data['planner_biomes'], biome_weights, constraints)
-    entries        = paint_entries + weight_entries
+    paint_assignments = st.session_state['paint_assignments']
+    paint_seeds       = st.session_state.get('paint_seeds')
+
+    if paint_seeds is not None:
+        paint_entries = climate_seeds_to_entries(paint_seeds, constraints)
+    elif paint_assignments:
+        paint_entries = paint_to_entries(paint_assignments, data['preview_query'], constraints)
+    else:
+        paint_entries = []
+
+    height, width = data['preview_query'].shape[:2]
+    if paint_covers_full_map(paint_assignments, height, width):
+        entries = paint_entries
+    else:
+        weight_entries = generate_grid_entries(data['planner_biomes'], biome_weights, constraints)
+        entries        = paint_entries + weight_entries
 
     preview_lo, preview_hi = build_parameter_bounds(entries)
     nearest_preview        = compute_nearest_entry_grid(preview_lo, preview_hi, data['preview_query'])

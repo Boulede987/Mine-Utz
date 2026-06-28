@@ -205,6 +205,7 @@ def render_world_map_tab(
     biome_weights:      dict[str, float],
     constraints:        dict[str, dict],
 ) -> None:
+    from worldgen.app_auto_layout import render_auto_layout_section
     _, biome_colors   = build_rgb_image(nearest_entry_grid, entries)
     entry_biomes      = [entry['biome'] for entry in entries]
     visible_biome_ids = sorted({entry_biomes[idx] for idx in np.unique(nearest_entry_grid)})
@@ -227,3 +228,4 @@ def render_world_map_tab(
         st.rerun()
 
     render_export_section(data, biome_weights, constraints, entries)
+    render_auto_layout_section(data['planner_biomes'], biome_weights, constraints, data['preview_query'])

@@ -22,12 +22,33 @@ import streamlit as st
 import streamlit.components.v1 as components
 
 from worldgen.biome_colour import biome_color_rgb, build_rgb_image
-from worldgen.constants import PAINT_ASSIGNMENTS_FILE, PARAMETER_AXES
+from worldgen.biome_grid import (
+    EROSION_MIN, EROSION_MAX,
+    LAND_CONTINENTALNESS_LO, LAND_CONTINENTALNESS_HI,
+    OCEAN_CONTINENTALNESS_LO, OCEAN_CONTINENTALNESS_HI,
+    SURFACE_DEPTH,
+    WEIRDNESS_MIN, WEIRDNESS_MAX,
+    ZONE_LAND, ZONE_OCEAN,
+    default_zone,
+)
+from worldgen.constants import PAINT_ASSIGNMENTS_FILE, PAINT_SEEDS_FILE, PARAMETER_AXES
 
-PAINT_ERASE_BRUSH           = '__erase__'
-PAINT_DOWNSAMPLE_STEP       = 4
-PAINT_CHART_HEIGHT_PX       = 524
-MAX_PAINT_SAMPLES_PER_BIOME = 256
+PAINT_ERASE_BRUSH     = '__erase__'
+PAINT_DOWNSAMPLE_STEP = 4
+PAINT_CHART_HEIGHT_PX = 524
+
+_TEMP_AXIS_IDX = PARAMETER_AXES.index('temperature')
+_HUM_AXIS_IDX  = PARAMETER_AXES.index('humidity')
+
+
+def paint_covers_full_map(assignments: dict[str, str], preview_height: int, preview_width: int) -> bool:
+    """True when every scatter-grid cell has been assigned a biome."""
+    step          = PAINT_DOWNSAMPLE_STEP
+    half          = step // 2
+    expected_rows = range(half, preview_height, step)
+    expected_cols = range(half, preview_width,  step)
+    total_cells   = len(expected_rows) * len(expected_cols)
+    return len(assignments) >= total_cells
 
 _COMPONENT_DIR  = Path(__file__).parent / 'paint_component'
 _paint_component = components.declare_component('paint_map', path=str(_COMPONENT_DIR))
@@ -50,45 +71,139 @@ def save_paint_assignments(assignments: dict[str, str]) -> None:
     )
 
 
+def load_paint_seeds() -> list[list] | None:
+    """Returns [[temp, hum, biome_id], ...] from auto-layout, or None if not present.
+
+    Returns None for the old world-space format (row/col integers >> 1) so stale
+    files are silently discarded rather than producing garbage entries.
+    """
+    if not PAINT_SEEDS_FILE.exists():
+        return None
+    seeds = json.loads(PAINT_SEEDS_FILE.read_text(encoding='utf-8'))
+    if not seeds:
+        return None
+    if abs(seeds[0][0]) > 1.5:
+        return None
+    return seeds
+
+
+def save_paint_seeds(seeds: list) -> None:
+    PAINT_SEEDS_FILE.parent.mkdir(parents=True, exist_ok=True)
+    PAINT_SEEDS_FILE.write_text(json.dumps(seeds, indent=2), encoding='utf-8')
+
+
+def delete_paint_seeds() -> None:
+    if PAINT_SEEDS_FILE.exists():
+        PAINT_SEEDS_FILE.unlink()
+
+
 # ── Entry generation ──────────────────────────────────────────────────────────
 
 def paint_to_entries(
     assignments:   dict[str, str],
     preview_query: np.ndarray,
+    constraints:   dict[str, dict],
 ) -> list[dict]:
-    """Converts painted cell assignments to TerraBlender point-anchor entries.
+    """Converts painted cell assignments to TerraBlender entries.
 
-    Each sampled cell becomes one entry with lo=hi=climate_value on all 6 axes.
-    Callers should place these before weight-based entries so they win
-    nearest-neighbour ties at painted locations.
+    One point anchor per cell (temperature + humidity at cell centre).  Point
+    anchors produce a smooth Voronoi partition in climate space → natural curved
+    biome borders, unlike range entries which create rectangular partitions.
+
+    Continentalness uses the biome's zone range so land biomes only win on land
+    pixels and ocean biomes only win on ocean pixels.  Erosion and weirdness span
+    their full range to avoid over-constraining.
     """
     height, width = preview_query.shape[:2]
-    biome_pixels: dict[str, list[tuple[int, int]]] = {}
+    entries = []
 
     for key, biome_id in assignments.items():
         row, col = map(int, key.split(','))
-        if 0 <= row < height and 0 <= col < width:
-            biome_pixels.setdefault(biome_id, []).append((row, col))
+        if not (0 <= row < height and 0 <= col < width):
+            continue
+        climate = preview_query[row, col]
+        zone    = constraints.get(biome_id, {}).get('zone', default_zone(biome_id))
+        entries.append({
+            'biome':      biome_id,
+            'parameters': _anchor_parameters(float(climate[_TEMP_AXIS_IDX]),
+                                             float(climate[_HUM_AXIS_IDX]),
+                                             zone),
+        })
 
-    entries = []
-    for biome_id, pixels in biome_pixels.items():
-        for row, col in _even_sample(pixels, MAX_PAINT_SAMPLES_PER_BIOME):
-            climate = preview_query[row, col]
-            entries.append({
-                'biome': biome_id,
-                'parameters': {
-                    axis: [float(climate[axis_idx]), float(climate[axis_idx])]
-                    for axis_idx, axis in enumerate(PARAMETER_AXES)
-                },
-            })
     return entries
 
 
-def _even_sample(items: list, max_count: int) -> list:
-    if len(items) <= max_count:
-        return items
-    step = len(items) / max_count
-    return [items[int(index * step)] for index in range(max_count)]
+def seeds_to_entries(
+    seeds:         list[list],
+    preview_query: np.ndarray,
+    constraints:   dict[str, dict],
+) -> list[dict]:
+    """One point anchor per auto-layout seed.
+
+    With ~60 seeds instead of ~1024 per-cell anchors, the Voronoi partition in
+    climate space has large coherent regions that mirror the spatial Voronoi.
+    """
+    height, width = preview_query.shape[:2]
+    entries = []
+    for seed in seeds:
+        row, col, biome_id = int(seed[0]), int(seed[1]), seed[2]
+        if not (0 <= row < height and 0 <= col < width):
+            continue
+        climate = preview_query[row, col]
+        zone    = constraints.get(biome_id, {}).get('zone', default_zone(biome_id))
+        entries.append({
+            'biome':      biome_id,
+            'parameters': _anchor_parameters(float(climate[_TEMP_AXIS_IDX]),
+                                             float(climate[_HUM_AXIS_IDX]),
+                                             zone),
+        })
+    return entries
+
+
+def climate_seeds_to_entries(
+    climate_seeds: list[list],
+    constraints:   dict[str, dict],
+) -> list[dict]:
+    """One point anchor per K-means cluster centre.
+
+    Seeds are [temp, hum, biome_id] triples in climate space — no preview_query
+    lookup needed.  These are the canonical TerraBlender entries after auto-layout.
+
+    DO NOT collapse these into one wide span entry per biome.  A single
+    Climate.Parameter.span covering a biome's full temperature × humidity extent
+    makes that biome win a huge region of climate space with distance = 0
+    everywhere inside.  TerraBlender resolves ties at chunk boundaries, so any
+    two biomes whose spans overlap produce a hard edge exactly at the chunk border
+    → one chunk = one biome = a grid of rectangular colour blocks.  Many smaller
+    point anchors produce a smooth Voronoi partition in climate space where biome
+    borders follow the actual noise isoline rather than chunk edges.
+    """
+    entries = []
+    for seed in climate_seeds:
+        temp, hum, biome_id = float(seed[0]), float(seed[1]), seed[2]
+        zone = constraints.get(biome_id, {}).get('zone', default_zone(biome_id))
+        entries.append({
+            'biome':      biome_id,
+            'parameters': _anchor_parameters(temp, hum, zone),
+        })
+    return entries
+
+
+def _anchor_parameters(temp: float, hum: float, zone: str) -> dict:
+    """Point anchor in temperature×humidity, zone range for continentalness."""
+    if zone == ZONE_OCEAN:
+        cont_lo, cont_hi = OCEAN_CONTINENTALNESS_LO, OCEAN_CONTINENTALNESS_HI
+    else:
+        cont_lo, cont_hi = LAND_CONTINENTALNESS_LO, LAND_CONTINENTALNESS_HI
+
+    return {
+        'temperature':     [temp,          temp],
+        'humidity':        [hum,           hum],
+        'continentalness': [cont_lo,       cont_hi],
+        'erosion':         [EROSION_MIN,   EROSION_MAX],
+        'depth':           [SURFACE_DEPTH, SURFACE_DEPTH],
+        'weirdness':       [WEIRDNESS_MIN, WEIRDNESS_MAX],
+    }
 
 
 # ── Image helpers ─────────────────────────────────────────────────────────────
@@ -186,7 +301,9 @@ def render_world_paint_tab(
     )
 
     if _process_paint_click(click, assignments, active_brush):
+        st.session_state['paint_seeds'] = None
         save_paint_assignments(assignments)
+        delete_paint_seeds()
         st.rerun()
 
     painted_count = len(assignments)
@@ -194,5 +311,7 @@ def render_world_paint_tab(
 
     if painted_count and st.button('Clear all paint'):
         st.session_state['paint_assignments'] = {}
+        st.session_state['paint_seeds']       = None
         save_paint_assignments({})
+        delete_paint_seeds()
         st.rerun()
