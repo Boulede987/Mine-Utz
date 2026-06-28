@@ -38,8 +38,8 @@ from worldgen.app_data import (
     WEIGHT_DEFAULT, WEIGHT_MAX, WEIGHT_MIN, WEIGHT_STEP,
 )
 from worldgen.app_slices import render_slices_tab
-from worldgen.app_tile_editor import render_tile_map_tab
 from worldgen.app_world_map import render_world_map_tab
+from worldgen.app_world_paint import load_paint_assignments, paint_to_entries, render_world_paint_tab
 from worldgen.biome_constraints import load_settings, save_settings
 from worldgen.biome_grid import (
     DEPTH_MAX, DEPTH_MIN, EROSION_MAX, EROSION_MIN, HUMIDITY_MAX, HUMIDITY_MIN,
@@ -50,7 +50,6 @@ from worldgen.biome_grid import (
 from worldgen.biome_loader import load_biome_parameter_defaults, load_planner_overworld_biomes
 from worldgen.biome_nearest_neighbour import build_parameter_bounds, compute_nearest_entry_grid
 from worldgen.biome_noise import climate_maps_to_query_grid, generate_all_climate_maps
-
 TEMPERATURE_STEP = 0.1
 HUMIDITY_STEP    = 0.1
 EROSION_STEP     = 0.1
@@ -263,16 +262,23 @@ def main() -> None:
     saved_settings = load_settings()
     _init_session_state_from_settings(data['planner_biomes'], saved_settings, data['biome_defaults'])
 
+    if 'paint_loaded' not in st.session_state:
+        st.session_state['paint_assignments'] = load_paint_assignments()
+        st.session_state['paint_loaded']      = True
+
     biome_weights, constraints = render_sidebar(data['planner_biomes'])
 
-    entries                = generate_grid_entries(data['planner_biomes'], biome_weights, constraints)
+    paint_entries  = paint_to_entries(st.session_state['paint_assignments'], data['preview_query'])
+    weight_entries = generate_grid_entries(data['planner_biomes'], biome_weights, constraints)
+    entries        = paint_entries + weight_entries
+
     preview_lo, preview_hi = build_parameter_bounds(entries)
     nearest_preview        = compute_nearest_entry_grid(preview_lo, preview_hi, data['preview_query'])
 
     save_settings(_collect_settings(biome_weights, constraints))
 
-    map_tab, coverage_tab, slices_tab, tile_map_tab = st.tabs(
-        ['World Map', 'Coverage', 'Parameter Slices', 'Tile Map']
+    map_tab, coverage_tab, slices_tab, paint_tab = st.tabs(
+        ['World Map', 'Coverage', 'Parameter Slices', 'Paint Map']
     )
 
     with map_tab:
@@ -281,8 +287,8 @@ def main() -> None:
         render_coverage_tab(nearest_preview, entries)
     with slices_tab:
         render_slices_tab(preview_lo, preview_hi, entries)
-    with tile_map_tab:
-        render_tile_map_tab(data['planner_biomes'])
+    with paint_tab:
+        render_world_paint_tab(nearest_preview, entries, data['planner_biomes'])
 
 
 main()

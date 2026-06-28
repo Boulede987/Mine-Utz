@@ -71,7 +71,7 @@ def generate_grid_entries(
     weights:        dict[str, float],
     constraints:    dict[str, dict],
 ) -> list[dict]:
-    """Builds climate parameter entries from the grid.  Replaces BoP mirror loading."""
+    """Builds climate parameter entries from the grid."""
     land_biomes  = _biomes_for_zone(planner_biomes, constraints, ZONE_LAND)
     ocean_biomes = _biomes_for_zone(planner_biomes, constraints, ZONE_OCEAN)
 

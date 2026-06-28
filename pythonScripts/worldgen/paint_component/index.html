@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #111; overflow: hidden; }
+  canvas { display: block; cursor: crosshair; width: 100%; height: auto; image-rendering: pixelated; }
+</style>
+</head>
+<body>
+<canvas id="map"></canvas>
+<script>
+  // ── Streamlit component protocol (raw postMessage — no CDN needed) ─────────
+
+  function sendReady() {
+    window.parent.postMessage(
+      { isStreamlitMessage: true, type: "streamlit:componentReady", apiVersion: 1 },
+      "*"
+    );
+  }
+
+  function setComponentValue(value) {
+    window.parent.postMessage(
+      { isStreamlitMessage: true, type: "streamlit:setComponentValue", value: value, dataType: "json" },
+      "*"
+    );
+  }
+
+  function setFrameHeight(height) {
+    window.parent.postMessage(
+      { isStreamlitMessage: true, type: "streamlit:setFrameHeight", height: height },
+      "*"
+    );
+  }
+
+  // ── Canvas ────────────────────────────────────────────────────────────────
+
+  const canvas = document.getElementById("map");
+  const ctx    = canvas.getContext("2d");
+  let   args   = null;
+
+  function renderAll(newArgs) {
+    args = newArgs;
+    const img = new Image();
+    img.onload = () => {
+      canvas.width  = img.naturalWidth;
+      canvas.height = img.naturalHeight;
+      ctx.drawImage(img, 0, 0);
+      drawPaintOverlay();
+      // Report actual rendered height so Streamlit sizes the iframe correctly.
+      setFrameHeight(Math.round(canvas.getBoundingClientRect().height) + 4);
+    };
+    img.src = args.image_data_url;
+  }
+
+  function drawPaintOverlay() {
+    if (!args) return;
+    const step = args.step;
+    const half = step / 2;
+    ctx.globalAlpha = 0.55;
+    for (const [key, color] of Object.entries(args.paint_colors)) {
+      const parts = key.split(",");
+      const row = parseInt(parts[0], 10);
+      const col = parseInt(parts[1], 10);
+      ctx.fillStyle = color;
+      ctx.fillRect(col - half, row - half, step, step);
+    }
+    ctx.globalAlpha = 1.0;
+  }
+
+  // ── Click → snap to cell center ───────────────────────────────────────────
+
+  canvas.addEventListener("click", (e) => {
+    if (!args) return;
+    const rect   = canvas.getBoundingClientRect();
+    const scaleX = canvas.width  / rect.width;
+    const scaleY = canvas.height / rect.height;
+    const rawX   = (e.clientX - rect.left) * scaleX;
+    const rawY   = (e.clientY - rect.top)  * scaleY;
+    const step   = args.step;
+    const half   = step / 2;
+    // Snap to the nearest scatter-point center (same grid as Python side).
+    const col = Math.floor(rawX / step) * step + half;
+    const row = Math.floor(rawY / step) * step + half;
+    const clampedCol = Math.max(half, Math.min(col, canvas.width  - half - 1));
+    const clampedRow = Math.max(half, Math.min(row, canvas.height - half - 1));
+    setComponentValue({ row: Math.round(clampedRow), col: Math.round(clampedCol), ts: Date.now() });
+  });
+
+  // ── Streamlit message listener ────────────────────────────────────────────
+
+  window.addEventListener("message", (e) => {
+    if (e.data && e.data.type === "streamlit:render") {
+      renderAll(e.data.args);
+    }
+  });
+
+  sendReady();
+</script>
+</body>
+</html>

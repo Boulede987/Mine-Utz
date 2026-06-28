@@ -12,6 +12,7 @@ BIOME_PLANNER_FILE     = Path('dimension_biome_planner.xlsx')
 BIOME_PLANNER_SHEET    = 'Biome Planner'
 STRUCTURE_PLANNER_FILE = Path('structure_planner.xlsx')
 MERGED_BIOME_DATA_DIR  = Path('worldgen_data') / 'merged'
+PAINT_ASSIGNMENTS_FILE = Path('worldgen_data') / 'paint_assignments.json'
 FILTER_REGION_JAVA     = Path(
     'companion-mods/terrablender-custom-region'
     '/src/main/java/com/mineutze/filtermod/FilterRegion.java'

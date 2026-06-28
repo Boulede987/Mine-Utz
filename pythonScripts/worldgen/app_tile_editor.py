@@ -21,9 +21,7 @@ from worldgen.biome_grid import (
     OCEAN_TEMPERATURE_BANDS,
     TEMPERATURE_MAX, TEMPERATURE_MIN,
 )
-from worldgen.tile_assignments import (
-    load_tile_assignments, save_tile_assignments, tile_editor_to_entries,
-)
+from worldgen.tile_assignments import save_tile_assignments
 
 ERASE_BRUSH            = '__erase__'
 UNASSIGNED_LABEL       = '— unassigned —'
@@ -270,14 +268,8 @@ def _render_zone_grid(
 
 # ── Main entry point ──────────────────────────────────────────────────────────
 
-def render_tile_map_tab(planner_biomes: list[str]) -> list[dict]:
-    """Renders the tile map editor. Returns the entry list for preview/export."""
-    if 'tile_loaded' not in st.session_state:
-        saved = load_tile_assignments()
-        st.session_state['tile_land']   = saved.get('land',  {})
-        st.session_state['tile_ocean']  = saved.get('ocean', {})
-        st.session_state['tile_loaded'] = True
-
+def render_tile_map_tab(planner_biomes: list[str]) -> None:
+    """Renders the tile map editor. Tile state is loaded by main() before this is called."""
     land_temp_centers  = _band_centers(TEMPERATURE_MIN, TEMPERATURE_MAX, LAND_TEMPERATURE_BANDS)
     land_hum_centers   = _band_centers(HUMIDITY_MIN,    HUMIDITY_MAX,    LAND_HUMIDITY_BANDS)
     ocean_temp_centers = _band_centers(TEMPERATURE_MIN, TEMPERATURE_MAX, OCEAN_TEMPERATURE_BANDS)
@@ -314,5 +306,3 @@ def render_tile_map_tab(planner_biomes: list[str]) -> list[dict]:
     assigned = len(land_assignments) + len(ocean_assignments)
     total    = LAND_TEMPERATURE_BANDS * LAND_HUMIDITY_BANDS + OCEAN_TEMPERATURE_BANDS
     st.caption(f'{assigned} / {total} cells assigned.')
-
-    return tile_editor_to_entries(land_assignments, ocean_assignments)
