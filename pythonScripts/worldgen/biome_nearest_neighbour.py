@@ -24,6 +24,9 @@ MERGED_DATA_DIR = Path('worldgen_data') / 'merged'
 # Entries processed per numpy batch. Lower = less peak memory, more iterations.
 NEAREST_NEIGHBOUR_CHUNK_SIZE = 100
 
+# Depth value below which an entry is considered a surface entry.
+SURFACE_DEPTH_THRESHOLD = 0.1
+
 
 def load_planner_overworld_biomes() -> list[str]:
     workbook  = openpyxl.load_workbook(BIOME_PLANNER_FILE)
@@ -56,6 +59,36 @@ def load_overworld_entries(planner_biomes: list[str]) -> list[dict]:
                 if entry['biome'] in included_biomes:
                     entries.append({'biome': entry['biome'], 'parameters': entry['parameters']})
     return entries
+
+
+def load_biome_parameter_defaults(planner_biomes: list[str]) -> dict[str, dict]:
+    """Returns per-biome parameter range defaults from actual registered entries.
+
+    Prefers surface entries (depth < SURFACE_DEPTH_THRESHOLD); falls back to all
+    entries for biomes that only register underground. Biomes with no data are omitted.
+    Each value is a flat dict: {'temperature_lo', 'temperature_hi', 'humidity_lo', ...}
+    """
+    all_entries     = load_overworld_entries(planner_biomes)
+    surface_entries = [e for e in all_entries if e['parameters']['depth'][0] < SURFACE_DEPTH_THRESHOLD]
+
+    defaults: dict[str, dict] = {}
+    for biome_id in planner_biomes:
+        biome_surface = [e for e in surface_entries if e['biome'] == biome_id]
+        biome_all     = [e for e in all_entries     if e['biome'] == biome_id]
+        source        = biome_surface if biome_surface else biome_all
+        if source:
+            defaults[biome_id] = _extract_parameter_ranges(source)
+    return defaults
+
+
+def _extract_parameter_ranges(entries: list[dict]) -> dict:
+    result: dict[str, float] = {}
+    for axis in PARAMETER_AXES:
+        lo_values      = [e['parameters'][axis][0] for e in entries]
+        hi_values      = [e['parameters'][axis][1] for e in entries]
+        result[f'{axis}_lo'] = min(lo_values)
+        result[f'{axis}_hi'] = max(hi_values)
+    return result
 
 
 def build_parameter_bounds(entries: list[dict]) -> tuple[np.ndarray, np.ndarray]:

@@ -54,7 +54,7 @@ from worldgen.biome_grid import (
 )
 from worldgen.biome_nearest_neighbour import (
     build_parameter_bounds, compute_nearest_entry_grid,
-    load_planner_overworld_biomes,
+    load_biome_parameter_defaults, load_planner_overworld_biomes,
 )
 from worldgen.biome_noise import climate_maps_to_query_grid, generate_all_climate_maps
 from worldgen.constants import PARAMETER_AXES
@@ -78,13 +78,15 @@ FILTER_REGION_JAVA = Path(
 @st.cache_data(show_spinner='Loading biome data...')
 def load_all_data() -> dict:
     """Loads everything that doesn't depend on weights or constraints. Cached once per session."""
-    planner_biomes = load_planner_overworld_biomes()
-    preview_query  = climate_maps_to_query_grid(
+    planner_biomes   = load_planner_overworld_biomes()
+    preview_query    = climate_maps_to_query_grid(
         generate_all_climate_maps(PREVIEW_RESOLUTION, PREVIEW_RESOLUTION, MAP_SEED)
     )
+    biome_defaults   = load_biome_parameter_defaults(planner_biomes)
     return {
-        'planner_biomes': planner_biomes,
-        'preview_query':  preview_query,
+        'planner_biomes':  planner_biomes,
+        'preview_query':   preview_query,
+        'biome_defaults':  biome_defaults,
     }
 
 
@@ -101,9 +103,11 @@ def load_export_query_grid() -> np.ndarray:
 def _init_session_state_from_settings(
     planner_biomes: list[str],
     settings:       dict[str, dict],
+    biome_defaults: dict[str, dict],
 ) -> None:
     """Populates persistent store_ keys from saved settings on first run only.
 
+    Priority: saved settings > actual biome data defaults > full axis range fallback.
     Widget keys (bw_, zone_, temp_, hum_) are managed by Streamlit and deleted
     when their widget is not rendered.  The store_ keys are set manually and survive
     across reruns regardless of whether the corresponding widget is visible.
@@ -111,28 +115,29 @@ def _init_session_state_from_settings(
     if st.session_state.get('settings_loaded'):
         return
     for biome_id in planner_biomes:
-        saved = settings.get(biome_id, {})
+        saved    = settings.get(biome_id, {})
+        defaults = biome_defaults.get(biome_id, {})
         st.session_state.setdefault(f'store_bw_{biome_id}',   saved.get('weight', WEIGHT_DEFAULT))
         st.session_state.setdefault(f'store_zone_{biome_id}', saved.get('zone', default_zone(biome_id)))
         st.session_state.setdefault(f'store_temp_{biome_id}', (
-            float(saved.get('temperature_lo', TEMPERATURE_MIN)),
-            float(saved.get('temperature_hi', TEMPERATURE_MAX)),
+            float(saved.get('temperature_lo', defaults.get('temperature_lo', TEMPERATURE_MIN))),
+            float(saved.get('temperature_hi', defaults.get('temperature_hi', TEMPERATURE_MAX))),
         ))
         st.session_state.setdefault(f'store_hum_{biome_id}', (
-            float(saved.get('humidity_lo', HUMIDITY_MIN)),
-            float(saved.get('humidity_hi', HUMIDITY_MAX)),
+            float(saved.get('humidity_lo', defaults.get('humidity_lo', HUMIDITY_MIN))),
+            float(saved.get('humidity_hi', defaults.get('humidity_hi', HUMIDITY_MAX))),
         ))
         st.session_state.setdefault(f'store_erosion_{biome_id}', (
-            float(saved.get('erosion_lo', EROSION_MIN)),
-            float(saved.get('erosion_hi', EROSION_MAX)),
+            float(saved.get('erosion_lo', defaults.get('erosion_lo', EROSION_MIN))),
+            float(saved.get('erosion_hi', defaults.get('erosion_hi', EROSION_MAX))),
         ))
         st.session_state.setdefault(f'store_depth_{biome_id}', (
-            float(saved.get('depth_lo', SURFACE_DEPTH)),
-            float(saved.get('depth_hi', SURFACE_DEPTH)),
+            float(saved.get('depth_lo', defaults.get('depth_lo', SURFACE_DEPTH))),
+            float(saved.get('depth_hi', defaults.get('depth_hi', SURFACE_DEPTH))),
         ))
         st.session_state.setdefault(f'store_weird_{biome_id}', (
-            float(saved.get('weirdness_lo', WEIRDNESS_MIN)),
-            float(saved.get('weirdness_hi', WEIRDNESS_MAX)),
+            float(saved.get('weirdness_lo', defaults.get('weirdness_lo', WEIRDNESS_MIN))),
+            float(saved.get('weirdness_hi', defaults.get('weirdness_hi', WEIRDNESS_MAX))),
         ))
     st.session_state['settings_loaded'] = True
 
@@ -646,7 +651,7 @@ def main() -> None:
         return
 
     saved_settings = load_settings()
-    _init_session_state_from_settings(data['planner_biomes'], saved_settings)
+    _init_session_state_from_settings(data['planner_biomes'], saved_settings, data['biome_defaults'])
 
     biome_weights, constraints = render_sidebar(data['planner_biomes'])
 
