@@ -19,6 +19,7 @@ Tabs:
   - Tile Map:           click-to-paint temperature×humidity grid editor
 """
 
+import base64
 import io
 import os
 import sys
@@ -61,12 +62,16 @@ from worldgen.constants import PARAMETER_AXES
 from worldgen.terrablender_codegen import build_region
 from worldgen.app_tile_editor import render_tile_map_tab
 
-TEMPERATURE_STEP      = 0.1
-HUMIDITY_STEP         = 0.1
-EROSION_STEP          = 0.1
-DEPTH_STEP            = 0.05
-WEIRDNESS_STEP        = 0.1
-SLICE_FIXED_AXIS_STEP = 0.05
+TEMPERATURE_STEP           = 0.1
+HUMIDITY_STEP              = 0.1
+EROSION_STEP               = 0.1
+DEPTH_STEP                 = 0.05
+WEIRDNESS_STEP             = 0.1
+SLICE_FIXED_AXIS_STEP      = 0.05
+CLICK_GRID_DOWNSAMPLE_STEP  = 4    # sample every Nth pixel for click detection scatter
+CLICK_MARKER_SIZE           = 16   # points; large enough for adjacent markers to overlap
+NO_HIGHLIGHT_LABEL          = '— none —'
+LAYOUT_IMAGE_UPSCALE_FACTOR = 4    # nearest-neighbour upscale before PNG encoding to prevent browser blur
 FILTER_REGION_JAVA = Path(
     'companion-mods/terrablender-custom-region'
     '/src/main/java/com/mineutze/filtermod/FilterRegion.java'
@@ -293,34 +298,93 @@ def _grid_entries_to_region_params(entries: list[dict]) -> dict[str, list[dict]]
         region_params.setdefault(entry['biome'], []).append(param)
     return region_params
 
+def _build_click_scatter(nearest_entry_grid: np.ndarray, entries: list[dict]) -> go.Scatter:
+    """Downsampled scatter grid for click and hover detection.
+
+    The image is placed as a non-interactive layout.images background, so this scatter
+    is the only interactive layer. y-coordinates are flipped to match the standard
+    Plotly axis convention (y=0 at bottom) while the image origin is at (x=0, y=height).
+    Markers are near-invisible but present so Plotly registers click events.
+    """
+    height, width = nearest_entry_grid.shape
+    entry_biomes  = [entry['biome'] for entry in entries]
+    half_step     = CLICK_GRID_DOWNSAMPLE_STEP // 2
+    sample_rows   = range(half_step, height, CLICK_GRID_DOWNSAMPLE_STEP)
+    sample_cols   = range(half_step, width,  CLICK_GRID_DOWNSAMPLE_STEP)
+
+    xs, ys, biome_names = [], [], []
+    for row in sample_rows:
+        for col in sample_cols:
+            xs.append(col + 0.5)
+            ys.append(height - row - 0.5)  # flip: row 0 → top of image → y = height
+            biome_names.append(entry_biomes[nearest_entry_grid[row, col]])
+
+    return go.Scatter(
+        x=xs, y=ys,
+        mode='markers',
+        marker=dict(symbol='square', size=CLICK_MARKER_SIZE, opacity=0.01, color='rgba(0,0,0,0)'),
+        customdata=biome_names,
+        hovertemplate='%{customdata}<extra></extra>',
+        showlegend=False,
+    )
+
+
+def _extract_biome_from_click(event_data) -> str | None:
+    """Returns the biome name from a scatter click event, or None if no click."""
+    if not event_data or not event_data.selection or not event_data.selection.points:
+        return None
+    custom = event_data.selection.points[0].get('customdata')
+    return custom if isinstance(custom, str) else None
+
+
+def _encode_image_as_png_data_url(rgb_uint8: np.ndarray) -> str:
+    upscaled = rgb_uint8.repeat(LAYOUT_IMAGE_UPSCALE_FACTOR, axis=0).repeat(LAYOUT_IMAGE_UPSCALE_FACTOR, axis=1)
+    buf = io.BytesIO()
+    plt.imsave(buf, upscaled, format='png')
+    buf.seek(0)
+    return 'data:image/png;base64,' + base64.b64encode(buf.read()).decode()
+
+
 def render_preview_map_plotly(
     nearest_entry_grid:   np.ndarray,
     entries:              list[dict],
     highlighted_biome_id: str | None,
     biome_colors:         dict[str, tuple],
-) -> None:
-    """Renders biome map as interactive Plotly chart with per-pixel hover tooltip."""
+):
+    """Renders biome map with click-to-highlight and hover.
+
+    The image is placed as a non-interactive layout.images background so it does not
+    absorb mouse events. An invisible scatter grid on top handles clicks and hover.
+    """
     if highlighted_biome_id:
         image = build_highlighted_image(nearest_entry_grid, entries, highlighted_biome_id, biome_colors)
     else:
         image, _ = build_rgb_image(nearest_entry_grid, entries)
 
-    entry_biomes    = [entry['biome'] for entry in entries]
-    biome_name_grid = np.array(entry_biomes)[nearest_entry_grid]
-    rgb_uint8       = (image * 255).astype(np.uint8)
+    rgb_uint8     = (image * 255).astype(np.uint8)
+    height, width = rgb_uint8.shape[:2]
 
-    figure = go.Figure(go.Image(
-        z=rgb_uint8,
-        customdata=biome_name_grid,
-        hovertemplate='%{customdata}<extra></extra>',
+    figure = go.Figure(_build_click_scatter(nearest_entry_grid, entries))
+    figure.add_layout_image(dict(
+        source   = _encode_image_as_png_data_url(rgb_uint8),
+        xref='x', yref='y',
+        x=0,     y=height,   # top-left anchor: y increases upward, so top = height
+        sizex=width, sizey=height,
+        sizing='stretch',
+        opacity=1,
+        layer='below',
     ))
     figure.update_layout(
         margin=dict(l=0, r=0, t=0, b=0),
         height=520,
-        xaxis=dict(visible=False),
-        yaxis=dict(visible=False),
+        xaxis=dict(range=[0, width],  visible=False, showgrid=False),
+        yaxis=dict(range=[0, height], visible=False, showgrid=False, scaleanchor='x', scaleratio=1),
+        clickmode='event+select',
+        dragmode='pan',
+        plot_bgcolor='rgba(0,0,0,0)',
+        uirevision='world_map',
     )
-    st.plotly_chart(figure, use_container_width=True)
+    return st.plotly_chart(figure, use_container_width=True, on_select='rerun', key='world_map_chart')
 
 
 def render_export_section(
@@ -394,19 +458,28 @@ def render_world_map_tab(
     biome_weights:      dict[str, float],
     constraints:        dict[str, dict],
 ) -> None:
-    image, biome_colors = build_rgb_image(nearest_entry_grid, entries)
-
+    _, biome_colors   = build_rgb_image(nearest_entry_grid, entries)
     entry_biomes      = [entry['biome'] for entry in entries]
     visible_biome_ids = sorted({entry_biomes[idx] for idx in np.unique(nearest_entry_grid)})
 
+    # Apply click from previous on_select rerun before the selectbox renders.
+    if 'map_pending_highlight' in st.session_state:
+        st.session_state['highlight_biome'] = st.session_state.pop('map_pending_highlight')
+
     highlight_label      = st.selectbox(
-        'Highlight biome (rest dimmed)',
-        options=['— none —'] + visible_biome_ids,
+        'Highlight biome (click map or select here)',
+        options=[NO_HIGHLIGHT_LABEL] + visible_biome_ids,
         key='highlight_biome',
     )
-    highlighted_biome_id = None if highlight_label == '— none —' else highlight_label
+    highlighted_biome_id = None if highlight_label == NO_HIGHLIGHT_LABEL else highlight_label
 
-    render_preview_map_plotly(nearest_entry_grid, entries, highlighted_biome_id, biome_colors)
+    event_data    = render_preview_map_plotly(nearest_entry_grid, entries, highlighted_biome_id, biome_colors)
+    clicked_biome = _extract_biome_from_click(event_data)
+    if clicked_biome:
+        new_label = NO_HIGHLIGHT_LABEL if clicked_biome == highlighted_biome_id else clicked_biome
+        st.session_state['map_pending_highlight'] = new_label
+        st.rerun()
+
     render_export_section(data, biome_weights, constraints, entries)
 
 
