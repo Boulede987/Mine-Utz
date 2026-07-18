@@ -10,8 +10,8 @@ Each biome contributes ALL of its parameter entries (not a merged bounding
 box) so that erosion/weirdness discrimination is preserved and sub-chunk
 biome variation can occur.
 
-Skips the Overworld column — overworld filtering is handled by the
-TerraBlender companion mod (companion-mods/terrablender-custom-region/).
+Skips the Overworld column — overworld placement is handled by the hand-maintained
+custom BiomeSource (companion-mods/mineutze-worldgen/), not generated from the planner.
 
 Usage:
     python pythonScripts/worldgen/generate_dimension_jsons.py

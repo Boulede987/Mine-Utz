@@ -1,7 +1,15 @@
 # Custom Overworld Biome Placement — Design Spec
 
-Status: design phase, not yet implemented. Supersedes the current TerraBlender-based
-`FilterRegion` approach in this mod.
+Status: **implemented** (all 6 rollout milestones complete — patch size, terrain-class
+gating, soft adjacency, underground linkage). Sections below are marked with what
+changed during implementation vs. this original design; unmarked sections are still
+accurate as background/rationale. See "As-built deltas" (§13) for the full list plus
+known follow-up items deferred, not forgotten.
+
+Supersedes the TerraBlender-based `FilterRegion` approach that used to live in this mod
+(`companion-mods/terrablender-custom-region`, now renamed
+`companion-mods/mineutze-worldgen`) for the **Overworld only** -- Nether and End were
+never migrated off TerraBlender, see §9's delta.
 
 ## 1. Goal
 
@@ -101,17 +109,32 @@ approach only if it proves to be a real problem in practice.
 
 ## 7. Underground (3D) tier
 
-Full 3D version of the same patch/adjacency/size engine, per decision to cover
-UndergroundWorlds biomes at full fidelity rather than a simplified depth-band fallback.
+**AS-BUILT DELTA**: implemented much simpler than this section originally called for, and
+the "exact 1:1 linkage" requirement (added after this doc was drafted) changes the
+eligibility model entirely — see below.
 
-- Terrain classes derived from the depth/weirdness/PV bands vanilla already uses for its own
-  cave biomes — same signal-reuse principle as the surface tier.
-- Dispatch: for a given `(x, y, z)`, first determine whether this y sits in the "surface
-  band" (near the column's height estimate) or the "underground band" (deep enough / cave
-  space), then route to the matching tier's patch lookup.
-- 3D patches are more expensive to resolve than 2D — memoize aggressively, and expect to use
-  a coarser cell size (e.g. 32-block cubes) than the surface tier, since precision matters
-  less underground than at the surface.
+Originally specified: full 3D version of the same patch/adjacency/size growth engine, per
+decision to cover UndergroundWorlds biomes at full fidelity rather than a simplified
+depth-band fallback, with terrain classes derived from vanilla's own cave-biome
+depth/weirdness/PV bands.
+
+What actually shipped (`UndergroundPatchGrid`): no growth engine at all. Each 32-block
+coarse `(x, z)` cell (Y is not a growth axis here) independently does a weighted pick
+among whichever cave biomes have that column's *specific* resolved surface biome
+(`SurfacePatchGrid.resolve`, memoized) in their `undergroundLinkedSurfaceBiomes` list —
+this is what "exact 1:1 linkage" (a requirement clarified after this doc was written)
+actually needs: not a terrain-class band match, a specific-surface-biome match. No patch
+size or adjacency underground in this milestone — that was never asked for, only
+linkage was. Dispatch (surface vs. underground) uses the `depth` climate axis directly
+(already what `FilterRegion.java`'s old `depth [0.2, 0.9]` underground entries exploited)
+rather than a real height estimate — simpler, and depth already encodes "how far below
+the estimated surface," so no separate height sampling was needed after all.
+
+Unlinked underground columns (no cave biome links to that surface biome) fall back to
+**the same biome as the surface directly above**, not vanilla's own dripstone/lush/
+deep_dark placement — see §9's delta for why (same root cause: avoiding a second
+uncertain vanilla-registry codec lookup for a payoff the actual requirements didn't ask
+for). Known, disclosed limitation, not an oversight.
 
 ## 8. Config / data model (replaces `biome_settings.json` / `paint_*.json`)
 
@@ -124,57 +147,147 @@ Per biome:
 - `forbidden_neighbors`: list of biome ids (soft-penalized, not hard-blocked)
 - `weight`: patch frequency / growth priority (reused from the old system)
 
-The Streamlit app's role shifts from "tune `Climate.ParameterPoint` anchors" to "tune this
-patch-generator config and preview the resulting patch layout":
-
-- World Map / Coverage tabs: concept survives, needs a new renderer driven by the patch
-  engine instead of nearest-point climate math.
-- Tile Map painter (`paint_seeds`/`paint_assignments`): survives and gets more useful — becomes
-  "manually pin a patch seed at this location" instead of a climate-anchor preview.
-- Parameter Slices tab: retired. There's no climate-anchor space left to visualize; a
-  meaningful replacement would need real sampled noise from the game rather than
-  `biome_noise.py`'s synthetic approximation.
+**AS-BUILT DELTA**: the Streamlit app's role never shifted — it was deleted outright
+instead. `pythonScripts/worldgen/app.py` and everything only it used (`biome_grid.py`,
+`biome_nearest_neighbour.py`, `app_auto_layout.py`, `app_slices.py`, `app_world_paint.py`,
+`app_world_map.py`, `app_coverage.py`, `app_data.py`, `biome_constraints.py`,
+`entry_pipeline.py`, plus the already-orphaned `app_constraints.py`/`app_tile_editor.py`/
+`tile_assignments.py` and the standalone `visualize_biome_layout.py`/
+`visualize_world_map.py`) are gone — none of it could be salvaged, since all of it was
+built around climate-anchor concepts (weight/zone/temperature/humidity ranges) that have
+no counterpart in the patch-growth model at all. The "tune this patch-generator config
+and preview the resulting layout" UI this section describes was **never built** — that
+was always separate scope from the 6 rollout milestones, deliberately skipped. Right now
+there is no UI: tuning `BiomeConfigRegistry.java` means hand-editing that Java file and
+rebuilding/redeploying the mod. `patch_engine.py` (the Python port used only for the
+growth-algorithm determinism self-test, not any UI) is the only surviving Python
+artifact from this whole area. A real authoring pipeline (`patch_config.json` + a new
+Streamlit tab, per §12) is still open work, not done.
 
 ## 9. TerraBlender removal
 
-Drop the TerraBlender dependency entirely.
+**AS-BUILT DELTA**: TerraBlender is NOT fully dropped — only the Overworld half. This
+was a deliberate scope decision (confirmed with the user, not a fallback): Nether and
+End keep `FilterNetherRegion`/`FilterEndBiomes` exactly as they were, still using
+TerraBlender's `Region`/`EndBiomeRegistry` APIs and the raw scanned climate positions.
+The mod's `build.gradle` keeps the TerraBlender `compileOnly` dependency and
+`neoforge.mods.toml` keeps the `terrablender` dependency block, permanently, not as a
+migration-window artifact. Only the Overworld's `FilterRegion.java` was deleted and
+replaced.
 
-- **Overworld**: fully custom `BiomeSource`, registered via a dimension JSON override
-  (`data/minecraft/dimension/overworld.json` → custom `biome_source` type + `MapCodec`) or
-  NeoForge's chunk-generator substitution hook.
-- **Nether/End**: not app-tuned today, so they don't need the new patch engine. Replace
-  `FilterNetherRegion`/`FilterEndBiomes`'s TerraBlender `Region` registration with direct,
-  vanilla-native climate point registration (`MultiNoiseBiomeSource`-style) using the same
-  raw scanned positions already in use. No third-party worldgen dependency left anywhere in
-  the mod.
+- **Overworld**: fully custom `BiomeSource` (`CustomOverworldBiomeSource`), registered via
+  a dimension JSON override (`data/minecraft/dimension/overworld.json` → `"type":
+  "mineutze_filter:custom_overworld"`) and a `DeferredRegister<MapCodec<? extends
+  BiomeSource>>` (`ModBiomeSources`) — matches what this section originally called for.
+- **Nether/End**: unchanged, still TerraBlender, as described above.
 
 ## 10. Mod restructuring
 
-The current name/package (`terrablender-custom-region`, `com.mineutze.filtermod`,
-`FilterRegion`/`FilterMod`) stops fitting once TerraBlender is dropped and this becomes a
-full custom `BiomeSource`. Recommend renaming (e.g. `mineutze-worldgen` /
-`com.mineutze.worldgen`) as a first mechanical step before writing the new Java — not a
-blocker for this spec.
+**Done.** `companion-mods/terrablender-custom-region` → `companion-mods/mineutze-worldgen`,
+`com.mineutze.filtermod` → `com.mineutze.worldgen`, `FilterMod` → `WorldgenMod`. The
+NeoForge modId stayed `mineutze_filter` (not renamed) — only harmless auto-regenerated
+cache files referenced it, not worth the churn.
 
 ## 11. Effort / risk summary
 
-- **Terrain-class calibration (highest risk of silent wrongness)**: needs an empirical dump
-  of `(continentalness, erosion, weirdness) → actual generated height` from this modpack's
-  real noise router, not assumptions carried over from vanilla — BOP and other mods may
-  alter the router. Without this, terrain-class buckets are guesses.
-- **Determinism of patch growth (highest implementation risk)**: untested pattern in this
-  codebase; needs the discovery-order test from §6 before trusting it in a real world.
-- **3D underground performance**: unproven cost of resolving 3D patches at chunk-gen speed;
-  needs a memoization/coarse-cell strategy validated under load.
-- **Python tooling migration**: moderate effort, mostly config-shape changes (§8), not a
-  rewrite of the UI framework.
+- **Terrain-class calibration**: tooling shipped (`/dump_height_samples` +
+  `pythonScripts/worldgen/calibrate_terrain_classes.py`, smoke-tested against synthetic
+  data), but the actual calibration run against this modpack's real noise router has
+  **not** been done yet — `TerrainClassifier`'s erosion/weirdness thresholds are still
+  the original placeholder guesses. Still an open risk, just no longer a tooling gap.
+- **Determinism of patch growth**: validated. Python prototype's
+  `run_determinism_self_test()` passes (two different scan orders, identical output);
+  the Java port mirrors the same order-independence techniques (local-maximum
+  germination rule, seed-derived tie-breaks). A real Java-side equivalent test (the
+  Gradle project has no test framework currently) was not added — flagged, not built.
+- **3D underground performance**: turned out not to apply — the underground tier shipped
+  without a growth engine at all (§7's delta), so this specific risk is moot as
+  implemented. A **different**, real performance risk showed up instead on the surface
+  tier: see the hang investigation below.
+- **Python tooling migration**: did not happen as "migrate incrementally" — the old UI
+  was deleted outright once superseded (§8's delta), since none of its code was
+  reusable against the new data model.
+
+### Real hang investigated and fixed during implementation (worth keeping as institutional memory)
+
+World creation hung on "Scanning for structures" twice during development, for two
+different real reasons, both fixed:
+
+1. An early per-query-window design had **no cap on how far growth could extend** — an
+   effectively-unbounded placeholder `size_max` meant a single cache miss grew forever
+   outward, sampling `Climate.Sampler` without limit. Fixed by hard-capping growth at a
+   resolution window's rectangular boundary regardless of target radius.
+2. Window radius derived directly from the largest configured `size_max` with **no
+   ceiling** — raising one biome's `size_max` in config alone nearly quadrupled the
+   per-cache-miss cost and reproduced the same symptom without an actual infinite loop.
+   Fixed with a hard radius ceiling independent of configured values.
+3. Separately (not a hang, but confirmed via real profiling data — thread timing logs
+   showed lock-wait roughly equal to compute time across ~2600 window resolutions during
+   one world creation, several minutes total): the original design used **one global
+   lock** (`synchronized` on the whole `SurfacePatchGrid` instance) serializing all of
+   NeoForge's parallel chunk-generation worker threads, and **did not cache gap cells**
+   (cells no patch's growth reached), causing redundant full recomputation for nearby
+   queries. Both fixed by switching from ad-hoc per-query overlapping windows to a
+   **fixed-size grid of tiles**, each resolved once via `ConcurrentHashMap.computeIfAbsent`
+   (real per-tile concurrency, gaps permanently known once a tile resolves) — see §5's
+   caching note, this is much closer to what that section originally specified
+   ("memoized... keyed by coarse region coordinate") than the ad-hoc window design that
+   preceded it. Accepted tradeoff: patches are now hard-clipped at tile edges (~1300
+   blocks apart), a coarser and far less visible version of the very chunk-alignment
+   problem this whole rewrite exists to fix (§2) — deliberate, not accidental.
 
 ## 12. Open items / next steps
 
-- Calibrate terrain-class thresholds from a real in-game noise dump (not vanilla defaults).
-- Decide the size unit: patch radius vs. area in blocks² vs. raw block count.
-- Prototype the patch growth engine standalone (plain Java, no Minecraft dependencies)
-  and validate determinism before wiring it into `BiomeSource`.
-- Rename the mod/package.
-- Migrate Python tooling incrementally: patch-config UI first, retire
-  `ParameterPoint`-era code (`terrablender_codegen.py`, `biome_grid.py`'s anchor logic) last.
+- Run the real terrain-class calibration (tooling exists, hasn't been executed against
+  real generated terrain yet).
+- Build the real config authoring pipeline: `patch_config.json` + a datapack reload
+  listener + a new Streamlit tab. `BiomeConfigRegistry.java` is genuinely temporary
+  scaffolding, not just in name — every tuning change today requires a Java edit and a
+  full mod rebuild/redeploy.
+- Add a Java-side determinism test (no test framework in this Gradle project yet).
+- See §13 for concrete, deferred bug follow-ups (rivers, border noise, cave variety).
+
+## 13. As-built deltas not covered above
+
+Requirement 3 ("cave biome X always under overworld biome Y") was clarified as an
+**exact 1:1** linkage after this doc's original draft, which had assumed the underground
+tier would be independent (§7's delta covers the resulting mechanism change). Requirement
+2 (soft, not hard, adjacency) was confirmed as drafted — no change there.
+
+Size unit (left TBD in the original §8/§11): resolved as **radius in blocks**, sampled
+per-patch-instance from `[size_min / 2, size_max / 2]`.
+
+A post-processing step not in the original design: `dissolveSmallIslands` /
+`dissolve_small_islands` (Java and the Python port). Real symptom found during testing —
+a germination point deep inside what becomes a much larger neighboring patch's territory
+can pass its own local-maximum check and then get boxed in almost immediately, leaving a
+small isolated "island" of one biome inside another. Fixed with a post-growth pass:
+contiguous same-biome components smaller than ~30% of their biome's own expected minimum
+size get reassigned to whichever bordering biome is dominant AND terrain-class-eligible
+for every cell involved. Snapshot-then-apply, not mutate-while-deciding, or two adjacent
+small islands' outcomes would depend on which got processed first.
+
+Known, deferred (not fixed, not forgotten — tracked as follow-up tasks):
+
+- **Rivers/lakes**: land biomes can still overshoot into inland water. `TerrainClassifier`
+  only sees continentalness/erosion/weirdness, and a river/lake cell can carry the same
+  macro continentalness as the dry land around it — vanilla itself uses a much narrower
+  "weirdness near the valley point" signal specifically for rivers, which the current
+  5-class bucketing doesn't capture. Needs a dedicated terrain class (or a height-based
+  check) plus a river/lake `BiomeConfig` restricted to it.
+- **Border noise between similar-weight biomes sharing a terrain class**: e.g. plains and
+  forest (both `FLAT_LAND`-eligible, similar weight) produce a visibly noisy/scattered
+  border before settling into solid territory further in. NOT the same failure mode as
+  the small-island bug above — border freckles are topologically connected back to their
+  main body through a winding path along the frontier, so the dissolve pass's
+  connected-component check doesn't catch them (they're not isolated). Real cause:
+  `computeCellScore` has no "cohesion" term rewarding a contested cell for having more
+  already-resolved same-biome cardinal neighbors, so ties along a contested frontier are
+  decided by near-coin-flip tie-break noise instead of favoring a compact, smooth edge.
+- **Cave-biome variety for unlinked underground**: see §7's and §9's deltas — unlinked
+  underground columns get their surface biome's ID rather than vanilla's own dripstone/
+  lush/deep_dark placement. Fixable by wrapping vanilla's default `MultiNoiseBiomeSource`
+  as the fallback instead (needs a second registry lookup,
+  `Registries.MULTI_NOISE_BIOME_SOURCE_PARAMETER_LIST`, threaded through the codec) — not
+  done because it wasn't something any stated requirement actually asked for, and adds a
+  real chunk of uncertain-API risk for that alone.

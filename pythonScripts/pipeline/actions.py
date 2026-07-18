@@ -147,11 +147,16 @@ def step_generate_structure_tags():
     return run_script(GENERATE_STRUCTURE_TAGS, "Generate structure biome tag overrides from planner")
 
 def step_generate_filter_region():
-    return run_script(GENERATE_FILTER_REGION, "Generate FilterRegion.java from Overworld ✓ biomes")
+    return run_script(GENERATE_FILTER_REGION, "Generate Nether/End TerraBlender Java (Overworld is hand-maintained BiomeConfigRegistry.java now)")
 
 
 def step_worldgen_sequence():
-    """End-to-end worldgen: dump → extract → parse → merge → planner → filter region."""
+    """End-to-end worldgen data refresh: dump → extract → parse → merge → planner →
+    Nether/End Java. Overworld placement is no longer generated from this data at all --
+    it's the hand-maintained com.mineutze.worldgen.biomesource.BiomeConfigRegistry Java
+    class in companion-mods/mineutze-worldgen. This sequence still matters for Nether/End
+    and for keeping worldgen_data/merged/ current for whatever authors that config by
+    hand."""
     section("STEP: World gen sequence")
     print("  Before starting:")
     print("    1. Load your world and visit the Nether (biome sampling requires it).")
@@ -187,13 +192,15 @@ def step_worldgen_sequence():
     print("  CLOSE Excel completely before pressing Enter.")
     pause("  Press Enter when xlsx is saved and closed...")
 
-    if not run_script(GENERATE_FILTER_REGION, "Generate filter region Java files"):
+    if not run_script(GENERATE_FILTER_REGION, "Generate Nether/End TerraBlender Java files"):
         failures.append("filter region")
-        print("  !! Filter region generation failed.")
+        print("  !! Nether/End Java generation failed.")
         return False
 
     print("\n  Worldgen sequence complete.")
-    print("  Rebuild the companion mod (deployMod in IntelliJ) to apply changes.")
+    print("  Rebuild the companion mod (deployMod in IntelliJ) to apply Nether/End changes.")
+    print("  Overworld placement changes go in BiomeConfigRegistry.java directly --")
+    print("  edit it, then deployMod the same way.")
     return True
 
 def step_full_pipeline():
@@ -245,7 +252,7 @@ STEPS = [
     ("15", "Export to Neo4j",                           step_neo4j_export),
     ("16", "Launch web explorer  (opens browser)",      step_web_explorer),
     (None, "World gen",                                 None),
-    ("17s","World gen sequence  (dump → parse → merge → planner → filter region)", step_worldgen_sequence),
+    ("17s","World gen sequence  (dump → parse → merge → planner → Nether/End Java)", step_worldgen_sequence),
     (None, "World gen — individual steps",              None),
     ("17", "All noise params -> worldgen_data/  (run /dump_all_noise first; visit nether beforehand)", step_worldgen_noise),
     ("17b","Auto-scan jars: nether/end biomes from new mods (skips bop/bwg)", step_scan_terrablender),
@@ -257,7 +264,7 @@ STEPS = [
     ("20c","Copy any biome into mineutz: namespace",            step_copy_biome),
     ("21", "Merge biome params -> worldgen_data/merged/", step_merge_biome_parameters),
     ("22", "Complete dimension_biome_planner.xlsx",    step_complete_biome_planner),
-    ("23", "Generate FilterRegion Java code",          step_generate_filter_region),
+    ("23", "Generate Nether/End Java (Overworld: hand-edit BiomeConfigRegistry.java)", step_generate_filter_region),
     ("24", "Generate custom dimension JSONs",          step_generate_dimension_jsons),
     ("25", "Generate structure_planner.xlsx",          step_generate_structure_planner),
     ("26", "Generate structure biome tag overrides",   step_generate_structure_tags),

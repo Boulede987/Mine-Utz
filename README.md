@@ -368,55 +368,50 @@ Each biome mod registers a set of `(parameter_point → biome)` entries. At any 
 
 ---
 
-### Overworld filtering — TerraBlender companion mod
+### Overworld filtering — custom BiomeSource
 
-The overworld biome list is controlled by a small companion NeoForge mod living in `companion-mods/terrablender-custom-region/`.
+The overworld's climate-nearest-neighbour system (above) turned out to have a hard ceiling: it can bias which biome wins a zone, but it can't guarantee terrain match, adjacency, or patch size, because Voronoi cell shape is an accident of point density, not something you can author. The overworld now uses a fully custom `BiomeSource` instead — no nearest-neighbour lookup, no climate anchor points.
 
 **How it works**
 
-[TerraBlender](https://modrinth.com/mod/terrablender) divides the overworld into coarse noise regions. Each region contributes a provider to the biome lookup. The companion mod registers a single custom region with an enormous weight (`100_000_000`) compared to the default of `10`. At that ratio the custom region governs **~99.999998 %** of all biome selections in the overworld — vanilla, BoP, and BWG regions are reduced to statistical noise.
+`companion-mods/mineutze-worldgen/` (NeoForge companion mod, renamed from `terrablender-custom-region`) implements `CustomOverworldBiomeSource`, registered via a `data/minecraft/dimension/overworld.json` datapack override (`"type": "mineutze_filter:custom_overworld"`) that fully replaces vanilla's own overworld biome source — TerraBlender is not involved for the Overworld at all anymore.
 
-The custom region's `addBiomes()` method explicitly registers only the biomes that should appear in the overworld, each mapped to merged climate parameters derived from the mod's own worldgen data. Any biome not listed simply cannot win the nearest-neighbour lookup under normal conditions.
-
-TerraBlender region weights are configured in `minecraft/config/terrablender.toml`:
-
-```toml
-vanilla_overworld_region_weight = 0
-```
-
-Setting vanilla weight to `0` removes vanilla biome regions entirely; the custom region is the sole provider.
+Each biome declares, in `BiomeConfigRegistry.java`: which terrain classes it's eligible for (`ocean`/`coast`/`flat_land`/`hilly`/`mountainous`), a `[size_min, size_max]` patch size range in blocks, a weight, and optional preferred/forbidden neighbor biomes. A seeded best-first growth algorithm (`PatchGrowthEngine`) grows patches outward from deterministic germination points, gated hard by terrain-class eligibility (a mountain biome's growth literally cannot enter a flat-land cell) and softly biased by neighbor preference — see `companion-mods/mineutze-worldgen/DESIGN.md` for the full design and its as-built deltas.
 
 **Companion mod structure**
 
 ```
-companion-mods/terrablender-custom-region/
-├── build.gradle                        # NeoForge userdev, Java 21 toolchain
+companion-mods/mineutze-worldgen/
+├── build.gradle                        # NeoForge userdev, Java 21 toolchain (still depends on TerraBlender -- Nether/End only)
 ├── gradle.properties                   # MC 1.21.1, NeoForge 21.1.219
-└── src/main/java/com/mineutze/filtermod/
-    ├── FilterMod.java                  # Registers FilterRegion on mod bus
-    └── FilterRegion.java               # addBiomes() — one entry per allowed overworld biome
+└── src/main/java/com/mineutze/worldgen/
+    ├── WorldgenMod.java                 # Mod entry: registers the custom BiomeSource + Nether/End TerraBlender regions
+    ├── FilterNetherRegion.java          # Unchanged, still TerraBlender (Nether only)
+    ├── FilterEndBiomes.java             # Unchanged, still TerraBlender (End only)
+    └── biomesource/
+        ├── CustomOverworldBiomeSource.java  # getNoiseBiome dispatch, codec, registration
+        ├── BiomeConfigRegistry.java         # Hand-maintained biome config -- see below
+        ├── TerrainClass.java / TerrainClassifier.java
+        ├── PatchDebugCommand.java           # /dump_patch_debug -- verify patch size in-game
+        ├── HeightSampleDumpCommand.java     # /dump_height_samples -- terrain-class threshold calibration data
+        └── patch/
+            ├── PatchGrowthEngine.java       # The seeded growth algorithm
+            ├── SurfacePatchGrid.java        # Fixed-tile-grid cache, surface tier
+            └── UndergroundPatchGrid.java    # Exact surface->cave biome linkage
 ```
 
-**Rebuilding after biome list changes**
+**Tuning the biome list today**
 
-1. Open the project in IntelliJ IDEA (import the `companion-mods/terrablender-custom-region/` Gradle project)
+There is currently **no UI and no pipeline step** for this — `BiomeConfigRegistry.java` is hand-maintained scaffolding, not generated. To change which biomes appear, their size, terrain eligibility, or neighbor preferences, edit that file directly, then rebuild:
+
+1. Open `companion-mods/mineutze-worldgen/` in IntelliJ IDEA
 2. In the Gradle panel run `Tasks → build → deployMod`
 3. The task builds the jar and copies it to `minecraft/mods/`
-4. Relaunch the game
+4. Relaunch the game (existing generated chunks keep their old biomes — test on fresh terrain or a new world)
 
-**Generating the Java code**
+A real config authoring pipeline (a generated `patch_config.json` a Streamlit tab could edit, so tuning wouldn't need a Java rebuild) is planned but not built — see `DESIGN.md`'s open items.
 
-`FilterRegion.java` is generated from the pipeline. Do not edit it by hand.
-
-From the repo root, run the pipeline and choose step **21 → 22 → 23**:
-
-```
-21  Merge biome params → worldgen_data/merged/
-22  Complete dimension_biome_planner.xlsx
-23  Generate FilterRegion Java code
-```
-
-Step 21 collapses every climate slot per biome to one wide-range entry (min-of-mins, max-of-maxes per axis). Step 22 adds any biomes missing from the planner with default `✗` choices. Step 23 prompts for a space-separated list of biome IDs and prints ready-to-paste `addBiome()` calls — copy them into `FilterRegion.java`, rebuild, deploy.
+**Nether/End still use TerraBlender** — those are unaffected by any of the above. See the next section's pipeline steps for regenerating `FilterNetherRegion.java`/`FilterEndBiomes.java`.
 
 ---
 
@@ -432,7 +427,7 @@ The structure is shown in the [Custom Dimensions](#custom-dimensions) section. T
 
 **Pipeline step 24**
 
-Run pipeline step **24 — Generate custom dimension JSONs** to regenerate all dimension files from the planner. The script reads `dimension_biome_planner.xlsx`, collects every biome marked `✓` per dimension column, looks up its merged climate parameters from `worldgen_data/merged/`, and writes a complete `multi_noise` dimension JSON for each column (except Overworld, which is handled by the companion mod).
+Run pipeline step **24 — Generate custom dimension JSONs** to regenerate all dimension files from the planner. The script reads `dimension_biome_planner.xlsx`, collects every biome marked `✓` per dimension column, looks up its merged climate parameters from `worldgen_data/merged/`, and writes a complete `multi_noise` dimension JSON for each column (except Overworld, which is the hand-maintained custom `BiomeSource` described above — the planner's `Overworld` column is no longer consumed by any codegen).
 
 Output files: `minecraft/config/paxi/datapacks/mineutz/data/mineutz/dimension/<slug>.json`
 
