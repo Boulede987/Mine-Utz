@@ -41,8 +41,8 @@ import java.util.concurrent.atomic.AtomicLong;
  * exists to fix -- a seam here needs deliberate cross-country travel to even notice.
  *
  * Only ever depends on the surface tier's own state -- never calls into the underground
- * tier -- keep it that way (see UndergroundPatchGrid's class comment, once it exists at
- * Milestone 5, for why a reverse dependency would be a correctness trap).
+ * tier -- keep it that way (see {@link UndergroundPatchGrid}'s class comment for why a
+ * reverse dependency would be a correctness trap).
  */
 public final class SurfacePatchGrid {
 
