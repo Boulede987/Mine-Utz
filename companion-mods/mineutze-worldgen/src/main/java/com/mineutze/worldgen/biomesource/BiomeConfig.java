@@ -7,10 +7,10 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * Author-controlled placement rules for one biome. Mirrors the {@code BiomeConfig}
- * dataclass in pythonScripts/worldgen/patch_engine.py and the JSON shape the runtime
+ * Author-controlled placement rules for one biome. Shape mirrors the JSON the runtime
  * config loader ({@link BiomeConfigRegistry}) will eventually read from a datapack
- * resource (see DESIGN.md Sec 2.4 / plan Sec "Runtime config delivery").
+ * resource (see DESIGN.md Sec 2.4 / plan Sec "Runtime config delivery") -- not built
+ * yet, {@link BiomeConfigRegistry} is hand-maintained scaffolding for now.
  *
  * undergroundLinkedSurfaceBiomes is only non-empty for underground (cave) biomes -- it
  * lists the exact surface biomes this cave biome is allowed under (requirement 3,

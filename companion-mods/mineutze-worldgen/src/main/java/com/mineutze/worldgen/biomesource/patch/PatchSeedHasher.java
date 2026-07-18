@@ -2,10 +2,7 @@ package com.mineutze.worldgen.biomesource.patch;
 
 /**
  * Deterministic per-cell seed derivation for the patch-growth engine
- * ({@link PatchGrowthEngine}). Must stay bit-identical to Python's
- * pythonScripts/worldgen/patch_seed_hash.py so the Streamlit preview and the real
- * in-game BiomeSource derive the same germination choices, spacing, and tie-break
- * priorities from the same (world seed, coords).
+ * ({@link PatchGrowthEngine}).
  *
  * Uses a splitmix64-style bit mix rather than seeding a general-purpose PRNG per cell:
  * per-cell PRNGs seeded from small, nearby integer coordinates have poor avalanche

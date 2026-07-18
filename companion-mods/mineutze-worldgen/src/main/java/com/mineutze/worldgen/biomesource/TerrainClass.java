@@ -2,8 +2,7 @@ package com.mineutze.worldgen.biomesource;
 
 /**
  * Surface terrain buckets a biome can declare eligibility for. See
- * {@link TerrainClassifier} -- must stay in lockstep with
- * pythonScripts/worldgen/terrain_classifier.py's TerrainClass enum.
+ * {@link TerrainClassifier}.
  */
 public enum TerrainClass {
     OCEAN,

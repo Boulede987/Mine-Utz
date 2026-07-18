@@ -6,13 +6,14 @@ package com.mineutze.worldgen.biomesource;
  * deliberately excluded here, it's what routes surface vs. underground tier in
  * CustomOverworldBiomeSource, not a terrain-class input (see DESIGN.md Sec 4).
  *
- * Must stay in lockstep with pythonScripts/worldgen/terrain_classifier.py's
- * classify_terrain() -- same thresholds, same bucket order -- so the Streamlit preview
- * predicts real in-game placement instead of a different-looking approximation.
+ * Thresholds are calibrated via pythonScripts/worldgen/calibrate_terrain_classes.py
+ * against a real /dump_height_samples capture (see that script's docstring) -- there is
+ * no longer a Python mirror of this classifier itself to keep in lockstep with, that was
+ * dropped once the growth algorithm's Python port was (see DESIGN.md).
  */
 public final class TerrainClassifier {
 
-    // Matches biome_grid.py's OCEAN_CONTINENTALNESS_HI / LAND_CONTINENTALNESS_LO
+    // Matches the old biome_grid.py's OCEAN_CONTINENTALNESS_HI / LAND_CONTINENTALNESS_LO
     // boundaries, already calibrated for this modpack's land/ocean split.
     private static final float OCEAN_CONTINENTALNESS_HI = -0.19f;
     private static final float COAST_CONTINENTALNESS_HI  =  0.03f;

@@ -18,19 +18,19 @@ import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * Seeded best-first patch-growth biome placement, resolved over a bounded rectangular
- * window of coarse cells. Faithful Java port of pythonScripts/worldgen/patch_engine.py
- * -- same seed-hash formula (PatchSeedHasher), same priority score, same termination
- * rule. See that module's docstring for the full determinism rationale; in short:
- * germination uses a local-maximum rule (order-independent), growth uses a global
- * best-first priority queue with a deterministic per-(cell, patch) tie-break, so the
- * result never depends on which order cells are visited in -- required because real
- * chunk generation visits cells in whatever order a player explores, not a fixed scan.
+ * window of coarse cells. Germination uses a local-maximum rule (order-independent),
+ * growth uses a global best-first priority queue with a deterministic per-(cell, patch)
+ * tie-break, so the result never depends on which order cells are visited in --
+ * required because real chunk generation visits cells in whatever order a player
+ * explores, not a fixed scan. Determinism verified by {@link PatchGrowthEngineSelfTest}
+ * (`./gradlew selfTest`).
  *
  * A patch's identity is its germination cell's own coordinates (the CoarseCell key in
- * patchesByCell), not an incrementing counter -- an earlier version of the Python
- * prototype used enumeration order for patch identity and it leaked into the tie-break
- * hash, breaking determinism across scan orders. Coordinates are already
- * order-independent, so this class doesn't need to guard against that mistake at all.
+ * patchesByCell), not an incrementing counter -- an earlier version (this class's
+ * now-dropped Python prototype) used enumeration order for patch identity and it leaked
+ * into the tie-break hash, breaking determinism across scan orders. Coordinates are
+ * already order-independent, so this class doesn't need to guard against that mistake
+ * at all.
  *
  * Bounded window: SurfacePatchGrid (the caller) picks a window around a queried cell
  * and this class resolves every cell inside it in one batch, memoized by the caller
@@ -60,9 +60,9 @@ public final class PatchGrowthEngine {
     // into an ineligible biome would silently undo Milestone 3's hard terrain-class gate.
     private static final double SMALL_ISLAND_DISSOLVE_FRACTION = 0.3;
 
-    // cell_seed's cellY parameter doubles as a hash "namespace" selector, matching
-    // patch_engine.py: 0 for germination-candidate selection, 1 for patch-identity
-    // seeding -- keeps the two hash uses from colliding.
+    // cellSeed's cellY parameter doubles as a hash "namespace" selector: 0 for
+    // germination-candidate selection, 1 for patch-identity seeding -- keeps the two
+    // hash uses from colliding.
     private static final int GERMINATION_CANDIDATE_HASH_NAMESPACE = 0;
     private static final int PATCH_IDENTITY_HASH_NAMESPACE        = 1;
 
@@ -222,7 +222,7 @@ public final class PatchGrowthEngine {
         return Math.max(MINIMUM_SPACING_CELLS, (int) Math.round(biome.sizeMinBlocks() / (2 * cellSizeBlocks)));
     }
 
-    /** Order-independent: see is_local_maximum's counterpart docstring in patch_engine.py. */
+    /** Order-independent: see isLocalMaximum's docstring below. */
     private static List<CoarseCell> selectGerminationPoints(Map<CoarseCell, GerminationCandidate> candidatesByCell) {
         int lookaheadRadiusCells = 0;
         for (GerminationCandidate candidate : candidatesByCell.values()) {

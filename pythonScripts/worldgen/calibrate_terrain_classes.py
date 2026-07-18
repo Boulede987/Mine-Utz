@@ -1,13 +1,19 @@
 """
 worldgen/calibrate_terrain_classes.py
 =======================================
-Suggests real TerrainClassifier thresholds (erosion/weirdness cutoffs for
+Suggests real TerrainClassifier.java thresholds (erosion/weirdness cutoffs for
 flat_land/hilly/mountainous) from a /dump_height_samples log capture, instead of the
-placeholder guesses currently hardcoded in TerrainClassifier.java and
-terrain_classifier.py. See DESIGN.md Sec 11 / the implementation plan's rollout
-Milestone 3b -- this modpack's real noise router (BoP/BWG layered on top of vanilla)
-is not guaranteed to match vanilla's own breakpoints, so the placeholder thresholds are
-genuine guesses until this has been run against real generated terrain.
+placeholder guesses currently hardcoded there. See DESIGN.md Sec 11 / the implementation
+plan's rollout Milestone 3b -- this modpack's real noise router (BoP/BWG layered on top
+of vanilla) is not guaranteed to match vanilla's own breakpoints, so the placeholder
+thresholds are genuine guesses until this has been run against real generated terrain.
+
+Standalone script, no dependency on the rest of pythonScripts/worldgen/ -- the Python
+patch-growth algorithm port it used to sit alongside was dropped (see DESIGN.md) once it
+became clear a plain-Java self-test (companion-mods/mineutze-worldgen's
+PatchGrowthEngineSelfTest, `./gradlew selfTest`) covers the same ground faster and
+without hand-porting every algorithm change to two languages. This script doesn't need
+any of that -- it's pure log parsing and bucket math.
 
 Workflow:
     1. In-game: /dump_height_samples [radius] [step] (fly over varied terrain first --
@@ -37,8 +43,8 @@ SAMPLE_LINE_PATTERN = re.compile(
     r'^(-?\d+),(-?\d+),(-?[\d.eE+-]+),(-?[\d.eE+-]+),(-?[\d.eE+-]+),(-?\d+)\s*$'
 )
 
-# Matches TerrainClassifier.java / terrain_classifier.py's existing ocean/coast split --
-# calibration here only concerns the land-side flat/hilly/mountainous cutoffs.
+# Matches TerrainClassifier.java's existing ocean/coast split -- calibration here only
+# concerns the land-side flat/hilly/mountainous cutoffs.
 OCEAN_CONTINENTALNESS_HI = -0.19
 COAST_CONTINENTALNESS_HI =  0.03
 
@@ -198,8 +204,7 @@ def main() -> None:
     print(f'  MOUNTAINOUS_EROSION_HI       = {mountainous_erosion_hi:.3f}f')
     print(f'  HILLY_EROSION_HI             = {hilly_erosion_hi:.3f}f')
     print(f'  MOUNTAINOUS_WEIRDNESS_ABS_LO = {mountainous_weirdness_abs_lo:.3f}f')
-    print('\nUpdate both TerrainClassifier.java and pythonScripts/worldgen/terrain_classifier.py')
-    print('with these values -- they must stay in lockstep (see either file\'s class comment).')
+    print('\nUpdate TerrainClassifier.java (companion-mods/mineutze-worldgen) with these values.')
 
 
 if __name__ == '__main__':

@@ -159,10 +159,17 @@ no counterpart in the patch-growth model at all. The "tune this patch-generator 
 and preview the resulting layout" UI this section describes was **never built** — that
 was always separate scope from the 6 rollout milestones, deliberately skipped. Right now
 there is no UI: tuning `BiomeConfigRegistry.java` means hand-editing that Java file and
-rebuilding/redeploying the mod. `patch_engine.py` (the Python port used only for the
-growth-algorithm determinism self-test, not any UI) is the only surviving Python
-artifact from this whole area. A real authoring pipeline (`patch_config.json` + a new
-Streamlit tab, per §12) is still open work, not done.
+rebuilding/redeploying the mod. The Python port of the growth algorithm
+(`patch_engine.py`/`patch_seed_hash.py`/`terrain_classifier.py`) was also dropped after
+the fact, once it became clear its stated justification ("faster than a Gradle rebuild")
+didn't hold up in practice (`compileJava` alone runs in seconds here) and hand-porting
+every algorithm fix to two languages was a real, ongoing cost for a preview UI that was
+never built. Its determinism check now lives in Java directly
+(`PatchGrowthEngineSelfTest`, `./gradlew selfTest` — no deployMod, no game launch).
+`calibrate_terrain_classes.py` survives; it's independent log-parsing/bucket-math with no
+dependency on the growth algorithm itself. A real authoring pipeline (`patch_config.json`
++ a new Streamlit tab, per §12) is still open work, not done — if it gets built, a Python
+port of the algorithm may become worth reintroducing for the preview to drive against.
 
 ## 9. TerraBlender removal
 
@@ -195,11 +202,17 @@ cache files referenced it, not worth the churn.
   data), but the actual calibration run against this modpack's real noise router has
   **not** been done yet — `TerrainClassifier`'s erosion/weirdness thresholds are still
   the original placeholder guesses. Still an open risk, just no longer a tooling gap.
-- **Determinism of patch growth**: validated. Python prototype's
-  `run_determinism_self_test()` passes (two different scan orders, identical output);
-  the Java port mirrors the same order-independence techniques (local-maximum
-  germination rule, seed-derived tie-breaks). A real Java-side equivalent test (the
-  Gradle project has no test framework currently) was not added — flagged, not built.
+- **Determinism of patch growth**: validated, now directly in Java —
+  `PatchGrowthEngineSelfTest` (`./gradlew selfTest`) resolves the same window twice
+  sequentially and eight times concurrently, asserting byte-identical results, which is
+  the property that actually matters given `PatchGrowthEngine.resolveWindow` has no
+  external "scan order" parameter to vary (its internal iteration order is always
+  fixed) — the germination local-maximum rule and seed-derived tie-breaks are what make
+  that guarantee hold. No test framework needed, a plain `main()` class was enough. The
+  original Python prototype's equivalent (`run_determinism_self_test`, two different
+  scan orders) is what caught the patch-identity determinism bug in the first place —
+  real value at the time — but the check itself has since been fully superseded by the
+  Java version, not just duplicated.
 - **3D underground performance**: turned out not to apply — the underground tier shipped
   without a growth engine at all (§7's delta), so this specific risk is moot as
   implemented. A **different**, real performance risk showed up instead on the surface
@@ -244,7 +257,7 @@ different real reasons, both fixed:
   listener + a new Streamlit tab. `BiomeConfigRegistry.java` is genuinely temporary
   scaffolding, not just in name — every tuning change today requires a Java edit and a
   full mod rebuild/redeploy.
-- Add a Java-side determinism test (no test framework in this Gradle project yet).
+- ~~Add a Java-side determinism test~~ — done (`PatchGrowthEngineSelfTest`, §11).
 - See §13 for concrete, deferred bug follow-ups (rivers, border noise, cave variety).
 
 ## 13. As-built deltas not covered above
@@ -257,8 +270,9 @@ tier would be independent (§7's delta covers the resulting mechanism change). R
 Size unit (left TBD in the original §8/§11): resolved as **radius in blocks**, sampled
 per-patch-instance from `[size_min / 2, size_max / 2]`.
 
-A post-processing step not in the original design: `dissolveSmallIslands` /
-`dissolve_small_islands` (Java and the Python port). Real symptom found during testing —
+A post-processing step not in the original design: `dissolveSmallIslands`
+(`PatchGrowthEngine.java`; the now-dropped Python port had an equivalent
+`dissolve_small_islands` too, while it existed). Real symptom found during testing —
 a germination point deep inside what becomes a much larger neighboring patch's territory
 can pass its own local-maximum check and then get boxed in almost immediately, leaving a
 small isolated "island" of one biome inside another. Fixed with a post-growth pass:
