@@ -1,4 +1,4 @@
-package com.mineutze.filtermod;
+package com.mineutze.worldgen;
 
 import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.ResourceKey;

@@ -16,7 +16,7 @@
 //   → worldgen_data/merged/*.json
 //   → generate_filter_region.py (reads planner ✓ column, calls build_region here)
 //   → this file
-package com.mineutze.filtermod;
+package com.mineutze.worldgen;
 
 import com.mojang.datafixers.util.Pair;
 import net.minecraft.core.Registry;

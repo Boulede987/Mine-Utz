@@ -44,12 +44,12 @@ from worldgen.app_world_paint import (
     paint_covers_full_map, paint_to_entries, climate_seeds_to_entries,
     render_world_paint_tab,
 )
-from worldgen.biome_constraints import load_settings, save_settings
+from worldgen.biome_constraints import load_settings, resolve_biome_constraints, save_settings
 from worldgen.biome_grid import (
     DEPTH_MAX, DEPTH_MIN, EROSION_MAX, EROSION_MIN, HUMIDITY_MAX, HUMIDITY_MIN,
     SURFACE_DEPTH, TEMPERATURE_MAX, TEMPERATURE_MIN, WEIRDNESS_MAX, WEIRDNESS_MIN,
     ZONE_LAND, ZONE_OCEAN,
-    default_zone, generate_grid_entries,
+    generate_grid_entries,
 )
 from worldgen.biome_loader import load_biome_parameter_defaults, load_planner_overworld_biomes
 from worldgen.biome_nearest_neighbour import build_parameter_bounds, compute_nearest_entry_grid
@@ -82,31 +82,19 @@ def load_all_data() -> dict:
 def _resolved_biome_defaults(biome_id: str, saved: dict, defaults: dict) -> dict:
     """Returns the resolved store_ key → value mapping for one biome.
 
-    Priority: saved settings > actual biome data defaults > full axis range fallback.
+    Priority (saved settings > actual biome data defaults > full axis range fallback)
+    lives in biome_constraints.resolve_biome_constraints — shared with entry_pipeline.py
+    so the preview and the FilterRegion.java codegen stay in sync.
     """
+    c = resolve_biome_constraints(biome_id, saved, defaults)
     return {
         f'store_bw_{biome_id}':      saved.get('weight', WEIGHT_DEFAULT),
-        f'store_zone_{biome_id}':    saved.get('zone', default_zone(biome_id)),
-        f'store_temp_{biome_id}':    (
-            float(saved.get('temperature_lo', defaults.get('temperature_lo', TEMPERATURE_MIN))),
-            float(saved.get('temperature_hi', defaults.get('temperature_hi', TEMPERATURE_MAX))),
-        ),
-        f'store_hum_{biome_id}':     (
-            float(saved.get('humidity_lo', defaults.get('humidity_lo', HUMIDITY_MIN))),
-            float(saved.get('humidity_hi', defaults.get('humidity_hi', HUMIDITY_MAX))),
-        ),
-        f'store_erosion_{biome_id}': (
-            float(saved.get('erosion_lo', defaults.get('erosion_lo', EROSION_MIN))),
-            float(saved.get('erosion_hi', defaults.get('erosion_hi', EROSION_MAX))),
-        ),
-        f'store_depth_{biome_id}':   (
-            float(saved.get('depth_lo', defaults.get('depth_lo', SURFACE_DEPTH))),
-            float(saved.get('depth_hi', defaults.get('depth_hi', SURFACE_DEPTH))),
-        ),
-        f'store_weird_{biome_id}':   (
-            float(saved.get('weirdness_lo', defaults.get('weirdness_lo', WEIRDNESS_MIN))),
-            float(saved.get('weirdness_hi', defaults.get('weirdness_hi', WEIRDNESS_MAX))),
-        ),
+        f'store_zone_{biome_id}':    c['zone'],
+        f'store_temp_{biome_id}':    (c['temperature_lo'], c['temperature_hi']),
+        f'store_hum_{biome_id}':     (c['humidity_lo'],    c['humidity_hi']),
+        f'store_erosion_{biome_id}': (c['erosion_lo'],     c['erosion_hi']),
+        f'store_depth_{biome_id}':   (c['depth_lo'],       c['depth_hi']),
+        f'store_weird_{biome_id}':   (c['weirdness_lo'],   c['weirdness_hi']),
     }
 
 

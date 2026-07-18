@@ -122,41 +122,15 @@ def paint_to_entries(
         if not (0 <= row < height and 0 <= col < width):
             continue
         climate = preview_query[row, col]
-        zone    = constraints.get(biome_id, {}).get('zone', default_zone(biome_id))
+        biome_c = constraints.get(biome_id, {})
+        zone    = biome_c.get('zone', default_zone(biome_id))
         entries.append({
             'biome':      biome_id,
             'parameters': _anchor_parameters(float(climate[_TEMP_AXIS_IDX]),
                                              float(climate[_HUM_AXIS_IDX]),
-                                             zone),
+                                             zone, biome_c),
         })
 
-    return entries
-
-
-def seeds_to_entries(
-    seeds:         list[list],
-    preview_query: np.ndarray,
-    constraints:   dict[str, dict],
-) -> list[dict]:
-    """One point anchor per auto-layout seed.
-
-    With ~60 seeds instead of ~1024 per-cell anchors, the Voronoi partition in
-    climate space has large coherent regions that mirror the spatial Voronoi.
-    """
-    height, width = preview_query.shape[:2]
-    entries = []
-    for seed in seeds:
-        row, col, biome_id = int(seed[0]), int(seed[1]), seed[2]
-        if not (0 <= row < height and 0 <= col < width):
-            continue
-        climate = preview_query[row, col]
-        zone    = constraints.get(biome_id, {}).get('zone', default_zone(biome_id))
-        entries.append({
-            'biome':      biome_id,
-            'parameters': _anchor_parameters(float(climate[_TEMP_AXIS_IDX]),
-                                             float(climate[_HUM_AXIS_IDX]),
-                                             zone),
-        })
     return entries
 
 
@@ -181,28 +155,37 @@ def climate_seeds_to_entries(
     entries = []
     for seed in climate_seeds:
         temp, hum, biome_id = float(seed[0]), float(seed[1]), seed[2]
-        zone = constraints.get(biome_id, {}).get('zone', default_zone(biome_id))
+        biome_c = constraints.get(biome_id, {})
+        zone    = biome_c.get('zone', default_zone(biome_id))
         entries.append({
             'biome':      biome_id,
-            'parameters': _anchor_parameters(temp, hum, zone),
+            'parameters': _anchor_parameters(temp, hum, zone, biome_c),
         })
     return entries
 
 
-def _anchor_parameters(temp: float, hum: float, zone: str) -> dict:
-    """Point anchor in temperature×humidity, zone range for continentalness."""
+def _anchor_parameters(temp: float, hum: float, zone: str, biome_c: dict | None = None) -> dict:
+    """Point anchor in temperature×humidity; zone, erosion, depth, weirdness from biome constraints.
+
+    Land cont = [0.03, 1.0].  Do NOT lower this to -0.19 to cover the coast strip.
+    At deep ocean (cont = -0.5), lowering lo from 0.03 → -0.19 cuts the zone penalty
+    from 0.28 to 0.096 — 3× weaker — letting land biomes win when ocean clusters are sparse.
+    The gap -0.19 → 0.03 (coast + near-inland) falls to nearest biome: land wins for cont > -0.08
+    because ocean anchor (HI = -0.19) has larger distance than land anchor (LO = 0.03) there.
+    """
     if zone == ZONE_OCEAN:
         cont_lo, cont_hi = OCEAN_CONTINENTALNESS_LO, OCEAN_CONTINENTALNESS_HI
     else:
         cont_lo, cont_hi = LAND_CONTINENTALNESS_LO, LAND_CONTINENTALNESS_HI
 
+    c = biome_c or {}
     return {
-        'temperature':     [temp,          temp],
-        'humidity':        [hum,           hum],
-        'continentalness': [cont_lo,       cont_hi],
-        'erosion':         [EROSION_MIN,   EROSION_MAX],
-        'depth':           [SURFACE_DEPTH, SURFACE_DEPTH],
-        'weirdness':       [WEIRDNESS_MIN, WEIRDNESS_MAX],
+        'temperature':     [temp,                                        temp],
+        'humidity':        [hum,                                         hum],
+        'continentalness': [cont_lo,                                     cont_hi],
+        'erosion':         [c.get('erosion_lo',  EROSION_MIN),           c.get('erosion_hi',  EROSION_MAX)],
+        'depth':           [c.get('depth_lo',    SURFACE_DEPTH),         c.get('depth_hi',    SURFACE_DEPTH)],
+        'weirdness':       [c.get('weirdness_lo', WEIRDNESS_MIN),        c.get('weirdness_hi', WEIRDNESS_MAX)],
     }
 
 

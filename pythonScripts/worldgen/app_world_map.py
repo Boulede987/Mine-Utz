@@ -1,7 +1,7 @@
 """
 worldgen/app_world_map.py
 ==========================
-World Map tab: live biome preview, click-to-highlight, PNG/Java export.
+World Map tab: live biome preview, click-to-highlight, PNG export.
 """
 
 import base64
@@ -19,8 +19,6 @@ from worldgen.biome_colour import build_highlighted_image, build_rgb_image
 from worldgen.biome_grid import generate_grid_entries
 from worldgen.biome_nearest_neighbour import build_parameter_bounds, compute_nearest_entry_grid
 from worldgen.biome_noise import climate_maps_to_query_grid, generate_all_climate_maps
-from worldgen.constants import FILTER_REGION_JAVA
-from worldgen.terrablender_codegen import build_region
 
 CLICK_GRID_DOWNSAMPLE_STEP  = 4
 CLICK_MARKER_SIZE           = 16
@@ -36,14 +34,6 @@ def load_export_query_grid() -> np.ndarray:
     return climate_maps_to_query_grid(
         generate_all_climate_maps(EXPORT_RESOLUTION, EXPORT_RESOLUTION, MAP_SEED)
     )
-
-
-def _grid_entries_to_region_params(entries: list[dict]) -> dict[str, list[dict]]:
-    region_params: dict[str, list[dict]] = {}
-    for entry in entries:
-        param = {**entry['parameters'], 'offset': 0.0}
-        region_params.setdefault(entry['biome'], []).append(param)
-    return region_params
 
 
 def _build_click_scatter(nearest_entry_grid: np.ndarray, entries: list[dict]) -> go.Scatter:
@@ -151,7 +141,6 @@ def render_export_section(
     data:          dict,
     biome_weights: dict[str, float],
     constraints:   dict[str, dict],
-    entries:       list[dict],
 ) -> None:
     st.divider()
     col_png_btn, col_png_dl = st.columns([1, 2])
@@ -174,28 +163,6 @@ def render_export_section(
                 file_name='world_map.png',
                 mime='image/png',
             )
-
-    col_java_btn, col_java_status = st.columns([1, 2])
-
-    with col_java_btn:
-        if st.button('Export to FilterRegion.java'):
-            if not FILTER_REGION_JAVA.parent.exists():
-                st.session_state['java_export_error'] = str(FILTER_REGION_JAVA.parent)
-                st.session_state.pop('java_export_ok', None)
-            else:
-                region_params = _grid_entries_to_region_params(entries)
-                biome_ids     = sorted(region_params.keys())
-                total_entries = sum(len(params) for params in region_params.values())
-                build_region(biome_ids, region_params, 'FilterRegion', 'OVERWORLD', FILTER_REGION_JAVA)
-                st.session_state['java_export_ok']   = (len(biome_ids), total_entries)
-                st.session_state.pop('java_export_error', None)
-
-    with col_java_status:
-        if 'java_export_ok' in st.session_state:
-            biome_count, entry_count = st.session_state['java_export_ok']
-            st.success(f'{biome_count} biomes, {entry_count} entries → FilterRegion.java. Rebuild mod in IntelliJ.')
-        elif 'java_export_error' in st.session_state:
-            st.error(f'Companion mod not found: {st.session_state["java_export_error"]}')
 
 
 def render_world_map_tab(
@@ -227,5 +194,5 @@ def render_world_map_tab(
         st.session_state['map_pending_highlight'] = new_label
         st.rerun()
 
-    render_export_section(data, biome_weights, constraints, entries)
+    render_export_section(data, biome_weights, constraints)
     render_auto_layout_section(data['planner_biomes'], biome_weights, constraints, data['preview_query'])

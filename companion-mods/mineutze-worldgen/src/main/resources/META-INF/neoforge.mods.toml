@@ -5,8 +5,8 @@ license = "MIT"
 [[mods]]
 modId = "mineutze_filter"
 version = "${file.jarVersion}"
-displayName = "Mineutze Biome Filter"
-description = "Dev-only companion mod. Registers a high-weight TerraBlender region to restrict overworld biomes for testing."
+displayName = "Mineutze Worldgen"
+description = "Dev-only companion mod. Custom author-controlled Overworld BiomeSource (patch size, adjacency, terrain-class placement); Nether/End still use TerraBlender."
 
 [[dependencies.mineutze_filter]]
     modId = "neoforge"

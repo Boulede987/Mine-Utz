@@ -1,20 +1,25 @@
 """
 generate_filter_region.py
 =========================
-Reads dimension_biome_planner.xlsx ✓ columns and generates TerraBlender
-region Java files + FilterMod.java into the companion mod.
+Reads dimension_biome_planner.xlsx ✓ columns and generates TerraBlender region Java
+files for Nether and End into the companion mod.
 
-Overworld → FilterRegion.java        (RegionType.OVERWORLD, always)
-Nether    → FilterNetherRegion.java  (RegionType.NETHER, only if ✓ biomes exist)
-End       → FilterEndBiomes.java     (EndBiomeRegistry calls, only if ✓ biomes exist)
-FilterMod.java is regenerated to register whichever regions were written.
+Nether → FilterNetherRegion.java  (RegionType.NETHER, only if ✓ biomes exist)
+End    → FilterEndBiomes.java     (EndBiomeRegistry calls, only if ✓ biomes exist)
+
+Overworld placement no longer goes through this script: it's the hand-maintained
+CustomOverworldBiomeSource Java (companion-mods/mineutze-worldgen) plus, eventually,
+a generated runtime config (see the implementation plan's "Runtime config delivery" /
+generate_patch_config.py, not yet written). FilterMod.java is also gone, replaced by
+hand-maintained WorldgenMod.java — this script no longer regenerates a mod bootstrap.
 
 ## Why this exists
 
 TerraBlender lets mods register custom biomes by claiming climate parameter slots.
 Without filtering, BiomedOPlenty and similar mods register ALL their biomes in ALL
-dimensions — including biomes the modpack doesn't want. This mod acts as a whitelist:
-only biomes marked ✓ in dimension_biome_planner.xlsx are re-registered.
+dimensions — including biomes the modpack doesn't want. For Nether/End, this mod still
+acts as a whitelist: only biomes marked ✓ in dimension_biome_planner.xlsx are
+re-registered.
 
 ## Why wide climate spans cause square biome borders
 
@@ -31,10 +36,11 @@ A biome with 116 original positions gets 116 addBiome calls — which is correct
     jar scan → worldgen_data/*.json
     step 21: merge_biome_parameters.py  → worldgen_data/merged/*.json  (dedup, all positions)
     step 22: dimension_biome_planner.xlsx  (mark ✓ which biomes to include per dimension)
-    this script  → FilterRegion.java / FilterNetherRegion.java / FilterEndBiomes.java / FilterMod.java
+    this script  → FilterNetherRegion.java / FilterEndBiomes.java
     IntelliJ deployMod → companion mod jar → load in game
 
-Run after steps 21 (merge) and 22 (complete planner).
+Run after steps 21 (merge) and 22 (complete planner). Nether/End are not app-tunable
+and use the raw scanned positions from worldgen_data/merged/.
 
 Usage:
     python pythonScripts/worldgen/generate_filter_region.py
@@ -50,9 +56,9 @@ import openpyxl
 
 from worldgen.constants import (
     CHECK_MARK, BIOME_PLANNER_FILE, BIOME_PLANNER_SHEET,
-    ALL_SECTIONS, END_SECTIONS, MERGED_BIOME_DATA_DIR, OVERWORLD_PLANNER_HEADER,
+    ALL_SECTIONS, END_SECTIONS, MERGED_BIOME_DATA_DIR,
 )
-from worldgen.terrablender_codegen import build_region, build_end_biomes, build_filter_mod
+from worldgen.terrablender_codegen import build_region, build_end_biomes
 
 sys.stdout.reconfigure(encoding='utf-8')
 
@@ -60,13 +66,11 @@ NETHER_HEADER = 'Nether'
 END_HEADER    = 'End'
 
 MOD_SRC = Path(
-    'companion-mods/terrablender-custom-region'
-    '/src/main/java/com/mineutze/filtermod'
+    'companion-mods/mineutze-worldgen'
+    '/src/main/java/com/mineutze/worldgen'
 )
-FILTER_REGION        = MOD_SRC / 'FilterRegion.java'
 FILTER_NETHER_REGION = MOD_SRC / 'FilterNetherRegion.java'
 FILTER_END_BIOMES    = MOD_SRC / 'FilterEndBiomes.java'
-FILTER_MOD           = MOD_SRC / 'FilterMod.java'
 
 
 def load_column_biomes(worksheet, headers: list, column_name: str) -> list[str]:
@@ -122,34 +126,27 @@ def main() -> None:
     worksheet = openpyxl.load_workbook(BIOME_PLANNER_FILE)[BIOME_PLANNER_SHEET]
     headers   = [cell.value for cell in worksheet[1]]
 
-    overworld_biomes = load_column_biomes(worksheet, headers, OVERWORLD_PLANNER_HEADER)
-    nether_biomes    = load_column_biomes(worksheet, headers, NETHER_HEADER)
-    end_biomes       = load_column_biomes(worksheet, headers, END_HEADER)
+    nether_biomes = load_column_biomes(worksheet, headers, NETHER_HEADER)
+    end_biomes    = load_column_biomes(worksheet, headers, END_HEADER)
 
-    if not overworld_biomes:
-        print('No biomes marked ✓ in Overworld column — nothing to write.')
+    if not nether_biomes and not end_biomes:
+        print('No biomes marked ✓ in Nether/End columns — nothing to write.')
         raise SystemExit(0)
 
     all_params = load_all_params()
     end_data   = load_merged_end_data()
 
-    build_region(overworld_biomes, all_params, 'FilterRegion', 'OVERWORLD', FILTER_REGION)
-
-    has_nether = bool(nether_biomes)
-    if has_nether:
+    if nether_biomes:
         build_region(nether_biomes, all_params, 'FilterNetherRegion', 'NETHER', FILTER_NETHER_REGION)
     elif FILTER_NETHER_REGION.exists():
         FILTER_NETHER_REGION.unlink()
         print(f'  Removed {FILTER_NETHER_REGION.name} (no Nether biomes selected).')
 
-    has_end = bool(end_biomes)
-    if has_end:
+    if end_biomes:
         build_end_biomes(end_biomes, end_data, FILTER_END_BIOMES)
     elif FILTER_END_BIOMES.exists():
         FILTER_END_BIOMES.unlink()
         print(f'  Removed {FILTER_END_BIOMES.name} (no End biomes selected).')
-
-    build_filter_mod(FILTER_MOD, has_nether, has_end)
 
     print('\nRebuild the companion mod (deployMod in IntelliJ) to apply.')
 

@@ -19,7 +19,10 @@ runs {
 
 dependencies {
     implementation "net.neoforged:neoforge:${neoforge_version}"
-    // TerraBlender is already in the modpack's mods folder — reference it directly
+    // Only Nether (FilterNetherRegion) and End (FilterEndBiomes) still use TerraBlender --
+    // Overworld placement is CustomOverworldBiomeSource now, registered independently via
+    // NeoForge's own BIOME_SOURCE registry. Already in the modpack's mods folder — reference
+    // it directly rather than pulling a Maven artifact.
     compileOnly files('../../minecraft/mods/TerraBlender-neoforge-1.21.1-4.1.0.8.jar')
 }
 
@@ -34,5 +37,5 @@ tasks.register('deployMod', Copy) {
     dependsOn jar
     from jar.outputs
     into '../../minecraft/mods'
-    rename { "mineutze-filter-mod-${project.version}.jar" }
+    rename { "mineutze-worldgen-${project.version}.jar" }
 }

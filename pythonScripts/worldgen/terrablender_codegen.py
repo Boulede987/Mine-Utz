@@ -9,8 +9,7 @@ from pathlib import Path
 
 from worldgen.constants import PARAMETER_AXES
 
-TERRABLENDER_REGION_WEIGHT = 100_000_000
-_JAVA_PARAM_INDENT         = '            '
+_JAVA_PARAM_INDENT = '            '
 
 _REGION_TEMPLATE = """\
 // GENERATED FILE — do not edit directly. Run generate_filter_region.py to regenerate.
@@ -31,7 +30,7 @@ _REGION_TEMPLATE = """\
 //   → worldgen_data/merged/*.json
 //   → generate_filter_region.py (reads planner ✓ column, calls build_region here)
 //   → this file
-package com.mineutze.filtermod;
+package com.mineutze.worldgen;
 
 import com.mojang.datafixers.util.Pair;
 import net.minecraft.core.Registry;
@@ -69,7 +68,7 @@ public class {class_name} extends Region {{
 """
 
 _END_BIOMES_TEMPLATE = """\
-package com.mineutze.filtermod;
+package com.mineutze.worldgen;
 
 import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.ResourceKey;
@@ -88,38 +87,6 @@ public class FilterEndBiomes {{
     }}
 }}
 """
-
-_MOD_TEMPLATE = """\
-package com.mineutze.filtermod;
-
-import net.minecraft.resources.ResourceLocation;
-import net.neoforged.bus.api.IEventBus;
-import net.neoforged.fml.common.Mod;
-import net.neoforged.fml.event.lifecycle.FMLCommonSetupEvent;
-import terrablender.api.Regions;
-
-@Mod("mineutze_filter")
-public class FilterMod {{
-
-    public FilterMod(IEventBus modEventBus) {{
-        modEventBus.addListener(this::onCommonSetup);
-    }}
-
-    private void onCommonSetup(FMLCommonSetupEvent event) {{
-        event.enqueueWork(() -> {{
-{registrations}
-        }});
-    }}
-}}
-"""
-
-_REGISTRATION = (
-    '            Regions.register(new {class_name}(\n'
-    '                ResourceLocation.fromNamespaceAndPath("mineutze_filter", "{loc}"),\n'
-    '                {weight}\n'
-    '            ));'
-)
-_END_SETUP_CALL = '            FilterEndBiomes.setup();'
 
 
 def _to_camel_case(snake: str) -> str:
@@ -245,24 +212,3 @@ def build_end_biomes(biome_ids: list[str], end_data: dict, dest: Path) -> int:
     dest.write_text(_END_BIOMES_TEMPLATE.format(calls='\n'.join(calls)), encoding='utf-8')
     print(f'  Wrote {len(calls)} biome(s) → {dest.name}')
     return len(calls)
-
-
-def build_filter_mod(dest: Path, has_nether: bool, has_end: bool) -> None:
-    weight_literal = f'{TERRABLENDER_REGION_WEIGHT:_}'
-    registrations_list = [
-        _REGISTRATION.format(class_name='FilterRegion', loc='overworld_filter', weight=weight_literal),
-    ]
-    if has_nether:
-        registrations_list.append(
-            _REGISTRATION.format(class_name='FilterNetherRegion', loc='nether_filter', weight=weight_literal),
-        )
-    if has_end:
-        registrations_list.append(_END_SETUP_CALL)
-
-    dest.write_text(_MOD_TEMPLATE.format(registrations='\n'.join(registrations_list)), encoding='utf-8')
-    dims_label = ' + '.join(filter(None, [
-        'overworld',
-        'nether' if has_nether else '',
-        'end'    if has_end    else '',
-    ]))
-    print(f'  Wrote FilterMod.java ({dims_label})')

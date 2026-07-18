@@ -3,10 +3,13 @@ worldgen/app_auto_layout.py
 ============================
 K-means-based automatic biome layout generator.
 
-Clusters land/ocean cells in temperature×humidity climate space, then assigns
-biomes to clusters proportional to weight and temperature preference.  Each
-cluster centre becomes one TerraBlender point anchor.  K-means guarantees every
-cluster is a contiguous Voronoi region in climate space — no interleaving.
+Clusters land/ocean cells in temperature×humidity×erosion climate space, then
+assigns biomes to clusters proportional to weight and temperature preference.
+Each cluster centre becomes one TerraBlender point anchor.  K-means guarantees
+every cluster is a contiguous Voronoi region in climate space — no interleaving.
+
+Non-surface biomes (depth_hi > 0) skip K-means — the surface preview has no
+depth variation — and receive a single midpoint anchor from their constraint ranges.
 
 Generated climate seeds overwrite paint_assignments — all tabs update on rerun.
 """
@@ -15,15 +18,27 @@ import numpy as np
 import streamlit as st
 
 from worldgen.app_world_paint import PAINT_DOWNSAMPLE_STEP, save_paint_assignments, save_paint_seeds
-from worldgen.biome_grid import ZONE_LAND, ZONE_OCEAN, default_zone
+from worldgen.biome_grid import (
+    HUMIDITY_MAX, HUMIDITY_MIN,
+    SURFACE_DEPTH,
+    TEMPERATURE_MAX, TEMPERATURE_MIN,
+    ZONE_LAND, ZONE_OCEAN,
+    default_zone,
+)
 from worldgen.constants import PARAMETER_AXES
 
 CONTINENT_AXIS_IDX   = PARAMETER_AXES.index('continentalness')
 TEMPERATURE_AXIS_IDX = PARAMETER_AXES.index('temperature')
 HUMIDITY_AXIS_IDX    = PARAMETER_AXES.index('humidity')
+EROSION_AXIS_IDX     = PARAMETER_AXES.index('erosion')
 
-LAND_CONTINENT_THRESHOLD  =  0.03   # biome_grid.LAND_CONTINENTALNESS_LO
-OCEAN_CONTINENT_THRESHOLD = -0.11   # biome_grid.OCEAN_CONTINENTALNESS_HI
+# K-means land/ocean split threshold — vanilla coast zone start.
+# Intentionally -0.19, not LAND_CONTINENTALNESS_LO (0.03).
+# Coast + near-inland cells (cont -0.19→0.03) go to the land K-means pool so
+# cluster centers are computed from the full land area.
+# The TerraBlender anchor for land still uses LAND_CONTINENTALNESS_LO (0.03)
+# to maintain a strong zone penalty in deep ocean.
+LAND_CONTINENT_THRESHOLD = -0.19
 
 DEFAULT_CELLS_PER_PATCH = 16
 MIN_CELLS_PER_PATCH     = 2
@@ -43,11 +58,16 @@ def auto_distribute_biomes(
 ) -> tuple[dict[str, str], list[list]]:
     """Returns (assignments, climate_seeds).
 
-    assignments:   {'{row},{col}': biome_id} covering all land and ocean cells.
-    climate_seeds: [[temp, hum, biome_id], ...] — one entry per K-means cluster.
+    assignments:   {'{row},{col}': biome_id} covering all surface land and ocean cells.
+    climate_seeds: [[temp, hum, biome_id], ...] — one entry per K-means cluster plus
+                   one entry per non-surface biome (midpoint anchor).
 
-    K-means in (temperature, humidity) space ensures each cluster is a
-    contiguous Voronoi region → biomes never interleave.
+    K-means in (temperature, humidity, erosion) space ensures each cluster is a
+    contiguous Voronoi region → biomes never interleave.  Erosion as a third axis
+    lets mountain biomes cluster away from valley biomes naturally.
+
+    Non-surface biomes (depth_hi > 0) are excluded from the surface K-means pool
+    and receive a single midpoint anchor derived from their constraint ranges.
     """
     step          = PAINT_DOWNSAMPLE_STEP
     half          = step // 2
@@ -66,35 +86,30 @@ def auto_distribute_biomes(
     assignments:   dict[str, str] = {}
     climate_seeds: list[list]     = []
 
-    if land_biomes:
-        land_cells = all_cells[land_mask]
-        if len(land_cells):
-            land_th = _extract_temp_hum(preview_query, land_cells)
-            seeds, labels = _kmeans_and_assign(
-                land_th, land_biomes, weights, constraints, cells_per_patch, rng,
-            )
-            climate_seeds.extend(seeds)
-            for cell_idx, cell in enumerate(land_cells):
-                assignments[f'{int(cell[0])},{int(cell[1])}'] = seeds[labels[cell_idx]][2]
+    for zone_biomes, cell_mask in [(land_biomes, land_mask), (ocean_biomes, ocean_mask)]:
+        surface_biomes, underground_biomes = _split_by_depth(zone_biomes, constraints)
 
-    if ocean_biomes:
-        ocean_cells = all_cells[ocean_mask]
-        if len(ocean_cells):
-            ocean_th = _extract_temp_hum(preview_query, ocean_cells)
-            seeds, labels = _kmeans_and_assign(
-                ocean_th, ocean_biomes, weights, constraints, cells_per_patch, rng,
-            )
-            climate_seeds.extend(seeds)
-            for cell_idx, cell in enumerate(ocean_cells):
-                assignments[f'{int(cell[0])},{int(cell[1])}'] = seeds[labels[cell_idx]][2]
+        for biome_id in underground_biomes:
+            climate_seeds.append(_underground_seed(biome_id, constraints))
+
+        if surface_biomes:
+            zone_cells = all_cells[cell_mask]
+            if len(zone_cells):
+                zone_features = _extract_climate_features(preview_query, zone_cells)
+                seeds, labels = _kmeans_and_assign(
+                    zone_features, surface_biomes, weights, constraints, cells_per_patch, rng,
+                )
+                climate_seeds.extend(seeds)
+                for cell_idx, cell in enumerate(zone_cells):
+                    assignments[f'{int(cell[0])},{int(cell[1])}'] = seeds[labels[cell_idx]][2]
 
     return assignments, climate_seeds
 
 
-def _extract_temp_hum(preview_query: np.ndarray, cells: np.ndarray) -> np.ndarray:
-    """Returns (N, 2) float32 array of [temperature, humidity] for the given cells."""
+def _extract_climate_features(preview_query: np.ndarray, cells: np.ndarray) -> np.ndarray:
+    """Returns (N, 3) float32 array of [temperature, humidity, erosion] for the given cells."""
     climate = preview_query[cells[:, 0], cells[:, 1], :]
-    return climate[:, [TEMPERATURE_AXIS_IDX, HUMIDITY_AXIS_IDX]].astype(np.float32)
+    return climate[:, [TEMPERATURE_AXIS_IDX, HUMIDITY_AXIS_IDX, EROSION_AXIS_IDX]].astype(np.float32)
 
 
 def _build_cell_grid(height: int, width: int, step: int, half: int) -> np.ndarray:
@@ -116,6 +131,28 @@ def _biomes_for_zone(
     ]
 
 
+def _split_by_depth(
+    biomes:      list[str],
+    constraints: dict[str, dict],
+) -> tuple[list[str], list[str]]:
+    """Splits biomes into (surface, underground) by depth_hi setting.
+
+    Surface biomes (depth_hi ≤ 0) participate in K-means on surface cells.
+    Underground/cave biomes (depth_hi > 0) skip K-means and get a midpoint anchor.
+    """
+    surface     = [b for b in biomes if constraints.get(b, {}).get('depth_hi', SURFACE_DEPTH) <= SURFACE_DEPTH]
+    underground = [b for b in biomes if constraints.get(b, {}).get('depth_hi', SURFACE_DEPTH) > SURFACE_DEPTH]
+    return surface, underground
+
+
+def _underground_seed(biome_id: str, constraints: dict[str, dict]) -> list:
+    """Returns [temp_center, hum_center, biome_id] midpoint anchor for a non-surface biome."""
+    c           = constraints.get(biome_id, {})
+    temp_center = (c.get('temperature_lo', TEMPERATURE_MIN) + c.get('temperature_hi', TEMPERATURE_MAX)) / 2
+    hum_center  = (c.get('humidity_lo',    HUMIDITY_MIN)    + c.get('humidity_hi',    HUMIDITY_MAX))    / 2
+    return [temp_center, hum_center, biome_id]
+
+
 # ── K-means ───────────────────────────────────────────────────────────────────
 
 def _kmeans_and_assign(
@@ -126,16 +163,16 @@ def _kmeans_and_assign(
     cells_per_patch: int,
     rng:             np.random.Generator,
 ) -> tuple[list[list], np.ndarray]:
-    """K-means clusters in climate space, then assigns each cluster to a biome.
+    """K-means clusters in climate space (temp × hum × erosion), then assigns each cluster to a biome.
 
     Returns (seeds, labels):
-      seeds[k]    = [temp, hum, biome_id] for cluster k
+      seeds[k]    = [temp, hum, biome_id] for cluster k  (erosion not stored — comes from biome constraint)
       labels[i]   = cluster index for climate_points[i]
     """
     num_clusters = max(len(zone_biomes), len(climate_points) // cells_per_patch)
     num_clusters = min(num_clusters, len(climate_points))
 
-    centers, labels = _kmeans_2d(climate_points, num_clusters, rng)
+    centers, labels = _kmeans_nd(climate_points, num_clusters, rng)
 
     biome_for_cluster = _assign_clusters_to_biomes(centers, zone_biomes, weights, constraints)
 
@@ -146,12 +183,12 @@ def _kmeans_and_assign(
     return seeds, labels
 
 
-def _kmeans_2d(
+def _kmeans_nd(
     points:       np.ndarray,
     num_clusters: int,
     rng:          np.random.Generator,
 ) -> tuple[np.ndarray, np.ndarray]:
-    """Lloyd's K-means on 2D float32 points. Returns (centers, labels)."""
+    """Lloyd's K-means on N-dimensional float32 points. Returns (centers, labels)."""
     points  = points.astype(np.float32)
     indices = rng.choice(len(points), size=num_clusters, replace=False)
     centers = points[indices].copy()
@@ -183,7 +220,7 @@ def _assign_clusters_to_biomes(
 ) -> list[str]:
     """Assigns each cluster to a biome.
 
-    Clusters and biomes are both sorted by temperature, then aligned by weight.
+    Clusters and biomes are both sorted by temperature (axis 0), then aligned by weight.
     Cold biomes receive cold-temperature clusters; warm biomes get warm clusters.
     """
     num_clusters    = len(cluster_centers)
@@ -242,8 +279,9 @@ def render_auto_layout_section(
 ) -> None:
     with st.expander('Auto Layout Generator'):
         st.caption(
-            'K-means clusters biomes in temperature×humidity space. '
+            'K-means clusters biomes in temperature×humidity×erosion space. '
             'Each cluster becomes one TerraBlender anchor — no interleaving. '
+            'Non-surface biomes (depth_hi > 0) skip K-means and get a midpoint anchor. '
             'Overwrites Paint Map assignments; map above updates immediately.'
         )
         cells_per_patch = st.slider(

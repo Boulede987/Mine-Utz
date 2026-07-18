@@ -29,10 +29,24 @@ TEMPERATURE_MAX =  1.5
 HUMIDITY_MIN    = -1.0
 HUMIDITY_MAX    =  1.0
 
+# Vanilla 1.21 continentalness bands:
+#   deep ocean  -1.05 → -0.455
+#   ocean       -0.455 → -0.19
+#   coast       -0.19 → -0.11  ← land terrain (beaches)
+#   near-inland -0.11 → 0.03   ← land terrain
+#   mid-inland   0.03 → 0.3    ← land terrain
+#   far-inland   0.3  → 1.0    ← land terrain
+# The terrain water/land boundary is -0.19, but land TerraBlender anchors use 0.03
+# so the zone penalty for land-in-ocean is (0.03 − cont)², not (−0.19 − cont)².
+# At cont = −0.5: penalty = 0.28 with lo=0.03 vs 0.096 with lo=−0.19.
+# The stronger penalty (lo=0.03) is necessary to prevent land biomes from winning
+# in deep ocean when ocean clusters are sparse.  The coast/near-inland gap
+# (−0.19 → 0.03) falls to nearest biome — land wins there for cont > −0.08
+# because the ocean anchor (HI=−0.19) has larger distance than land anchor (LO=0.03).
 LAND_CONTINENTALNESS_LO  =  0.03
 LAND_CONTINENTALNESS_HI  =  1.0
 OCEAN_CONTINENTALNESS_LO = -1.1
-OCEAN_CONTINENTALNESS_HI = -0.11
+OCEAN_CONTINENTALNESS_HI = -0.19   # true ocean ends at coast boundary
 
 EROSION_MIN   = -1.0
 EROSION_MAX   =  1.0
@@ -115,12 +129,15 @@ def build_ocean_cells() -> list[GridCell]:
     ]
 
 
+_OCEAN_KEYWORDS = (
+    'ocean', 'sea', 'reef', 'coral', 'kelp', 'abyss', 'abyssal',
+    'seabed', 'thermal_vent', 'deep_water', 'tidal',
+)
+
 def default_zone(biome_id: str) -> str:
-    """Ocean if the biome ID contains 'ocean' or 'sea', land otherwise."""
+    """Ocean if the biome ID contains any ocean-related keyword, land otherwise."""
     lower = biome_id.lower()
-    if 'ocean' in lower or 'sea' in lower:
-        return ZONE_OCEAN
-    return ZONE_LAND
+    return ZONE_OCEAN if any(kw in lower for kw in _OCEAN_KEYWORDS) else ZONE_LAND
 
 
 # ── Internal helpers ──────────────────────────────────────────────────────────
