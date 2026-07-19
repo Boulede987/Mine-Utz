@@ -1,0 +1,5 @@
+{
+  "type": "mineutze_filter:region_intent",
+  "axis": "selector",
+  "fallback": "tectonic:noise/region_selector"
+}

@@ -67,17 +67,38 @@ final class DomainWarp {
     }
 
     /** Returns a value in [-1, 1], smoothly (C1-continuous) interpolated between
-     * deterministic lattice-point values at the given spacing. */
+     * deterministic lattice-point values at the given spacing. Thin wrapper around
+     * bilinearSmoothstep -- see that method for the general form Phase 2's
+     * RegionIntentDensityFunction reuses (same package) with real per-cell family
+     * coordinates instead of random noise. */
     private static double smoothValueNoise(long worldSeed, int hashNamespace, int blockX, int blockZ, int latticeSpacing) {
+        return bilinearSmoothstep(blockX, blockZ, latticeSpacing,
+            (latticeX, latticeZ) -> latticePointValue(worldSeed, hashNamespace, latticeX, latticeZ));
+    }
+
+    @FunctionalInterface
+    interface LatticeValueLookup {
+        double valueAt(int latticeX, int latticeZ);
+    }
+
+    /** General bilinear+smoothstep lattice interpolation, factored out of
+     * smoothValueNoise (Phase 1) so Phase 2's RegionIntentDensityFunction can reuse the
+     * exact same smooth-blending shape with a different corner-value source (real
+     * per-cell RegionFamily coordinates instead of seed-derived random noise) --
+     * TERRAIN_COHERENCE_DESIGN.md's Fork 3: a hard per-cell switch between adjacent,
+     * uncorrelated Tectonic region shapes would be a one-column cliff, not a blend.
+     * Package-visible for that reuse; the smoothness-matters reasoning in this class's
+     * own doc applies equally to both callers. */
+    static double bilinearSmoothstep(int blockX, int blockZ, int latticeSpacing, LatticeValueLookup lookup) {
         int latticeX0 = Math.floorDiv(blockX, latticeSpacing) * latticeSpacing;
         int latticeZ0 = Math.floorDiv(blockZ, latticeSpacing) * latticeSpacing;
         int latticeX1 = latticeX0 + latticeSpacing;
         int latticeZ1 = latticeZ0 + latticeSpacing;
 
-        double v00 = latticePointValue(worldSeed, hashNamespace, latticeX0, latticeZ0);
-        double v10 = latticePointValue(worldSeed, hashNamespace, latticeX1, latticeZ0);
-        double v01 = latticePointValue(worldSeed, hashNamespace, latticeX0, latticeZ1);
-        double v11 = latticePointValue(worldSeed, hashNamespace, latticeX1, latticeZ1);
+        double v00 = lookup.valueAt(latticeX0, latticeZ0);
+        double v10 = lookup.valueAt(latticeX1, latticeZ0);
+        double v01 = lookup.valueAt(latticeX0, latticeZ1);
+        double v11 = lookup.valueAt(latticeX1, latticeZ1);
 
         double tx = smoothstep((blockX - latticeX0) / (double) latticeSpacing);
         double tz = smoothstep((blockZ - latticeZ0) / (double) latticeSpacing);

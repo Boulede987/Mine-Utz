@@ -1,0 +1,5 @@
+{
+  "type": "mineutze_filter:region_intent",
+  "axis": "bracket",
+  "fallback": "tectonic:noise/continent/erosion"
+}

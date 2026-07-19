@@ -6,6 +6,7 @@ import com.mineutze.worldgen.biomesource.PatchDebugCommand;
 import com.mineutze.worldgen.biomesource.RegionIntentDebugCommand;
 import com.mineutze.worldgen.biomesource.TerrainClassDebugCommand;
 import com.mineutze.worldgen.biomesource.WorldSeedHolder;
+import com.mineutze.worldgen.biomesource.patch.ModDensityFunctionTypes;
 import net.minecraft.resources.ResourceLocation;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.common.Mod;
@@ -30,6 +31,7 @@ public class WorldgenMod {
         // FMLCommonSetupEvent below -- so DeferredRegister registration happens here,
         // in the mod constructor, not in onCommonSetup.
         ModBiomeSources.BIOME_SOURCES.register(modEventBus);
+        ModDensityFunctionTypes.DENSITY_FUNCTION_TYPES.register(modEventBus);
         modEventBus.addListener(this::onCommonSetup);
         NeoForge.EVENT_BUS.addListener(WorldSeedHolder::onLevelLoad);
         NeoForge.EVENT_BUS.addListener(PatchDebugCommand::register);
