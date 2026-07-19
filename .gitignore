@@ -145,6 +145,11 @@ __pycache__/
 *.prof
 
 # ===========================
+# Per-world calibration data dumps (personal, regenerable)
+# ===========================
+pythonScripts/worldgen/calibration_data/
+
+# ===========================
 # Documentation (keep)
 # ===========================
 !README.md

@@ -18,12 +18,32 @@ any of that -- it's pure log parsing and bucket math.
 Workflow:
     1. In-game: /dump_height_samples [radius] [step] (fly over varied terrain first --
        flat, hilly, and mountainous areas -- run it in each so the sample set actually
-       spans the range you're trying to calibrate against).
+       spans the range you're trying to calibrate against). /dump_height_samples walk
+       automates re-positioning between captures -- see its own command doc.
     2. Copy the "===== DUMP START (height_samples) =====" ... "DUMP END" block(s) out of
        logs/latest.log into a text file (or point this script at logs/latest.log
        directly -- it only reads matching blocks, extra log noise is fine).
     3. python pythonScripts/worldgen/calibrate_terrain_classes.py <log_file> [...]
        Multiple files/captures are fine -- samples from all of them are pooled.
+
+Persisting across sessions (--world):
+    logs/latest.log gets rotated away on every game relaunch, so a capture session that
+    spans multiple play sessions needs somewhere durable to accumulate into. Pass
+    --world <name> (anything -- typically the save folder's name) and every run:
+      1. Loads the highest-numbered calibration_data/<world>_NNNN.csv already saved for
+         that world, if any (samples from every prior session).
+      2. Parses whatever new log file(s) you passed on the command line this time.
+      3. Merges the two, deduped by (x, z) -- same seed means the same column always
+         yields the same climate/height, so overlapping capture areas from different
+         sessions just collapse rather than double-count.
+      4. Writes the merged total to calibration_data/<world>_(NNNN+1).csv (source-of-
+         truth for next time; previous snapshots are left alone, cheap backups) and runs
+         the usual bucket analysis against the FULL accumulated set, not just this run's
+         new samples.
+    Come back later, run the same command with a fresh logs/latest.log -- it picks up
+    exactly where it left off. --world with zero log files is valid too (just re-analyzes
+    whatever's already saved). Omit --world entirely for the old one-shot, no-persistence
+    behavior.
 
 What "roughness" means here: for each sample, the max height difference to its
 immediate grid neighbors (the dump is on a regular grid, spacing = the `step` argument
@@ -41,8 +61,9 @@ apart, which is what makes it possible to calibrate TerrainClassifier's
 RIVER_WEIRDNESS_ABS_HI the same empirical way the erosion/weirdness thresholds are.
 """
 
+import argparse
+import csv
 import re
-import sys
 from pathlib import Path
 
 DUMP_START_PATTERN = re.compile(r'===== DUMP START \(height_samples\) =====')
@@ -50,6 +71,10 @@ DUMP_END_PATTERN   = re.compile(r'===== DUMP END \(height_samples\) =====')
 SAMPLE_LINE_PATTERN = re.compile(
     r'^(-?\d+),(-?\d+),(-?[\d.eE+-]+),(-?[\d.eE+-]+),(-?[\d.eE+-]+),(-?\d+)\s*$'
 )
+
+CALIBRATION_DATA_DIR = Path(__file__).parent / 'calibration_data'
+CUMULATIVE_FILE_PATTERN_TEMPLATE = r'^{world}_(\d+)\.csv$'
+CUMULATIVE_CSV_FIELDNAMES = ['x', 'z', 'continentalness', 'erosion', 'weirdness', 'height']
 
 # Matches TerrainClassifier.java's existing ocean/coast split -- calibration here only
 # concerns the land-side flat/hilly/mountainous cutoffs.
@@ -214,20 +239,99 @@ def suggest_river_threshold(buckets: list[tuple[float, float, int]]) -> float:
     return threshold
 
 
+def find_latest_cumulative_file(world_name: str) -> Path | None:
+    """Highest-sequence calibration_data/<world_name>_NNNN.csv already saved for this
+    world, or None if this world has never been saved before. Sequence compared
+    numerically, not lexically, so _10 correctly sorts after _9."""
+    if not CALIBRATION_DATA_DIR.is_dir():
+        return None
+    pattern = re.compile(CUMULATIVE_FILE_PATTERN_TEMPLATE.format(world=re.escape(world_name)))
+    candidates = [
+        (int(match.group(1)), path)
+        for path in CALIBRATION_DATA_DIR.iterdir()
+        if (match := pattern.match(path.name))
+    ]
+    return max(candidates, key=lambda pair: pair[0])[1] if candidates else None
+
+
+def cumulative_file_sequence(path: Path, world_name: str) -> int:
+    match = re.match(CUMULATIVE_FILE_PATTERN_TEMPLATE.format(world=re.escape(world_name)), path.name)
+    return int(match.group(1))
+
+
+def load_cumulative_samples(path: Path) -> list[dict]:
+    with path.open(newline='', encoding='utf-8') as csv_file:
+        return [
+            {
+                'x': int(row['x']), 'z': int(row['z']),
+                'continentalness': float(row['continentalness']),
+                'erosion': float(row['erosion']),
+                'weirdness': float(row['weirdness']),
+                'height': int(row['height']),
+            }
+            for row in csv.DictReader(csv_file)
+        ]
+
+
+def write_cumulative_samples(path: Path, samples: list[dict]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open('w', newline='', encoding='utf-8') as csv_file:
+        writer = csv.DictWriter(csv_file, fieldnames=CUMULATIVE_CSV_FIELDNAMES)
+        writer.writeheader()
+        for sample in samples:
+            writer.writerow({field: sample[field] for field in CUMULATIVE_CSV_FIELDNAMES})
+
+
+def merge_samples_deduped(existing: list[dict], new: list[dict]) -> list[dict]:
+    """Dedupes by (x, z) -- same seed means the same column always yields the same
+    climate/height, so a recaptured column from an earlier session is a duplicate, not
+    new information. New samples win on conflict (should be identical anyway, but a
+    newer capture is the more trustworthy one if something ever doesn't match)."""
+    by_position = {(sample['x'], sample['z']): sample for sample in existing}
+    for sample in new:
+        by_position[(sample['x'], sample['z'])] = sample
+    return list(by_position.values())
+
+
 def main() -> None:
-    if len(sys.argv) < 2:
-        print('Usage: python calibrate_terrain_classes.py <log_file> [log_file...]')
-        raise SystemExit(1)
+    parser = argparse.ArgumentParser(
+        description='Suggest TerrainClassifier.java thresholds from /dump_height_samples captures.'
+    )
+    parser.add_argument('log_files', nargs='*', help='Log file(s) containing /dump_height_samples DUMP blocks.')
+    parser.add_argument('--world', help=(
+        'Persist cumulative samples for this world across sessions -- see this module\'s '
+        'docstring ("Persisting across sessions") for the exact behavior.'
+    ))
+    args = parser.parse_args()
 
     all_samples: list[dict] = []
-    for log_path in sys.argv[1:]:
+    persisted_path = find_latest_cumulative_file(args.world) if args.world else None
+    if args.world:
+        if persisted_path:
+            persisted_samples = load_cumulative_samples(persisted_path)
+            print(f'{persisted_path}: {len(persisted_samples)} samples from previous sessions')
+            all_samples.extend(persisted_samples)
+        else:
+            print(f'No previous calibration_data found for world "{args.world}" -- starting fresh.')
+
+    new_samples: list[dict] = []
+    for log_path in args.log_files:
         text = Path(log_path).read_text(encoding='utf-8', errors='ignore')
         found = parse_dump_blocks(text)
         print(f'{log_path}: {len(found)} samples')
-        all_samples.extend(found)
+        new_samples.extend(found)
+
+    if args.world:
+        all_samples = merge_samples_deduped(all_samples, new_samples)
+        next_sequence = cumulative_file_sequence(persisted_path, args.world) + 1 if persisted_path else 1
+        output_path = CALIBRATION_DATA_DIR / f'{args.world}_{next_sequence:04d}.csv'
+        write_cumulative_samples(output_path, all_samples)
+        print(f'Wrote {len(all_samples)} cumulative samples to {output_path}')
+    else:
+        all_samples.extend(new_samples)
 
     if not all_samples:
-        print('No /dump_height_samples blocks found in the given file(s).')
+        print('No samples to analyze -- pass at least one log file, or --world with previously saved data.')
         raise SystemExit(1)
 
     step = detect_grid_step(all_samples)
