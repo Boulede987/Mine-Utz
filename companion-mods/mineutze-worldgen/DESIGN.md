@@ -70,6 +70,49 @@ This replaces per-column independent nearest-neighbor lookup with explicit, cach
 patches — required for size and adjacency control, which are meaningless for a system where
 patch shape is an accident of Voronoi cell density.
 
+### 3a. Per-column resolution, step by step
+
+What actually happens for one `getNoiseBiome` call today — **note we never read Tectonic's
+internal region/family choice (club/heart/spade/diamond) directly**; we only read its
+*output* (the climate signal), which Tectonic's family system already baked its influence
+into upstream. Reading the family itself is Phase 2's proposal
+(`TERRAIN_COHERENCE_DESIGN.md`), not how this works today.
+
+```mermaid
+flowchart TB
+    T["Tectonic generates real terrain<br/>(its own internal region/family system —<br/>we never read this choice directly)"]
+    T --> SAMPLE["Climate.Sampler.sample(x, y, z)<br/>continentalness · erosion · weirdness · depth"]
+
+    SAMPLE --> DEPTHCHK{"depth ≤ 0.2 ?"}
+    DEPTHCHK -- "yes, surface" --> TC["TerrainClassifier.classify(...)<br/>buckets into one TerrainClass"]
+    DEPTHCHK -- "no, underground" --> UPG["UndergroundPatchGrid.resolve<br/>32-block cell, weighted pick among<br/>cave biomes linked to surface biome above"]
+
+    TC --> CLASS["OCEAN · COAST · RIVER ·<br/>FLAT_LAND · HILLY · MOUNTAINOUS"]
+    CLASS --> PGE["PatchGrowthEngine.resolveWindow<br/>(whole 128-cell tile, cached)<br/>germinate → weighted pick → best-first grow,<br/>gated to terrain-class-eligible biomes only"]
+    PGE --> WARP["DomainWarp<br/>bend the border lookup, then re-validate<br/>the borrowed answer against real terrain here"]
+    WARP --> HIT{"patch claimed<br/>this cell?"}
+    HIT -- "yes" --> BIOME["Final biome for this column"]
+    HIT -- "no — true gap" --> FALLBACK["pickTerrainAppropriateFallback<br/>reclassify real terrain here,<br/>weighted pick among eligible biomes"]
+    FALLBACK --> BIOME
+
+    UPG --> ULINK{"a cave biome<br/>is linked here?"}
+    ULINK -- "yes" --> BIOME
+    ULINK -- "no" --> SAMESURFACE["fall back to whatever<br/>surface resolved to directly above"]
+    SAMESURFACE --> BIOME
+
+    classDef tectonic fill:#3f7a5c,stroke:#17222e,color:#fff
+    classDef classify fill:#a6720f,stroke:#17222e,color:#fff
+    classDef place fill:#2f6690,stroke:#17222e,color:#fff
+    class T,SAMPLE tectonic
+    class DEPTHCHK,TC,CLASS classify
+    class PGE,WARP,HIT,FALLBACK,UPG,ULINK,SAMESURFACE,BIOME place
+```
+
+Green = Tectonic's own output, read but not written by us. Amber = classification
+(`TerrainClassifier`, the only place raw climate numbers get bucketed). Blue = placement
+(`PatchGrowthEngine` and its tiers) — this is the part Phase 2 would make independent
+of the green box entirely.
+
 ## 4. Terrain-class gating
 
 Bucket the climate signal (continentalness, erosion, weirdness, depth) into terrain classes
