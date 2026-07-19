@@ -1,12 +1,18 @@
 # Terrain Coherence — Phase 2 (goal for the next session)
 
-Status: **investigation complete (§4a/§4b/§4c), implementation not started.** All five
-original open questions (§4) are answered — license, placement decoupling, mechanism,
-graph mapping, terrain-quality scoping. This document exists so a fresh conversation can
-pick up exactly where this one left off without re-deriving any of the investigation
-below. Do not start implementing from this doc without the user's explicit go-ahead in
-that session — it captures a *decision about direction and a concrete mechanism*, not
-an approved implementation plan.
+Status: **implementation Stages 1–4 done, unverified in-game.** All five original open
+questions (§4) were answered first — license, placement decoupling, mechanism, graph
+mapping, terrain-quality scoping — then implemented in four staged, self-tested,
+individually-committed steps (commits `0e202a98`, `83c7fbf1`, `61cf12da`, `1f9fddbd`):
+land terrain-blindness in `PatchGrowthEngine`, the region-intent cache
+(`SurfacePatchGrid.resolveWithFamily`/`peekRegionIntent`), `RegionIntentDensityFunction`
+registered as `mineutze_filter:region_intent`, and the actual override wiring it into
+`tectonic:terrain_spline/offset/regions.json`/`regions_weak.json` (in the Paxi datapack,
+not the mod jar). `./gradlew selfTest` green throughout. **Nothing has been checked in a
+real running world yet** — fresh-world visual verification (does terrain actually match
+biome now, does the `Climate.Sampler`-access cache-warm assumption hold, any hang
+regression) and Stage 5's iterative family-weight/numeric tuning are next, and both need
+a real game launch this document's authoring session couldn't do itself.
 
 Phase 1 (everything in `DESIGN.md` — the custom `BiomeSource` replacing TerraBlender,
 patch-growth placement, terrain-class gating, domain-warped borders, underground
