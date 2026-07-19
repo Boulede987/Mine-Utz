@@ -20,23 +20,29 @@ public final class TerrainClassifier {
     private static final float OCEAN_CONTINENTALNESS_HI = -0.19f;
     private static final float COAST_CONTINENTALNESS_HI  =  0.03f;
 
-    // Placeholder guess, NOT calibrated -- vanilla rivers occupy a narrow band right at
-    // weirdness's "valley" extremum (its own ridges-folding function, not raw weirdness
-    // directly, which this approximates), independent of continentalness -- a river can
-    // cut through land that's otherwise flat, hilly, or mountainous. Without this check,
-    // land biomes had no way to avoid growing straight across small inland water bodies
-    // (rivers/lakes) that share ordinary FLAT_LAND continentalness. Needs the same real
-    // calibration as the other thresholds below before this is more than a guess at the
-    // right band width.
-    private static final float RIVER_WEIRDNESS_ABS_HI = 0.05f;
+    // STILL a placeholder guess, NOT calibrated -- unlike the three below, real
+    // calibrate_terrain_classes.py runs (117836 pooled samples, including a session
+    // deliberately following real rivers) never produced a trustworthy suggestion here:
+    // the script's own sanity check (peak depression should sit near weirdness=0 if the
+    // river band is really centered there) fails every time, even with river-focused
+    // sampling. Tectonic redirects weirdness/ridges through its own custom noise
+    // (tectonic:biome_parameter/ridges, see TERRAIN_COHERENCE_DESIGN.md Sec 5) -- vanilla's
+    // "narrow weirdness band = river" convention this threshold assumes may just not hold
+    // for Tectonic's real river mechanism at all. The script DID suggest a value (0.000)
+    // once, but that's actively worse than this placeholder, not an improvement: it makes
+    // abs(weirdness) <= threshold match almost nothing, near-disabling RIVER entirely --
+    // rejected on sanity-check grounds, not applied. Needs a different signal (e.g. ground-
+    // truth /dump_terrain_class readings taken standing in confirmed flowing water, not the
+    // depression-proxy's inference) before this stops being a guess.
+    private static final float RIVER_WEIRDNESS_ABS_HI = 0.010f;
 
-    // Placeholder guesses -- NOT calibrated against this modpack's real noise router
-    // yet. BoP/BWG may shift these breakpoints from vanilla's own. Do not trust
-    // visually until calibrate_terrain_classes.py has run against a real
-    // /dump_height_samples capture (DESIGN.md Sec 11 / rollout Milestone 3b).
-    private static final float MOUNTAINOUS_EROSION_HI       = -0.4f;
-    private static final float HILLY_EROSION_HI             =  0.2f;
-    private static final float MOUNTAINOUS_WEIRDNESS_ABS_LO =  0.6f;
+    // Calibrated via calibrate_terrain_classes.py against 117836 pooled real
+    // /dump_height_samples captures (two sessions, --world persistence) -- see git history
+    // for the exact run. Stable across both sessions (unchanged when the sample count
+    // roughly doubled between them), unlike RIVER_WEIRDNESS_ABS_HI above.
+    private static final float MOUNTAINOUS_EROSION_HI       = 0.040f;
+    private static final float HILLY_EROSION_HI             = 0.170f;
+    private static final float MOUNTAINOUS_WEIRDNESS_ABS_LO = 0.216f;
 
     private TerrainClassifier() {
     }
