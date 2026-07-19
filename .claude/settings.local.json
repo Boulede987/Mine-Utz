@@ -25,6 +25,9 @@
 
       "Bash(jar tf *)",
       "Bash(javap *)",
+      
+      "Bash(git add*)",
+      "Bash(git commit*)",
 
       "WebSearch",
       "WebFetch(domain:github.com)",
@@ -40,8 +43,6 @@
       "Bash(rm -rf*)",
       "Bash(git push*)",
       "Bash(git reset --hard*)",
-      "Bash(git add*)",
-      "Bash(git commit*)",
       "Bash(packwiz update*)",
       "Bash(packwiz remove*)",
       "Bash(curl *)",
