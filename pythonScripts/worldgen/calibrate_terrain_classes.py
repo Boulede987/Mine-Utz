@@ -31,6 +31,14 @@ you ran it with) -- a cheap, local proxy for "how jagged is the terrain right he
 without needing the full noise router. This is exactly the same proxy DESIGN.md Sec 4
 already accepts ("a coarser, cheaper proxy than actually walking the density function
 stack") for the classifier itself, just derived empirically instead of guessed.
+
+What "depression" means (river/lake calibration specifically): how far BELOW the
+average of its immediate neighbors a sample sits -- positive means a local low point
+(a carved channel), negative means a local high point (a peak/ridge). Roughness alone
+can't distinguish a river dip from a spire (both look "rough" -- roughness is an
+undirected |difference|); depression is the directed signal that actually tells them
+apart, which is what makes it possible to calibrate TerrainClassifier's
+RIVER_WEIRDNESS_ABS_HI the same empirical way the erosion/weirdness thresholds are.
 """
 
 import re
@@ -50,8 +58,14 @@ COAST_CONTINENTALNESS_HI =  0.03
 
 EROSION_BUCKET_COUNT   = 10
 WEIRDNESS_BUCKET_COUNT = 10
+# Rivers are typically a much narrower band of |weirdness| than the broad mountainous/
+# hilly zones -- confirmed by a synthetic-data smoke test where 10 buckets (width 0.2
+# over the full [-1,1] range) diluted a known 0.08-wide test band into its neighbor and
+# under-suggested the threshold. Finer resolution just for the river analysis.
+RIVER_WEIRDNESS_BUCKET_COUNT   = 40
 HILLY_ROUGHNESS_FRACTION       = 0.25  # buckets above this fraction of max roughness -> hilly candidate
 MOUNTAINOUS_ROUGHNESS_FRACTION = 0.55  # buckets above this fraction of max roughness -> mountainous candidate
+RIVER_DEPRESSION_FRACTION      = 0.40  # buckets above this fraction of peak depression -> river-band candidate
 
 
 def parse_dump_blocks(text: str) -> list[dict]:
@@ -91,48 +105,65 @@ def detect_grid_step(samples: list[dict]) -> int:
     return min(gaps) if gaps else 1
 
 
-def compute_roughness(samples: list[dict], step: int) -> None:
-    """Adds a 'roughness' key to each sample: max height difference to its immediate
-    grid neighbors (in-place). Samples missing a neighbor (dump area edge) use whatever
-    neighbors are present -- never skipped outright, just a smaller comparison set."""
+def _neighbor_heights(x: int, z: int, step: int, height_by_position: dict) -> list[int]:
+    return [
+        height_by_position[(x + dx, z + dz)]
+        for dx, dz in ((step, 0), (-step, 0), (0, step), (0, -step))
+        if (x + dx, z + dz) in height_by_position
+    ]
+
+
+def compute_local_height_features(samples: list[dict], step: int) -> None:
+    """Adds 'roughness' and 'depression' keys to each sample (in-place), both derived
+    from the same immediate-grid-neighbor heights. Samples missing a neighbor (dump area
+    edge) use whatever neighbors are present -- never skipped outright, just a smaller
+    comparison set.
+
+    roughness: max height difference to any neighbor -- undirected, "how jagged is it
+    right here" (mountains AND river banks both score high here).
+
+    depression: average(neighbor heights) - this sample's height -- directed, positive
+    means this sample sits in a local dip (a carved channel), negative means a local
+    high point. This is what separates a river reading from a cliff/spire reading, which
+    roughness alone can't do -- see the module docstring.
+    """
     height_by_position = {(sample['x'], sample['z']): sample['height'] for sample in samples}
     for sample in samples:
-        x, z = sample['x'], sample['z']
-        neighbor_heights = [
-            height_by_position[(x + dx, z + dz)]
-            for dx, dz in ((step, 0), (-step, 0), (0, step), (0, -step))
-            if (x + dx, z + dz) in height_by_position
-        ]
+        neighbor_heights = _neighbor_heights(sample['x'], sample['z'], step, height_by_position)
         sample['roughness'] = max(
             (abs(sample['height'] - neighbor_height) for neighbor_height in neighbor_heights),
             default=0,
         )
+        sample['depression'] = (
+            sum(neighbor_heights) / len(neighbor_heights) - sample['height'] if neighbor_heights else 0.0
+        )
 
 
-def bucket_average_roughness(samples: list[dict], key: str, bucket_count: int) -> list[tuple[float, float, int]]:
-    """Returns [(bucket_lo, avg_roughness, sample_count), ...] sorted by bucket_lo."""
-    values = [sample[key] for sample in samples]
-    lo, hi = min(values), max(values)
+def bucket_average(samples: list[dict], bucket_key: str, value_key: str, bucket_count: int) -> list[tuple[float, float, int]]:
+    """Returns [(bucket_lo, avg_value, sample_count), ...] sorted by bucket_lo, bucketing
+    samples by bucket_key and averaging value_key within each bucket."""
+    bucket_values = [sample[bucket_key] for sample in samples]
+    lo, hi = min(bucket_values), max(bucket_values)
     if hi <= lo:
-        return [(lo, sum(sample['roughness'] for sample in samples) / len(samples), len(samples))]
+        return [(lo, sum(sample[value_key] for sample in samples) / len(samples), len(samples))]
 
     bucket_width = (hi - lo) / bucket_count
     buckets: dict[int, list[float]] = {}
     for sample in samples:
-        bucket_index = min(bucket_count - 1, int((sample[key] - lo) / bucket_width))
-        buckets.setdefault(bucket_index, []).append(sample['roughness'])
+        bucket_index = min(bucket_count - 1, int((sample[bucket_key] - lo) / bucket_width))
+        buckets.setdefault(bucket_index, []).append(sample[value_key])
 
     return [
-        (lo + bucket_index * bucket_width, sum(roughness_values) / len(roughness_values), len(roughness_values))
-        for bucket_index, roughness_values in sorted(buckets.items())
+        (lo + bucket_index * bucket_width, sum(values) / len(values), len(values))
+        for bucket_index, values in sorted(buckets.items())
     ]
 
 
-def print_bucket_table(title: str, buckets: list[tuple[float, float, int]]) -> None:
+def print_bucket_table(title: str, buckets: list[tuple[float, float, int]], value_label: str = 'avg roughness') -> None:
     print(f'\n{title}')
-    print(f'{"bucket lo":>12}  {"avg roughness":>14}  {"samples":>8}')
-    for bucket_lo, avg_roughness, sample_count in buckets:
-        print(f'{bucket_lo:>12.3f}  {avg_roughness:>14.2f}  {sample_count:>8}')
+    print(f'{"bucket lo":>12}  {value_label:>14}  {"samples":>8}')
+    for bucket_lo, avg_value, sample_count in buckets:
+        print(f'{bucket_lo:>12.3f}  {avg_value:>14.2f}  {sample_count:>8}')
 
 
 def suggest_erosion_thresholds(buckets: list[tuple[float, float, int]]) -> tuple[float, float]:
@@ -163,6 +194,26 @@ def suggest_weirdness_threshold(buckets: list[tuple[float, float, int]]) -> floa
     return threshold
 
 
+def suggest_river_threshold(buckets: list[tuple[float, float, int]]) -> float:
+    """Returns river_weirdness_abs_hi -- buckets are by |weirdness| ascending, so this
+    scans outward from zero and returns the largest |weirdness| still inside the
+    contiguous high-depression band starting at zero. Stops at the first drop-off
+    (unlike the mountainous scan, which keeps scanning the whole range) because a real
+    river band should be one contiguous region around weirdness=0 -- a high-depression
+    bucket found far from zero after the band has already ended is more likely a cliff
+    base (depression is undirected-confoundable, see compute_local_height_features) than
+    a second river band, and shouldn't extend the suggested threshold outward."""
+    max_depression = max(avg_depression for _, avg_depression, _ in buckets)
+    if max_depression <= 0:
+        return buckets[0][0]  # no real depression signal near zero -- don't suggest a band at all
+    threshold = buckets[0][0]
+    for bucket_lo, avg_depression, _ in buckets:
+        if avg_depression < max_depression * RIVER_DEPRESSION_FRACTION:
+            break
+        threshold = bucket_lo
+    return threshold
+
+
 def main() -> None:
     if len(sys.argv) < 2:
         print('Usage: python calibrate_terrain_classes.py <log_file> [log_file...]')
@@ -181,7 +232,7 @@ def main() -> None:
 
     step = detect_grid_step(all_samples)
     print(f'\nTotal samples: {len(all_samples)}  (detected grid step: {step} blocks)')
-    compute_roughness(all_samples, step)
+    compute_local_height_features(all_samples, step)
 
     land_samples = [s for s in all_samples if s['continentalness'] >= COAST_CONTINENTALNESS_HI]
     print(f'Land samples (continentalness >= {COAST_CONTINENTALNESS_HI}): {len(land_samples)}')
@@ -192,18 +243,31 @@ def main() -> None:
     for sample in land_samples:
         sample['abs_weirdness'] = abs(sample['weirdness'])
 
-    erosion_buckets = bucket_average_roughness(land_samples, 'erosion', EROSION_BUCKET_COUNT)
+    erosion_buckets = bucket_average(land_samples, 'erosion', 'roughness', EROSION_BUCKET_COUNT)
     print_bucket_table('Roughness by erosion bucket (low erosion = more mountainous in current scheme):', erosion_buckets)
     mountainous_erosion_hi, hilly_erosion_hi = suggest_erosion_thresholds(erosion_buckets)
 
-    weirdness_buckets = bucket_average_roughness(land_samples, 'abs_weirdness', WEIRDNESS_BUCKET_COUNT)
+    weirdness_buckets = bucket_average(land_samples, 'abs_weirdness', 'roughness', WEIRDNESS_BUCKET_COUNT)
     print_bucket_table('Roughness by |weirdness| bucket:', weirdness_buckets)
     mountainous_weirdness_abs_lo = suggest_weirdness_threshold(weirdness_buckets)
+
+    raw_weirdness_depression_buckets = bucket_average(land_samples, 'weirdness', 'depression', RIVER_WEIRDNESS_BUCKET_COUNT)
+    print_bucket_table(
+        'Depression by RAW weirdness bucket (sanity check: should peak near 0 if the river band is actually centered there):',
+        raw_weirdness_depression_buckets, value_label='avg depression'
+    )
+    abs_weirdness_depression_buckets = bucket_average(land_samples, 'abs_weirdness', 'depression', RIVER_WEIRDNESS_BUCKET_COUNT)
+    print_bucket_table('Depression by |weirdness| bucket:', abs_weirdness_depression_buckets, value_label='avg depression')
+    river_weirdness_abs_hi = suggest_river_threshold(abs_weirdness_depression_buckets)
 
     print('\nSuggested TerrainClassifier thresholds (sanity-check against the tables above, don\'t paste blindly):')
     print(f'  MOUNTAINOUS_EROSION_HI       = {mountainous_erosion_hi:.3f}f')
     print(f'  HILLY_EROSION_HI             = {hilly_erosion_hi:.3f}f')
     print(f'  MOUNTAINOUS_WEIRDNESS_ABS_LO = {mountainous_weirdness_abs_lo:.3f}f')
+    print(f'  RIVER_WEIRDNESS_ABS_HI       = {river_weirdness_abs_hi:.3f}f')
+    print('  (check the RAW weirdness depression table above first -- if the peak isn\'t')
+    print('   near 0, RIVER_WEIRDNESS_ABS_HI is not trustworthy and this needs a different')
+    print('   band shape, not just a different width)')
     print('\nUpdate TerrainClassifier.java (companion-mods/mineutze-worldgen) with these values.')
 
 

@@ -1,5 +1,7 @@
 package com.mineutze.worldgen.biomesource;
 
+import com.mineutze.worldgen.biomesource.patch.PatchGrowthEngine;
+import com.mineutze.worldgen.biomesource.patch.PatchSeedHasher;
 import com.mineutze.worldgen.biomesource.patch.SurfacePatchGrid;
 import com.mineutze.worldgen.biomesource.patch.UndergroundPatchGrid;
 import com.mojang.serialization.MapCodec;
@@ -13,6 +15,7 @@ import net.minecraft.world.level.biome.Biome;
 import net.minecraft.world.level.biome.BiomeSource;
 import net.minecraft.world.level.biome.Climate;
 
+import java.util.List;
 import java.util.stream.Stream;
 
 /**
@@ -20,21 +23,20 @@ import java.util.stream.Stream;
  * column to the surface patch-growth tier (SurfacePatchGrid) or the underground tier
  * (UndergroundPatchGrid, requirement 3's exact 1:1 surface-to-cave-biome linkage).
  *
- * Fallback (used both for underground columns with no linked cave biome, and surface
- * columns no configured biome's terrain_classes cover): resolves to whatever biome the
- * surface tier assigns for that column, i.e. an unlinked cave defaults to "the same
- * biome as what's directly above it" rather than vanilla's own dripstone/lush/deep-dark
- * placement rules. Deliberate scope cut, not an oversight -- the plan's original design
- * called for wrapping vanilla's own default MultiNoiseBiomeSource here, but that needs a
- * second registry lookup (Registries.MULTI_NOISE_BIOME_SOURCE_PARAMETER_LIST) threaded
- * through the codec on top of the Biome one already here, for a payoff (matching
- * vanilla's exact cave-biome variety) requirement 3 never actually asked for -- it asked
- * for specific cave biomes under specific surface biomes, which this delivers. Losing
- * vanilla's dripstone/lush/deep-dark variety everywhere NOT explicitly linked is a real,
- * known limitation of this choice.
- *
- * See DESIGN.md and the implementation plan for the full design: patch size
- * (Milestone 2), real terrain-class gating (Milestone 3), soft adjacency (Milestone 4).
+ * Fallback chain, in order: (1) an underground column with no linked cave biome falls
+ * back to "the same biome as the surface directly above it" (see the class comment on
+ * why not a real vanilla MultiNoiseBiomeSource wrap -- known, accepted limitation, loses
+ * vanilla's dripstone/lush/deep-dark variety everywhere not explicitly linked); (2) a
+ * TRUE gap -- no patch's growth ever claimed this cell at all -- falls back to a
+ * terrain-class-eligible biome for the REAL terrain at this exact position, picked the
+ * same weighted way germination does, NOT an arbitrary default. That second case is a
+ * real, if narrow, failure mode: a tiny, isolated terrain feature (e.g. a small
+ * mountainous speck) can lose its own germination bid to a nearby, unrelated,
+ * higher-priority candidate -- local-maximum suppression isn't restricted to
+ * same-terrain-class competitors -- and if no other patch's growth reaches it either, it
+ * has to be resolved from scratch right here. Returning "whatever's first in the
+ * configured list" for that case (the original Milestone 1 scaffolding) would have
+ * silently mislabeled a real mountain speck as plains -- confirmed, not hypothetical.
  */
 public final class CustomOverworldBiomeSource extends BiomeSource {
 
@@ -44,10 +46,14 @@ public final class CustomOverworldBiomeSource extends BiomeSource {
         ).apply(instance, CustomOverworldBiomeSource::new)
     );
 
-    // Matches biome_loader.py / extract_noise_to_json.py's surface/underground depth
-    // section boundary -- keep these two constant sets in lockstep (see the plan's
-    // "Dispatch" section).
-    private static final double SURFACE_DEPTH_MAX = 0.05;
+    // getNoiseBiome is called at many Y-levels per column -- this threshold decides
+    // which ones count as "surface" vs "underground". 0.05 (too close to zero) was a
+    // real, confirmed bug: on any not-perfectly-flat terrain, near-surface columns got
+    // misrouted to the underground tier, picked up their column's linked cave biome, and
+    // showed up as e.g. lush_caves patches sitting visibly on top of a plain. Matches
+    // the old FilterRegion.java's underground entries, which used depth [0.2, 0.9] --
+    // that precedent is what 0.2 here is restoring, not a fresh guess.
+    private static final double SURFACE_DEPTH_MAX = 0.2;
 
     private final HolderGetter<Biome> biomeLookup;
     private volatile SurfacePatchGrid surfacePatchGrid;
@@ -83,14 +89,34 @@ public final class CustomOverworldBiomeSource extends BiomeSource {
             return biomeLookup.getOrThrow(resolved);
         }
 
-        // Fallback for (a) an underground column with no linked cave biome and (b) a
-        // surface column no configured biome's terrain_classes cover -- see class
-        // comment for why "same as the surface biome above" instead of a real vanilla
-        // MultiNoiseBiomeSource wrap. Only reachable itself in the rare double-gap case
-        // (surface tier ALSO has nothing here) does this fall through to the crude
-        // first-configured-biome answer.
+        // Fallback (1): underground gap with no linked cave biome -- "same as the
+        // surface above" (see class comment). For a surface gap this re-queries the
+        // exact same thing and comes back null again, falling through to (2).
         ResourceKey<Biome> surfaceFallback = surfacePatchGrid().resolve(blockX, blockZ, sampler);
-        return biomeLookup.getOrThrow(surfaceFallback != null ? surfaceFallback : BiomeConfigRegistry.allConfigs().get(0).id());
+        if (surfaceFallback != null) {
+            return biomeLookup.getOrThrow(surfaceFallback);
+        }
+
+        // Fallback (2): a true gap -- pick among whatever's terrain-class-eligible for
+        // what's REALLY here, not an arbitrary default (see class comment).
+        return biomeLookup.getOrThrow(pickTerrainAppropriateFallback(blockX, blockZ, sampler));
+    }
+
+    private static final int FALLBACK_PICK_HASH_NAMESPACE = 99;
+
+    private ResourceKey<Biome> pickTerrainAppropriateFallback(int blockX, int blockZ, Climate.Sampler sampler) {
+        TerrainClass terrainClass = TerrainClassifier.classifyAtBlock(sampler, blockX, blockZ);
+        List<BiomeConfig> eligible = BiomeConfigRegistry.allConfigs().stream()
+            .filter(biome -> biome.terrainClasses().contains(terrainClass))
+            .toList();
+        if (eligible.isEmpty()) {
+            // No configured biome declares this terrain class at all -- should not
+            // happen with the current config (every TerrainClass has at least one owner),
+            // but stay correct if that ever stops being true rather than throwing.
+            return BiomeConfigRegistry.allConfigs().get(0).id();
+        }
+        long seed = PatchSeedHasher.cellSeed(WorldSeedHolder.overworldSeed(), blockX, FALLBACK_PICK_HASH_NAMESPACE, blockZ);
+        return PatchGrowthEngine.pickWeightedBiome(eligible, seed).id();
     }
 
     /** /dump_patch_debug entry point -- see SurfacePatchGrid.measurePatchAt for caveats. */

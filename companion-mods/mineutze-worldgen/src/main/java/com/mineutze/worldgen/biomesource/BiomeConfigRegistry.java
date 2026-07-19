@@ -44,6 +44,7 @@ public final class BiomeConfigRegistry {
     private static final ResourceKey<Biome> WINDSWEPT_HILLS  = biomeKey("minecraft", "windswept_hills");
     private static final ResourceKey<Biome> DRIPSTONE_CAVES  = biomeKey("minecraft", "dripstone_caves");
     private static final ResourceKey<Biome> LUSH_CAVES        = biomeKey("minecraft", "lush_caves");
+    private static final ResourceKey<Biome> RIVER             = biomeKey("minecraft", "river");
 
     private static final List<BiomeConfig> CONFIGS = loadPlaceholderConfig();
 
@@ -88,6 +89,10 @@ public final class BiomeConfigRegistry {
             new BiomeConfig(
                 WINDSWEPT_HILLS, Set.of(TerrainClass.HILLY, TerrainClass.MOUNTAINOUS), 200, 450, 0.6f,
                 List.of(FOREST), List.of(), List.of()
+            ),
+            new BiomeConfig(
+                RIVER, Set.of(TerrainClass.RIVER), 200, 1000, 1.0f,
+                List.of(), List.of(), List.of()
             ),
             new BiomeConfig(
                 DRIPSTONE_CAVES, Set.of(), 0, 0, 1.0f,

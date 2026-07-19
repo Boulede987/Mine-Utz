@@ -6,6 +6,17 @@ changed during implementation vs. this original design; unmarked sections are st
 accurate as background/rationale. See "As-built deltas" (§13) for the full list plus
 known follow-up items deferred, not forgotten.
 
+**Read `TERRAIN_COHERENCE_DESIGN.md` (same directory) before doing further work here.**
+Real in-game testing after this doc's implementation exposed a deeper, architectural
+problem this design cannot fix by further tuning: this modpack's terrain generator
+(Tectonic, not vanilla) produces shape features (spires, ridges) largely decoupled from
+the climate signal this `BiomeSource` reads, so biome-reacts-to-terrain (this whole
+document's premise) can't guarantee the terrain/biome coherence the project actually
+needs. The user has decided the next phase inverts that: biome decision should drive
+terrain shape, not react to it, likely via modifying/forking Tectonic. That's a separate,
+larger, not-yet-started project — this document's system stays in place and working
+regardless, but it is not the final word on terrain/biome coherence.
+
 Supersedes the TerraBlender-based `FilterRegion` approach that used to live in this mod
 (`companion-mods/terrablender-custom-region`, now renamed
 `companion-mods/mineutze-worldgen`) for the **Overworld only** -- Nether and End were
@@ -251,14 +262,19 @@ different real reasons, both fixed:
 
 ## 12. Open items / next steps
 
+- **See `TERRAIN_COHERENCE_DESIGN.md` first** — the actual next priority, a larger
+  architectural pivot (biome-driven terrain instead of terrain-driven biome), not one of
+  the smaller items below.
 - Run the real terrain-class calibration (tooling exists, hasn't been executed against
-  real generated terrain yet).
+  real generated terrain yet) — still worth doing regardless of the above, though no
+  longer expected to be sufficient on its own (see `TERRAIN_COHERENCE_DESIGN.md` §3).
 - Build the real config authoring pipeline: `patch_config.json` + a datapack reload
   listener + a new Streamlit tab. `BiomeConfigRegistry.java` is genuinely temporary
   scaffolding, not just in name — every tuning change today requires a Java edit and a
   full mod rebuild/redeploy.
 - ~~Add a Java-side determinism test~~ — done (`PatchGrowthEngineSelfTest`, §11).
-- See §13 for concrete, deferred bug follow-ups (rivers, border noise, cave variety).
+- See §13 for concrete, deferred bug follow-ups (cave variety; rivers and border noise
+  are fixed).
 
 ## 13. As-built deltas not covered above
 
@@ -269,6 +285,31 @@ tier would be independent (§7's delta covers the resulting mechanism change). R
 
 Size unit (left TBD in the original §8/§11): resolved as **radius in blocks**, sampled
 per-patch-instance from `[size_min / 2, size_max / 2]`.
+
+**Domain-warped boundary lookup, not in the original design.** Even with the tile-radius
+fix (§11's hang investigation) and the cohesion bonus (§5's delta, requirement 2's
+follow-up), edges were still fundamentally cellular-automaton-shaped: a discrete
+best-first BFS over a 16-block grid, not the continuous-noise-driven boundaries vanilla
+gets "for free" because biome selection there is nearest-neighbour over smooth climate
+fields. Discrete structure is what gives us authored size/adjacency/terrain-class
+control at all (the whole reason this rewrite exists, §2) -- but it means edges read as
+grid-shaped unless something explicitly reintroduces organic variation.
+
+Fix: `DomainWarp` (new, `patch` package) perturbs the (x, z) position with a smooth,
+bilinearly-interpolated value-noise field (deterministic, built from `PatchSeedHasher`,
+no external noise dependency) -- but ONLY at the final read in
+`SurfacePatchGrid.resolve()`, when a block asks "whose cached answer do I use." It never
+touches germination, growth, size targets, adjacency scoring, or terrain classification --
+those all keep running on the clean, unwarped grid, so size/adjacency guarantees don't
+move. Correctness-critical detail: a warped/borrowed neighbor's answer is only accepted
+after re-checking it against the REAL terrain class at the exact unwarped query position
+(`classifyBlock`, finer-grained than the once-per-cell `classifyCell` growth uses) -- this
+makes it structurally impossible for the warp to place a biome on terrain it isn't
+eligible for (e.g. desert can never appear on real ocean-classified terrain via the warp,
+because the check rejects it before returning). The warp noise's smoothness is load-bearing,
+not cosmetic: verified via a standalone check (no Minecraft dependency) that adjacent
+blocks' offsets differ by at most ~1 block, never jump -- a sloppy per-cell-random warp
+would speckle instead of wobble.
 
 A post-processing step not in the original design: `dissolveSmallIslands`
 (`PatchGrowthEngine.java`; the now-dropped Python port had an equivalent
@@ -281,23 +322,54 @@ size get reassigned to whichever bordering biome is dominant AND terrain-class-e
 for every cell involved. Snapshot-then-apply, not mutate-while-deciding, or two adjacent
 small islands' outcomes would depend on which got processed first.
 
+**Border noise between similar-weight biomes sharing a terrain class — fixed.** e.g.
+plains and forest (both `FLAT_LAND`-eligible, similar weight) produced a visibly noisy/
+scattered border before settling into solid territory further in. NOT the same failure
+mode as the small-island bug above — border freckles were topologically connected back
+to their main body through a winding path along the frontier, so the dissolve pass's
+connected-component check never caught them (they weren't isolated). Real cause:
+`computeCellScore` had no "cohesion" term rewarding a contested cell for having more
+already-resolved same-biome cardinal neighbors, so ties along a contested frontier were
+decided by near-coin-flip tie-break noise instead of favoring a compact, smooth edge.
+Fixed with `SAME_BIOME_COHESION_BONUS_PER_NEIGHBOR` (0.2 per already-resolved
+same-*biome* cardinal neighbor, deliberately not same-*patch* — two separate patches of
+the same biome should still cohere near each other) added directly into
+`computeCellScore`, orthogonal to `PREFERRED_NEIGHBOR_SCORE_BONUS` (that rewards
+bordering a *different* macro-preferred biome; this rewards bordering *more of the same*
+biome — both can apply to one cell). Determinism reverified (`./gradlew selfTest`) since
+this changes the score function.
+
+**Rivers/lakes — fixed.** Land biomes could overshoot into inland water because
+`TerrainClassifier` only saw continentalness/erosion/weirdness, and a river/lake cell can
+carry the same macro continentalness as the dry land around it. Added `TerrainClass.RIVER`,
+detected via `abs(weirdness) <= RIVER_WEIRDNESS_ABS_HI` (a placeholder band, same
+calibration caveat as the other thresholds — not yet run against real terrain) checked
+before the flat/hilly/mountainous bucketing, and a `minecraft:river` `BiomeConfig`
+restricted to it. Because the eligible RIVER area is itself naturally thin/winding (it's
+literally the near-zero contour of the weirdness field), patches growing within it come
+out thin and winding too without needing any special-cased shape logic — the same
+circular-target-radius growth algorithm just naturally can't expand sideways out of a
+band that isn't there to expand into.
+
+**Gap fallback picked an arbitrary default — fixed.** `CustomOverworldBiomeSource`'s
+original Milestone-1-era fallback for a true gap (no patch's growth ever claimed that
+cell) was `BiomeConfigRegistry.allConfigs().get(0)` -- "whatever's first in the
+configured list." Confirmed, not hypothetical, real failure mode: germination-priority
+suppression (`isLocalMaximum`) isn't restricted to same-terrain-class competitors, so a
+tiny, isolated terrain feature (e.g. a small mountainous speck) can lose its own
+germination bid to a nearby, unrelated, higher-priority candidate; if no other patch's
+growth reaches it either, the crude fallback would silently mislabel it as whatever
+biome happened to be first in the list (plains) regardless of what's actually there.
+Fixed: the gap fallback now classifies the real terrain at the exact query position
+(`TerrainClassifier.classifyAtBlock`, extracted as a shared utility -- also de-duplicates
+what `SurfacePatchGrid.classifyCell`/`classifyBlock` were already doing) and picks a
+weighted-random biome among whichever configured biomes are actually eligible for that
+terrain class (`PatchGrowthEngine.pickWeightedBiome`, made public for this reuse) -- the
+same selection rule germination itself uses, just invoked directly for the one cell that
+needs it instead of via the normal seed-and-grow path.
+
 Known, deferred (not fixed, not forgotten — tracked as follow-up tasks):
 
-- **Rivers/lakes**: land biomes can still overshoot into inland water. `TerrainClassifier`
-  only sees continentalness/erosion/weirdness, and a river/lake cell can carry the same
-  macro continentalness as the dry land around it — vanilla itself uses a much narrower
-  "weirdness near the valley point" signal specifically for rivers, which the current
-  5-class bucketing doesn't capture. Needs a dedicated terrain class (or a height-based
-  check) plus a river/lake `BiomeConfig` restricted to it.
-- **Border noise between similar-weight biomes sharing a terrain class**: e.g. plains and
-  forest (both `FLAT_LAND`-eligible, similar weight) produce a visibly noisy/scattered
-  border before settling into solid territory further in. NOT the same failure mode as
-  the small-island bug above — border freckles are topologically connected back to their
-  main body through a winding path along the frontier, so the dissolve pass's
-  connected-component check doesn't catch them (they're not isolated). Real cause:
-  `computeCellScore` has no "cohesion" term rewarding a contested cell for having more
-  already-resolved same-biome cardinal neighbors, so ties along a contested frontier are
-  decided by near-coin-flip tie-break noise instead of favoring a compact, smooth edge.
 - **Cave-biome variety for unlinked underground**: see §7's and §9's deltas — unlinked
   underground columns get their surface biome's ID rather than vanilla's own dripstone/
   lush/deep_dark placement. Fixable by wrapping vanilla's default `MultiNoiseBiomeSource`

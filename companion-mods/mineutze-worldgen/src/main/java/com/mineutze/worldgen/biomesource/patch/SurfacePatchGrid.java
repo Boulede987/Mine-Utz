@@ -12,6 +12,7 @@ import org.slf4j.Logger;
 
 import java.util.ArrayDeque;
 import java.util.Deque;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -34,11 +35,17 @@ import java.util.concurrent.atomic.AtomicLong;
  * to land on that exact gap cell. Both were real, measured problems with the earlier
  * design (see git history / the world-creation hang investigation), not theoretical.
  *
- * Tradeoff accepted deliberately: patches are now hard-clipped at tile edges, which are
- * fixed and grid-aligned rather than centered on wherever a player happens to be. At
- * TILE_WIDTH_CELLS * CELL_SIZE_BLOCKS (currently ~1300 blocks) apart, this is nothing
- * like the original chunk-aligned (16-block) square-border problem this whole project
- * exists to fix -- a seam here needs deliberate cross-country travel to even notice.
+ * Tradeoff accepted deliberately: patches are hard-clipped at tile edges, which are fixed
+ * and grid-aligned rather than centered on wherever a player happens to be. This was
+ * originally assumed to be a rare, barely-noticeable edge case given how far apart tile
+ * seams are -- that assumption was wrong in practice: with TILE_RADIUS_CELLS capped
+ * below what some configured biomes' size_max actually needed, clipping was the DEFAULT
+ * outcome for those biomes, not a rare one, and produced clearly visible rectangular
+ * patches. The real fix was making sure the radius ceiling comfortably exceeds current
+ * config (see its own comment) so patches terminate by their own natural target radius
+ * in the common case -- tile-edge clipping remains a real possibility for any future
+ * biome sized well past what's currently configured, and would still show as a straight
+ * edge if it happens, not a curve.
  *
  * Only ever depends on the surface tier's own state -- never calls into the underground
  * tier -- keep it that way (see {@link UndergroundPatchGrid}'s class comment for why a
@@ -60,15 +67,23 @@ public final class SurfacePatchGrid {
     // unconditionally, before growth even starts) -- a SECOND hang happened after simply
     // raising one biome's size_max in config, since this radius derived directly from
     // MAX_SIZE_MAX_BLOCKS with no ceiling. HARD_RADIUS_CEILING_CELLS exists so no single
-    // future config value -- however reasonable a biome size it represents -- can do
-    // that again. Biomes whose size_max exceeds what the ceiling comfortably covers will
-    // occasionally get truncated at the tile edge instead of reaching their real target
-    // radius -- an accepted, documented tradeoff (DESIGN.md Sec 6's own "cap lookahead"
-    // philosophy explicitly sanctions this over unbounded cost), not a bug to chase away
-    // by raising the ceiling again.
+    // future config value can reintroduce that.
+    //
+    // The ceiling was originally set to 40 (the pre-hang-fix value), which turned out to
+    // be a real bug of its own, not just a safety margin: with desert's size_max at 1900
+    // blocks (radius 950 -> ~59 cells), a ceiling of 40 meant desert NEVER terminated by
+    // its own natural target radius -- it always hit the tile's rectangular edge first,
+    // producing visibly square/rectangular patches instead of organic ones. Raised well
+    // past what the current config needs (75 cells with margin) so the ceiling goes back
+    // to being a rare-case safety bound, not the routine limiter. Biomes whose size_max
+    // exceeds what the ceiling comfortably covers will still occasionally get truncated
+    // at the tile edge instead of reaching their real target radius -- an accepted,
+    // documented tradeoff (DESIGN.md Sec 6's own "cap lookahead" philosophy explicitly
+    // sanctions this over unbounded cost) -- but that should now be the rare exception,
+    // not the default outcome for any moderately large biome.
     private static final double TILE_MARGIN_FACTOR = 1.25;
     private static final int TILE_RADIUS_FLOOR_CELLS = 16;
-    private static final int HARD_RADIUS_CEILING_CELLS = 40;
+    private static final int HARD_RADIUS_CEILING_CELLS = 128;
     private static final int TILE_RADIUS_CELLS = Math.min(
         HARD_RADIUS_CEILING_CELLS,
         Math.max(
@@ -103,11 +118,17 @@ public final class SurfacePatchGrid {
 
     private final long worldSeed;
     private final List<BiomeConfig> biomes;
+    private final Map<ResourceKey<Biome>, BiomeConfig> configById;
     private final ConcurrentHashMap<TileKey, Map<PatchGrowthEngine.CoarseCell, ResourceKey<Biome>>> tileCache = new ConcurrentHashMap<>();
 
     public SurfacePatchGrid(long worldSeed, List<BiomeConfig> biomes) {
         this.worldSeed = worldSeed;
         this.biomes = biomes;
+        Map<ResourceKey<Biome>, BiomeConfig> lookup = new HashMap<>();
+        for (BiomeConfig biome : biomes) {
+            lookup.put(biome.id(), biome);
+        }
+        this.configById = lookup;
     }
 
     /**
@@ -115,13 +136,77 @@ public final class SurfacePatchGrid {
      * terrain_classes cover this cell and no neighboring patch's growth reached it --
      * the caller (CustomOverworldBiomeSource) must fall back to vanilla in that case,
      * never invent an arbitrary biome for the gap.
+     *
+     * Domain-warps the lookup near boundaries so edges wobble organically instead of
+     * following the underlying cell grid exactly (see DomainWarp's class comment for
+     * why the warp itself must be smooth). Safety property that must never be violated:
+     * whatever biome this returns for (blockX, blockZ) is always terrain-class-eligible
+     * for the REAL terrain at that exact position -- a warped/borrowed answer is only
+     * ever accepted after re-checking it against the true, unwarped terrain
+     * classification here, so the warp can never place e.g. desert on terrain the real
+     * noise says is ocean. The underlying cell/tile structure (including small-island
+     * dissolve) is resolved once, cached, and untouched by any of this -- warping is a
+     * read-time-only cosmetic layer on top of an already-correct structure.
      */
     public ResourceKey<Biome> resolve(int blockX, int blockZ, Climate.Sampler sampler) {
-        int cellX = Math.floorDiv(blockX, CELL_SIZE_BLOCKS);
-        int cellZ = Math.floorDiv(blockZ, CELL_SIZE_BLOCKS);
-        TileKey tileKey = new TileKey(Math.floorDiv(cellX, TILE_WIDTH_CELLS), Math.floorDiv(cellZ, TILE_WIDTH_CELLS));
+        ResourceKey<Biome> trueBiome = resolveCell(blockX, blockZ, sampler);
+        if (trueBiome == null) {
+            return null;
+        }
+
+        int warpedBlockX = blockX + DomainWarp.offsetXBlocks(worldSeed, blockX, blockZ);
+        int warpedBlockZ = blockZ + DomainWarp.offsetZBlocks(worldSeed, blockX, blockZ);
+        if (cellFor(warpedBlockX, warpedBlockZ).equals(cellFor(blockX, blockZ))) {
+            return trueBiome; // warp didn't reach a different cell -- nothing to borrow
+        }
+
+        ResourceKey<Biome> warpedBiome = resolveCell(warpedBlockX, warpedBlockZ, sampler);
+        if (warpedBiome == null || warpedBiome.equals(trueBiome)) {
+            return trueBiome;
+        }
+
+        BiomeConfig warpedConfig = configById.get(warpedBiome);
+        TerrainClass trueTerrainClassAtThisExactBlock = classifyBlock(blockX, blockZ, sampler);
+        boolean accepted = warpedConfig != null && warpedConfig.terrainClasses().contains(trueTerrainClassAtThisExactBlock);
+        recordWarpPairDiagnostics(trueBiome, warpedBiome, accepted);
+        return accepted ? warpedBiome : trueBiome; // rejected -- borrowing would mismatch the real terrain right here
+    }
+
+    /** TEMPORARY diagnostics: per-(trueBiome, warpedBiome) accept/reject counts, so if
+     * some specific biome pair's border stays suspiciously straight despite the warp
+     * being active elsewhere, real data is available instead of guessing why. Remove
+     * once border quality across all configured pairs is confirmed good in practice. */
+    private static final Map<String, long[]> WARP_PAIR_STATS = new ConcurrentHashMap<>();
+    private static final AtomicLong WARP_CONSIDERATION_COUNT = new AtomicLong();
+    private static final long WARP_STATS_LOG_EVERY_N = 2000L;
+
+    private static void recordWarpPairDiagnostics(ResourceKey<Biome> trueBiome, ResourceKey<Biome> warpedBiome, boolean accepted) {
+        String pairKey = trueBiome.location() + " <-> " + warpedBiome.location();
+        long[] counts = WARP_PAIR_STATS.computeIfAbsent(pairKey, key -> new long[2]);
+        synchronized (counts) {
+            counts[accepted ? 0 : 1]++;
+        }
+        if (WARP_CONSIDERATION_COUNT.incrementAndGet() % WARP_STATS_LOG_EVERY_N == 0) {
+            StringBuilder summary = new StringBuilder("[patch-debug] warp accept/reject by biome pair (accepted/rejected):");
+            for (Map.Entry<String, long[]> entry : WARP_PAIR_STATS.entrySet()) {
+                summary.append("\n  ").append(entry.getKey()).append(": ").append(entry.getValue()[0]).append('/').append(entry.getValue()[1]);
+            }
+            LOGGER.info(summary.toString());
+        }
+    }
+
+    private static PatchGrowthEngine.CoarseCell cellFor(int blockX, int blockZ) {
+        return new PatchGrowthEngine.CoarseCell(Math.floorDiv(blockX, CELL_SIZE_BLOCKS), Math.floorDiv(blockZ, CELL_SIZE_BLOCKS));
+    }
+
+    /** Looks up a single cell's biome, resolving (and caching) its whole tile on first
+     * touch. No warping here -- this is the "true", grid-aligned answer for exactly the
+     * given block position. */
+    private ResourceKey<Biome> resolveCell(int blockX, int blockZ, Climate.Sampler sampler) {
+        PatchGrowthEngine.CoarseCell cell = cellFor(blockX, blockZ);
+        TileKey tileKey = new TileKey(Math.floorDiv(cell.cellX(), TILE_WIDTH_CELLS), Math.floorDiv(cell.cellZ(), TILE_WIDTH_CELLS));
         Map<PatchGrowthEngine.CoarseCell, ResourceKey<Biome>> tile = tileCache.computeIfAbsent(tileKey, key -> resolveTile(key, sampler));
-        return tile.get(new PatchGrowthEngine.CoarseCell(cellX, cellZ));
+        return tile.get(cell);
     }
 
     /** Resolves one whole tile. Runs inside ConcurrentHashMap.computeIfAbsent, so this
@@ -167,9 +252,11 @@ public final class SurfacePatchGrid {
      * patch that extends beyond what's been explored so far, and never crosses into an
      * unresolved neighboring tile. Good enough to confirm "does this patch's width fall
      * in its configured [size_min, size_max] range", not a precise or authoritative query.
+     * Uses the TRUE (unwarped) cell structure, not resolve()'s warped answer -- this
+     * measures the authored patch, not the cosmetically wobbled visual outcome.
      */
     public PatchMeasurement measurePatchAt(int blockX, int blockZ, Climate.Sampler sampler) {
-        ResourceKey<Biome> biome = resolve(blockX, blockZ, sampler);
+        ResourceKey<Biome> biome = resolveCell(blockX, blockZ, sampler);
         if (biome == null) {
             return null;
         }
@@ -208,14 +295,20 @@ public final class SurfacePatchGrid {
     public record PatchMeasurement(ResourceKey<Biome> biome, int cachedCellCount, double approxRadiusBlocks) {
     }
 
+    /** Terrain class for a whole coarse cell, sampled once at its representative
+     * midpoint -- what germination/growth/eligibility use throughout PatchGrowthEngine. */
     private static TerrainClass classifyCell(int cellX, int cellZ, Climate.Sampler sampler) {
         int blockX = cellX * CELL_SIZE_BLOCKS + CELL_SIZE_BLOCKS / 2;
         int blockZ = cellZ * CELL_SIZE_BLOCKS + CELL_SIZE_BLOCKS / 2;
-        Climate.TargetPoint sample = sampler.sample(blockX >> 2, 0, blockZ >> 2);
-        return TerrainClassifier.classify(
-            Climate.unquantizeCoord(sample.continentalness()),
-            Climate.unquantizeCoord(sample.erosion()),
-            Climate.unquantizeCoord(sample.weirdness())
-        );
+        return classifyBlock(blockX, blockZ, sampler);
+    }
+
+    /** Terrain class at one EXACT block position, not a cell's representative midpoint --
+     * what resolve()'s warp-acceptance check uses. A cell is classified once for the
+     * whole 16-block area during growth; this finer per-block reading is what keeps a
+     * borrowed warped answer honest about the real terrain right at the query position,
+     * even though the cell it came from was only validated at its own midpoint. */
+    private static TerrainClass classifyBlock(int blockX, int blockZ, Climate.Sampler sampler) {
+        return TerrainClassifier.classifyAtBlock(sampler, blockX, blockZ);
     }
 }

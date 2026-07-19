@@ -48,6 +48,21 @@ public final class PatchGrowthEngine {
     private static final double TIE_BREAK_SCORE_SCALE            = 1e-6;
     private static final int MINIMUM_SPACING_CELLS               = 1;
 
+    // Real reported symptom: two biomes sharing a terrain class and similar weight (e.g.
+    // plains/forest, both FLAT_LAND) produced a visibly noisy, scattered border -- small
+    // alternating freckles of each biome before eventually settling into solid territory
+    // further in. Root cause: without this bonus, every contested cell along a shared
+    // frontier was decided purely by weight + the ~1e-6 tie-break noise, with nothing
+    // rewarding a cell for being surrounded by more of its own already-resolved
+    // territory. This is deliberately a same-BIOME check, not same-PATCH -- two separate
+    // patches of the same biome sitting near each other should still cohere, and
+    // visually "which patch instance" is invisible to a player anyway. Orthogonal to
+    // PREFERRED_NEIGHBOR_SCORE_BONUS: that rewards bordering a *different*,
+    // macro-preferred biome (encourages patches to cluster near each other in the first
+    // place); this rewards bordering *more of the same* biome (keeps any single patch's
+    // own edge compact once it's growing) -- both can and do apply to the same cell.
+    private static final double SAME_BIOME_COHESION_BONUS_PER_NEIGHBOR = 0.2;
+
     // A germination point deep inside what will become a much larger neighboring
     // patch's territory can survive its own local-maximum check (nothing else was
     // within ITS spacing radius at germination time) and then get boxed in almost
@@ -197,9 +212,11 @@ public final class PatchGrowthEngine {
         return eligible;
     }
 
-    /** Package-private: UndergroundPatchGrid reuses this same weighted-pick formula for
-     * choosing among multiple cave biomes linked to the same surface biome. */
-    static BiomeConfig pickWeightedBiome(List<BiomeConfig> candidates, long seed) {
+    /** Public: reused by UndergroundPatchGrid (same package, choosing among multiple cave
+     * biomes linked to the same surface biome) and CustomOverworldBiomeSource's gap
+     * fallback (different package, picking among biomes eligible for a gap cell's real
+     * terrain class). */
+    public static BiomeConfig pickWeightedBiome(List<BiomeConfig> candidates, long seed) {
         double totalWeight = 0;
         for (BiomeConfig biome : candidates) {
             totalWeight += biome.weight();
@@ -270,6 +287,9 @@ public final class PatchGrowthEngine {
             ResourceKey<Biome> neighborBiome = resolvedCells.get(new CoarseCell(cell.cellX() + offset[0], cell.cellZ() + offset[1]));
             if (neighborBiome == null) {
                 continue;
+            }
+            if (neighborBiome.equals(patch.biome.id())) {
+                score += SAME_BIOME_COHESION_BONUS_PER_NEIGHBOR;
             }
             if (patch.biome.preferredNeighbors().contains(neighborBiome)) {
                 score += PREFERRED_NEIGHBOR_SCORE_BONUS;
