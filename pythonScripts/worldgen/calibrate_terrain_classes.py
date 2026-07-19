@@ -59,6 +59,20 @@ can't distinguish a river dip from a spire (both look "rough" -- roughness is an
 undirected |difference|); depression is the directed signal that actually tells them
 apart, which is what makes it possible to calibrate TerrainClassifier's
 RIVER_WEIRDNESS_ABS_HI the same empirical way the erosion/weirdness thresholds are.
+
+RIVER_WEIRDNESS_ABS_HI ground truth (/dump_river_samples): the depression-proxy approach
+above kept failing its own sanity check on this modpack's real data (peak depression not
+near weirdness=0) even after sessions spent deliberately flying along visible rivers --
+likely because Tectonic redirects weirdness/ridges through its own custom noise, not
+vanilla's. /dump_river_samples [radius] [step] bulk-scans a grid the same way
+/dump_height_samples does but only logs a column if its real surface block is confirmed
+water -- ground truth, not inference. Point this script at a log containing that
+command's output (same log file works fine, both commands write to logs/latest.log) and
+it reports a direct percentile-based suggestion from confirmed water samples' real
+abs(weirdness) values instead, preferred over the depression-proxy number whenever
+ground-truth data is present. --world persistence covers this data too, in a separate
+calibration_data/<world>_rivers_NNNN.csv series (kept apart from the height-sample
+series so one never gets mistaken for the other).
 """
 
 import argparse
@@ -69,13 +83,25 @@ from pathlib import Path
 
 DUMP_START_PATTERN = re.compile(r'===== DUMP START \(height_samples\) =====')
 DUMP_END_PATTERN   = re.compile(r'===== DUMP END \(height_samples\) =====')
+# /dump_river_samples writes the identical row format under a different DUMP marker --
+# ground-truth confirmed-water columns, not the full grid. See suggest_river_threshold's
+# own docstring for why the depression-proxy approach below needed a ground-truth
+# alternative in the first place.
+RIVER_DUMP_START_PATTERN = re.compile(r'===== DUMP START \(river_samples\) =====')
+RIVER_DUMP_END_PATTERN   = re.compile(r'===== DUMP END \(river_samples\) =====')
 SAMPLE_LINE_PATTERN = re.compile(
     r'^(-?\d+),(-?\d+),(-?[\d.eE+-]+),(-?[\d.eE+-]+),(-?[\d.eE+-]+),(-?\d+)\s*$'
 )
 
 CALIBRATION_DATA_DIR = Path(__file__).parent / 'calibration_data'
 CUMULATIVE_FILE_PATTERN_TEMPLATE = r'^{world}_(\d+)\.csv$'
+CUMULATIVE_RIVER_FILE_PATTERN_TEMPLATE = r'^{world}_rivers_(\d+)\.csv$'
 CUMULATIVE_CSV_FIELDNAMES = ['x', 'z', 'continentalness', 'erosion', 'weirdness', 'height']
+
+# Suggested RIVER_WEIRDNESS_ABS_HI (ground-truth method) covers this percentile of
+# confirmed water samples' abs(weirdness) -- not the max, so a single outlier column
+# (a stray puddle, a lake arm at unusual weirdness) doesn't blow the band out wide.
+RIVER_WEIRDNESS_PERCENTILE = 90
 
 # Matches TerrainClassifier.java's existing ocean/coast split -- calibration here only
 # concerns the land-side flat/hilly/mountainous cutoffs.
@@ -94,17 +120,18 @@ MOUNTAINOUS_ROUGHNESS_FRACTION = 0.55  # buckets above this fraction of max roug
 RIVER_DEPRESSION_FRACTION      = 0.40  # buckets above this fraction of peak depression -> river-band candidate
 
 
-def parse_dump_blocks(text: str) -> list[dict]:
+def parse_generic_dump_blocks(text: str, start_pattern: re.Pattern, end_pattern: re.Pattern) -> list[dict]:
     """Extracts every (x, z, continentalness, erosion, weirdness, height) sample from
-    all DUMP START/END blocks found in text, wherever they appear in a noisy log file."""
+    all matching DUMP START/END blocks found in text, wherever they appear in a noisy
+    log file. Shared by parse_dump_blocks and parse_river_dump_blocks -- both commands
+    write the identical row format, only the marker differs."""
     samples = []
-    lines = text.splitlines()
     inside_block = False
-    for line in lines:
-        if DUMP_START_PATTERN.search(line):
+    for line in text.splitlines():
+        if start_pattern.search(line):
             inside_block = True
             continue
-        if DUMP_END_PATTERN.search(line):
+        if end_pattern.search(line):
             inside_block = False
             continue
         if not inside_block:
@@ -121,6 +148,40 @@ def parse_dump_blocks(text: str) -> list[dict]:
             'height': int(height),
         })
     return samples
+
+
+def parse_dump_blocks(text: str) -> list[dict]:
+    return parse_generic_dump_blocks(text, DUMP_START_PATTERN, DUMP_END_PATTERN)
+
+
+def parse_river_dump_blocks(text: str) -> list[dict]:
+    """/dump_river_samples output: confirmed-water columns only, ground truth for
+    RIVER_WEIRDNESS_ABS_HI instead of the depression-proxy inference below."""
+    return parse_generic_dump_blocks(text, RIVER_DUMP_START_PATTERN, RIVER_DUMP_END_PATTERN)
+
+
+def percentile(sorted_values: list[float], pct: float) -> float:
+    """Nearest-rank percentile (no interpolation) -- simple and good enough for a
+    threshold suggestion, keeps this script dependency-free (no numpy)."""
+    if not sorted_values:
+        return 0.0
+    index = max(0, min(len(sorted_values) - 1, round(pct / 100 * (len(sorted_values) - 1))))
+    return sorted_values[index]
+
+
+def suggest_river_threshold_from_ground_truth(river_samples: list[dict]) -> float | None:
+    """Direct ground truth from /dump_river_samples' confirmed water columns, not the
+    depression-proxy inference suggest_river_threshold below relies on -- built because
+    that approach kept failing its own sanity check (peak depression not near
+    weirdness=0) even after a session spent deliberately flying along real rivers.
+    Filters to land-side water (continentalness >= COAST_CONTINENTALNESS_HI) the same
+    way land_samples does, so open ocean doesn't dilute the river-specific signal.
+    Returns None if there's no land-side water data to suggest from at all."""
+    land_river_samples = [s for s in river_samples if s['continentalness'] >= COAST_CONTINENTALNESS_HI]
+    if not land_river_samples:
+        return None
+    abs_weirdness_values = sorted(abs(s['weirdness']) for s in land_river_samples)
+    return percentile(abs_weirdness_values, RIVER_WEIRDNESS_PERCENTILE)
 
 
 def detect_grid_step(samples: list[dict]) -> int:
@@ -252,13 +313,16 @@ def suggest_river_threshold(buckets: list[tuple[float, float, int]]) -> float:
     return threshold
 
 
-def find_latest_cumulative_file(world_name: str) -> Path | None:
-    """Highest-sequence calibration_data/<world_name>_NNNN.csv already saved for this
-    world, or None if this world has never been saved before. Sequence compared
-    numerically, not lexically, so _10 correctly sorts after _9."""
+def find_latest_cumulative_file(world_name: str, river: bool = False) -> Path | None:
+    """Highest-sequence calibration_data/<world_name>[_rivers]_NNNN.csv already saved
+    for this world, or None if this world has never been saved before (in that
+    category). Sequence compared numerically, not lexically, so _10 correctly sorts
+    after _9. river=True targets the separate river-samples file series -- same world
+    name, different content, kept apart so one doesn't get mistaken for the other."""
     if not CALIBRATION_DATA_DIR.is_dir():
         return None
-    pattern = re.compile(CUMULATIVE_FILE_PATTERN_TEMPLATE.format(world=re.escape(world_name)))
+    template = CUMULATIVE_RIVER_FILE_PATTERN_TEMPLATE if river else CUMULATIVE_FILE_PATTERN_TEMPLATE
+    pattern = re.compile(template.format(world=re.escape(world_name)))
     candidates = [
         (int(match.group(1)), path)
         for path in CALIBRATION_DATA_DIR.iterdir()
@@ -267,8 +331,9 @@ def find_latest_cumulative_file(world_name: str) -> Path | None:
     return max(candidates, key=lambda pair: pair[0])[1] if candidates else None
 
 
-def cumulative_file_sequence(path: Path, world_name: str) -> int:
-    match = re.match(CUMULATIVE_FILE_PATTERN_TEMPLATE.format(world=re.escape(world_name)), path.name)
+def cumulative_file_sequence(path: Path, world_name: str, river: bool = False) -> int:
+    template = CUMULATIVE_RIVER_FILE_PATTERN_TEMPLATE if river else CUMULATIVE_FILE_PATTERN_TEMPLATE
+    match = re.match(template.format(world=re.escape(world_name)), path.name)
     return int(match.group(1))
 
 
@@ -328,11 +393,21 @@ def main() -> None:
             print(f'No previous calibration_data found for world "{args.world}" -- starting fresh.')
 
     new_samples: list[dict] = []
+    new_river_samples: list[dict] = []
     for log_path in args.log_files:
         text = Path(log_path).read_text(encoding='utf-8', errors='ignore')
         found = parse_dump_blocks(text)
-        print(f'{log_path}: {len(found)} samples')
+        found_river = parse_river_dump_blocks(text)
+        print(f'{log_path}: {len(found)} height samples, {len(found_river)} river samples')
         new_samples.extend(found)
+        new_river_samples.extend(found_river)
+
+    all_river_samples: list[dict] = []
+    river_persisted_path = find_latest_cumulative_file(args.world, river=True) if args.world else None
+    if args.world and river_persisted_path:
+        persisted_river_samples = load_cumulative_samples(river_persisted_path)
+        print(f'{river_persisted_path}: {len(persisted_river_samples)} river samples from previous sessions')
+        all_river_samples.extend(persisted_river_samples)
 
     if args.world:
         all_samples = merge_samples_deduped(all_samples, new_samples)
@@ -340,8 +415,16 @@ def main() -> None:
         output_path = CALIBRATION_DATA_DIR / f'{args.world}_{next_sequence:04d}.csv'
         write_cumulative_samples(output_path, all_samples)
         print(f'Wrote {len(all_samples)} cumulative samples to {output_path}')
+
+        all_river_samples = merge_samples_deduped(all_river_samples, new_river_samples)
+        if all_river_samples:
+            river_next_sequence = cumulative_file_sequence(river_persisted_path, args.world, river=True) + 1 if river_persisted_path else 1
+            river_output_path = CALIBRATION_DATA_DIR / f'{args.world}_rivers_{river_next_sequence:04d}.csv'
+            write_cumulative_samples(river_output_path, all_river_samples)
+            print(f'Wrote {len(all_river_samples)} cumulative river samples to {river_output_path}')
     else:
         all_samples.extend(new_samples)
+        all_river_samples.extend(new_river_samples)
 
     if not all_samples:
         print('No samples to analyze -- pass at least one log file, or --world with previously saved data.')
@@ -377,14 +460,30 @@ def main() -> None:
     print_bucket_table('Depression by |weirdness| bucket:', abs_weirdness_depression_buckets, value_label='avg depression')
     river_weirdness_abs_hi = suggest_river_threshold(abs_weirdness_depression_buckets)
 
+    ground_truth_river_threshold = suggest_river_threshold_from_ground_truth(all_river_samples)
+    if all_river_samples:
+        land_river_samples = [s for s in all_river_samples if s['continentalness'] >= COAST_CONTINENTALNESS_HI]
+        print(f'\nGround-truth river/water samples (/dump_river_samples): {len(all_river_samples)} total, '
+              f'{len(land_river_samples)} on land (continentalness >= {COAST_CONTINENTALNESS_HI})')
+        if land_river_samples:
+            abs_weirdness_values = sorted(abs(s['weirdness']) for s in land_river_samples)
+            print(f'  abs(weirdness): min={abs_weirdness_values[0]:.3f} '
+                  f'median={percentile(abs_weirdness_values, 50):.3f} max={abs_weirdness_values[-1]:.3f}')
+
     print('\nSuggested TerrainClassifier thresholds (sanity-check against the tables above, don\'t paste blindly):')
     print(f'  MOUNTAINOUS_EROSION_HI       = {mountainous_erosion_hi:.3f}f')
     print(f'  HILLY_EROSION_HI             = {hilly_erosion_hi:.3f}f')
     print(f'  MOUNTAINOUS_WEIRDNESS_ABS_LO = {mountainous_weirdness_abs_lo:.3f}f')
-    print(f'  RIVER_WEIRDNESS_ABS_HI       = {river_weirdness_abs_hi:.3f}f')
-    print('  (check the RAW weirdness depression table above first -- if the peak isn\'t')
-    print('   near 0, RIVER_WEIRDNESS_ABS_HI is not trustworthy and this needs a different')
-    print('   band shape, not just a different width)')
+    if ground_truth_river_threshold is not None:
+        print(f'  RIVER_WEIRDNESS_ABS_HI       = {ground_truth_river_threshold:.3f}f  '
+              f'(ground truth, {RIVER_WEIRDNESS_PERCENTILE}th percentile of confirmed water -- use this one)')
+        print(f'    depression-proxy alternative was {river_weirdness_abs_hi:.3f}f -- prefer the ground-truth')
+        print('    value above; the depression proxy has repeatedly failed its own sanity check on this')
+        print('    modpack\'s real data (see the RAW weirdness depression table -- peak not near 0).')
+    else:
+        print(f'  RIVER_WEIRDNESS_ABS_HI       = {river_weirdness_abs_hi:.3f}f  (depression-proxy, UNTRUSTED --')
+        print('    run /dump_river_samples for a ground-truth suggestion instead; check the RAW weirdness')
+        print('    depression table above first -- if the peak isn\'t near 0, this number is not trustworthy)')
     print('\nUpdate TerrainClassifier.java (companion-mods/mineutze-worldgen) with these values.')
 
 
