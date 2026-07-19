@@ -64,6 +64,7 @@ RIVER_WEIRDNESS_ABS_HI the same empirical way the erosion/weirdness thresholds a
 import argparse
 import csv
 import re
+from collections import Counter
 from pathlib import Path
 
 DUMP_START_PATTERN = re.compile(r'===== DUMP START \(height_samples\) =====')
@@ -123,11 +124,23 @@ def parse_dump_blocks(text: str) -> list[dict]:
 
 
 def detect_grid_step(samples: list[dict]) -> int:
-    """Grid spacing the dump command was run with -- inferred from the smallest positive
-    gap between distinct x coordinates, since the command always samples on a regular grid."""
+    """Grid spacing the dump command was run with -- inferred from the MOST COMMON
+    positive gap between distinct x coordinates, not the smallest one. /dump_height_samples
+    walk pools multiple hops into one capture, each centered at a different, generally
+    non-step-aligned position (a rounded trig offset, not a clean multiple of step) -- so
+    the union of several independently-8-spaced grids interleaves and produces a handful
+    of small stray gaps (confirmed via real data: gap histogram [(8, 560), (7, 16), (1, 8)]
+    for a true step-8 capture) alongside the real dominant gap. min() picks up that noise
+    every time real multi-hop data is used; the mode is what actually recovers the step
+    the command was run with. A real, confirmed bug -- this is why roughness read as ~0
+    everywhere on real multi-hop captures: _neighbor_heights looked for a neighbor at the
+    wrong (noise) offset, almost never finding one, silently defaulting to 0 roughness."""
     xs = sorted({sample['x'] for sample in samples})
     gaps = [b - a for a, b in zip(xs, xs[1:]) if b > a]
-    return min(gaps) if gaps else 1
+    if not gaps:
+        return 1
+    gap_counts = Counter(gaps)
+    return gap_counts.most_common(1)[0][0]
 
 
 def _neighbor_heights(x: int, z: int, step: int, height_by_position: dict) -> list[int]:
