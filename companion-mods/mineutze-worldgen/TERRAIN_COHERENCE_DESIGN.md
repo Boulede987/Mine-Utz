@@ -83,10 +83,7 @@ continuation/patch.
 
 Open questions for next session's investigation phase (research first, no code):
 1. ~~Verify Tectonic's actual license terms~~ **RESOLVED, see §4a.**
-2. Map Tectonic's *full* density function graph (not just the spire/ridge features
-   already found) to scope what "biome-driven" would actually need to touch — the
-   `region_selector`/`continent_selector`/`terrain_spline` machinery is the likely core,
-   not just the named shape-feature files. **Still open — next entry point, see §7.**
+2. ~~Map Tectonic's *full* density function graph~~ **RESOLVED, see §4b.**
 3. ~~Decide whether biome *placement* can run fully decoupled from real terrain signal~~
    **RESOLVED, see §4a.**
 4. ~~Decide the actual mechanism~~ **Mechanism identified, see §4a — exact set of nodes
@@ -157,6 +154,74 @@ neither is needed for the JSON-expressed majority of the graph. One known except
 `NoiseBasedChunkGeneratorMixin.class`) — if Q2's mapping finds these load-bearing for
 compliance (not just cosmetic tuning), *that* specific piece may still need actual
 decompiling/forking. Won't know until Q2 is done.
+
+> **Correction from §4b (Q2's actual mapping):** the guess above that we'd need to
+> override each named shape file individually (`jungle_pillar`, `badlands_ridge`, spade
+> tiers) was wrong — turned out unnecessary. The real override surface is two files:
+> `terrain_spline/offset/regions.json` and `regions_weak.json`. See §4b for why.
+
+## 4b. Investigation findings continued (Q2 — density function graph mapping)
+
+Extracted and traced the jar's bundled resourcepack (`resourcepacks/tectonic/`, only
+`overlay.mod` active — confirmed via `minecraft/config/tectonic.json`: `no_carvers`
+absent/false, `ultrasmooth: false`, and neither `terralith` nor `mr_clifftree`/`clifftree`
+installed, so the other conditional overlays never apply). Full graph lives under
+`resourcepacks/tectonic/data/tectonic/worldgen/density_function/` (base pack, ~65 files;
+`overlay.mod` only touches `__constants/*` and `terrain_spline/offset/final.json`).
+
+**Router entry points** (`resourcepacks/tectonic/data/minecraft/worldgen/density_function/overworld/noise_router/`):
+vanilla's `continents.json`/`erosion.json`/`ridges.json` slots are each a trivial
+`minecraft:add` redirect to `tectonic:noise/full_continents` /
+`tectonic:biome_parameter/erosion` / `tectonic:biome_parameter/ridges`. `final_density.json`
+chains into `tectonic:base_terrain` → `tectonic:sloped_cheese`, which is where the
+actual land-shape system lives.
+
+**The region-family selector — the single highest-leverage node.**
+`terrain_spline/offset/regions.json` (+ `regions_weak.json`, a softer-magnitude variant
+blended alongside it) is a nested spline with exactly two input axes:
+- outer coordinate `tectonic:noise/continent/erosion` — picks the *bracket*: low erosion
+  → club / club_weak / heart family, high erosion → spade / spade_weak / diamond family
+- inner coordinate `tectonic:noise/region_selector` (its own largely-independent noise
+  field, `tectonic:region/selector`) — picks the specific member within that bracket
+
+Once a family is picked (e.g. `region/heart`), that region's own sub-graph
+(`jungle_pillar.json`, `rolling_hills.json`) runs unconstrained by biome — but that's
+fine by construction: if family *selection* is already biome-intent-driven, pillars only
+ever generate inside cells where intent already wanted jungle-shaped terrain. **No need
+to override the named shape-feature files individually** — overriding the two selector
+files above is sufficient. This corrects the individual-node-list guess in §4a.
+
+**Erosion's shared root, and why we don't touch it.** Traced
+`tectonic:noise/continent/erosion` and `tectonic:biome_parameter/erosion` (the
+vanilla-read biome-climate axis) back to the same raw octave,
+`tectonic:__constants/noise/erosion` — confirms §5's "erosion does incorporate region
+info" claim at the source. Overriding that shared raw octave was considered and
+rejected: it would alter general terrain roughness *everywhere*, not just region-family
+selection, which is exactly the terrain-quality loss Q5 worries about. Overriding
+`terrain_spline/offset/regions.json`/`regions_weak.json` directly instead avoids this —
+the shared erosion octave, and hence vanilla biome-climate matching elsewhere, stays
+untouched.
+
+**OCEAN/COAST/RIVER caveat (§4a, originally from §6) — resolved, not just guessed.**
+Ocean/continent placement runs through a wholly separate axis
+(`continent_selector`/`island_selector`/`terrain_spline/ocean.json`) that never
+references `region_selector` at all. Clean split confirmed: leave that axis reactive
+and untouched; only the land-shape family layer (`regions.json`) becomes
+intent-driven. No conflict between the two systems.
+
+**Revised mechanism, concretely:** one new custom `DensityFunction` type in our mod
+(samples `PatchGrowthEngine`'s intent map per column) + datapack-override exactly
+`terrain_spline/offset/regions.json` and `regions_weak.json` (swap/blend their
+`coordinate` inputs to read our function instead of / alongside
+`tectonic:noise/continent/erosion` and `tectonic:noise/region_selector`). Everything
+else in Tectonic's graph — ocean/island placement, roughness, mountain ridges/weathering,
+underground rivers, lava tunnels, caves — stays completely untouched.
+
+Still unconfirmed: exact numeric range our custom function needs to emit to land in the
+right spline brackets (regions.json's breakpoints are roughly ±0.02 to ±0.1 on the
+erosion axis, ±0.01 to ±0.1 on region_selector) — that's implementation-detail tuning,
+not architecture, deferred to when this is actually built. §5's Java-side mixin-slider
+exception still stands, unresolved either way.
 
 ## 5. Concrete technical grounding already established — don't re-derive this
 
@@ -231,10 +296,14 @@ see §4a. Confirmed: bounded density-function project, `PatchGrowthEngine` itsel
 no redesign, no Tectonic fork/reimplementation needed for the JSON-expressed majority of
 the graph.
 
-Next entry point is **Q2**: map Tectonic's full density-function graph
-(`region_selector`/`continent_selector`/`terrain_spline` machinery, not just the
-already-found named shape-feature files) to produce the exact list of nodes §4a's
-override mechanism needs to touch. Also resolve the still-open OCEAN/COAST/RIVER
-caveat from §4a (full-intent vs. staying reactive) and Q5's terrain-quality tradeoff
-scoping. Still research-first, no code, until Q2 gives a concrete node list to plan
-against.
+~~Next entry point is Q2~~ Q2 is answered too — see §4b. Concrete override surface
+identified: one new custom `DensityFunction` + `terrain_spline/offset/regions.json` +
+`regions_weak.json`. OCEAN/COAST/RIVER caveat resolved (stays reactive, architecturally
+separate axis, no conflict).
+
+Remaining before implementation: Q5's terrain-quality tradeoff scoping (now narrower in
+practice, given how surgical §4b's override surface turned out to be, but still not
+formally assessed) and the numeric-tuning question §4b flagged (what range our custom
+function needs to emit to land in the right spline brackets). After that, this moves
+from research to an actual implementation plan — get the user's explicit go-ahead
+before starting to write code, per this doc's opening note.
