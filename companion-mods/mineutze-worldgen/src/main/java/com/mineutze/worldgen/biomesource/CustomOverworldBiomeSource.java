@@ -124,6 +124,26 @@ public final class CustomOverworldBiomeSource extends BiomeSource {
         return surfacePatchGrid().measurePatchAt(blockX, blockZ, sampler);
     }
 
+    /** /dump_region_intent entry point. Peeks the cache BEFORE the real resolving call
+     * below, so the reported cacheHitBeforeQuery reflects the cache-warm assumption
+     * Stage 3's density function will rely on (it has no Climate.Sampler to force a
+     * fresh resolution with -- see TERRAIN_COHERENCE_DESIGN.md's "Climate.Sampler access
+     * problem" section), not whatever state this debug call itself just caused. A peek
+     * miss can mean either "tile not resolved yet" or "resolved, but this biome declared
+     * no regionFamilyWeights" -- both read identically to a real consumer, so this
+     * command doesn't try to distinguish them either (see SurfacePatchGrid.peekRegionIntent). */
+    public RegionIntentDebugInfo debugRegionIntent(int blockX, int blockZ, Climate.Sampler sampler) {
+        boolean cacheHitBeforeQuery = surfacePatchGrid().peekRegionIntent(blockX, blockZ) != null;
+        SurfacePatchGrid.BiomeAndFamily resolved = surfacePatchGrid().resolveWithFamily(blockX, blockZ, sampler);
+        if (resolved == null) {
+            return null;
+        }
+        return new RegionIntentDebugInfo(resolved.biome(), resolved.regionFamily(), cacheHitBeforeQuery);
+    }
+
+    public record RegionIntentDebugInfo(ResourceKey<Biome> biome, RegionFamily regionFamily, boolean cacheHitBeforeQuery) {
+    }
+
     private SurfacePatchGrid surfacePatchGrid() {
         SurfacePatchGrid grid = surfacePatchGrid;
         if (grid == null) {
@@ -132,6 +152,10 @@ public final class CustomOverworldBiomeSource extends BiomeSource {
                 if (grid == null) {
                     grid = new SurfacePatchGrid(WorldSeedHolder.overworldSeed(), BiomeConfigRegistry.allConfigs());
                     surfacePatchGrid = grid;
+                    // Phase 2 (Stage 3): a codec-constructed DensityFunction has no other
+                    // way to reach this instance -- see SurfacePatchGridHolder's own
+                    // comment.
+                    SurfacePatchGridHolder.set(grid);
                 }
             }
         }

@@ -2,6 +2,7 @@ package com.mineutze.worldgen.biomesource.patch;
 
 import com.mineutze.worldgen.biomesource.BiomeConfig;
 import com.mineutze.worldgen.biomesource.BiomeConfigRegistry;
+import com.mineutze.worldgen.biomesource.RegionFamily;
 import com.mineutze.worldgen.biomesource.TerrainClass;
 import com.mineutze.worldgen.biomesource.TerrainClassifier;
 import com.mojang.logging.LogUtils;
@@ -149,27 +150,45 @@ public final class SurfacePatchGrid {
      * read-time-only cosmetic layer on top of an already-correct structure.
      */
     public ResourceKey<Biome> resolve(int blockX, int blockZ, Climate.Sampler sampler) {
-        ResourceKey<Biome> trueBiome = resolveCell(blockX, blockZ, sampler);
-        if (trueBiome == null) {
+        BiomeAndFamily result = resolveWithFamily(blockX, blockZ, sampler);
+        return result == null ? null : result.biome();
+    }
+
+    /** Phase 2 (TERRAIN_COHERENCE_DESIGN.md Sec 4b): same warp+re-validate logic as
+     * resolve(), but carrying the cell's rolled RegionFamily alongside the biome through
+     * every step -- one warp-acceptance code path for both, so a warped/borrowed answer
+     * can never disagree between what CustomOverworldBiomeSource assigns as the real
+     * biome and what a later stage's density function reads as shape intent right at the
+     * same block. resolve() is now a thin wrapper around this. */
+    public BiomeAndFamily resolveWithFamily(int blockX, int blockZ, Climate.Sampler sampler) {
+        CellResolution trueResolution = resolveCellWithFamily(blockX, blockZ, sampler);
+        if (trueResolution == null) {
             return null;
         }
 
         int warpedBlockX = blockX + DomainWarp.offsetXBlocks(worldSeed, blockX, blockZ);
         int warpedBlockZ = blockZ + DomainWarp.offsetZBlocks(worldSeed, blockX, blockZ);
         if (cellFor(warpedBlockX, warpedBlockZ).equals(cellFor(blockX, blockZ))) {
-            return trueBiome; // warp didn't reach a different cell -- nothing to borrow
+            return trueResolution.toBiomeAndFamily(); // warp didn't reach a different cell -- nothing to borrow
         }
 
-        ResourceKey<Biome> warpedBiome = resolveCell(warpedBlockX, warpedBlockZ, sampler);
-        if (warpedBiome == null || warpedBiome.equals(trueBiome)) {
-            return trueBiome;
+        CellResolution warpedResolution = resolveCellWithFamily(warpedBlockX, warpedBlockZ, sampler);
+        if (warpedResolution == null || warpedResolution.biome().equals(trueResolution.biome())) {
+            return trueResolution.toBiomeAndFamily();
         }
 
-        BiomeConfig warpedConfig = configById.get(warpedBiome);
+        BiomeConfig warpedConfig = configById.get(warpedResolution.biome());
         TerrainClass trueTerrainClassAtThisExactBlock = classifyBlock(blockX, blockZ, sampler);
         boolean accepted = warpedConfig != null && warpedConfig.terrainClasses().contains(trueTerrainClassAtThisExactBlock);
-        recordWarpPairDiagnostics(trueBiome, warpedBiome, accepted);
-        return accepted ? warpedBiome : trueBiome; // rejected -- borrowing would mismatch the real terrain right here
+        recordWarpPairDiagnostics(trueResolution.biome(), warpedResolution.biome(), accepted);
+        // rejected -- borrowing would mismatch the real terrain right here
+        return accepted ? warpedResolution.toBiomeAndFamily() : trueResolution.toBiomeAndFamily();
+    }
+
+    /** Public: (biome, regionFamily) pair for one exact block position, after warp
+     * acceptance -- regionFamily is null wherever the resolved biome declared no
+     * regionFamilyWeights (see PatchGrowthEngine.GrowingPatch's own comment). */
+    public record BiomeAndFamily(ResourceKey<Biome> biome, RegionFamily regionFamily) {
     }
 
     /** TEMPORARY diagnostics: per-(trueBiome, warpedBiome) accept/reject counts, so if
@@ -201,12 +220,30 @@ public final class SurfacePatchGrid {
 
     /** Looks up a single cell's biome, resolving (and caching) its whole tile on first
      * touch. No warping here -- this is the "true", grid-aligned answer for exactly the
-     * given block position. */
+     * given block position. Thin wrapper around resolveCellWithFamily -- measurePatchAt
+     * only ever needed the biome half. */
     private ResourceKey<Biome> resolveCell(int blockX, int blockZ, Climate.Sampler sampler) {
+        CellResolution resolution = resolveCellWithFamily(blockX, blockZ, sampler);
+        return resolution == null ? null : resolution.biome();
+    }
+
+    /** (biome, regionFamily) pair for one cell, resolving (and caching) its whole tile
+     * on first touch. No warping here -- see resolveCell's own comment. */
+    private CellResolution resolveCellWithFamily(int blockX, int blockZ, Climate.Sampler sampler) {
         PatchGrowthEngine.CoarseCell cell = cellFor(blockX, blockZ);
         TileKey tileKey = new TileKey(Math.floorDiv(cell.cellX(), TILE_WIDTH_CELLS), Math.floorDiv(cell.cellZ(), TILE_WIDTH_CELLS));
         PatchGrowthEngine.WindowResolution tile = tileCache.computeIfAbsent(tileKey, key -> resolveTile(key, sampler));
-        return tile.biomeByCell().get(cell);
+        ResourceKey<Biome> biome = tile.biomeByCell().get(cell);
+        if (biome == null) {
+            return null;
+        }
+        return new CellResolution(biome, tile.regionFamilyByCell().get(cell));
+    }
+
+    private record CellResolution(ResourceKey<Biome> biome, RegionFamily regionFamily) {
+        BiomeAndFamily toBiomeAndFamily() {
+            return new BiomeAndFamily(biome, regionFamily);
+        }
     }
 
     /** Resolves one whole tile. Runs inside ConcurrentHashMap.computeIfAbsent, so this
@@ -308,6 +345,23 @@ public final class SurfacePatchGrid {
         TileKey tileKey = new TileKey(Math.floorDiv(cell.cellX(), TILE_WIDTH_CELLS), Math.floorDiv(cell.cellZ(), TILE_WIDTH_CELLS));
         PatchGrowthEngine.WindowResolution tile = tileCache.get(tileKey);
         return tile == null ? null : tile.biomeByCell().get(cell);
+    }
+
+    /** Public, non-triggering peek at a cell's resolved region-family shape intent --
+     * null for "tile not resolved yet", "resolved but this cell is a gap", AND "resolved
+     * to a biome that declared no regionFamilyWeights" (see
+     * PatchGrowthEngine.GrowingPatch's own comment) -- all three read identically to a
+     * caller: stay reactive to real Tectonic terrain here. This is deliberately
+     * non-triggering (mirrors peekCachedBiome's exact contract, one level over) because
+     * a codec-constructed DensityFunction (Stage 3) has no Climate.Sampler to force a
+     * real resolution with -- see the plan's "Climate.Sampler access problem" section.
+     * No warp applied here either, same reasoning as peekCachedBiome: this is a cheap
+     * read of already-resolved structure, not a fresh query. */
+    public RegionFamily peekRegionIntent(int blockX, int blockZ) {
+        PatchGrowthEngine.CoarseCell cell = cellFor(blockX, blockZ);
+        TileKey tileKey = new TileKey(Math.floorDiv(cell.cellX(), TILE_WIDTH_CELLS), Math.floorDiv(cell.cellZ(), TILE_WIDTH_CELLS));
+        PatchGrowthEngine.WindowResolution tile = tileCache.get(tileKey);
+        return tile == null ? null : tile.regionFamilyByCell().get(cell);
     }
 
     public record PatchMeasurement(ResourceKey<Biome> biome, int cachedCellCount, double approxRadiusBlocks) {
