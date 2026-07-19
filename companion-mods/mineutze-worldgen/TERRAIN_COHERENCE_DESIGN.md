@@ -1,10 +1,12 @@
 # Terrain Coherence — Phase 2 (goal for the next session)
 
-Status: **not started — planning/handoff only.** This document exists so a fresh
-conversation can pick up exactly where this one left off without re-deriving any of the
-investigation below. Do not start implementing from this doc without the user's explicit
-go-ahead in that session — it captures a *decision about direction*, not an approved
-implementation plan.
+Status: **investigation complete (§4a/§4b/§4c), implementation not started.** All five
+original open questions (§4) are answered — license, placement decoupling, mechanism,
+graph mapping, terrain-quality scoping. This document exists so a fresh conversation can
+pick up exactly where this one left off without re-deriving any of the investigation
+below. Do not start implementing from this doc without the user's explicit go-ahead in
+that session — it captures a *decision about direction and a concrete mechanism*, not
+an approved implementation plan.
 
 Phase 1 (everything in `DESIGN.md` — the custom `BiomeSource` replacing TerraBlender,
 patch-growth placement, terrain-class gating, domain-warped borders, underground
@@ -88,12 +90,9 @@ Open questions for next session's investigation phase (research first, no code):
    **RESOLVED, see §4a.**
 4. ~~Decide the actual mechanism~~ **Mechanism identified, see §4a — exact set of nodes
    to override still depends on Q2.**
-5. Scope how much of Tectonic's terrain *quality* survives the intervention — the more
-   we force compliance, the more we risk flattening exactly the "realistic, beautiful
-   terrain" the user explicitly doesn't want to lose. This is a real tension, not a
-   solved problem — expect a tradeoff, not a free lunch. **Still open** — mitigated
-   somewhat by §4a's mechanism (keeps Tectonic's own spline/region math, only gates
-   specific nodes) but not eliminated.
+5. ~~Scope how much of Tectonic's terrain *quality* survives the intervention~~
+   **Narrowed to a bounded design task, see §4c** — no longer an open research
+   question, structurally resolved by §4b's mechanism; what's left is authoring work.
 
 ## 4a. Investigation findings (this session)
 
@@ -223,6 +222,41 @@ erosion axis, ±0.01 to ±0.1 on region_selector) — that's implementation-deta
 not architecture, deferred to when this is actually built. §5's Java-side mixin-slider
 exception still stands, unresolved either way.
 
+## 4c. Q5 — terrain-quality tradeoff, narrowed (this session)
+
+User's framing, agreed with in full: whether Tectonic's terrain quality survives the
+intervention comes down to two levers, both under our control, neither automatable:
+
+1. **Shape attributed to each biome** — which Tectonic region family (club/diamond/
+   heart/spade + weak variants) a biome declares as its desired shape. These family
+   names are internal codenames with no inherent semantic tie to biome identity (heart
+   happening to hold `jungle_pillar` is a naming accident, not a pattern) — which family
+   "feels right" for desert vs. swamp vs. mountain is aesthetic judgment. No amount of
+   data-driven calibration can derive this; it has to be hand-authored, the same way
+   `terrain_classes`/`size`/`weight`/neighbors already are in `BiomeConfigRegistry`
+   (§ handoff doc: no authoring pipeline exists, every change needs a Java edit —
+   this adds to that same pile, doesn't create a new problem).
+2. **Biome placement rules** — `PatchGrowthEngine`'s existing size/adjacency/weight
+   knobs, already manually tuned, already the mechanism controlling patch footprint and
+   border behavior. Nothing structurally new needed; will need retuning once shape
+   intent goes live.
+
+**Refinement added this session:** don't map each biome to a single family 1:1.
+§4b's mechanism only *selects which existing Tectonic template runs* — it never touches
+the template's own math — so per-family variety/beauty is structurally preserved
+regardless of how the mapping is authored. The real risk to perceived quality isn't
+math degradation, it's **spatial monotony**: a rigid 1:1 mapping means every patch of a
+given biome renders the same family, stamped repeatedly across the map. Fix: map each
+biome to a **weighted set** of eligible families, rolled once per patch — reusing the
+exact pattern `PatchGrowthEngine.pickWeightedBiome` (line 219) already uses for biome
+selection itself, one level down. Preserves variety inside a biome's own footprint on
+top of variety across biomes.
+
+**Net effect on Q5:** moves from an open research question to a bounded, well-understood
+authoring task — structurally guaranteed by §4b's mechanism (shape math untouched),
+remaining work is content (the family-weight table per biome) and tuning (existing
+placement knobs), not architecture.
+
 ## 5. Concrete technical grounding already established — don't re-derive this
 
 From a prior investigation this session (full report available in conversation history
@@ -301,9 +335,11 @@ identified: one new custom `DensityFunction` + `terrain_spline/offset/regions.js
 `regions_weak.json`. OCEAN/COAST/RIVER caveat resolved (stays reactive, architecturally
 separate axis, no conflict).
 
-Remaining before implementation: Q5's terrain-quality tradeoff scoping (now narrower in
-practice, given how surgical §4b's override surface turned out to be, but still not
-formally assessed) and the numeric-tuning question §4b flagged (what range our custom
-function needs to emit to land in the right spline brackets). After that, this moves
-from research to an actual implementation plan — get the user's explicit go-ahead
-before starting to write code, per this doc's opening note.
+~~Remaining before implementation: Q5's terrain-quality tradeoff scoping~~ Q5 is
+resolved too — see §4c. All five original open questions are now answered. What's left
+is the numeric-tuning question §4b flagged (what range our custom function needs to
+emit to land in the right spline brackets) plus authoring the per-biome family-weight
+table §4c calls for — both implementation-detail work, not research.
+
+This moves from research to an actual implementation plan next. Get the user's explicit
+go-ahead before starting to write code, per this doc's opening note.
