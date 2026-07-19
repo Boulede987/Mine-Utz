@@ -27,10 +27,16 @@ import org.slf4j.Logger;
  * and mountainous areas), then feed the log output to
  * pythonScripts/worldgen/calibrate_terrain_classes.py to get real threshold suggestions.
  *
- * Deliberately only walks already-loaded/explored terrain in practice -- getHeight on
- * fresh chunks forces generation, so running this over a huge unexplored radius would
- * itself be slow for the same reason the surface tier's window resolution is. The sample
- * cap exists to keep a single invocation cheap regardless.
+ * CORRECTNESS NOTE (found via real captured data returning -64, the world-bottom
+ * sentinel, for 97% of samples over unexplored terrain): Level.getHeight does NOT force
+ * chunk generation on its own -- verified directly against decompiled vanilla source
+ * (Level.java's real getHeight implementation checks hasChunk(...) first and silently
+ * returns getMinY() if the chunk isn't already loaded, never triggering generation).
+ * forceRealHeight below explicitly forces the chunk via getChunk(cx, cz) (confirmed,
+ * separately, to force synchronous full generation) before every height read, fixing
+ * this. Consequence: running this over a large UNEXPLORED radius is now genuinely
+ * expensive (real chunk generation, not a cheap heightmap read) -- the sample cap below
+ * is the real safety valve for that cost now, not a redundant one.
  *
  * /dump_height_samples walk [radius] [step] -- same dump, then teleports the sender
  * forward (their current horizontal look direction, pitch ignored) by 2*radius blocks,
@@ -107,7 +113,7 @@ public final class HeightSampleDumpCommand {
         for (int x = center.getX() - radiusBlocks; x <= center.getX() + radiusBlocks; x += stepBlocks) {
             for (int z = center.getZ() - radiusBlocks; z <= center.getZ() + radiusBlocks; z += stepBlocks) {
                 Climate.TargetPoint sample = sampler.sample(x >> 2, 0, z >> 2);
-                int height = level.getHeight(Heightmap.Types.WORLD_SURFACE, x, z);
+                int height = forceRealHeight(level, x, z);
                 output.append(x).append(',').append(z).append(',')
                     .append(Climate.unquantizeCoord(sample.continentalness())).append(',')
                     .append(Climate.unquantizeCoord(sample.erosion())).append(',')
@@ -149,9 +155,20 @@ public final class HeightSampleDumpCommand {
 
         int destX = from.getX() + (int) Math.round(forwardX * travelBlocks);
         int destZ = from.getZ() + (int) Math.round(forwardZ * travelBlocks);
-        int destY = level.getHeight(Heightmap.Types.WORLD_SURFACE, destX, destZ) + WALK_LANDING_CLEARANCE_BLOCKS;
+        int destY = forceRealHeight(level, destX, destZ) + WALK_LANDING_CLEARANCE_BLOCKS;
 
         player.teleportTo(destX + 0.5, destY, destZ + 0.5);
         return new BlockPos(destX, destY, destZ);
+    }
+
+    /** Level.getHeight alone silently returns getMinY() (world bottom) for a chunk
+     * that isn't already loaded -- it does NOT force generation, despite what this
+     * class used to assume (see the class-level correctness note). Forcing the chunk
+     * via getChunk(cx, cz) first (confirmed: LevelReader's 2-arg getChunk defaults to
+     * requireChunk=true, which synchronously generates to FULL status) makes hasChunk
+     * true before getHeight ever checks it, so the real generated height comes back. */
+    private static int forceRealHeight(ServerLevel level, int x, int z) {
+        level.getChunk(x >> 4, z >> 4);
+        return level.getHeight(Heightmap.Types.WORLD_SURFACE, x, z);
     }
 }
