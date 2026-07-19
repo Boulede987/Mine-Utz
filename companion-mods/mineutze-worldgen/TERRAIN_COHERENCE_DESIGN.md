@@ -82,25 +82,81 @@ larger undertaking than anything built in Phase 1; treat it as its own project, 
 continuation/patch.
 
 Open questions for next session's investigation phase (research first, no code):
-1. Verify Tectonic's actual license terms (confirm MIT, check for any additional
-   restrictions e.g. on redistribution of modified jars) before deciding to fork vs.
-   reimplement vs. hybrid.
+1. ~~Verify Tectonic's actual license terms~~ **RESOLVED, see §4a.**
 2. Map Tectonic's *full* density function graph (not just the spire/ridge features
    already found) to scope what "biome-driven" would actually need to touch — the
    `region_selector`/`continent_selector`/`terrain_spline` machinery is the likely core,
-   not just the named shape-feature files.
-3. Decide whether biome *placement* (our existing size/adjacency system, `PatchGrowthEngine`)
-   can run fully decoupled from any real terrain signal at all (pure position + world
-   seed + authored rules) — this is the crux of inverting the pipeline order. If yes,
-   Phase 1's terrain-class *gating* concept (a biome can only grow where real terrain
-   already matches) inverts into terrain-class *intent* (a biome declares what it wants;
-   generation is made to comply).
-4. Decide the actual mechanism: forked Tectonic density functions reading our placement
-   decision as an input, vs. a new parallel density-function layer, vs. something else.
+   not just the named shape-feature files. **Still open — next entry point, see §7.**
+3. ~~Decide whether biome *placement* can run fully decoupled from real terrain signal~~
+   **RESOLVED, see §4a.**
+4. ~~Decide the actual mechanism~~ **Mechanism identified, see §4a — exact set of nodes
+   to override still depends on Q2.**
 5. Scope how much of Tectonic's terrain *quality* survives the intervention — the more
    we force compliance, the more we risk flattening exactly the "realistic, beautiful
    terrain" the user explicitly doesn't want to lose. This is a real tension, not a
-   solved problem — expect a tradeoff, not a free lunch.
+   solved problem — expect a tradeoff, not a free lunch. **Still open** — mitigated
+   somewhat by §4a's mechanism (keeps Tectonic's own spline/region math, only gates
+   specific nodes) but not eliminated.
+
+## 4a. Investigation findings (this session)
+
+**License (Q1) — resolved, user accepts.** Confirmed MIT three independent ways: jar's
+own `META-INF/mods.toml` (`license = "MIT"`), Modrinth project API
+(`api.modrinth.com/v2/project/lWDHr9jE` → `license.id: "MIT"`), and CurseForge listing
+(user-confirmed). One wrinkle found and noted for the record: the GitHub source repo
+(`Apollounknowndev/tectonic`, branch `rewrite-squared`) has **no LICENSE file** —
+`api.github.com/repos/Apollounknowndev/tectonic` reports `license: null`, README has no
+licensing mention. So there's no formal license *grant text* to cite, only the
+author's consistent self-declaration across jar metadata and both mod-listing sites.
+User has weighed this and is fine proceeding on that basis — not revisiting unless new
+information surfaces.
+
+**Placement decoupling (Q3) — resolved: yes, cleanly, no `PatchGrowthEngine` redesign.**
+Traced every read of real terrain signal in `PatchGrowthEngine.java`
+(`biomesource/patch/`). It has exactly three touchpoints, all hard *filters*, none
+feeding the scoring/selection math:
+- `eligibleBiomesForTerrainClass` (germination candidate filter)
+- the terrain-class check inside `pushEligibleNeighbors` (growth-time filter)
+- `isEligibleForEveryCell` (dissolve-small-island replacement filter)
+
+Everything else — weighted biome pick, local-maximum germination spacing, best-first
+growth scoring (weight + same-biome cohesion + preferred/forbidden neighbor bonuses +
+seed tiebreak), target radius sampling — is a pure function of
+`(worldSeed, cellX, cellZ, BiomeConfig)`. Stripping those three filter call sites is
+enough to make the engine emit a full biome-placement map from seed + authored config
+alone, with **zero terrain read** — this becomes the terrain-class *intent* map. So all
+of Phase 2's redesign weight sits on Tectonic's side; none of it lands on
+`PatchGrowthEngine`'s core algorithm.
+
+Caveat raised and accepted: OCEAN/COAST/RIVER probably can't go full-intent the same
+way — water plausibly still needs to react to real low elevation, or risks
+floating/buried oceans. Doc §6 already flagged this; treat as still-open, decide
+explicitly when scoping Q4/mechanism work, not assumed either way.
+
+**Mechanism (Q4) — identified: datapack override + one new custom density-function
+type, not a Tectonic fork/reimplementation.** Tectonic's shape graph
+(`region/{club,diamond,heart,spade}/*`, `terrain_spline/offset/regions.json`, etc.,
+per §5) is **JSON data**, not compiled code. Minecraft's normal datapack resource-ID
+override mechanism already lets our mod replace any of those JSON files without
+touching Tectonic's jar, mixins, or source at all — this is exactly how §3's rejected
+"targeted override" idea worked mechanically, just scoped wider now.
+
+The missing piece: JSON density functions have no way to read our Java-computed intent
+map. Fix: register **one new custom `DensityFunction` type in our own mod** (pure new
+code, zero Tectonic code copied or forked) that samples `PatchGrowthEngine`'s intent map
+per-column, then datapack-override the specific Tectonic JSON nodes (`region_selector`,
+`jungle_pillar`, `badlands_ridge`, spade tiers, spline offsets — exact full list is Q2's
+job) to reference it.
+
+Net effect: keeps almost all of Tectonic's actual spline/region math and "beautiful
+terrain" quality intact (§4 pt 5's tension), only gates/parameterizes the specific nodes
+that need to consume our biome intent. Substantially lower blast radius than either
+"fork Tectonic's compiled mixins" or "reimplement Tectonic's generator from scratch" —
+neither is needed for the JSON-expressed majority of the graph. One known exception:
+§5's "not yet determined" Java-side mixin config sliders (`NoiseState.class`,
+`NoiseBasedChunkGeneratorMixin.class`) — if Q2's mapping finds these load-bearing for
+compliance (not just cosmetic tuning), *that* specific piece may still need actual
+decompiling/forking. Won't know until Q2 is done.
 
 ## 5. Concrete technical grounding already established — don't re-derive this
 
@@ -170,8 +226,15 @@ of Phase 2's own design work.
 
 ## 7. Suggested entry point for next session
 
-Start with §4's open questions as research (no code), particularly #1 (license) and #3
-(can placement decouple from real terrain fully) — #3 in particular determines whether
-this is "a large but bounded density-function project" or "we're now also redesigning
-`PatchGrowthEngine`'s core eligibility model." Don't skip straight to forking Tectonic's
-jar before that's answered.
+~~Start with §4's open questions as research~~ Q1, Q3, and Q4's mechanism are answered —
+see §4a. Confirmed: bounded density-function project, `PatchGrowthEngine` itself needs
+no redesign, no Tectonic fork/reimplementation needed for the JSON-expressed majority of
+the graph.
+
+Next entry point is **Q2**: map Tectonic's full density-function graph
+(`region_selector`/`continent_selector`/`terrain_spline` machinery, not just the
+already-found named shape-feature files) to produce the exact list of nodes §4a's
+override mechanism needs to touch. Also resolve the still-open OCEAN/COAST/RIVER
+caveat from §4a (full-intent vs. staying reactive) and Q5's terrain-quality tradeoff
+scoping. Still research-first, no code, until Q2 gives a concrete node list to plan
+against.
