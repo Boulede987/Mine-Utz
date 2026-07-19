@@ -14,6 +14,45 @@ linkage) is **done and working**. This document is about a deeper problem Phase 
 testing exposed, which Phase 1's architecture cannot fix no matter how much more it gets
 tuned.
 
+## Architecture at a glance
+
+Blue = Phase 1, done. Yellow = Phase 2, planned/not built. Green = untouched either way.
+
+```mermaid
+flowchart TB
+    SEED["World seed"] --> PGE["PatchGrowthEngine"]
+    BCR["BiomeConfigRegistry<br/>(authored: terrain_classes, size, weight,<br/>adjacency, shape-family weights)"] --> PGE
+    TC["TerrainClassifier<br/>(reads real Tectonic terrain)"] -.->|"gate, removed in Phase 2"| PGE
+    PGE --> INTENT["Intent map<br/>(biome + terrain-class + shape-family per cell)"]
+    INTENT --> COBS["CustomOverworldBiomeSource"]
+    COBS --> BIOME["Final biome assigned"]
+
+    INTENT --> CDF["New custom DensityFunction<br/>(mineutze mod, samples intent map)"]
+    CDF --> OV1["datapack override:<br/>terrain_spline/offset/regions.json"]
+    CDF --> OV2["datapack override:<br/>regions_weak.json"]
+    OV1 --> FAM["Tectonic region family graphs<br/>(club / diamond / heart / spade — untouched math)"]
+    OV2 --> FAM
+    FAM --> HEIGHT["Actual terrain height / shape"]
+
+    OCEAN["continent_selector / island_selector<br/>(ocean placement, stays reactive)"] --> HEIGHT
+
+    classDef phase1 fill:#cce5ff,stroke:#004085,color:#000
+    classDef phase2 fill:#fff3cd,stroke:#856404,color:#000
+    classDef unchanged fill:#d4edda,stroke:#155724,color:#000
+
+    class SEED,BCR,TC,PGE,INTENT,COBS,BIOME phase1
+    class CDF,OV1,OV2 phase2
+    class FAM,OCEAN,HEIGHT unchanged
+```
+
+Reading it: today (Phase 1, blue), `PatchGrowthEngine` only emits a biome where real
+Tectonic terrain already matches (`TerrainClassifier` gate). Phase 2 (yellow) strips
+that gate so the same engine emits a pure intent map from seed + config alone, then
+feeds it into Tectonic's own region-family selector via one new density-function type
+and two file overrides — everything downstream of that (yellow `FAM` box onward) is
+Tectonic's existing, untouched shape math. Ocean/continent placement (green) never
+enters this picture at all — see §4b.
+
 ## 1. The problem, precisely
 
 Phase 1's whole premise (`DESIGN.md` §2): a custom `BiomeSource` can read the same
