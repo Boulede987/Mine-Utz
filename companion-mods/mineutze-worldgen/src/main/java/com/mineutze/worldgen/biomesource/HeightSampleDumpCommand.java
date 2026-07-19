@@ -1,12 +1,14 @@
 package com.mineutze.worldgen.biomesource;
 
 import com.mojang.brigadier.arguments.IntegerArgumentType;
+import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import com.mojang.logging.LogUtils;
 import net.minecraft.core.BlockPos;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.level.biome.Climate;
 import net.minecraft.world.level.levelgen.Heightmap;
 import net.neoforged.neoforge.event.RegisterCommandsEvent;
@@ -29,6 +31,14 @@ import org.slf4j.Logger;
  * fresh chunks forces generation, so running this over a huge unexplored radius would
  * itself be slow for the same reason the surface tier's window resolution is. The sample
  * cap exists to keep a single invocation cheap regardless.
+ *
+ * /dump_height_samples walk [radius] [step] -- same dump, then teleports the sender
+ * forward (their current horizontal look direction, pitch ignored) by 2*radius blocks,
+ * landing on the real surface height at the destination -- covers varied terrain by
+ * repeated invocation (spam the command / bind it) without manually re-flying between
+ * every capture. 2*radius keeps consecutive sample areas adjacent, not overlapping.
+ * Direction is locked to whichever way the sender was facing at THAT invocation, not
+ * re-read from a fixed heading -- turn before the next call to redirect the sweep.
  */
 public final class HeightSampleDumpCommand {
 
@@ -38,26 +48,45 @@ public final class HeightSampleDumpCommand {
     private static final int DEFAULT_RADIUS_BLOCKS = 256;
     private static final int DEFAULT_STEP_BLOCKS = 8;
 
+    // Landed above the real surface height, not exactly on it -- avoids spawning the
+    // player inside terrain on a destination column with an overhang or a sudden rise
+    // relative to its neighbors.
+    private static final int WALK_LANDING_CLEARANCE_BLOCKS = 2;
+
     private HeightSampleDumpCommand() {
     }
 
     public static void register(RegisterCommandsEvent event) {
         event.getDispatcher().register(Commands.literal("dump_height_samples")
             .requires(source -> source.hasPermission(REQUIRED_PERMISSION_LEVEL))
-            .executes(context -> run(context.getSource(), DEFAULT_RADIUS_BLOCKS, DEFAULT_STEP_BLOCKS))
+            .executes(context -> run(context.getSource(), DEFAULT_RADIUS_BLOCKS, DEFAULT_STEP_BLOCKS, false))
             .then(Commands.argument("radius", IntegerArgumentType.integer(1))
                 .then(Commands.argument("step", IntegerArgumentType.integer(1))
                     .executes(context -> run(
                         context.getSource(),
                         IntegerArgumentType.getInteger(context, "radius"),
-                        IntegerArgumentType.getInteger(context, "step")
+                        IntegerArgumentType.getInteger(context, "step"),
+                        false
                     ))
+                )
+            )
+            .then(Commands.literal("walk")
+                .executes(context -> run(context.getSource(), DEFAULT_RADIUS_BLOCKS, DEFAULT_STEP_BLOCKS, true))
+                .then(Commands.argument("radius", IntegerArgumentType.integer(1))
+                    .then(Commands.argument("step", IntegerArgumentType.integer(1))
+                        .executes(context -> run(
+                            context.getSource(),
+                            IntegerArgumentType.getInteger(context, "radius"),
+                            IntegerArgumentType.getInteger(context, "step"),
+                            true
+                        ))
+                    )
                 )
             )
         );
     }
 
-    private static int run(CommandSourceStack source, int radiusBlocks, int stepBlocks) {
+    private static int run(CommandSourceStack source, int radiusBlocks, int stepBlocks, boolean walkAfter) throws CommandSyntaxException {
         long sideSamples = (2L * radiusBlocks / stepBlocks) + 1;
         long totalSamples = sideSamples * sideSamples;
         if (totalSamples > MAX_TOTAL_SAMPLES) {
@@ -91,7 +120,38 @@ public final class HeightSampleDumpCommand {
         LOGGER.info(output.toString());
 
         int finalSampleCount = sampleCount;
-        source.sendSuccess(() -> Component.literal("Dumped " + finalSampleCount + " height samples to the log."), false);
+        if (walkAfter) {
+            BlockPos destination = teleportForward(source, level, center, radiusBlocks);
+            source.sendSuccess(() -> Component.literal(
+                "Dumped " + finalSampleCount + " height samples to the log. Walked to ("
+                    + destination.getX() + ", " + destination.getZ() + ")."
+            ), false);
+        } else {
+            source.sendSuccess(() -> Component.literal("Dumped " + finalSampleCount + " height samples to the log."), false);
+        }
         return sampleCount;
+    }
+
+    /** Moves the sender 2*radiusBlocks forward along their current horizontal look
+     * direction (yaw only -- pitch ignored, so looking up/down doesn't send them into
+     * the sky or underground), landing WALK_LANDING_CLEARANCE_BLOCKS above the real
+     * surface height at the destination column. 2*radiusBlocks keeps this capture's
+     * sampled square and the next one adjacent rather than overlapping. */
+    private static BlockPos teleportForward(
+        CommandSourceStack source, ServerLevel level, BlockPos from, int radiusBlocks
+    ) throws CommandSyntaxException {
+        ServerPlayer player = source.getPlayerOrException();
+        double yawRadians = Math.toRadians(player.getYRot());
+        // Minecraft yaw: 0 = facing south (+Z), increases clockwise when viewed from above.
+        double forwardX = -Math.sin(yawRadians);
+        double forwardZ = Math.cos(yawRadians);
+        int travelBlocks = radiusBlocks * 2;
+
+        int destX = from.getX() + (int) Math.round(forwardX * travelBlocks);
+        int destZ = from.getZ() + (int) Math.round(forwardZ * travelBlocks);
+        int destY = level.getHeight(Heightmap.Types.WORLD_SURFACE, destX, destZ) + WALK_LANDING_CLEARANCE_BLOCKS;
+
+        player.teleportTo(destX + 0.5, destY, destZ + 0.5);
+        return new BlockPos(destX, destY, destZ);
     }
 }
