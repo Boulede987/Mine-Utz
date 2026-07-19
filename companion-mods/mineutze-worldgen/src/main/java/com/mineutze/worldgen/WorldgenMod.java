@@ -4,6 +4,7 @@ import com.mineutze.worldgen.biomesource.HeightSampleDumpCommand;
 import com.mineutze.worldgen.biomesource.ModBiomeSources;
 import com.mineutze.worldgen.biomesource.PatchDebugCommand;
 import com.mineutze.worldgen.biomesource.RegionIntentDebugCommand;
+import com.mineutze.worldgen.biomesource.RiverSampleDumpCommand;
 import com.mineutze.worldgen.biomesource.TerrainClassDebugCommand;
 import com.mineutze.worldgen.biomesource.WorldSeedHolder;
 import com.mineutze.worldgen.biomesource.patch.ModDensityFunctionTypes;
@@ -38,6 +39,7 @@ public class WorldgenMod {
         NeoForge.EVENT_BUS.addListener(HeightSampleDumpCommand::register);
         NeoForge.EVENT_BUS.addListener(TerrainClassDebugCommand::register);
         NeoForge.EVENT_BUS.addListener(RegionIntentDebugCommand::register);
+        NeoForge.EVENT_BUS.addListener(RiverSampleDumpCommand::register);
     }
 
     private void onCommonSetup(FMLCommonSetupEvent event) {

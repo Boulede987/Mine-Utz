@@ -38,13 +38,21 @@ import org.slf4j.Logger;
  * expensive (real chunk generation, not a cheap heightmap read) -- the sample cap below
  * is the real safety valve for that cost now, not a redundant one.
  *
- * /dump_height_samples walk [radius] [step] -- same dump, then teleports the sender
- * forward (their current horizontal look direction, pitch ignored) by 2*radius blocks,
- * landing on the real surface height at the destination -- covers varied terrain by
- * repeated invocation (spam the command / bind it) without manually re-flying between
- * every capture. 2*radius keeps consecutive sample areas adjacent, not overlapping.
- * Direction is locked to whichever way the sender was facing at THAT invocation, not
- * re-read from a fixed heading -- turn before the next call to redirect the sweep.
+ * /dump_height_samples walk [count] -- same dump, then teleports the sender forward
+ * (their current horizontal look direction, pitch ignored) by 2*radius blocks, landing
+ * on the real surface height at the destination. With [count] > 1, repeats dump+walk
+ * that many times in one command call, printing a "[hop/count] ..." progress line to
+ * chat after each hop (running total included) so a long sweep's progress -- and when
+ * it's actually done -- is visible without guessing. 2*radius keeps consecutive sample
+ * areas adjacent, not overlapping. Direction is locked to whichever way the sender was
+ * facing when the COMMAND was issued, read once -- not re-read between hops -- so the
+ * whole multi-hop sweep travels in a straight line; turn before the next invocation to
+ * redirect. /dump_height_samples walk <radius> <step> [count] sets radius/step too.
+ *
+ * Cost note: every hop's chunk-forcing (see forceRealHeight) is real, synchronous work
+ * on the server thread -- a large count over unexplored terrain blocks the server for
+ * the sum of every hop's generation cost, not just one. MAX_WALK_COUNT is a blunt safety
+ * ceiling on that, not a tuned value.
  */
 public final class HeightSampleDumpCommand {
 
@@ -53,6 +61,12 @@ public final class HeightSampleDumpCommand {
     private static final int MAX_TOTAL_SAMPLES = 10_000;
     private static final int DEFAULT_RADIUS_BLOCKS = 256;
     private static final int DEFAULT_STEP_BLOCKS = 8;
+    private static final int DEFAULT_WALK_COUNT = 1;
+
+    // Blunt safety ceiling on how many hops one command call can chain -- see the
+    // class-level "Cost note". Generous enough to comfortably cover the counts (~10)
+    // this was actually built for, not a tuned value.
+    private static final int MAX_WALK_COUNT = 50;
 
     // Landed above the real surface height, not exactly on it -- avoids spawning the
     // player inside terrain on a destination column with an overhang or a sudden rise
@@ -65,47 +79,104 @@ public final class HeightSampleDumpCommand {
     public static void register(RegisterCommandsEvent event) {
         event.getDispatcher().register(Commands.literal("dump_height_samples")
             .requires(source -> source.hasPermission(REQUIRED_PERMISSION_LEVEL))
-            .executes(context -> run(context.getSource(), DEFAULT_RADIUS_BLOCKS, DEFAULT_STEP_BLOCKS, false))
+            .executes(context -> run(context.getSource(), DEFAULT_RADIUS_BLOCKS, DEFAULT_STEP_BLOCKS, false, DEFAULT_WALK_COUNT))
             .then(Commands.argument("radius", IntegerArgumentType.integer(1))
                 .then(Commands.argument("step", IntegerArgumentType.integer(1))
                     .executes(context -> run(
                         context.getSource(),
                         IntegerArgumentType.getInteger(context, "radius"),
                         IntegerArgumentType.getInteger(context, "step"),
-                        false
+                        false, DEFAULT_WALK_COUNT
                     ))
                 )
             )
             .then(Commands.literal("walk")
-                .executes(context -> run(context.getSource(), DEFAULT_RADIUS_BLOCKS, DEFAULT_STEP_BLOCKS, true))
+                .executes(context -> run(context.getSource(), DEFAULT_RADIUS_BLOCKS, DEFAULT_STEP_BLOCKS, true, DEFAULT_WALK_COUNT))
+                .then(Commands.argument("count", IntegerArgumentType.integer(1))
+                    .executes(context -> run(
+                        context.getSource(), DEFAULT_RADIUS_BLOCKS, DEFAULT_STEP_BLOCKS, true,
+                        IntegerArgumentType.getInteger(context, "count")
+                    ))
+                )
                 .then(Commands.argument("radius", IntegerArgumentType.integer(1))
                     .then(Commands.argument("step", IntegerArgumentType.integer(1))
                         .executes(context -> run(
                             context.getSource(),
                             IntegerArgumentType.getInteger(context, "radius"),
                             IntegerArgumentType.getInteger(context, "step"),
-                            true
+                            true, DEFAULT_WALK_COUNT
                         ))
+                        .then(Commands.argument("count", IntegerArgumentType.integer(1))
+                            .executes(context -> run(
+                                context.getSource(),
+                                IntegerArgumentType.getInteger(context, "radius"),
+                                IntegerArgumentType.getInteger(context, "step"),
+                                true,
+                                IntegerArgumentType.getInteger(context, "count")
+                            ))
+                        )
                     )
                 )
             )
         );
     }
 
-    private static int run(CommandSourceStack source, int radiusBlocks, int stepBlocks, boolean walkAfter) throws CommandSyntaxException {
+    private static int run(
+        CommandSourceStack source, int radiusBlocks, int stepBlocks, boolean walkAfter, int walkCount
+    ) throws CommandSyntaxException {
         long sideSamples = (2L * radiusBlocks / stepBlocks) + 1;
-        long totalSamples = sideSamples * sideSamples;
-        if (totalSamples > MAX_TOTAL_SAMPLES) {
+        long samplesPerHop = sideSamples * sideSamples;
+        if (samplesPerHop > MAX_TOTAL_SAMPLES) {
             source.sendFailure(Component.literal(
-                "That would be " + totalSamples + " samples (max " + MAX_TOTAL_SAMPLES + ") -- raise step or shrink radius."
+                "That would be " + samplesPerHop + " samples per hop (max " + MAX_TOTAL_SAMPLES + ") -- raise step or shrink radius."
+            ));
+            return 0;
+        }
+        if (walkCount > MAX_WALK_COUNT) {
+            source.sendFailure(Component.literal(
+                "count " + walkCount + " exceeds max " + MAX_WALK_COUNT + " -- run the command again to continue past that."
             ));
             return 0;
         }
 
         ServerLevel level = source.getLevel();
         Climate.Sampler sampler = level.getChunkSource().randomState().sampler();
-        BlockPos center = BlockPos.containing(source.getPosition());
+        BlockPos currentCenter = BlockPos.containing(source.getPosition());
 
+        int totalSamples = 0;
+        for (int hop = 1; hop <= walkCount; hop++) {
+            BlockPos hopCenter = currentCenter;
+            int hopSamples = dumpOnce(level, sampler, hopCenter, radiusBlocks, stepBlocks);
+            totalSamples += hopSamples;
+            int finalTotal = totalSamples;
+            int finalHop = hop;
+
+            if (walkAfter) {
+                BlockPos destination = teleportForward(source, level, hopCenter, radiusBlocks);
+                boolean isLastHop = hop == walkCount;
+                source.sendSuccess(() -> Component.literal(
+                    "[" + finalHop + "/" + walkCount + "] " + hopSamples + " samples at ("
+                        + hopCenter.getX() + ", " + hopCenter.getZ() + ")" + (isLastHop ? "." : " -- walking to ("
+                        + destination.getX() + ", " + destination.getZ() + ").") + " Total: " + finalTotal + "."
+                ), false);
+                currentCenter = destination;
+            } else {
+                source.sendSuccess(() -> Component.literal("Dumped " + hopSamples + " height samples to the log."), false);
+            }
+        }
+
+        if (walkAfter && walkCount > 1) {
+            int finalTotal = totalSamples;
+            source.sendSuccess(() -> Component.literal(
+                "Walk complete: " + walkCount + " hops, " + finalTotal + " total samples dumped to the log."
+            ), false);
+        }
+        return totalSamples;
+    }
+
+    /** One capture centered at `center`, logged as its own DUMP START/END block --
+     * run()'s walk loop calls this once per hop. */
+    private static int dumpOnce(ServerLevel level, Climate.Sampler sampler, BlockPos center, int radiusBlocks, int stepBlocks) {
         StringBuilder output = new StringBuilder();
         output.append("===== DUMP START (height_samples) =====\n");
         output.append("x,z,continentalness,erosion,weirdness,height\n");
@@ -124,17 +195,6 @@ public final class HeightSampleDumpCommand {
         }
         output.append("===== DUMP END (height_samples) =====");
         LOGGER.info(output.toString());
-
-        int finalSampleCount = sampleCount;
-        if (walkAfter) {
-            BlockPos destination = teleportForward(source, level, center, radiusBlocks);
-            source.sendSuccess(() -> Component.literal(
-                "Dumped " + finalSampleCount + " height samples to the log. Walked to ("
-                    + destination.getX() + ", " + destination.getZ() + ")."
-            ), false);
-        } else {
-            source.sendSuccess(() -> Component.literal("Dumped " + finalSampleCount + " height samples to the log."), false);
-        }
         return sampleCount;
     }
 
