@@ -3,6 +3,7 @@ package com.mineutze.worldgen;
 import com.mineutze.worldgen.biomesource.HeightSampleDumpCommand;
 import com.mineutze.worldgen.biomesource.ModBiomeSources;
 import com.mineutze.worldgen.biomesource.PatchDebugCommand;
+import com.mineutze.worldgen.biomesource.TerrainClassDebugCommand;
 import com.mineutze.worldgen.biomesource.WorldSeedHolder;
 import net.minecraft.resources.ResourceLocation;
 import net.neoforged.bus.api.IEventBus;
@@ -32,6 +33,7 @@ public class WorldgenMod {
         NeoForge.EVENT_BUS.addListener(WorldSeedHolder::onLevelLoad);
         NeoForge.EVENT_BUS.addListener(PatchDebugCommand::register);
         NeoForge.EVENT_BUS.addListener(HeightSampleDumpCommand::register);
+        NeoForge.EVENT_BUS.addListener(TerrainClassDebugCommand::register);
     }
 
     private void onCommonSetup(FMLCommonSetupEvent event) {

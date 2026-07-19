@@ -15,6 +15,11 @@ import java.util.Set;
  * undergroundLinkedSurfaceBiomes is only non-empty for underground (cave) biomes -- it
  * lists the exact surface biomes this cave biome is allowed under (requirement 3,
  * "exact 1:1 linkage"). Empty for surface biomes.
+ *
+ * regionFamilyWeights is this biome's desired Tectonic terrain-shape templates (Phase 2,
+ * TERRAIN_COHERENCE_DESIGN.md Sec 4b/4c) -- empty for any biome that should stay
+ * reactive to real Tectonic terrain rather than declaring shape intent (OCEAN, RIVER,
+ * and underground biomes never roll a family; see PatchGrowthEngine.isEligible).
  */
 public record BiomeConfig(
     ResourceKey<Biome> id,
@@ -24,6 +29,7 @@ public record BiomeConfig(
     float weight,
     List<ResourceKey<Biome>> preferredNeighbors,
     List<ResourceKey<Biome>> forbiddenNeighbors,
-    List<ResourceKey<Biome>> undergroundLinkedSurfaceBiomes
+    List<ResourceKey<Biome>> undergroundLinkedSurfaceBiomes,
+    List<RegionFamilyWeight> regionFamilyWeights
 ) {
 }

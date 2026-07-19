@@ -119,7 +119,7 @@ public final class SurfacePatchGrid {
     private final long worldSeed;
     private final List<BiomeConfig> biomes;
     private final Map<ResourceKey<Biome>, BiomeConfig> configById;
-    private final ConcurrentHashMap<TileKey, Map<PatchGrowthEngine.CoarseCell, ResourceKey<Biome>>> tileCache = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<TileKey, PatchGrowthEngine.WindowResolution> tileCache = new ConcurrentHashMap<>();
 
     public SurfacePatchGrid(long worldSeed, List<BiomeConfig> biomes) {
         this.worldSeed = worldSeed;
@@ -205,24 +205,42 @@ public final class SurfacePatchGrid {
     private ResourceKey<Biome> resolveCell(int blockX, int blockZ, Climate.Sampler sampler) {
         PatchGrowthEngine.CoarseCell cell = cellFor(blockX, blockZ);
         TileKey tileKey = new TileKey(Math.floorDiv(cell.cellX(), TILE_WIDTH_CELLS), Math.floorDiv(cell.cellZ(), TILE_WIDTH_CELLS));
-        Map<PatchGrowthEngine.CoarseCell, ResourceKey<Biome>> tile = tileCache.computeIfAbsent(tileKey, key -> resolveTile(key, sampler));
-        return tile.get(cell);
+        PatchGrowthEngine.WindowResolution tile = tileCache.computeIfAbsent(tileKey, key -> resolveTile(key, sampler));
+        return tile.biomeByCell().get(cell);
     }
 
     /** Resolves one whole tile. Runs inside ConcurrentHashMap.computeIfAbsent, so this
      * must never call back into tileCache (re-entrant computeIfAbsent on the same map
-     * throws) -- it doesn't, PatchGrowthEngine is pure computation. */
-    private Map<PatchGrowthEngine.CoarseCell, ResourceKey<Biome>> resolveTile(TileKey key, Climate.Sampler sampler) {
+     * throws) -- it doesn't, PatchGrowthEngine is pure computation.
+     *
+     * If this throws, computeIfAbsent records NO mapping for the tile -- every future
+     * query touching it re-attempts resolution from scratch and throws again. Under real
+     * chunk generation (many worker threads, the eager stronghold-ring structure scan
+     * querying thousands of columns in a burst) that reads as a silent hang, not a
+     * visible crash -- a real, confirmed failure mode this session (see
+     * BiomeConfigRegistry's static-init-order bug and its own comment). Catch, log loudly
+     * with the tile coordinates that triggered it, then rethrow -- never swallow. */
+    private PatchGrowthEngine.WindowResolution resolveTile(TileKey key, Climate.Sampler sampler) {
         long startedAtNanos = System.nanoTime();
         int minCellX = key.tileX() * TILE_WIDTH_CELLS;
         int minCellZ = key.tileZ() * TILE_WIDTH_CELLS;
-        PatchGrowthEngine.TerrainSampler terrainSampler = (cellX, cellZ) -> classifyCell(cellX, cellZ, sampler);
-        Map<PatchGrowthEngine.CoarseCell, ResourceKey<Biome>> resolved = PatchGrowthEngine.resolveWindow(
-            worldSeed, biomes, CELL_SIZE_BLOCKS, terrainSampler,
-            minCellX, minCellZ, minCellX + TILE_WIDTH_CELLS, minCellZ + TILE_WIDTH_CELLS
-        );
-        recordDiagnostics(key, System.nanoTime() - startedAtNanos, resolved.size());
-        return resolved;
+        try {
+            PatchGrowthEngine.TerrainSampler terrainSampler = (cellX, cellZ) -> classifyCell(cellX, cellZ, sampler);
+            PatchGrowthEngine.WindowResolution resolved = PatchGrowthEngine.resolveWindow(
+                worldSeed, biomes, CELL_SIZE_BLOCKS, terrainSampler,
+                minCellX, minCellZ, minCellX + TILE_WIDTH_CELLS, minCellZ + TILE_WIDTH_CELLS
+            );
+            recordDiagnostics(key, System.nanoTime() - startedAtNanos, resolved.biomeByCell().size());
+            return resolved;
+        } catch (RuntimeException | Error e) {
+            LOGGER.error(
+                "[patch-debug] tile ({}, {}) [{},{} to {},{}) FAILED to resolve on thread '{}' after {}ms -- "
+                    + "this tile will keep re-throwing on every future query until fixed and redeployed",
+                key.tileX(), key.tileZ(), minCellX, minCellZ, minCellX + TILE_WIDTH_CELLS, minCellZ + TILE_WIDTH_CELLS,
+                Thread.currentThread().getName(), (System.nanoTime() - startedAtNanos) / 1_000_000, e
+            );
+            throw e;
+        }
     }
 
     private void recordDiagnostics(TileKey key, long computeNanos, int cellsResolved) {
@@ -288,8 +306,8 @@ public final class SurfacePatchGrid {
      * flood-fill in measurePatchAt doesn't need to tell those apart. */
     private ResourceKey<Biome> peekCachedBiome(PatchGrowthEngine.CoarseCell cell) {
         TileKey tileKey = new TileKey(Math.floorDiv(cell.cellX(), TILE_WIDTH_CELLS), Math.floorDiv(cell.cellZ(), TILE_WIDTH_CELLS));
-        Map<PatchGrowthEngine.CoarseCell, ResourceKey<Biome>> tile = tileCache.get(tileKey);
-        return tile == null ? null : tile.get(cell);
+        PatchGrowthEngine.WindowResolution tile = tileCache.get(tileKey);
+        return tile == null ? null : tile.biomeByCell().get(cell);
     }
 
     public record PatchMeasurement(ResourceKey<Biome> biome, int cachedCellCount, double approxRadiusBlocks) {

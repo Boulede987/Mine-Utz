@@ -1,6 +1,8 @@
 package com.mineutze.worldgen.biomesource.patch;
 
 import com.mineutze.worldgen.biomesource.BiomeConfig;
+import com.mineutze.worldgen.biomesource.RegionFamily;
+import com.mineutze.worldgen.biomesource.RegionFamilyWeight;
 import com.mineutze.worldgen.biomesource.TerrainClass;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.world.level.biome.Biome;
@@ -15,6 +17,7 @@ import java.util.Map;
 import java.util.PriorityQueue;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.ToDoubleFunction;
 
 /**
  * Seeded best-first patch-growth biome placement, resolved over a bounded rectangular
@@ -76,10 +79,63 @@ public final class PatchGrowthEngine {
     private static final double SMALL_ISLAND_DISSOLVE_FRACTION = 0.3;
 
     // cellSeed's cellY parameter doubles as a hash "namespace" selector: 0 for
-    // germination-candidate selection, 1 for patch-identity seeding -- keeps the two
-    // hash uses from colliding.
+    // germination-candidate selection, 1 for patch-identity seeding, 3 for region-family
+    // rolling (2 is UndergroundPatchGrid's, 10/20+ are DomainWarp's) -- keeps every hash
+    // use from colliding.
     private static final int GERMINATION_CANDIDATE_HASH_NAMESPACE = 0;
     private static final int PATCH_IDENTITY_HASH_NAMESPACE        = 1;
+    private static final int REGION_FAMILY_HASH_NAMESPACE         = 3;
+
+    // Phase 2 (TERRAIN_COHERENCE_DESIGN.md Sec 4a/4b): OCEAN/COAST/RIVER stay gated by
+    // the REAL terrain class here -- Tectonic's base elevation axis is physically
+    // separate from the region-family shape axis (Sec 4b's confirmed finding), so an
+    // intent-driven desert placed on real deep ocean would produce underwater dunes, not
+    // land.
+    //
+    // FLAT_LAND/HILLY/MOUNTAINOUS split GERMINATION from GROWTH -- a real, in-game
+    // correction to the first attempt at this, which made BOTH terrain-blind (any biome
+    // declaring any land class eligible on any land cell, everywhere, for everything).
+    // That collapsed 3 real, naturally-clustered terrain classes into one undifferentiated
+    // bucket: a biome like windswept_hills (previously confined to real hills/mountains --
+    // rare, clustered terrain) could suddenly GERMINATE anywhere on any land cell in the
+    // whole world, since every land cell now offered it as an equally-eligible candidate.
+    // Confirmed real symptom in-game: small windswept_hills/desert/etc patches peppered
+    // through completely unrelated terrain (forest, plains) at high density -- not a
+    // mismatch between biome and terrain SHAPE (expected and fine at this stage, see
+    // Stage 1's own doc note), but the biome MAP ITSELF losing the macro-scale coherence
+    // real terrain-class boundaries used to provide for free.
+    //
+    // Fix: germination (isEligibleForGermination) stays exactly as strict as Phase 1
+    // always was -- a patch can only ORIGINATE where real terrain already matches one of
+    // its declared classes, for every TerrainClass, water or land alike. Growth
+    // (isEligibleForGrowth) is where terrain-blindness actually lives -- an
+    // already-germinated patch can SPREAD onto adjacent land cells regardless of their
+    // real class. This still achieves the real goal (an existing patch's territory isn't
+    // artificially bounded by real terrain shape, so Stage 3/4's eventual terrain-forcing
+    // has real territory to act on) without exploding germination density across
+    // unrelated terrain everywhere.
+    private static final Set<TerrainClass> WATER_TERRAIN_CLASSES = Set.of(
+        TerrainClass.OCEAN, TerrainClass.COAST, TerrainClass.RIVER
+    );
+    private static final Set<TerrainClass> LAND_TERRAIN_CLASSES = Set.of(
+        TerrainClass.FLAT_LAND, TerrainClass.HILLY, TerrainClass.MOUNTAINOUS
+    );
+    // Growth-blend-only subset of LAND_TERRAIN_CLASSES -- MOUNTAINOUS deliberately
+    // excluded. Real in-game evidence (a desert patch, declaring only FLAT_LAND/COAST,
+    // grown directly onto a real MOUNTAINOUS cell across a genuine coast-to-mountain
+    // transition, confirmed via /dump_terrain_class showing smooth, non-noisy real
+    // classification either side of the border -- so this was never a classifier-noise
+    // problem) showed FLAT_LAND/HILLY/MOUNTAINOUS treated as one fully-interchangeable
+    // bucket for growth was too permissive: real mountainous terrain is visually far
+    // more distinct (elevation, jaggedness) from flat/hilly than flat and hilly are from
+    // each other, and until Stage 3/4 actually forces terrain shape to comply with
+    // biome intent, letting non-mountain biomes grow across real mountains produces a
+    // large, jarring mismatch, not a gentle blur. FLAT_LAND/HILLY still blend freely
+    // (much closer in character); MOUNTAINOUS goes back to requiring an exact real-class
+    // match during growth too, same strictness as water.
+    private static final Set<TerrainClass> GROWTH_BLENDABLE_LAND_TERRAIN_CLASSES = Set.of(
+        TerrainClass.FLAT_LAND, TerrainClass.HILLY
+    );
 
     @FunctionalInterface
     public interface TerrainSampler {
@@ -96,12 +152,19 @@ public final class PatchGrowthEngine {
         final BiomeConfig biome;
         final double targetRadiusBlocks;
         final long identitySeed;
+        // Rolled once per patch at germination (not per cell) -- every cell this patch
+        // claims shares one shape intent, see resolveWindow. Null for any biome with an
+        // empty regionFamilyWeights (OCEAN/RIVER/underground) -- those never populate
+        // regionFamilyByCell at all, which is exactly what later stages' cache-peek reads
+        // as "stay reactive to real Tectonic terrain here".
+        final RegionFamily regionFamily;
         int cellCount = 1;
 
-        GrowingPatch(BiomeConfig biome, double targetRadiusBlocks, long identitySeed) {
+        GrowingPatch(BiomeConfig biome, double targetRadiusBlocks, long identitySeed, RegionFamily regionFamily) {
             this.biome = biome;
             this.targetRadiusBlocks = targetRadiusBlocks;
             this.identitySeed = identitySeed;
+            this.regionFamily = regionFamily;
         }
     }
 
@@ -118,7 +181,17 @@ public final class PatchGrowthEngine {
     private PatchGrowthEngine() {
     }
 
-    public static Map<CoarseCell, ResourceKey<Biome>> resolveWindow(
+    /** Both maps share the same key set for every cell a patch actually claimed;
+     * regionFamilyByCell simply has no entry for cells whose patch's biome declared no
+     * regionFamilyWeights (see GrowingPatch's own comment) -- absence, not null, is the
+     * "stay reactive to real Tectonic terrain" signal later stages read. */
+    public record WindowResolution(
+        Map<CoarseCell, ResourceKey<Biome>> biomeByCell,
+        Map<CoarseCell, RegionFamily> regionFamilyByCell
+    ) {
+    }
+
+    public static WindowResolution resolveWindow(
         long worldSeed,
         List<BiomeConfig> biomes,
         double cellSizeBlocks,
@@ -139,12 +212,17 @@ public final class PatchGrowthEngine {
 
         Map<CoarseCell, GrowingPatch> patchesByCell = new HashMap<>();
         Map<CoarseCell, ResourceKey<Biome>> resolvedCells = new HashMap<>();
+        Map<CoarseCell, RegionFamily> regionFamilyByCell = new HashMap<>();
         for (CoarseCell origin : germinationPoints) {
             GerminationCandidate candidate = candidatesByCell.get(origin);
             long identitySeed = PatchSeedHasher.cellSeed(worldSeed, origin.cellX(), PATCH_IDENTITY_HASH_NAMESPACE, origin.cellZ());
-            GrowingPatch patch = new GrowingPatch(candidate.biome(), targetRadiusFromCandidate(candidate), identitySeed);
+            RegionFamily regionFamily = rollRegionFamily(worldSeed, origin, candidate.biome());
+            GrowingPatch patch = new GrowingPatch(candidate.biome(), targetRadiusFromCandidate(candidate), identitySeed, regionFamily);
             patchesByCell.put(origin, patch);
             resolvedCells.put(origin, candidate.biome().id());
+            if (regionFamily != null) {
+                regionFamilyByCell.put(origin, regionFamily);
+            }
         }
 
         PriorityQueue<FrontierEntry> frontier = new PriorityQueue<>();
@@ -152,9 +230,19 @@ public final class PatchGrowthEngine {
         for (CoarseCell origin : germinationPoints) {
             pushEligibleNeighbors(frontier, pushCounter, origin, origin, patchesByCell.get(origin), resolvedCells, terrainClassByCell, bounds);
         }
-        growUntilFrontierEmpty(frontier, pushCounter, patchesByCell, resolvedCells, terrainClassByCell, bounds, cellSizeBlocks);
-        dissolveSmallIslands(resolvedCells, terrainClassByCell, biomes, cellSizeBlocks);
-        return resolvedCells;
+        growUntilFrontierEmpty(frontier, pushCounter, patchesByCell, resolvedCells, regionFamilyByCell, terrainClassByCell, bounds, cellSizeBlocks);
+        dissolveSmallIslands(resolvedCells, regionFamilyByCell, terrainClassByCell, biomes, cellSizeBlocks);
+        return new WindowResolution(resolvedCells, regionFamilyByCell);
+    }
+
+    /** Null (no roll at all) for any biome that declares no regionFamilyWeights -- those
+     * biomes stay reactive to real Tectonic terrain (see GrowingPatch's own comment). */
+    private static RegionFamily rollRegionFamily(long worldSeed, CoarseCell origin, BiomeConfig biome) {
+        if (biome.regionFamilyWeights().isEmpty()) {
+            return null;
+        }
+        long seed = PatchSeedHasher.cellSeed(worldSeed, origin.cellX(), REGION_FAMILY_HASH_NAMESPACE, origin.cellZ());
+        return pickWeightedRegionFamily(biome.regionFamilyWeights(), seed);
     }
 
     /** Inclusive/exclusive coarse-cell rectangle a single resolveWindow call is allowed
@@ -205,11 +293,33 @@ public final class PatchGrowthEngine {
     private static List<BiomeConfig> eligibleBiomesForTerrainClass(List<BiomeConfig> biomes, TerrainClass terrainClass) {
         List<BiomeConfig> eligible = new ArrayList<>();
         for (BiomeConfig biome : biomes) {
-            if (biome.terrainClasses().contains(terrainClass)) {
+            if (isEligibleForGermination(biome, terrainClass)) {
                 eligible.add(biome);
             }
         }
         return eligible;
+    }
+
+    /** Where a patch is allowed to ORIGINATE -- exact real-terrain-class match required
+     * for every class, water or land, same as Phase 1 always required. See the class-level
+     * comment above WATER_TERRAIN_CLASSES/LAND_TERRAIN_CLASSES for why this is
+     * deliberately stricter than isEligibleForGrowth below. */
+    private static boolean isEligibleForGermination(BiomeConfig biome, TerrainClass realTerrainClass) {
+        return biome.terrainClasses().contains(realTerrainClass);
+    }
+
+    /** Where an ALREADY-GERMINATED patch is allowed to SPREAD. OCEAN/COAST/RIVER and
+     * MOUNTAINOUS all require an exact match -- water stays reactive to real elevation
+     * everywhere, and MOUNTAINOUS is excluded from the blend for the reason in
+     * GROWTH_BLENDABLE_LAND_TERRAIN_CLASSES' own comment. FLAT_LAND/HILLY are blind to
+     * which of the two a neighbor cell is, as long as the spreading biome declares
+     * either. See the class-level comment for why this split from germination exists,
+     * and isEligibleForGermination for the stricter sibling. */
+    private static boolean isEligibleForGrowth(BiomeConfig biome, TerrainClass realTerrainClass) {
+        if (GROWTH_BLENDABLE_LAND_TERRAIN_CLASSES.contains(realTerrainClass)) {
+            return biome.terrainClasses().stream().anyMatch(GROWTH_BLENDABLE_LAND_TERRAIN_CLASSES::contains);
+        }
+        return biome.terrainClasses().contains(realTerrainClass);
     }
 
     /** Public: reused by UndergroundPatchGrid (same package, choosing among multiple cave
@@ -217,19 +327,32 @@ public final class PatchGrowthEngine {
      * fallback (different package, picking among biomes eligible for a gap cell's real
      * terrain class). */
     public static BiomeConfig pickWeightedBiome(List<BiomeConfig> candidates, long seed) {
+        return pickWeighted(candidates, BiomeConfig::weight, seed);
+    }
+
+    /** Same weighted-pick pattern as pickWeightedBiome, one level down -- a biome's
+     * regionFamilyWeights (TERRAIN_COHERENCE_DESIGN.md Sec 4c: a weighted SET per biome,
+     * not a fixed 1:1 pick, to avoid every patch of a biome rendering the same Tectonic
+     * shape template). Callers must not pass an empty list -- see rollRegionFamily's own
+     * empty check, which is what keeps this from ever being called with one. */
+    public static RegionFamily pickWeightedRegionFamily(List<RegionFamilyWeight> candidates, long seed) {
+        return pickWeighted(candidates, RegionFamilyWeight::weight, seed).family();
+    }
+
+    private static <T> T pickWeighted(List<T> candidates, ToDoubleFunction<T> weightOf, long seed) {
         double totalWeight = 0;
-        for (BiomeConfig biome : candidates) {
-            totalWeight += biome.weight();
+        for (T candidate : candidates) {
+            totalWeight += weightOf.applyAsDouble(candidate);
         }
         if (totalWeight <= 0) {
             totalWeight = 1.0;
         }
         double roll = PatchSeedHasher.unitIntervalFromSeed(seed) * totalWeight;
         double runningTotal = 0;
-        for (BiomeConfig biome : candidates) {
-            runningTotal += biome.weight();
+        for (T candidate : candidates) {
+            runningTotal += weightOf.applyAsDouble(candidate);
             if (roll <= runningTotal) {
-                return biome;
+                return candidate;
             }
         }
         return candidates.get(candidates.size() - 1);
@@ -326,7 +449,7 @@ public final class PatchGrowthEngine {
             if (resolvedCells.containsKey(neighbor)) {
                 continue;
             }
-            if (!patch.biome.terrainClasses().contains(terrainClassByCell.get(neighbor))) {
+            if (!isEligibleForGrowth(patch.biome, terrainClassByCell.get(neighbor))) {
                 continue;
             }
             double score = computeCellScore(neighbor, patch, resolvedCells);
@@ -338,8 +461,8 @@ public final class PatchGrowthEngine {
      * seed-derived), never of push order -- see computeCellScore's tie-break comment. */
     private static void growUntilFrontierEmpty(
         PriorityQueue<FrontierEntry> frontier, AtomicLong pushCounter, Map<CoarseCell, GrowingPatch> patchesByCell,
-        Map<CoarseCell, ResourceKey<Biome>> resolvedCells, Map<CoarseCell, TerrainClass> terrainClassByCell,
-        WindowBounds bounds, double cellSizeBlocks
+        Map<CoarseCell, ResourceKey<Biome>> resolvedCells, Map<CoarseCell, RegionFamily> regionFamilyByCell,
+        Map<CoarseCell, TerrainClass> terrainClassByCell, WindowBounds bounds, double cellSizeBlocks
     ) {
         while (!frontier.isEmpty()) {
             FrontierEntry entry = frontier.poll();
@@ -352,6 +475,9 @@ public final class PatchGrowthEngine {
                 continue; // this patch has already reached its sampled target size
             }
             resolvedCells.put(entry.cell(), patch.biome.id());
+            if (patch.regionFamily != null) {
+                regionFamilyByCell.put(entry.cell(), patch.regionFamily);
+            }
             patch.cellCount++;
             pushEligibleNeighbors(frontier, pushCounter, entry.cell(), entry.patchOrigin(), patch, resolvedCells, terrainClassByCell, bounds);
         }
@@ -367,8 +493,8 @@ public final class PatchGrowthEngine {
      * two adjacent small islands' border tallies would depend on which one got processed
      * first, breaking this class's order-independence guarantee (see class comment). */
     private static void dissolveSmallIslands(
-        Map<CoarseCell, ResourceKey<Biome>> resolvedCells, Map<CoarseCell, TerrainClass> terrainClassByCell,
-        List<BiomeConfig> biomes, double cellSizeBlocks
+        Map<CoarseCell, ResourceKey<Biome>> resolvedCells, Map<CoarseCell, RegionFamily> regionFamilyByCell,
+        Map<CoarseCell, TerrainClass> terrainClassByCell, List<BiomeConfig> biomes, double cellSizeBlocks
     ) {
         Map<ResourceKey<Biome>, BiomeConfig> configById = new HashMap<>();
         for (BiomeConfig biome : biomes) {
@@ -376,7 +502,12 @@ public final class PatchGrowthEngine {
         }
 
         Map<CoarseCell, ResourceKey<Biome>> snapshot = new HashMap<>(resolvedCells);
-        Map<CoarseCell, ResourceKey<Biome>> reassignments = new HashMap<>();
+        // Frozen alongside snapshot for the same reason (see this method's class-level
+        // doc): a dissolved island's replacement family must read pre-reassignment state,
+        // not whatever another island's dissolve happened to write moments earlier.
+        Map<CoarseCell, RegionFamily> regionFamilySnapshot = new HashMap<>(regionFamilyByCell);
+        Map<CoarseCell, ResourceKey<Biome>> biomeReassignments = new HashMap<>();
+        Map<CoarseCell, RegionFamily> familyReassignments = new HashMap<>();
         Set<CoarseCell> visited = new HashSet<>();
         for (CoarseCell cell : snapshot.keySet()) {
             if (visited.contains(cell)) {
@@ -391,12 +522,52 @@ public final class PatchGrowthEngine {
             }
             ResourceKey<Biome> replacement = pickDissolveReplacement(component, biome, snapshot, terrainClassByCell, configById);
             if (replacement != null) {
+                RegionFamily replacementFamily = pickDissolveReplacementFamily(component, replacement, snapshot, regionFamilySnapshot);
                 for (CoarseCell componentCell : component) {
-                    reassignments.put(componentCell, replacement);
+                    biomeReassignments.put(componentCell, replacement);
+                    familyReassignments.put(componentCell, replacementFamily);
                 }
             }
         }
-        resolvedCells.putAll(reassignments);
+        resolvedCells.putAll(biomeReassignments);
+        // A dissolved cell's OLD family (from the biome it stopped being) must never
+        // survive the reassignment -- put the new one, or remove entirely if the
+        // replacement biome had no bordering family info to inherit (null value, not a
+        // missing key, is not the "stay reactive" contract elsewhere in this file).
+        for (Map.Entry<CoarseCell, RegionFamily> entry : familyReassignments.entrySet()) {
+            if (entry.getValue() != null) {
+                regionFamilyByCell.put(entry.getKey(), entry.getValue());
+            } else {
+                regionFamilyByCell.remove(entry.getKey());
+            }
+        }
+    }
+
+    /** Majority family among the component's border cells that already share the winning
+     * replacement biome (snapshot state, pre-reassignment) -- null if none of them had a
+     * family (e.g. replacement itself never rolls one). */
+    private static RegionFamily pickDissolveReplacementFamily(
+        List<CoarseCell> component, ResourceKey<Biome> replacement,
+        Map<CoarseCell, ResourceKey<Biome>> resolvedCells, Map<CoarseCell, RegionFamily> regionFamilyByCell
+    ) {
+        Set<CoarseCell> componentCells = new HashSet<>(component);
+        Map<RegionFamily, Integer> familyCounts = new HashMap<>();
+        for (CoarseCell cell : component) {
+            for (int[] offset : CARDINAL_NEIGHBOR_OFFSETS) {
+                CoarseCell neighbor = new CoarseCell(cell.cellX() + offset[0], cell.cellZ() + offset[1]);
+                if (componentCells.contains(neighbor) || !replacement.equals(resolvedCells.get(neighbor))) {
+                    continue;
+                }
+                RegionFamily family = regionFamilyByCell.get(neighbor);
+                if (family != null) {
+                    familyCounts.merge(family, 1, Integer::sum);
+                }
+            }
+        }
+        return familyCounts.entrySet().stream()
+            .max(Map.Entry.comparingByValue())
+            .map(Map.Entry::getKey)
+            .orElse(null);
     }
 
     private static List<CoarseCell> floodFillSameBiomeComponent(
@@ -462,12 +633,15 @@ public final class PatchGrowthEngine {
         ResourceKey<Biome> candidate, List<CoarseCell> component,
         Map<CoarseCell, TerrainClass> terrainClassByCell, Map<ResourceKey<Biome>, BiomeConfig> configById
     ) {
+        // Absorbing a dissolved island's cells is an extension of the replacement
+        // biome's existing territory, not a fresh germination -- growth's (permissive)
+        // rule applies, matching pushEligibleNeighbors' own use of it during normal growth.
         BiomeConfig candidateConfig = configById.get(candidate);
         if (candidateConfig == null) {
             return false;
         }
         for (CoarseCell cell : component) {
-            if (!candidateConfig.terrainClasses().contains(terrainClassByCell.get(cell))) {
+            if (!isEligibleForGrowth(candidateConfig, terrainClassByCell.get(cell))) {
                 return false;
             }
         }
