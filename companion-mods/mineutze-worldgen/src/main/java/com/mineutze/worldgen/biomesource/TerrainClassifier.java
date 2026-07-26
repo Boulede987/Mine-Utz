@@ -20,21 +20,19 @@ public final class TerrainClassifier {
     private static final float OCEAN_CONTINENTALNESS_HI = -0.19f;
     private static final float COAST_CONTINENTALNESS_HI  =  0.03f;
 
-    // STILL a placeholder guess, NOT calibrated -- unlike the three below, real
-    // calibrate_terrain_classes.py runs (117836 pooled samples, including a session
-    // deliberately following real rivers) never produced a trustworthy suggestion here:
-    // the script's own sanity check (peak depression should sit near weirdness=0 if the
-    // river band is really centered there) fails every time, even with river-focused
-    // sampling. Tectonic redirects weirdness/ridges through its own custom noise
+    // Calibrated via ground truth, NOT the depression-proxy approach -- that kept failing
+    // its own sanity check (peak depression should sit near weirdness=0 if the river band
+    // is really centered there) on every real calibrate_terrain_classes.py run, including
+    // a 117836-sample pool with a session deliberately following real rivers. Root cause:
+    // Tectonic redirects weirdness/ridges through its own custom noise
     // (tectonic:biome_parameter/ridges, see TERRAIN_COHERENCE_DESIGN.md Sec 5) -- vanilla's
-    // "narrow weirdness band = river" convention this threshold assumes may just not hold
-    // for Tectonic's real river mechanism at all. The script DID suggest a value (0.000)
-    // once, but that's actively worse than this placeholder, not an improvement: it makes
-    // abs(weirdness) <= threshold match almost nothing, near-disabling RIVER entirely --
-    // rejected on sanity-check grounds, not applied. Needs a different signal (e.g. ground-
-    // truth /dump_terrain_class readings taken standing in confirmed flowing water, not the
-    // depression-proxy's inference) before this stops being a guess.
-    private static final float RIVER_WEIRDNESS_ABS_HI = 0.010f;
+    // "narrow weirdness band = river" convention the depression proxy assumes doesn't hold
+    // for Tectonic's real river mechanism. Real value instead comes from
+    // /dump_river_samples (bulk-scans a grid, logs only columns whose real surface block
+    // is confirmed water -- ground truth, not inference) fed into
+    // calibrate_terrain_classes.py's percentile-based suggestion. See git history for the
+    // exact run this value came from.
+    private static final float RIVER_WEIRDNESS_ABS_HI = 0.067f;
 
     // Calibrated via calibrate_terrain_classes.py against 117836 pooled real
     // /dump_height_samples captures (two sessions, --world persistence) -- see git history
