@@ -82,24 +82,47 @@ public final class CustomOverworldBiomeSource extends BiomeSource {
         Climate.TargetPoint targetPoint = sampler.sample(quartX, quartY, quartZ);
         double depth = Climate.unquantizeCoord(targetPoint.depth());
 
-        ResourceKey<Biome> resolved = depth <= SURFACE_DEPTH_MAX
-            ? surfacePatchGrid().resolve(blockX, blockZ, sampler)
-            : undergroundPatchGrid().resolve(blockX, blockZ, sampler);
-        if (resolved != null) {
-            return biomeLookup.getOrThrow(resolved);
+        if (depth <= SURFACE_DEPTH_MAX) {
+            SurfacePatchGrid.BiomeAndFamily resolved = surfacePatchGrid().resolveWithFamily(blockX, blockZ, sampler);
+            if (resolved != null) {
+                debugRecord(blockX, blockZ, sampler, resolved.biome(), resolved.regionFamily(), "surface");
+                return biomeLookup.getOrThrow(resolved.biome());
+            }
+        } else {
+            ResourceKey<Biome> resolved = undergroundPatchGrid().resolve(blockX, blockZ, sampler);
+            if (resolved != null) {
+                debugRecord(blockX, blockZ, sampler, resolved, null, "underground");
+                return biomeLookup.getOrThrow(resolved);
+            }
         }
 
         // Fallback (1): underground gap with no linked cave biome -- "same as the
         // surface above" (see class comment). For a surface gap this re-queries the
         // exact same thing and comes back null again, falling through to (2).
-        ResourceKey<Biome> surfaceFallback = surfacePatchGrid().resolve(blockX, blockZ, sampler);
+        SurfacePatchGrid.BiomeAndFamily surfaceFallback = surfacePatchGrid().resolveWithFamily(blockX, blockZ, sampler);
         if (surfaceFallback != null) {
-            return biomeLookup.getOrThrow(surfaceFallback);
+            debugRecord(blockX, blockZ, sampler, surfaceFallback.biome(), surfaceFallback.regionFamily(), "fallback-surface-for-underground-gap");
+            return biomeLookup.getOrThrow(surfaceFallback.biome());
         }
 
         // Fallback (2): a true gap -- pick among whatever's terrain-class-eligible for
         // what's REALLY here, not an arbitrary default (see class comment).
-        return biomeLookup.getOrThrow(pickTerrainAppropriateFallback(blockX, blockZ, sampler));
+        ResourceKey<Biome> gapFallback = pickTerrainAppropriateFallback(blockX, blockZ, sampler);
+        debugRecord(blockX, blockZ, sampler, gapFallback, null, "fallback-terrain-appropriate-gap");
+        return biomeLookup.getOrThrow(gapFallback);
+    }
+
+    /** WorldgenDebugDump hook -- see that class's own doc. No-op (not even a
+     * TerrainClassifier call) when WorldgenDebugDump.ENABLED is false, so this costs
+     * nothing in normal operation. */
+    private static void debugRecord(
+        int blockX, int blockZ, Climate.Sampler sampler, ResourceKey<Biome> biome, RegionFamily regionFamily, String source
+    ) {
+        if (!WorldgenDebugDump.ENABLED) {
+            return;
+        }
+        TerrainClass terrainClass = TerrainClassifier.classifyAtBlock(sampler, blockX, blockZ);
+        WorldgenDebugDump.record(blockX, blockZ, sampler, terrainClass, biome, regionFamily, source);
     }
 
     private static final int FALLBACK_PICK_HASH_NAMESPACE = 99;
