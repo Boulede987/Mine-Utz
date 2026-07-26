@@ -60,7 +60,11 @@ public final class PatchGrowthEngineSelfTest {
         boolean blendPenaltyPassed = runGrowthBlendPenaltySelfTest();
         System.out.println("Growth-blend-penalty self-test: " + (blendPenaltyPassed ? "PASS" : "FAIL"));
 
-        if (!determinismPassed || !terrainBlindnessPassed || !dissolveFamilyPassed || !blendPenaltyPassed) {
+        boolean spacingScalesWithMaxSizePassed = runSpacingScalesWithMaxSizeSelfTest();
+        System.out.println("Spacing-scales-with-max-size self-test: " + (spacingScalesWithMaxSizePassed ? "PASS" : "FAIL"));
+
+        if (!determinismPassed || !terrainBlindnessPassed || !dissolveFamilyPassed
+            || !blendPenaltyPassed || !spacingScalesWithMaxSizePassed) {
             System.exit(1);
         }
     }
@@ -95,26 +99,39 @@ public final class PatchGrowthEngineSelfTest {
         return true;
     }
 
-    /** Fork 1, TWICE-revised after real in-game evidence. First revision: split
+    /** Fork 1, THREE TIMES revised after real in-game evidence. First revision: split
      * germination (strict, exact real-class match, unchanged from Phase 1) from growth
      * (an already-germinated patch may SPREAD onto adjacent land regardless of its real
      * class) -- germination-time land-blindness was letting biomes spawn anywhere on any
      * land cell, collapsing 3 real terrain classes' natural clustering into noise.
-     * Second revision, this one: growth's land-blindness itself was still too broad --
-     * a real desert patch (declares only FLAT_LAND/COAST) grew directly onto a real
-     * MOUNTAINOUS cell across an actual coast-to-mountain transition, confirmed via
+     * Second revision: growth's land-blindness itself was still too broad -- a real
+     * desert patch (declares only FLAT_LAND/COAST) grew directly onto a real MOUNTAINOUS
+     * cell across an actual coast-to-mountain transition, confirmed via
      * /dump_terrain_class showing smooth, non-noisy real classification either side (so
-     * not a classifier-noise problem). MOUNTAINOUS is now excluded from growth's blend
-     * too -- only FLAT_LAND/HILLY blend during growth, MOUNTAINOUS requires an exact
-     * match same as water. Proves all three halves on one window: a single HILLY column
-     * (cellX == 0), a single MOUNTAINOUS column (cellX == 1), and a single OCEAN column
-     * (cellX == 2), cutting through an otherwise FLAT_LAND field --
-     * (a) hilly-only MUST spread beyond its own column onto FLAT_LAND neighbors
-     *     (FLAT_LAND/HILLY still blend during growth),
-     * (b) mountainous-only must NEVER appear outside its own column (growth no longer
-     *     crosses onto/off MOUNTAINOUS), and
-     * (c) ocean-only must NEVER appear outside its own column (water stays gated,
-     *     unchanged). */
+     * not a classifier-noise problem). MOUNTAINOUS excluded from growth's blend too --
+     * only FLAT_LAND/HILLY blend during growth, MOUNTAINOUS requires an exact match same
+     * as water. Third revision, this one: growth's FLAT_LAND/HILLY blend was itself
+     * UNCONDITIONALLY permissive (any biome declaring either class could invade cells of
+     * either, on equal footing with a biome that actually declares that exact class) --
+     * real symptom: windswept_hills/plains and windswept_hills/forest boundary
+     * patchwork. Fixed with GROWTH_BLEND_RELIANCE_SCORE_PENALTY (score-based, not an
+     * eligibility change -- see PatchGrowthEngine's own comment on why an eligibility
+     * fix would have silently disabled the blend entirely). That penalty makes
+     * blend-reliant growth DISFAVORED, not blocked -- so a HILLY-only biome now
+     * correctly prefers staying within same-class HILLY territory as long as any is
+     * still available, and only spills into FLAT_LAND once its own native territory
+     * can't satisfy its target radius alone. The HILLY region below is deliberately a
+     * SINGLE cell (not the original long column -- a long column gave hillyOnly enough
+     * same-class room along its own length to satisfy a modest target radius without
+     * ever needing FLAT_LAND, making spillover no longer a hard guarantee and silently
+     * breaking this test after the penalty was introduced) specifically so spillover
+     * into FLAT_LAND is REQUIRED regardless of the exact size/penalty tuning, not just
+     * likely -- (a) hilly-only MUST spread beyond its own single native cell onto
+     * FLAT_LAND (nowhere else for it to grow at all), (b) mountainous-only (kept as a
+     * full column -- doesn't need to spread, this assertion is about NEVER leaving,
+     * unaffected by native-room size) must NEVER appear outside its own column (growth
+     * no longer crosses onto/off MOUNTAINOUS), and (c) ocean-only (same, full column)
+     * must NEVER appear outside its own column (water stays gated, unchanged). */
     static boolean runTerrainBlindnessSelfTest() {
         ResourceKey<Biome> hillyOnly = testBiomeKey("hilly_only");
         ResourceKey<Biome> mountainousOnly = testBiomeKey("mountainous_only");
@@ -124,8 +141,20 @@ public final class PatchGrowthEngineSelfTest {
             new BiomeConfig(mountainousOnly, Set.of(TerrainClass.MOUNTAINOUS), 64, 128, 1.0f, List.of(), List.of(), List.of(), List.of()),
             new BiomeConfig(oceanOnly, Set.of(TerrainClass.OCEAN), 64, 128, 1.0f, List.of(), List.of(), List.of(), List.of())
         );
+        // hillyOnly's native terrain is ONLY the single cell (HILLY_ORIGIN_CELL_X, 0) --
+        // see the method doc for why a single cell, not a column, is what makes
+        // spillover a hard guarantee under the growth-blend-penalty fix. Placed far from
+        // columns 1/2 (Chebyshev distance > this test's spacingRadiusInCells, which is
+        // sizeMax=128-driven i.e. 4 cells -- see PatchGrowthEngine.spacingRadiusInCells)
+        // so the single hillyOnly germination candidate is never cross-biome
+        // local-maximum-compared against a mountainousOnly/oceanOnly candidate and
+        // spuriously suppressed before it can even germinate -- a real failure mode
+        // hit while developing this test, not a hypothetical. mountainous/ocean stay
+        // full columns since their assertions are about never spreading, not about
+        // being forced to.
+        int hillyOriginCellX = -10;
         PatchGrowthEngine.TerrainSampler terrainSampler = (cellX, cellZ) -> {
-            if (cellX == 0) return TerrainClass.HILLY;
+            if (cellX == hillyOriginCellX && cellZ == 0) return TerrainClass.HILLY;
             if (cellX == 1) return TerrainClass.MOUNTAINOUS;
             if (cellX == 2) return TerrainClass.OCEAN;
             return TerrainClass.FLAT_LAND;
@@ -137,7 +166,7 @@ public final class PatchGrowthEngineSelfTest {
         );
 
         boolean hillySpreadOntoFlatLand = resolution.biomeByCell().entrySet().stream()
-            .anyMatch(entry -> hillyOnly.equals(entry.getValue()) && entry.getKey().cellX() != 0);
+            .anyMatch(entry -> hillyOnly.equals(entry.getValue()) && !(entry.getKey().cellX() == hillyOriginCellX && entry.getKey().cellZ() == 0));
         boolean mountainousNeverLeftItsOwnColumn = resolution.biomeByCell().entrySet().stream()
             .noneMatch(entry -> mountainousOnly.equals(entry.getValue()) && entry.getKey().cellX() != 1);
         boolean oceanNeverLeftItsOwnColumn = resolution.biomeByCell().entrySet().stream()
@@ -217,6 +246,32 @@ public final class PatchGrowthEngineSelfTest {
         double scoreOnBlendOnlyClass = PatchGrowthEngine.computeCellScoreForTest(cell, flatOnlyConfig, TerrainClass.HILLY, identitySeed);
 
         return scoreOnDeclaredClass - scoreOnBlendOnlyClass >= MIN_EXPECTED_BLEND_PENALTY_MARGIN;
+    }
+
+    /** Fork "Cause B: germination spacing must scale with sizeMaxBlocks, not
+     * sizeMinBlocks" -- real in-game symptom: multiple biomes sharing one terrain class
+     * (desert/savanna/plains/snowy_plains, all FLAT_LAND) fragmenting each other into
+     * many small patches, because germination-time spacing only ever guaranteed
+     * separation for a patch's SMALLEST possible size while growth can reach its
+     * largest. Directly asserts the fix rather than reverse-engineering it from
+     * germination-origin positions (not exposed by WindowResolution): holding
+     * sizeMinBlocks fixed, spacing must strictly increase as sizeMaxBlocks increases --
+     * this would NOT hold under the old sizeMinBlocks-based formula, which was blind to
+     * sizeMaxBlocks entirely. */
+    static boolean runSpacingScalesWithMaxSizeSelfTest() {
+        ResourceKey<Biome> narrowRange = testBiomeKey("spacing_narrow_range");
+        ResourceKey<Biome> wideRange = testBiomeKey("spacing_wide_range");
+        BiomeConfig narrowRangeConfig = new BiomeConfig(
+            narrowRange, Set.of(TerrainClass.FLAT_LAND), 900, 950, 1.0f, List.of(), List.of(), List.of(), List.of()
+        );
+        BiomeConfig wideRangeConfig = new BiomeConfig(
+            wideRange, Set.of(TerrainClass.FLAT_LAND), 900, 1900, 1.0f, List.of(), List.of(), List.of(), List.of()
+        );
+
+        int narrowRangeSpacing = PatchGrowthEngine.spacingRadiusInCellsForTest(narrowRangeConfig, CELL_SIZE_BLOCKS);
+        int wideRangeSpacing = PatchGrowthEngine.spacingRadiusInCellsForTest(wideRangeConfig, CELL_SIZE_BLOCKS);
+
+        return wideRangeSpacing > narrowRangeSpacing;
     }
 
     /** Deterministic synthetic terrain, no Climate.Sampler needed -- reuses

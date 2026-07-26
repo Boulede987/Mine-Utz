@@ -389,8 +389,40 @@ public final class PatchGrowthEngine {
         return candidates.get(candidates.size() - 1);
     }
 
+    // Cause B (real in-game symptom: desert/savanna/plains and other same-terrain-class
+    // biomes fragmenting each other into many small patches). Root cause: this used to
+    // read biome.sizeMinBlocks() -- the germination-time local-maximum spacing check
+    // (isLocalMaximum below) only ever guaranteed enough separation for a patch's SMALLEST
+    // possible size, while targetRadiusFromCandidate actually samples the real grown
+    // radius uniformly across the full [sizeMin/2, sizeMax/2] range. A biome with a wide
+    // min-max range (desert: 900-1900, roughly 2x) could legitimately roll toward its
+    // size_max during growth and reach well past where a neighboring biome's germination
+    // point was only guaranteed room for -- their frontiers then collide mid-growth. Where
+    // several biomes share one terrain class (FLAT_LAND: desert/savanna/plains/
+    // snowy_plains) and multiple such near-collisions land close together, this produced
+    // an interleaved battlefield of small patches, not a calibration/noise problem.
+    //
+    // Fixed by spacing on sizeMaxBlocks instead -- guarantees separation for the LARGEST
+    // a patch could roll, not just the smallest, making mid-growth collisions structurally
+    // rare rather than a roll-dependent coin flip. Deliberate tradeoff, chosen over a
+    // smaller (min+max)/2 midpoint alternative: this reduces germination density/patch
+    // count everywhere, not just in previously-contested zones, in exchange for fully
+    // closing the gap rather than just narrowing it. TILE_RADIUS_CELLS (SurfacePatchGrid)
+    // was already sized off MAX_SIZE_MAX_BLOCKS with margin, so this doesn't risk
+    // reintroducing the window-bounds hangs documented in DESIGN.md Sec 11 -- it only
+    // shrinks how many germination points occur within an already-generous window, never
+    // expands growth past it.
     private static int spacingRadiusInCells(BiomeConfig biome, double cellSizeBlocks) {
-        return Math.max(MINIMUM_SPACING_CELLS, (int) Math.round(biome.sizeMinBlocks() / (2 * cellSizeBlocks)));
+        return Math.max(MINIMUM_SPACING_CELLS, (int) Math.round(biome.sizeMaxBlocks() / (2 * cellSizeBlocks)));
+    }
+
+    /** Test-support entry point (package-visible, not private): lets
+     * PatchGrowthEngineSelfTest assert spacing scales with sizeMaxBlocks (the Cause B
+     * fix) rather than sizeMinBlocks (the old, buggy behavior) directly, without needing
+     * to reverse-engineer it from germination-origin positions in a full resolveWindow
+     * run -- WindowResolution doesn't expose which cells were origins vs. grown-into. */
+    static int spacingRadiusInCellsForTest(BiomeConfig biome, double cellSizeBlocks) {
+        return spacingRadiusInCells(biome, cellSizeBlocks);
     }
 
     /** Order-independent: see isLocalMaximum's docstring below. */
