@@ -51,6 +51,29 @@ public final class PatchGrowthEngine {
     private static final double TIE_BREAK_SCORE_SCALE            = 1e-6;
     private static final int MINIMUM_SPACING_CELLS               = 1;
 
+    // Real reported symptom: at every real FLAT_LAND/HILLY boundary, biomes that don't
+    // even declare one side of it (windswept_hills invading real FLAT_LAND; plains/forest
+    // invading real HILLY) were contesting cells on completely equal footing with biomes
+    // that DO declare that exact class -- turning every such boundary into a chaotic,
+    // many-small-patches battlefield, not just windswept_hills/forest/plains but any pair
+    // sharing the blend. Considered and rejected: disabling GROWTH_BLENDABLE_LAND_TERRAIN_
+    // CLASSES eligibility outright (requiring a biome to declare BOTH FLAT_LAND and HILLY
+    // to blend at all) -- turns out mathematically equivalent to disabling the blend
+    // entirely, since any biome declaring both already passes exact-match on either class
+    // with no blend needed; the blend only ever mattered for biomes declaring exactly ONE
+    // of the two, which is precisely the population that fix would strip it from. That
+    // would also undo growth-blend's actual documented purpose (not noise-smoothing --
+    // giving a patch real territory beyond wherever real Tectonic terrain already happens
+    // to match, so Stage 3/4's terrain-forcing has something to act on).
+    //
+    // This penalty keeps blend-reliant growth POSSIBLE (so that purpose still holds when
+    // nothing else is contesting the cell) but SCORES it below a same-class competitor,
+    // so at a real boundary a biome that actually declares the cell's real class usually
+    // wins the contest first -- same order of magnitude as FORBIDDEN_NEIGHBOR_SCORE_
+    // PENALTY, enough to matter against typical BiomeConfig weights (0.6-1.0) without
+    // being an outright block.
+    private static final double GROWTH_BLEND_RELIANCE_SCORE_PENALTY = 0.5;
+
     // Real reported symptom: two biomes sharing a terrain class and similar weight (e.g.
     // plains/forest, both FLAT_LAND) produced a visibly noisy, scattered border -- small
     // alternating freckles of each biome before eventually settling into solid territory
@@ -412,8 +435,17 @@ public final class PatchGrowthEngine {
         return candidate.biome().sizeMinBlocks() / 2.0 + candidate.priority() * sizeRangeBlocks / 2.0;
     }
 
-    private static double computeCellScore(CoarseCell cell, GrowingPatch patch, Map<CoarseCell, ResourceKey<Biome>> resolvedCells) {
+    private static double computeCellScore(
+        CoarseCell cell, GrowingPatch patch, Map<CoarseCell, ResourceKey<Biome>> resolvedCells, TerrainClass cellRealTerrainClass
+    ) {
         double score = patch.biome.weight();
+        // See GROWTH_BLEND_RELIANCE_SCORE_PENALTY's own comment -- claiming a cell whose
+        // real terrain class this patch's biome doesn't actually declare (i.e. eligible
+        // here only via the FLAT_LAND/HILLY blend) is disfavored relative to a same-class
+        // competitor, not blocked outright.
+        if (!patch.biome.terrainClasses().contains(cellRealTerrainClass)) {
+            score -= GROWTH_BLEND_RELIANCE_SCORE_PENALTY;
+        }
         for (int[] offset : CARDINAL_NEIGHBOR_OFFSETS) {
             ResourceKey<Biome> neighborBiome = resolvedCells.get(new CoarseCell(cell.cellX() + offset[0], cell.cellZ() + offset[1]));
             if (neighborBiome == null) {
@@ -434,6 +466,19 @@ public final class PatchGrowthEngine {
         // depends on push order. Keyed off patch.identitySeed (order-independent).
         long tieBreakSeed = PatchSeedHasher.cellSeed(patch.identitySeed, cell.cellX(), 0, cell.cellZ());
         return score + PatchSeedHasher.unitIntervalFromSeed(tieBreakSeed) * TIE_BREAK_SCORE_SCALE;
+    }
+
+    /** Test-support entry point (package-visible, not private): lets
+     * PatchGrowthEngineSelfTest exercise computeCellScore's real scoring logic
+     * (including GROWTH_BLEND_RELIANCE_SCORE_PENALTY) directly, without needing to
+     * construct a full deterministic head-to-head contested-growth scenario -- real
+     * best-first queue ordering and neighbor-bonus accumulation would make that far less
+     * precise than checking the scoring primitive itself. Builds a throwaway
+     * single-cell, no-resolved-neighbors patch purely for the score computation; not
+     * used by any real growth path. */
+    static double computeCellScoreForTest(CoarseCell cell, BiomeConfig biome, TerrainClass cellRealTerrainClass, long identitySeed) {
+        GrowingPatch patch = new GrowingPatch(biome, 0, identitySeed, null);
+        return computeCellScore(cell, patch, Map.of(), cellRealTerrainClass);
     }
 
     /** Approximate patch radius from assigned cell count, treating the patch as a disc.
@@ -457,10 +502,11 @@ public final class PatchGrowthEngine {
             if (resolvedCells.containsKey(neighbor)) {
                 continue;
             }
-            if (!isEligibleForGrowth(patch.biome, terrainClassByCell.get(neighbor))) {
+            TerrainClass neighborRealTerrainClass = terrainClassByCell.get(neighbor);
+            if (!isEligibleForGrowth(patch.biome, neighborRealTerrainClass)) {
                 continue;
             }
-            double score = computeCellScore(neighbor, patch, resolvedCells);
+            double score = computeCellScore(neighbor, patch, resolvedCells, neighborRealTerrainClass);
             frontier.add(new FrontierEntry(-score, pushCounter.getAndIncrement(), neighbor, patchOrigin));
         }
     }

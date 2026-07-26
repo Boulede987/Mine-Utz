@@ -57,7 +57,10 @@ public final class PatchGrowthEngineSelfTest {
         boolean dissolveFamilyPassed = runDissolveFamilySelfTest();
         System.out.println("Dissolve-family self-test: " + (dissolveFamilyPassed ? "PASS" : "FAIL"));
 
-        if (!determinismPassed || !terrainBlindnessPassed || !dissolveFamilyPassed) {
+        boolean blendPenaltyPassed = runGrowthBlendPenaltySelfTest();
+        System.out.println("Growth-blend-penalty self-test: " + (blendPenaltyPassed ? "PASS" : "FAIL"));
+
+        if (!determinismPassed || !terrainBlindnessPassed || !dissolveFamilyPassed || !blendPenaltyPassed) {
             System.exit(1);
         }
     }
@@ -181,6 +184,39 @@ public final class PatchGrowthEngineSelfTest {
             }
         }
         return true;
+    }
+
+    // Margin the growth-blend penalty must clear to count as "applied" in this test --
+    // well above the ~1e-6 tie-break scale (real score noise), well below the penalty's
+    // real configured magnitude (0.5 as of this writing) -- deliberately NOT a duplicate
+    // of PatchGrowthEngine's own private constant, so retuning that value doesn't also
+    // require touching this test; this only asserts the mechanism still fires in the
+    // right direction, not its exact magnitude.
+    private static final double MIN_EXPECTED_BLEND_PENALTY_MARGIN = 0.3;
+
+    /** Fork "Cause A: FLAT_LAND/HILLY growth blend was unconditionally permissive"
+     * (real in-game symptom: windswept_hills/plains and windswept_hills/forest boundary
+     * patchwork, since ANY biome declaring either blend class could invade ANY cell of
+     * either class on equal footing with a biome that actually declares it). Fix was a
+     * score penalty (GROWTH_BLEND_RELIANCE_SCORE_PENALTY), not an eligibility change --
+     * blend-reliant growth stays POSSIBLE (preserves Stage 3/4's territory-expansion
+     * purpose) but scores below a same-class claim. Verifies via computeCellScoreForTest
+     * directly (same cell, same identitySeed, so the tie-break term is identical between
+     * both calls and no neighbor bonuses apply with an empty resolvedCells map) rather
+     * than simulating a full contested-growth scenario, which would be far less precise
+     * given real best-first queue ordering and neighbor-bonus accumulation. */
+    static boolean runGrowthBlendPenaltySelfTest() {
+        ResourceKey<Biome> flatOnly = testBiomeKey("blend_penalty_flat_only");
+        BiomeConfig flatOnlyConfig = new BiomeConfig(
+            flatOnly, Set.of(TerrainClass.FLAT_LAND), 64, 128, 1.0f, List.of(), List.of(), List.of(), List.of()
+        );
+        PatchGrowthEngine.CoarseCell cell = new PatchGrowthEngine.CoarseCell(0, 0);
+        long identitySeed = 42L;
+
+        double scoreOnDeclaredClass = PatchGrowthEngine.computeCellScoreForTest(cell, flatOnlyConfig, TerrainClass.FLAT_LAND, identitySeed);
+        double scoreOnBlendOnlyClass = PatchGrowthEngine.computeCellScoreForTest(cell, flatOnlyConfig, TerrainClass.HILLY, identitySeed);
+
+        return scoreOnDeclaredClass - scoreOnBlendOnlyClass >= MIN_EXPECTED_BLEND_PENALTY_MARGIN;
     }
 
     /** Deterministic synthetic terrain, no Climate.Sampler needed -- reuses
