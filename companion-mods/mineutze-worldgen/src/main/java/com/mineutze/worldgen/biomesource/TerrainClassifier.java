@@ -32,7 +32,7 @@ public final class TerrainClassifier {
     // is confirmed water -- ground truth, not inference) fed into
     // calibrate_terrain_classes.py's percentile-based suggestion. See git history for the
     // exact run this value came from.
-    private static final float RIVER_WEIRDNESS_ABS_HI = 0.067f;
+    private static final float RIVER_WEIRDNESS_ABS_HI = 0.065f;
 
     // Calibrated via calibrate_terrain_classes.py against 117836 pooled real
     // /dump_height_samples captures (two sessions, --world persistence) -- see git history
