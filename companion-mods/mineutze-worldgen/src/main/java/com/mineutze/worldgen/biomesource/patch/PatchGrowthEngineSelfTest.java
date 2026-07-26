@@ -248,16 +248,17 @@ public final class PatchGrowthEngineSelfTest {
         return scoreOnDeclaredClass - scoreOnBlendOnlyClass >= MIN_EXPECTED_BLEND_PENALTY_MARGIN;
     }
 
-    /** Fork "Cause B: germination spacing must scale with sizeMaxBlocks, not
-     * sizeMinBlocks" -- real in-game symptom: multiple biomes sharing one terrain class
-     * (desert/savanna/plains/snowy_plains, all FLAT_LAND) fragmenting each other into
-     * many small patches, because germination-time spacing only ever guaranteed
-     * separation for a patch's SMALLEST possible size while growth can reach its
-     * largest. Directly asserts the fix rather than reverse-engineering it from
-     * germination-origin positions (not exposed by WindowResolution): holding
-     * sizeMinBlocks fixed, spacing must strictly increase as sizeMaxBlocks increases --
-     * this would NOT hold under the old sizeMinBlocks-based formula, which was blind to
-     * sizeMaxBlocks entirely. */
+    /** Fork "Cause B", REVISED after real WorldgenDebugDump data showed the original
+     * sizeMaxBlocks-only fix caused a 52% true-gap rate (spacing sized for the rare
+     * worst-case simultaneous-max-roll, not the typical patch) -- see
+     * spacingRadiusInCells's own comment for the full story. Now spaces on the midpoint
+     * (sizeMin + sizeMax) / 2, the actual expected value of targetRadiusFromCandidate's
+     * uniform [sizeMin/2, sizeMax/2] sampling. This assertion (spacing must still
+     * strictly increase as sizeMaxBlocks increases, holding sizeMinBlocks fixed) happens
+     * to hold under BOTH the sizeMax-only and midpoint formulas (midpoint is monotonic
+     * in sizeMax too) -- kept as regression coverage against reverting all the way back
+     * to the original sizeMinBlocks-only formula, which was blind to sizeMaxBlocks
+     * entirely and would fail this same check. */
     static boolean runSpacingScalesWithMaxSizeSelfTest() {
         ResourceKey<Biome> narrowRange = testBiomeKey("spacing_narrow_range");
         ResourceKey<Biome> wideRange = testBiomeKey("spacing_wide_range");

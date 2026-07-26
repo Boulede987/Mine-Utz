@@ -402,18 +402,34 @@ public final class PatchGrowthEngine {
     // snowy_plains) and multiple such near-collisions land close together, this produced
     // an interleaved battlefield of small patches, not a calibration/noise problem.
     //
-    // Fixed by spacing on sizeMaxBlocks instead -- guarantees separation for the LARGEST
-    // a patch could roll, not just the smallest, making mid-growth collisions structurally
-    // rare rather than a roll-dependent coin flip. Deliberate tradeoff, chosen over a
-    // smaller (min+max)/2 midpoint alternative: this reduces germination density/patch
-    // count everywhere, not just in previously-contested zones, in exchange for fully
-    // closing the gap rather than just narrowing it. TILE_RADIUS_CELLS (SurfacePatchGrid)
-    // was already sized off MAX_SIZE_MAX_BLOCKS with margin, so this doesn't risk
-    // reintroducing the window-bounds hangs documented in DESIGN.md Sec 11 -- it only
-    // shrinks how many germination points occur within an already-generous window, never
-    // expands growth past it.
+    // REVISED again after real WorldgenDebugDump data (see git history): the sizeMax-based
+    // fix above was itself wrong, confirmed empirically, not just theoretically. Real
+    // world data (452k logged columns) showed 52% of all surface resolutions were true
+    // gaps -- no patch's growth ever reached them, resolved instead by
+    // CustomOverworldBiomeSource.pickTerrainAppropriateFallback, an INDEPENDENT per-column
+    // weighted roll with zero spatial correlation between neighboring columns. Spatially:
+    // 71% of surface-tier 128-block buckets were >70% gap rows, and 65% of THOSE had 3+
+    // distinct biomes crammed into one bucket -- the exact chaotic salt-and-pepper pattern
+    // being debugged, at map scale, not just at biome seams.
+    //
+    // Root cause of the regression: sizeMaxBlocks-based spacing guards against the WORST
+    // CASE (both neighboring patches simultaneously roll their maximum size), but
+    // targetRadiusFromCandidate samples the real grown radius UNIFORMLY across
+    // [sizeMin/2, sizeMax/2] -- so most patches roll somewhere in the middle, not the max.
+    // Spacing sized for the rare worst case left enormous unclaimed area around the
+    // TYPICAL patch, collapsing real coverage rather than just reducing collisions.
+    //
+    // Fixed by spacing on the MIDPOINT (sizeMin + sizeMax) / 2 instead -- the actual
+    // expected value of that uniform distribution, not a worst-case bound. Statistically
+    // principled middle ground: still meaningfully wider than the original sizeMin-only
+    // spacing (still reduces the real collision problem Cause B was chasing), without
+    // sizing for a scenario that rarely happens at the cost of gutting normal coverage.
+    // Expect to re-measure the real gap rate with WorldgenDebugDump after this change,
+    // not assume it's fully solved from reasoning alone -- this file has now been wrong
+    // twice in a row trusting theory over real data.
     private static int spacingRadiusInCells(BiomeConfig biome, double cellSizeBlocks) {
-        return Math.max(MINIMUM_SPACING_CELLS, (int) Math.round(biome.sizeMaxBlocks() / (2 * cellSizeBlocks)));
+        double midpointSizeBlocks = (biome.sizeMinBlocks() + biome.sizeMaxBlocks()) / 2.0;
+        return Math.max(MINIMUM_SPACING_CELLS, (int) Math.round(midpointSizeBlocks / (2 * cellSizeBlocks)));
     }
 
     /** Test-support entry point (package-visible, not private): lets
