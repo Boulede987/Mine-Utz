@@ -1,7 +1,6 @@
 package com.mineutze.worldgen.biomesource;
 
-import com.mineutze.worldgen.biomesource.patch.PatchGrowthEngine;
-import com.mineutze.worldgen.biomesource.patch.PatchSeedHasher;
+import com.mineutze.worldgen.biomesource.patch.CoherentFallbackPicker;
 import com.mineutze.worldgen.biomesource.patch.SurfacePatchGrid;
 import com.mineutze.worldgen.biomesource.patch.UndergroundPatchGrid;
 import com.mojang.serialization.MapCodec;
@@ -125,8 +124,12 @@ public final class CustomOverworldBiomeSource extends BiomeSource {
         WorldgenDebugDump.record(blockX, blockZ, sampler, terrainClass, biome, regionFamily, source);
     }
 
-    private static final int FALLBACK_PICK_HASH_NAMESPACE = 99;
-
+    /** Picks a biome for a TRUE GAP column (no patch's growth ever reached it). Delegates
+     * to CoherentFallbackPicker for the actual selection -- see that class's own comment
+     * for why this is a smoothly-varying selector, not a per-column-independent random
+     * roll: real WorldgenDebugDump data confirmed the original independent-roll version
+     * produced visible chaotic salt-and-pepper patches even after fixing the underlying
+     * growth/spacing algorithm issues. */
     private ResourceKey<Biome> pickTerrainAppropriateFallback(int blockX, int blockZ, Climate.Sampler sampler) {
         TerrainClass terrainClass = TerrainClassifier.classifyAtBlock(sampler, blockX, blockZ);
         List<BiomeConfig> eligible = BiomeConfigRegistry.allConfigs().stream()
@@ -138,8 +141,7 @@ public final class CustomOverworldBiomeSource extends BiomeSource {
             // but stay correct if that ever stops being true rather than throwing.
             return BiomeConfigRegistry.allConfigs().get(0).id();
         }
-        long seed = PatchSeedHasher.cellSeed(WorldSeedHolder.overworldSeed(), blockX, FALLBACK_PICK_HASH_NAMESPACE, blockZ);
-        return PatchGrowthEngine.pickWeightedBiome(eligible, seed).id();
+        return CoherentFallbackPicker.pick(WorldSeedHolder.overworldSeed(), blockX, blockZ, eligible).id();
     }
 
     /** /dump_patch_debug entry point -- see SurfacePatchGrid.measurePatchAt for caveats. */

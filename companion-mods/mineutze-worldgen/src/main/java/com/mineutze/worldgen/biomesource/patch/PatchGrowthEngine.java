@@ -358,7 +358,7 @@ public final class PatchGrowthEngine {
      * fallback (different package, picking among biomes eligible for a gap cell's real
      * terrain class). */
     public static BiomeConfig pickWeightedBiome(List<BiomeConfig> candidates, long seed) {
-        return pickWeighted(candidates, BiomeConfig::weight, seed);
+        return pickWeightedByRoll(candidates, BiomeConfig::weight, PatchSeedHasher.unitIntervalFromSeed(seed));
     }
 
     /** Same weighted-pick pattern as pickWeightedBiome, one level down -- a biome's
@@ -367,10 +367,20 @@ public final class PatchGrowthEngine {
      * shape template). Callers must not pass an empty list -- see rollRegionFamily's own
      * empty check, which is what keeps this from ever being called with one. */
     public static RegionFamily pickWeightedRegionFamily(List<RegionFamilyWeight> candidates, long seed) {
-        return pickWeighted(candidates, RegionFamilyWeight::weight, seed).family();
+        return pickWeightedByRoll(candidates, RegionFamilyWeight::weight, PatchSeedHasher.unitIntervalFromSeed(seed)).family();
     }
 
-    private static <T> T pickWeighted(List<T> candidates, ToDoubleFunction<T> weightOf, long seed) {
+    /** Public: CoherentFallbackPicker (same package) reuses this with a SMOOTHLY-VARYING
+     * roll (not a per-cell-independent seed hash) so gap-fallback biome selection
+     * clusters spatially instead of flipping independently cell to cell -- see that
+     * class's own comment for why. unitRoll should be in [0, 1); pickWeightedBiome's own
+     * seed-to-roll conversion is exactly PatchSeedHasher.unitIntervalFromSeed, now
+     * factored out here as the shared cumulative-weight walk both entry points share. */
+    public static BiomeConfig pickWeightedBiomeByRoll(List<BiomeConfig> candidates, double unitRoll) {
+        return pickWeightedByRoll(candidates, BiomeConfig::weight, unitRoll);
+    }
+
+    private static <T> T pickWeightedByRoll(List<T> candidates, ToDoubleFunction<T> weightOf, double unitRoll) {
         double totalWeight = 0;
         for (T candidate : candidates) {
             totalWeight += weightOf.applyAsDouble(candidate);
@@ -378,7 +388,7 @@ public final class PatchGrowthEngine {
         if (totalWeight <= 0) {
             totalWeight = 1.0;
         }
-        double roll = PatchSeedHasher.unitIntervalFromSeed(seed) * totalWeight;
+        double roll = unitRoll * totalWeight;
         double runningTotal = 0;
         for (T candidate : candidates) {
             runningTotal += weightOf.applyAsDouble(candidate);

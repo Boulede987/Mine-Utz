@@ -63,8 +63,11 @@ public final class PatchGrowthEngineSelfTest {
         boolean spacingScalesWithMaxSizePassed = runSpacingScalesWithMaxSizeSelfTest();
         System.out.println("Spacing-scales-with-max-size self-test: " + (spacingScalesWithMaxSizePassed ? "PASS" : "FAIL"));
 
+        boolean coherentFallbackPassed = runCoherentFallbackSelfTest();
+        System.out.println("Coherent-fallback self-test: " + (coherentFallbackPassed ? "PASS" : "FAIL"));
+
         if (!determinismPassed || !terrainBlindnessPassed || !dissolveFamilyPassed
-            || !blendPenaltyPassed || !spacingScalesWithMaxSizePassed) {
+            || !blendPenaltyPassed || !spacingScalesWithMaxSizePassed || !coherentFallbackPassed) {
             System.exit(1);
         }
     }
@@ -309,6 +312,56 @@ public final class PatchGrowthEngineSelfTest {
             new BiomeConfig(beach, Set.of(TerrainClass.COAST), 16, 48, 1.0f, List.of(), List.of(), List.of(), List.of()),
             new BiomeConfig(sea, Set.of(TerrainClass.OCEAN), 64, 200, 1.0f, List.of(), List.of(), List.of(), List.of())
         );
+    }
+
+    // Nearby-agreement threshold for the clustering assertion below -- deliberately well
+    // above "better than random chance" (with 4 equal-weight candidates, independent
+    // per-column rolls would average ~25% agreement with any fixed reference point) but
+    // below 100%, since points straddling a smooth-selector-field crossing near a
+    // cumulative-weight boundary are EXPECTED to disagree with their neighbors --
+    // that's the organic-boundary behavior this fix exists to produce, not a bug.
+    private static final double MIN_EXPECTED_FALLBACK_CLUSTERING_AGREEMENT = 0.6;
+
+    /** Fork "make gap-fallback biome selection spatially coherent" (real WorldgenDebugDump
+     * finding: 57-71% of gap-dominated 128-block areas had 3+ distinct biomes crammed
+     * together, confirming the OLD independent-per-column roll was the direct cause of
+     * visible chaos, not just the underlying gap rate itself). Verifies two properties
+     * directly: (a) determinism -- same (seed, x, z) always returns the same pick, a pure
+     * function with no hidden state; (b) clustering -- most points close together (within
+     * one CoherentFallbackPicker lattice cell) pick the SAME biome, unlike what an
+     * independent-per-column hash would produce. Uses 4 equal-weight candidates
+     * specifically so a broken (non-clustering) implementation would show ~25% agreement
+     * with any fixed reference point, comfortably distinguishable from this test's real
+     * threshold. */
+    static boolean runCoherentFallbackSelfTest() {
+        List<BiomeConfig> candidates = List.of(
+            new BiomeConfig(testBiomeKey("fallback_a"), Set.of(TerrainClass.FLAT_LAND), 1, 1, 1.0f, List.of(), List.of(), List.of(), List.of()),
+            new BiomeConfig(testBiomeKey("fallback_b"), Set.of(TerrainClass.FLAT_LAND), 1, 1, 1.0f, List.of(), List.of(), List.of(), List.of()),
+            new BiomeConfig(testBiomeKey("fallback_c"), Set.of(TerrainClass.FLAT_LAND), 1, 1, 1.0f, List.of(), List.of(), List.of(), List.of()),
+            new BiomeConfig(testBiomeKey("fallback_d"), Set.of(TerrainClass.FLAT_LAND), 1, 1, 1.0f, List.of(), List.of(), List.of(), List.of())
+        );
+
+        BiomeConfig referencePick = CoherentFallbackPicker.pick(WORLD_SEED, 0, 0, candidates);
+        BiomeConfig repeatPick = CoherentFallbackPicker.pick(WORLD_SEED, 0, 0, candidates);
+        if (referencePick != repeatPick) {
+            return false; // not deterministic -- a pure function of (seed, x, z) must always agree with itself
+        }
+
+        int sampleSpacingBlocks = 8;
+        int sampleRadiusSteps = 8; // +-64 blocks around the reference point, well inside one 256-block lattice cell
+        int agreementCount = 0;
+        int totalCount = 0;
+        for (int dx = -sampleRadiusSteps; dx <= sampleRadiusSteps; dx++) {
+            for (int dz = -sampleRadiusSteps; dz <= sampleRadiusSteps; dz++) {
+                BiomeConfig nearbyPick = CoherentFallbackPicker.pick(WORLD_SEED, dx * sampleSpacingBlocks, dz * sampleSpacingBlocks, candidates);
+                totalCount++;
+                if (nearbyPick == referencePick) {
+                    agreementCount++;
+                }
+            }
+        }
+        double agreementFraction = (double) agreementCount / totalCount;
+        return agreementFraction >= MIN_EXPECTED_FALLBACK_CLUSTERING_AGREEMENT;
     }
 
     private static ResourceKey<Biome> testBiomeKey(String path) {
