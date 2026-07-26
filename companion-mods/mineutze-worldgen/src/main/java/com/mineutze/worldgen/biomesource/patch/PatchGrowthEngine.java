@@ -453,39 +453,74 @@ public final class PatchGrowthEngine {
 
     /** Order-independent: see isLocalMaximum's docstring below. */
     private static List<CoarseCell> selectGerminationPoints(Map<CoarseCell, GerminationCandidate> candidatesByCell) {
-        int lookaheadRadiusCells = 0;
-        for (GerminationCandidate candidate : candidatesByCell.values()) {
-            lookaheadRadiusCells = Math.max(lookaheadRadiusCells, candidate.spacingCells());
-        }
         List<CoarseCell> germinationPoints = new ArrayList<>();
         for (Map.Entry<CoarseCell, GerminationCandidate> entry : candidatesByCell.entrySet()) {
-            if (isLocalMaximum(entry.getKey(), entry.getValue(), candidatesByCell, lookaheadRadiusCells)) {
+            if (isLocalMaximum(entry.getKey(), entry.getValue(), candidatesByCell)) {
                 germinationPoints.add(entry.getKey());
             }
         }
         return germinationPoints;
     }
 
+    // REVISED after real WorldgenDebugDump data (see git history): the suppression
+    // radius used to be Math.max(candidate.spacingCells(), neighbor.spacingCells()) --
+    // always the LARGER of the two competing biomes' own configured spacing. Since
+    // desert has by far the widest spacing radius among configured biomes (sizeMax=1900,
+    // ~44 cells under the current midpoint-based formula), that max() meant desert (and
+    // to a lesser extent ocean) could suppress germination for ANY other biome within
+    // its own huge radius, REGARDLESS of whether they even share a terrain class --
+    // isLocalMaximum only compares priority values, it never checks terrain-class
+    // relevance between the two candidates being compared. Confirmed empirically, not
+    // just theoretically: real dumped data showed forest/savanna/snowy_plains/river at
+    // 0% real ("surface" source) resolution, windswept_hills/desert at 0.4-0.7% -- nearly
+    // all resolved via the gap-fallback path instead, meaning germination for these
+    // biomes was barely happening at all. Widening every biome's spacing radius (this
+    // file's own Cause B history) made this pre-existing asymmetry worse, not new.
+    //
+    // Fixed by using ONLY the evaluated candidate's own spacingCells -- each biome's own
+    // configured scale now governs its own suppression sensitivity, never inflated by an
+    // unrelated neighbor's larger scale. A large-range biome (desert) still gets
+    // correctly suppressed by any higher-priority neighbor within ITS OWN large reach
+    // (its own check still uses its own large radius); a small-range biome (forest) only
+    // ever worries about its own, much smaller neighborhood. This also means the loop
+    // bound no longer needs a separately-computed global maximum (selectGerminationPoints
+    // no longer needs lookaheadRadiusCells at all) and the old withinRadius check is
+    // redundant (the loop bounds already only ever reach candidate's own radius).
     private static boolean isLocalMaximum(
-        CoarseCell cell, GerminationCandidate candidate, Map<CoarseCell, GerminationCandidate> candidatesByCell, int lookaheadRadiusCells
+        CoarseCell cell, GerminationCandidate candidate, Map<CoarseCell, GerminationCandidate> candidatesByCell
     ) {
-        for (int deltaX = -lookaheadRadiusCells; deltaX <= lookaheadRadiusCells; deltaX++) {
-            for (int deltaZ = -lookaheadRadiusCells; deltaZ <= lookaheadRadiusCells; deltaZ++) {
+        int radius = candidate.spacingCells();
+        for (int deltaX = -radius; deltaX <= radius; deltaX++) {
+            for (int deltaZ = -radius; deltaZ <= radius; deltaZ++) {
                 if (deltaX == 0 && deltaZ == 0) {
                     continue;
                 }
                 GerminationCandidate neighbor = candidatesByCell.get(new CoarseCell(cell.cellX() + deltaX, cell.cellZ() + deltaZ));
-                if (neighbor == null) {
-                    continue;
-                }
-                int symmetricRadius = Math.max(candidate.spacingCells(), neighbor.spacingCells());
-                boolean withinRadius = Math.max(Math.abs(deltaX), Math.abs(deltaZ)) <= symmetricRadius;
-                if (withinRadius && neighbor.priority() > candidate.priority()) {
+                if (neighbor != null && neighbor.priority() > candidate.priority()) {
                     return false;
                 }
             }
         }
         return true;
+    }
+
+    /** Test-support entry point (package-visible, not private): lets
+     * PatchGrowthEngineSelfTest verify isLocalMaximum's asymmetric-radius behavior
+     * directly, with explicit test-controlled priority/spacing values -- the real
+     * hash-derived candidate generation (precomputeGerminationCandidates) can't easily
+     * be forced into a specific priority collision, which is exactly what this fix is
+     * about. GerminationCandidate.biome is never read by isLocalMaximum, so null is
+     * safe here. */
+    static boolean isLocalMaximumForTest(
+        int candidateSpacingCells, double candidatePriority,
+        int neighborOffsetXCells, int neighborOffsetZCells, double neighborPriority
+    ) {
+        CoarseCell origin = new CoarseCell(0, 0);
+        CoarseCell neighborCell = new CoarseCell(neighborOffsetXCells, neighborOffsetZCells);
+        GerminationCandidate candidate = new GerminationCandidate(null, candidateSpacingCells, candidatePriority);
+        GerminationCandidate neighbor = new GerminationCandidate(null, 0, neighborPriority);
+        Map<CoarseCell, GerminationCandidate> candidatesByCell = Map.of(origin, candidate, neighborCell, neighbor);
+        return isLocalMaximum(origin, candidate, candidatesByCell);
     }
 
     private static double targetRadiusFromCandidate(GerminationCandidate candidate) {

@@ -66,8 +66,12 @@ public final class PatchGrowthEngineSelfTest {
         boolean coherentFallbackPassed = runCoherentFallbackSelfTest();
         System.out.println("Coherent-fallback self-test: " + (coherentFallbackPassed ? "PASS" : "FAIL"));
 
+        boolean asymmetricSuppressionPassed = runAsymmetricSuppressionSelfTest();
+        System.out.println("Asymmetric-suppression self-test: " + (asymmetricSuppressionPassed ? "PASS" : "FAIL"));
+
         if (!determinismPassed || !terrainBlindnessPassed || !dissolveFamilyPassed
-            || !blendPenaltyPassed || !spacingScalesWithMaxSizePassed || !coherentFallbackPassed) {
+            || !blendPenaltyPassed || !spacingScalesWithMaxSizePassed || !coherentFallbackPassed
+            || !asymmetricSuppressionPassed) {
             System.exit(1);
         }
     }
@@ -362,6 +366,38 @@ public final class PatchGrowthEngineSelfTest {
         }
         double agreementFraction = (double) agreementCount / totalCount;
         return agreementFraction >= MIN_EXPECTED_FALLBACK_CLUSTERING_AGREEMENT;
+    }
+
+    /** Fork "asymmetric germination suppression" -- real WorldgenDebugDump finding:
+     * forest/savanna/snowy_plains/river showed 0% real ("surface" source) resolution,
+     * windswept_hills/desert 0.4-0.7%, because isLocalMaximum's old
+     * Math.max(candidate.spacingCells(), neighbor.spacingCells()) suppression radius let
+     * a large-spacing biome (desert) veto germination for ANY other biome within its own
+     * huge radius, regardless of terrain-class relevance. Proves both halves directly via
+     * isLocalMaximumForTest, with explicit priority/spacing values bypassing the real
+     * hash-derived candidate generation (which can't easily be forced into a specific
+     * priority collision):
+     * (a) a SMALL-spacing candidate must SURVIVE a much-higher-priority neighbor that
+     *     sits OUTSIDE the candidate's own (small) radius -- this is exactly what the old
+     *     max()-based rule got wrong: if that neighbor's own spacing were large, the old
+     *     rule would use the neighbor's large radius instead and suppress the candidate
+     *     even though the candidate's own scale would never have cared about a neighbor
+     *     that far away.
+     * (b) a LARGE-spacing candidate must STILL be suppressed by a higher-priority
+     *     neighbor within ITS OWN large radius -- confirms normal suppression didn't
+     *     silently break, only the asymmetric over-suppression case. */
+    static boolean runAsymmetricSuppressionSelfTest() {
+        boolean smallSpacingSurvivesDistantHigherPriority = PatchGrowthEngine.isLocalMaximumForTest(
+            2, 0.1,   // candidate: small spacing radius, low priority
+            5, 0,     // neighbor 5 cells away -- outside candidate's own radius of 2
+            0.9       // neighbor: much higher priority
+        );
+        boolean largeSpacingStillSuppressedWithinOwnRadius = !PatchGrowthEngine.isLocalMaximumForTest(
+            40, 0.1,  // candidate: large spacing radius (comparable to desert's real one), low priority
+            5, 0,     // neighbor 5 cells away -- well within candidate's own radius of 40
+            0.9       // neighbor: much higher priority
+        );
+        return smallSpacingSurvivesDistantHigherPriority && largeSpacingStillSuppressedWithinOwnRadius;
     }
 
     private static ResourceKey<Biome> testBiomeKey(String path) {
