@@ -314,8 +314,16 @@ public final class PatchGrowthEngine {
      * GROWTH_BLENDABLE_LAND_TERRAIN_CLASSES' own comment. FLAT_LAND/HILLY are blind to
      * which of the two a neighbor cell is, as long as the spreading biome declares
      * either. See the class-level comment for why this split from germination exists,
-     * and isEligibleForGermination for the stricter sibling. */
-    private static boolean isEligibleForGrowth(BiomeConfig biome, TerrainClass realTerrainClass) {
+     * and isEligibleForGermination for the stricter sibling.
+     *
+     * Package-visible (not private): SurfacePatchGrid (same package) reuses this exact
+     * rule for its own per-exact-block safety net -- a narrow real feature (RIVER
+     * especially, often narrower than one CELL_SIZE_BLOCKS cell) can sit at a block whose
+     * CELL was classified something else by classifyCell's single-midpoint sample. That
+     * safety net must reject only what growth itself would never have allowed (a real
+     * water-class or MOUNTAINOUS mismatch), not legitimate FLAT_LAND/HILLY blending --
+     * this is exactly that boundary, already correct, don't duplicate it. */
+    static boolean isEligibleForGrowth(BiomeConfig biome, TerrainClass realTerrainClass) {
         if (GROWTH_BLENDABLE_LAND_TERRAIN_CLASSES.contains(realTerrainClass)) {
             return biome.terrainClasses().stream().anyMatch(GROWTH_BLENDABLE_LAND_TERRAIN_CLASSES::contains);
         }

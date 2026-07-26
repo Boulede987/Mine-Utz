@@ -134,9 +134,10 @@ public final class SurfacePatchGrid {
 
     /**
      * Resolves the biome at a block column, or returns null if no configured biome's
-     * terrain_classes cover this cell and no neighboring patch's growth reached it --
-     * the caller (CustomOverworldBiomeSource) must fall back to vanilla in that case,
-     * never invent an arbitrary biome for the gap.
+     * terrain_classes cover this cell and no neighboring patch's growth reached it, OR
+     * if the exact block's real terrain doesn't actually match what got resolved (see
+     * acceptIfEligibleForExactBlock below) -- the caller (CustomOverworldBiomeSource)
+     * must fall back in either case, never invent an arbitrary biome for the gap.
      *
      * Domain-warps the lookup near boundaries so edges wobble organically instead of
      * following the underlying cell grid exactly (see DomainWarp's class comment for
@@ -148,6 +149,15 @@ public final class SurfacePatchGrid {
      * noise says is ocean. The underlying cell/tile structure (including small-island
      * dissolve) is resolved once, cached, and untouched by any of this -- warping is a
      * read-time-only cosmetic layer on top of an already-correct structure.
+     *
+     * Second safety property, added after a confirmed real symptom (desert visibly
+     * overlapping real river channels): classifyCell only ever samples ONE point per
+     * CELL_SIZE_BLOCKS=16 cell (its midpoint) to drive every placement decision for the
+     * whole cell -- a real feature narrower than one cell (RIVER especially) can sit
+     * anywhere in that cell without the midpoint ever seeing it. acceptIfEligibleForExactBlock
+     * re-validates the FINAL answer (true or warp-accepted) against the exact queried
+     * block's own real terrain class before returning it, on top of the warp-specific
+     * check above.
      */
     public ResourceKey<Biome> resolve(int blockX, int blockZ, Climate.Sampler sampler) {
         BiomeAndFamily result = resolveWithFamily(blockX, blockZ, sampler);
@@ -165,24 +175,55 @@ public final class SurfacePatchGrid {
         if (trueResolution == null) {
             return null;
         }
+        TerrainClass trueTerrainClassAtThisExactBlock = classifyBlock(blockX, blockZ, sampler);
 
         int warpedBlockX = blockX + DomainWarp.offsetXBlocks(worldSeed, blockX, blockZ);
         int warpedBlockZ = blockZ + DomainWarp.offsetZBlocks(worldSeed, blockX, blockZ);
         if (cellFor(warpedBlockX, warpedBlockZ).equals(cellFor(blockX, blockZ))) {
-            return trueResolution.toBiomeAndFamily(); // warp didn't reach a different cell -- nothing to borrow
+            // warp didn't reach a different cell -- nothing to borrow, still needs the
+            // exact-block safety net below
+            return acceptIfEligibleForExactBlock(trueResolution, trueTerrainClassAtThisExactBlock);
         }
 
         CellResolution warpedResolution = resolveCellWithFamily(warpedBlockX, warpedBlockZ, sampler);
         if (warpedResolution == null || warpedResolution.biome().equals(trueResolution.biome())) {
-            return trueResolution.toBiomeAndFamily();
+            return acceptIfEligibleForExactBlock(trueResolution, trueTerrainClassAtThisExactBlock);
         }
 
         BiomeConfig warpedConfig = configById.get(warpedResolution.biome());
-        TerrainClass trueTerrainClassAtThisExactBlock = classifyBlock(blockX, blockZ, sampler);
         boolean accepted = warpedConfig != null && warpedConfig.terrainClasses().contains(trueTerrainClassAtThisExactBlock);
         recordWarpPairDiagnostics(trueResolution.biome(), warpedResolution.biome(), accepted);
         // rejected -- borrowing would mismatch the real terrain right here
-        return accepted ? warpedResolution.toBiomeAndFamily() : trueResolution.toBiomeAndFamily();
+        return accepted ? warpedResolution.toBiomeAndFamily() : acceptIfEligibleForExactBlock(trueResolution, trueTerrainClassAtThisExactBlock);
+    }
+
+    /** Safety net for something classifyCell's single-midpoint sampling structurally
+     * cannot catch: a narrow real terrain feature (RIVER especially -- often narrower
+     * than one CELL_SIZE_BLOCKS=16 cell) physically present at THIS exact block, even
+     * though the cell's midpoint sample said something else and every placement decision
+     * for the whole cell was made on that basis. Confirmed real symptom, not
+     * hypothetical: land biomes (desert) visibly overlapping real river channels,
+     * because germination/growth only ever sampled the cell midpoint.
+     *
+     * Uses PatchGrowthEngine.isEligibleForGrowth, NOT a strict terrainClasses().contains
+     * check -- reusing growth's own permissiveness rule is what keeps this from falsely
+     * rejecting legitimate FLAT_LAND/HILLY blending (e.g. windswept_hills grown onto a
+     * neighboring FLAT_LAND block) while still catching what growth itself would never
+     * have allowed: a real water-class (including RIVER) or MOUNTAINOUS mismatch.
+     *
+     * On rejection, returns null (a "gap") rather than the mismatched answer --
+     * CustomOverworldBiomeSource's existing gap-fallback chain already does exactly the
+     * right thing for that: it classifies the EXACT block, not a cell midpoint, and picks
+     * a real, weighted-eligible biome for it (e.g. the configured RIVER biome). This only
+     * ever narrows what gets returned here, never widens past the cell's already-resolved
+     * eligibility -- can't undo any other safety property (small-island dissolve, warp
+     * acceptance) already established elsewhere in this class. */
+    private BiomeAndFamily acceptIfEligibleForExactBlock(CellResolution resolution, TerrainClass exactTerrainClass) {
+        BiomeConfig config = configById.get(resolution.biome());
+        if (config != null && PatchGrowthEngine.isEligibleForGrowth(config, exactTerrainClass)) {
+            return resolution.toBiomeAndFamily();
+        }
+        return null;
     }
 
     /** Public: (biome, regionFamily) pair for one exact block position, after warp
