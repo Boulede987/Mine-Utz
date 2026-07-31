@@ -1,0 +1,25 @@
+// Pure Java, no Minecraft/NeoForge dependency on purpose: this module holds
+// the biome graph model and (later) the region-solve algorithm. Keeping it
+// free of Minecraft classes means its tests run as plain fast JUnit instead
+// of NeoForge's "unit testing mode", which boots a full Minecraft instance
+// for the whole test task.
+plugins {
+    id 'java'
+}
+
+java {
+    toolchain.languageVersion = JavaLanguageVersion.of(21)
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    testImplementation platform('org.junit:junit-bom:5.10.2')
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+}
+
+test {
+    useJUnitPlatform()
+}
