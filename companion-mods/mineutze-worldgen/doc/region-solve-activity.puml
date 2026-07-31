@@ -1,0 +1,32 @@
+@startuml
+title Solving one region (2048x2048 blocks, 16x16 macro-cells)
+
+start
+:Chunk request lands in\nan unsolved region;
+:Load west + north neighbor\nregions' edge macro-cells\n(solve them first if missing);
+:Fix those edge cells as\nboundary constraints;
+:Place seeds inside region\n(blue-noise, deterministic\nfrom world seed + region coords,\nspaced per target biome size);
+
+repeat
+  :Grow each seed outward\nacross macro-cells\n(flood-fill toward size target);
+  if (growth hits adjacency\nviolation with a neighbor region/seed?) then (yes)
+    if (another candidate biome fits\nsize class + all touched neighbors?) then (yes)
+      :Reassign seed to\nnext candidate biome;
+    else (no)
+      :Backtrack to previous\nseed decision, try its\nnext candidate;
+    endif
+  else (no)
+  endif
+repeat while (any region still\nbelow its target size range\nand growable?) is (yes)
+->no;
+
+note right
+  Never relax a constraint.
+  Universal-filler biome node
+  guarantees a legal candidate
+  always exists eventually.
+end note
+
+:Write macro-cell -> biome-id\nfor this region to cache;
+stop
+@enduml

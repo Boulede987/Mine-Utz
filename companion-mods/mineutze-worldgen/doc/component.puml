@@ -1,0 +1,29 @@
+@startuml
+title Component overview
+
+package "Config (static data)" {
+  [BiomeGraph\n(adjacency, size ranges,\nshape hints, feature toggles)] as Graph
+}
+
+package "Runtime" {
+  [Region Solver] as Solver
+  [Region Cache\n(macro-cell -> biome-id)] as Cache
+  [Density Router] as Density
+  [Feature Gate] as Features
+}
+
+Graph --> Solver : rules + size ranges
+Solver --> Cache : write (once per region)
+Cache --> Solver : read fixed\nwest/north edges
+Cache --> Density : biome-id per column
+Cache --> Features : biome-id per column
+Graph --> Density : shape hints per biome
+Graph --> Features : feature toggles per biome
+
+note right of Cache
+  Only source of truth for
+  "what biome is at x,z".
+  No climate-noise sampling
+  anywhere downstream.
+end note
+@enduml
