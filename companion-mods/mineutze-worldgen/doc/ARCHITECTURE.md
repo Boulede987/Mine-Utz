@@ -17,19 +17,28 @@ infinite world.
 - Group macro-cells into **solve-regions**: 16x16 macro-cells = 2048x2048
   blocks. A solve-region is the unit of work: solved once, cached to disk,
   never resolved.
-- Solving a region only needs to know the biome assignment of macro-cells
-  along its **west and north edges** (from already-solved neighbor regions).
-  It does NOT need its east/south neighbors yet.
-- Regions are solved in raster-scan dependency order: a region depends only
-  on regions with smaller (regionX, regionZ) in scan order. No cycles,
-  because nothing ever depends on a region solved later than itself.
+- **Never force-solve a neighbor to solve this region.** Earlier draft of
+  this doc said "west/north neighbors, solved first if missing" — that's
+  circular on an infinite world: there is no region with no west/north
+  neighbor to serve as a base case, so "solve neighbor first" recurses
+  forever the first time *any* region is ever solved. Fixed: when solving
+  a region, check all 4 neighbor directions (not just west/north) for an
+  *already-cached* region and use its near edge as fixed boundary context.
+  A direction with no cached neighbor yet is simply unconstrained on that
+  side — never solved eagerly just to provide a boundary. Player
+  exploration order ends up deciding which regions get boundary context
+  from which side, and that's fine: whichever region got solved first in
+  an area is unconstrained there, everything solved afterward stitches
+  against it correctly regardless of which of the 4 directions it's in.
+  (`RegionSolveInput.fixedBoundaryCells` was already direction-agnostic —
+  only this doc's narrative and the javadoc wording assumed west/north.)
 - First time a chunk generation request lands in an unsolved region, solve
-  that region (using already-cached west/north edges as fixed boundary
-  constraints), cache result, then read from cache like any other region
-  file.
+  it against whatever's cached (see above), cache the result, then read
+  from cache like any other region file.
 
 This mirrors how vanilla already handles other infinite/lazy problems
-(structure references, etc.) — never depend on data that doesn't exist yet.
+(structure references, etc.) — never depend on data that doesn't exist yet,
+and never force generation of something just to satisfy a dependency.
 
 ## Layers
 

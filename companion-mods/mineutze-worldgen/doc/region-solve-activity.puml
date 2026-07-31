@@ -3,8 +3,8 @@ title Solving one region (2048x2048 blocks, 16x16 macro-cells)
 
 start
 :Chunk request lands in\nan unsolved region;
-:Load west + north neighbor\nregions' edge macro-cells\n(solve them first if missing);
-:Fix those edge cells as\nboundary constraints;
+:Check all 4 neighbor directions\nfor an already-cached region\n(never force-solve one that's missing);
+:Fix that/those cached edge(s)\nas boundary constraints;\nunconstrained on any side\nwith no cached neighbor yet;
 :Place seeds inside region\n(blue-noise, deterministic\nfrom world seed + region coords,\nspaced per target biome size);
 
 repeat

@@ -6,8 +6,10 @@ import com.mineutze.worldgen.biomegraph.BiomeId;
 import java.util.Map;
 
 /**
- * @param fixedBoundaryCells already-solved neighbor regions' edge cells
- *                           (west/north), fixed and never claimed by this solve
+ * @param fixedBoundaryCells edge cells from whichever neighbor regions are
+ *                           already solved (any of the 4 directions —
+ *                           direction-agnostic, see doc/ARCHITECTURE.md),
+ *                           fixed and never claimed by this solve
  * @param seedSpacingBlocks  placeholder, tune from logged solve output like
  *                           the macro-cell size (doc/ARCHITECTURE.md)
  * @param backtrackDepthCap  sanity limit only; the universal-filler
