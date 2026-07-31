@@ -19,11 +19,6 @@ runs {
 
 dependencies {
     implementation "net.neoforged:neoforge:${neoforge_version}"
-    // Only Nether (FilterNetherRegion) and End (FilterEndBiomes) still use TerraBlender --
-    // Overworld placement is CustomOverworldBiomeSource now, registered independently via
-    // NeoForge's own BIOME_SOURCE registry. Already in the modpack's mods folder — reference
-    // it directly rather than pulling a Maven artifact.
-    compileOnly files('../../minecraft/mods/TerraBlender-neoforge-1.21.1-4.1.0.8.jar')
 }
 
 jar {
@@ -38,15 +33,4 @@ tasks.register('deployMod', Copy) {
     from jar.outputs
     into '../../minecraft/mods'
     rename { "mineutze-worldgen-${project.version}.jar" }
-}
-
-// Runs the plain-Java algorithm self-test (PatchGrowthEngineSelfTest) -- verifies
-// PatchGrowthEngine's determinism/reproducibility in a few seconds via `compileJava`
-// alone, no deployMod, no game launch. Replaces the old Python patch_engine.py
-// prototype's determinism self-test, which was dropped once it became clear this is
-// just as fast and avoids hand-porting every algorithm change to two languages.
-tasks.register('selfTest', JavaExec) {
-    dependsOn compileJava
-    classpath = sourceSets.main.runtimeClasspath
-    mainClass = 'com.mineutze.worldgen.biomesource.patch.PatchGrowthEngineSelfTest'
 }

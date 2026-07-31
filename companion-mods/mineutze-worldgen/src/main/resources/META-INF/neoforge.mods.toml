@@ -3,21 +3,21 @@ loaderVersion = "[2,)"
 license = "MIT"
 
 [[mods]]
-modId = "mineutze_filter"
+modId = "mineutze_worldgen"
 version = "${file.jarVersion}"
 displayName = "Mineutze Worldgen"
-description = "Dev-only companion mod. Custom author-controlled Overworld BiomeSource (patch size, adjacency, terrain-class placement); Nether/End still use TerraBlender."
+description = "Custom author-controlled Overworld biome placement: constraint-graph adjacency/size rules, biome-driven terrain shape."
 
-[[dependencies.mineutze_filter]]
+[[dependencies.mineutze_worldgen]]
     modId = "neoforge"
     type = "required"
     versionRange = "[21.1,)"
     ordering = "NONE"
     side = "BOTH"
 
-[[dependencies.mineutze_filter]]
-    modId = "terrablender"
+[[dependencies.mineutze_worldgen]]
+    modId = "minecraft"
     type = "required"
-    versionRange = "[4.1,)"
-    ordering = "BEFORE"
+    versionRange = "[1.21.1,1.22)"
+    ordering = "NONE"
     side = "BOTH"
