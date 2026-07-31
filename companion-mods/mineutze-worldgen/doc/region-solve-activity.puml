@@ -13,7 +13,12 @@ repeat
     if (another candidate biome fits\nsize class + all touched neighbors?) then (yes)
       :Reassign seed to\nnext candidate biome;
     else (no)
-      :Backtrack to previous\nseed decision, try its\nnext candidate;
+      if (backtrack depth cap reached?) then (yes)
+        :Log warning\n(graph-config bug signal);
+        :Assign universal-filler\nbiome to this seed;
+      else (no)
+        :Backtrack to previous\nseed decision, try its\nnext candidate;
+      endif
     endif
   else (no)
   endif

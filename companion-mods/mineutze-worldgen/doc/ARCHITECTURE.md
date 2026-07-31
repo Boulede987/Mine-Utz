@@ -115,15 +115,19 @@ hand-roll the Anvil region-file format ourselves.
   biome candidate first, then backtrack to an earlier seed decision.
   Requires the biome graph to have a universal-filler node so backtracking
   always terminates.
-- Blend width is per-adjacency-edge, not a global constant.
+- Blend width is per-adjacency-edge, not a global constant. Placeholder
+  value: 10 blocks for every edge. Will adjust per-relation once real
+  terrain is visible.
 - Cache storage: own sibling folder next to `region/`/`poi/`/`entities/`,
   via NeoForge `SavedData`, one per solve-region. Placeholder scheme, may
   change once real read/write volume is known.
+- Backtrack depth cap: sanity limit, not a correctness mechanism (the
+  universal-filler invariant already guarantees termination). If the cap
+  is hit, log a warning and fall back to the universal-filler biome for
+  that seed — signals a graph-config bug (e.g. a node with no viable
+  neighbor within reach) without hanging or crashing world gen.
 
 ## Open questions (need decisions before implementation)
 
-- Backtrack depth limit / cycle detection — with a universal-filler
-  invariant termination is guaranteed, but should there still be a sanity
-  cap so a bug in the graph config fails loud instead of looping?
-- Concrete blend-width values per relation (placeholder, tune from logs
-  like the cell size).
+- Concrete backtrack depth cap number (placeholder, tune from logs like
+  cell size and blend width).
