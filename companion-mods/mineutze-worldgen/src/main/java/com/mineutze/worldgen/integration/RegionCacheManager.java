@@ -1,0 +1,97 @@
+package com.mineutze.worldgen.integration;
+
+import com.mineutze.worldgen.biomegraph.BiomeId;
+import com.mineutze.worldgen.regionsolve.MacroCellPos;
+import com.mineutze.worldgen.regionsolve.MacroGridConfig;
+import com.mineutze.worldgen.regionsolve.RegionPos;
+import com.mineutze.worldgen.regionsolve.RegionSolveInput;
+import com.mineutze.worldgen.regionsolve.RegionSolveResult;
+import com.mineutze.worldgen.regionsolve.RegionSolver;
+import com.mojang.logging.LogUtils;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.level.saveddata.SavedData;
+import org.slf4j.Logger;
+
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+
+/**
+ * Solves regions on demand and caches each in its own {@link SavedData},
+ * a sibling of vanilla's region/poi/entities folders (doc/ARCHITECTURE.md
+ * "Cache storage"). Never force-solves a neighbor region just to get
+ * boundary context — see doc/ARCHITECTURE.md "never force-solve a
+ * neighbor" — it only reads whichever of the 4 neighbors happen to be
+ * cached already.
+ */
+public final class RegionCacheManager {
+
+    private static final Logger LOGGER = LogUtils.getLogger();
+
+    // Placeholders, same as the grid constants in doc/ARCHITECTURE.md - tune from logged solve output.
+    private static final int SEED_SPACING_BLOCKS = 300;
+    private static final int BACKTRACK_DEPTH_CAP = 50;
+
+    private RegionCacheManager() {
+    }
+
+    public static Map<MacroCellPos, BiomeId> getOrSolve(ServerLevel level, RegionPos region) {
+        MacroGridConfig grid = MacroGridConfig.DEFAULT;
+        RegionCacheData data = level.getDataStorage().computeIfAbsent(factoryFor(level, region, grid), saveName(region));
+        return data.assignment();
+    }
+
+    private static SavedData.Factory<RegionCacheData> factoryFor(ServerLevel level, RegionPos region, MacroGridConfig grid) {
+        return new SavedData.Factory<>(() -> solveRegion(level, region, grid), RegionCacheData::load);
+    }
+
+    private static RegionCacheData solveRegion(ServerLevel level, RegionPos region, MacroGridConfig grid) {
+        Map<MacroCellPos, BiomeId> fixedBoundary = boundaryFromAlreadyCachedNeighbors(level, region, grid);
+        RegionSolveInput input = new RegionSolveInput(
+            ModBiomeGraph.DEFAULT, grid, region, fixedBoundary, level.getSeed(), SEED_SPACING_BLOCKS, BACKTRACK_DEPTH_CAP
+        );
+
+        RegionSolveResult result = RegionSolver.solve(input);
+        for (String warning : result.warnings()) {
+            LOGGER.warn("[mineutze_worldgen] region {},{}: {}", region.x(), region.z(), warning);
+        }
+        return new RegionCacheData(result.assignment());
+    }
+
+    /** Only checks whether each of the 4 neighbors is already cached — never triggers solving one. */
+    private static Map<MacroCellPos, BiomeId> boundaryFromAlreadyCachedNeighbors(ServerLevel level, RegionPos region, MacroGridConfig grid) {
+        Map<MacroCellPos, BiomeId> fixedBoundary = new LinkedHashMap<>();
+        for (RegionPos neighbor : neighborRegions(region)) {
+            RegionCacheData neighborData = level.getDataStorage().get(factoryFor(level, neighbor, grid), saveName(neighbor));
+            if (neighborData != null) {
+                fixedBoundary.putAll(cellsBorderingRegion(neighborData.assignment(), region, grid));
+            }
+        }
+        return fixedBoundary;
+    }
+
+    private static List<RegionPos> neighborRegions(RegionPos region) {
+        return List.of(
+            new RegionPos(region.x() - 1, region.z()),
+            new RegionPos(region.x() + 1, region.z()),
+            new RegionPos(region.x(), region.z() - 1),
+            new RegionPos(region.x(), region.z() + 1)
+        );
+    }
+
+    private static Map<MacroCellPos, BiomeId> cellsBorderingRegion(Map<MacroCellPos, BiomeId> neighborAssignment, RegionPos region, MacroGridConfig grid) {
+        Map<MacroCellPos, BiomeId> bordering = new LinkedHashMap<>();
+        for (Map.Entry<MacroCellPos, BiomeId> entry : neighborAssignment.entrySet()) {
+            MacroCellPos cell = entry.getKey();
+            boolean touchesRegion = cell.orthogonalNeighbors().stream().anyMatch(adjacent -> grid.regionOf(adjacent).equals(region));
+            if (touchesRegion) {
+                bordering.put(cell, entry.getValue());
+            }
+        }
+        return bordering;
+    }
+
+    private static String saveName(RegionPos region) {
+        return "mineutze_worldgen_region_" + region.x() + "_" + region.z();
+    }
+}
