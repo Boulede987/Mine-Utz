@@ -68,6 +68,15 @@ This mirrors how vanilla already handles other infinite/lazy problems
      may fall back to filler biome in the worst case, never a broken rule.
    - Output cached as: macro-cell -> biome-id. This is the ground truth for
      everything downstream.
+   - **Gap-fill pass, after seed growth**: independently-grown patches
+     rarely tile a region perfectly — cells between patches can end up
+     unclaimed by any seed. Sweep leftover cells repeatedly (filling one
+     can make its neighbors fillable next pass), assigning each the most
+     common already-assigned neighboring biome that's still legal there.
+     Any cell with no legal neighbor option (isolated, or no assigned
+     neighbors at all) gets the universal filler. Implemented in
+     `RegionSolver.fillGaps`; discovered by testing "does every cell in
+     the region get assigned?", not planned upfront.
 
 3. **Density Router** — vanilla's NoiseRouter equivalent, but its
    parameters are selected per-column from the biome-id at that column's

@@ -32,6 +32,7 @@ note right
   always exists eventually.
 end note
 
+:Gap-fill pass: assign any\nunclaimed cell the most common\nlegal neighboring biome,\nor universal filler if none;
 :Write macro-cell -> biome-id\nfor this region to cache;
 stop
 @enduml

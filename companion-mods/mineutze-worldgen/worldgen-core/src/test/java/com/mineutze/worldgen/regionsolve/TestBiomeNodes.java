@@ -1,0 +1,29 @@
+package com.mineutze.worldgen.regionsolve;
+
+import com.mineutze.worldgen.biomegraph.BiomeFeatureToggles;
+import com.mineutze.worldgen.biomegraph.BiomeId;
+import com.mineutze.worldgen.biomegraph.BiomeNode;
+import com.mineutze.worldgen.biomegraph.BiomeShapeHints;
+import com.mineutze.worldgen.biomegraph.BiomeSizeRange;
+
+final class TestBiomeNodes {
+
+    static final String NAMESPACE = "test";
+
+    private TestBiomeNodes() {
+    }
+
+    static BiomeId id(String path) {
+        return new BiomeId(NAMESPACE, path);
+    }
+
+    static BiomeNode node(String path, int minWidthBlocks, int maxWidthBlocks, boolean universalFiller) {
+        return new BiomeNode(
+            id(path),
+            new BiomeSizeRange(minWidthBlocks, maxWidthBlocks),
+            new BiomeShapeHints(0.5, 0.5, 0.5),
+            new BiomeFeatureToggles(true, true),
+            universalFiller
+        );
+    }
+}
