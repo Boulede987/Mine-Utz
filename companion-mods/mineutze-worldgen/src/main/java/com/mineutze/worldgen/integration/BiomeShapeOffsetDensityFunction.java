@@ -7,6 +7,7 @@ import com.mineutze.worldgen.regionsolve.MacroGridConfig;
 import com.mojang.logging.LogUtils;
 import com.mojang.serialization.MapCodec;
 import net.minecraft.util.KeyDispatchDataCodec;
+import net.minecraft.util.Mth;
 import net.minecraft.world.level.levelgen.DensityFunction;
 import org.slf4j.Logger;
 
@@ -35,6 +36,17 @@ public record BiomeShapeOffsetDensityFunction() implements DensityFunction.Simpl
     // the effect is visible in-game. depthBias in [0,1] maps to [-HALF, HALF].
     private static final double MAX_OFFSET = 0.1;
 
+    // Vanilla's own final_density has a y_clamped_gradient tapering density to
+    // air between y=240 and y=256 (build-limit taper - see the real overworld.json
+    // this wraps). Applying our offset untapered there pushed cells that were
+    // barely air back over the solid threshold across a whole y-band at once -
+    // a floating slab, worst for ocean (highest depthBias -> biggest offset).
+    // Taper our own offset to 0 well before that zone, and near the y=-64 floor too.
+    private static final int TOP_FADE_START_Y = 192;
+    private static final int TOP_FADE_END_Y = 232;
+    private static final int BOTTOM_FADE_START_Y = -64;
+    private static final int BOTTOM_FADE_END_Y = -32;
+
     // compute() runs millions of times per chunk - log only the first few distinct
     // macro-cells so this is diagnostic (proof the offset actually varies by biome)
     // without flooding the log or costing real performance.
@@ -52,13 +64,20 @@ public record BiomeShapeOffsetDensityFunction() implements DensityFunction.Simpl
 
         BiomeId biomeId = RegionCacheHolder.get().biomeAt(cell);
         BiomeShapeHints hints = ModBiomeGraph.DEFAULT.node(biomeId).shapeHints();
-        double offset = (hints.depthBias() - 0.5) * MAX_OFFSET;
+        double baseOffset = (hints.depthBias() - 0.5) * MAX_OFFSET;
+        double offset = baseOffset * verticalFade(context.blockY());
 
         if (LOGGED_CELLS.size() < MAX_LOGGED_CELLS && LOGGED_CELLS.add(cell)) {
             LOGGER.info("[mineutze_worldgen] density offset at macro-cell {},{} (biome {}): {}", cell.x(), cell.z(), biomeId, offset);
         }
 
         return offset;
+    }
+
+    private static double verticalFade(int blockY) {
+        double topFade = Mth.clampedMap(blockY, TOP_FADE_START_Y, TOP_FADE_END_Y, 1.0, 0.0);
+        double bottomFade = Mth.clampedMap(blockY, BOTTOM_FADE_START_Y, BOTTOM_FADE_END_Y, 0.0, 1.0);
+        return Math.min(topFade, bottomFade);
     }
 
     @Override
