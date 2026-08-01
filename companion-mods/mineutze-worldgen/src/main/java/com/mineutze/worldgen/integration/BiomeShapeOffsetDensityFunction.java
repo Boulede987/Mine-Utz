@@ -2,6 +2,7 @@ package com.mineutze.worldgen.integration;
 
 import com.mineutze.worldgen.biomegraph.BiomeId;
 import com.mineutze.worldgen.biomegraph.BiomeShapeHints;
+import com.mineutze.worldgen.regionsolve.BorderBlend;
 import com.mineutze.worldgen.regionsolve.MacroCellPos;
 import com.mineutze.worldgen.regionsolve.MacroGridConfig;
 import com.mojang.logging.LogUtils;
@@ -26,10 +27,14 @@ import java.util.concurrent.ConcurrentHashMap;
  * Deliberately exaggerated for now: the +-0.05 version was too subtle to
  * confirm visually against vanilla's own continentalness/erosion noise,
  * which still independently shapes terrain everywhere right now (full
- * biome-driven shape, and cross-macro-cell blending so cell borders
- * aren't visible steps, are later doc/ARCHITECTURE.md layer 3 work).
- * This amplitude is a "prove the wiring, make it unmistakable" value, not
- * a tuned one — dial it back down once confirmed.
+ * biome-driven shape is later doc/ARCHITECTURE.md layer 3 work). This
+ * amplitude is a "prove the wiring, make it unmistakable" value, not a
+ * tuned one — dial it back down once confirmed.
+ *
+ * Blended across macro-cell borders via {@link BorderBlend}, using each
+ * adjacent pair's own blendWidthBlocks — the biome PATCH outline is
+ * still blocky (a union of square macro-cells), but the terrain no
+ * longer has a hard density cliff at every cell edge.
  */
 public record BiomeShapeOffsetDensityFunction() implements DensityFunction.SimpleFunction {
 
@@ -71,29 +76,36 @@ public record BiomeShapeOffsetDensityFunction() implements DensityFunction.Simpl
     @Override
     public double compute(FunctionContext context) {
         MacroGridConfig grid = MacroGridConfig.DEFAULT;
+        double wave = Math.sin(context.blockX() * WAVE_FREQUENCY) * Math.cos(context.blockZ() * WAVE_FREQUENCY);
+
+        double baseOffset = BorderBlend.blendedValue(
+            context.blockX(), context.blockZ(), grid, ModBiomeGraph.DEFAULT,
+            cell -> RegionCacheHolder.get().biomeAt(cell),
+            biomeId -> baseOffsetForBiome(biomeId, wave)
+        );
+        double offset = baseOffset * verticalFade(context.blockY());
+
+        logIfNewCell(context, baseOffset);
+        return offset;
+    }
+
+    private static double baseOffsetForBiome(BiomeId biomeId, double wave) {
+        BiomeShapeHints hints = ModBiomeGraph.DEFAULT.node(biomeId).shapeHints();
+        double verticalShift = (0.5 - hints.depthBias()) * VERTICAL_SHIFT_AMPLITUDE;
+        double waveAmplitude = hints.roughness() * (1.0 - hints.flatness()) * WAVE_AMPLITUDE;
+        return verticalShift + wave * waveAmplitude;
+    }
+
+    private static void logIfNewCell(FunctionContext context, double baseOffset) {
+        MacroGridConfig grid = MacroGridConfig.DEFAULT;
         MacroCellPos cell = new MacroCellPos(
             Math.floorDiv(context.blockX(), grid.macroCellSizeBlocks()),
             Math.floorDiv(context.blockZ(), grid.macroCellSizeBlocks())
         );
-
-        BiomeId biomeId = RegionCacheHolder.get().biomeAt(cell);
-        BiomeShapeHints hints = ModBiomeGraph.DEFAULT.node(biomeId).shapeHints();
-
-        double verticalShift = (0.5 - hints.depthBias()) * VERTICAL_SHIFT_AMPLITUDE;
-        double waveAmplitude = hints.roughness() * (1.0 - hints.flatness()) * WAVE_AMPLITUDE;
-        double wave = Math.sin(context.blockX() * WAVE_FREQUENCY) * Math.cos(context.blockZ() * WAVE_FREQUENCY) * waveAmplitude;
-
-        double baseOffset = verticalShift + wave;
-        double offset = baseOffset * verticalFade(context.blockY());
-
         if (LOGGED_CELLS.size() < MAX_LOGGED_CELLS && LOGGED_CELLS.add(cell)) {
-            LOGGER.info(
-                "[mineutze_worldgen] macro-cell {},{} (biome {}): verticalShift={} waveAmplitude={} baseOffset={}",
-                cell.x(), cell.z(), biomeId, verticalShift, waveAmplitude, baseOffset
-            );
+            BiomeId biomeId = RegionCacheHolder.get().biomeAt(cell);
+            LOGGER.info("[mineutze_worldgen] macro-cell {},{} (biome {}): blended baseOffset sample={}", cell.x(), cell.z(), biomeId, baseOffset);
         }
-
-        return offset;
     }
 
     private static double verticalFade(int blockY) {
