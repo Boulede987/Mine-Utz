@@ -4,9 +4,14 @@ import com.mineutze.worldgen.biomegraph.BiomeId;
 import com.mineutze.worldgen.biomegraph.BiomeShapeHints;
 import com.mineutze.worldgen.regionsolve.MacroCellPos;
 import com.mineutze.worldgen.regionsolve.MacroGridConfig;
+import com.mojang.logging.LogUtils;
 import com.mojang.serialization.MapCodec;
 import net.minecraft.util.KeyDispatchDataCodec;
 import net.minecraft.world.level.levelgen.DensityFunction;
+import org.slf4j.Logger;
+
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Small additive nudge on top of vanilla's Overworld final_density — see
@@ -30,6 +35,13 @@ public record BiomeShapeOffsetDensityFunction() implements DensityFunction.Simpl
     // the effect is visible in-game. depthBias in [0,1] maps to [-HALF, HALF].
     private static final double MAX_OFFSET = 0.1;
 
+    // compute() runs millions of times per chunk - log only the first few distinct
+    // macro-cells so this is diagnostic (proof the offset actually varies by biome)
+    // without flooding the log or costing real performance.
+    private static final Logger LOGGER = LogUtils.getLogger();
+    private static final Set<MacroCellPos> LOGGED_CELLS = ConcurrentHashMap.newKeySet();
+    private static final int MAX_LOGGED_CELLS = 30;
+
     @Override
     public double compute(FunctionContext context) {
         MacroGridConfig grid = MacroGridConfig.DEFAULT;
@@ -40,7 +52,13 @@ public record BiomeShapeOffsetDensityFunction() implements DensityFunction.Simpl
 
         BiomeId biomeId = RegionCacheHolder.get().biomeAt(cell);
         BiomeShapeHints hints = ModBiomeGraph.DEFAULT.node(biomeId).shapeHints();
-        return (hints.depthBias() - 0.5) * MAX_OFFSET;
+        double offset = (hints.depthBias() - 0.5) * MAX_OFFSET;
+
+        if (LOGGED_CELLS.size() < MAX_LOGGED_CELLS && LOGGED_CELLS.add(cell)) {
+            LOGGER.info("[mineutze_worldgen] density offset at macro-cell {},{} (biome {}): {}", cell.x(), cell.z(), biomeId, offset);
+        }
+
+        return offset;
     }
 
     @Override
