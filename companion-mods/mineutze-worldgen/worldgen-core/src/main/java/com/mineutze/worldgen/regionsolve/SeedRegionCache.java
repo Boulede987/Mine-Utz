@@ -5,6 +5,7 @@ import com.mineutze.worldgen.biomegraph.BiomeId;
 
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.BiConsumer;
 
 /**
  * In-memory, seed-only region cache. Density function evaluation only gets
@@ -26,11 +27,11 @@ public final class SeedRegionCache {
     private final long worldSeed;
     private final int seedSpacingBlocks;
     private final int backtrackDepthCap;
-    private final RegionSolveListener onRegionSolved;
+    private final BiConsumer<RegionPos, RegionSolveResult> onRegionSolved;
     private final Map<RegionPos, RegionSolveResult> solved = new ConcurrentHashMap<>();
 
     public SeedRegionCache(BiomeGraph graph, MacroGridConfig gridConfig, long worldSeed, int seedSpacingBlocks, int backtrackDepthCap) {
-        this(graph, gridConfig, worldSeed, seedSpacingBlocks, backtrackDepthCap, (region, result, durationMillis) -> { });
+        this(graph, gridConfig, worldSeed, seedSpacingBlocks, backtrackDepthCap, (region, result) -> { });
     }
 
     /**
@@ -45,7 +46,7 @@ public final class SeedRegionCache {
      */
     public SeedRegionCache(
         BiomeGraph graph, MacroGridConfig gridConfig, long worldSeed, int seedSpacingBlocks, int backtrackDepthCap,
-        RegionSolveListener onRegionSolved
+        BiConsumer<RegionPos, RegionSolveResult> onRegionSolved
     ) {
         this.graph = graph;
         this.gridConfig = gridConfig;
@@ -53,15 +54,6 @@ public final class SeedRegionCache {
         this.seedSpacingBlocks = seedSpacingBlocks;
         this.backtrackDepthCap = backtrackDepthCap;
         this.onRegionSolved = onRegionSolved;
-    }
-
-    /** {@code durationMillis} is wall-clock time for this one solve — the earlier
-     * (and more concerning) of two possible causes for a slowdown: either this
-     * one region is expensive, or many are running concurrently and contending
-     * for CPU. Reported per-region so both are visible from the logs alone. */
-    @FunctionalInterface
-    public interface RegionSolveListener {
-        void onSolved(RegionPos region, RegionSolveResult result, long durationMillis);
     }
 
     public BiomeId biomeAt(MacroCellPos cell) {
@@ -85,12 +77,8 @@ public final class SeedRegionCache {
             }
         );
         RegionSolveInput input = new RegionSolveInput(graph, gridConfig, region, fixedBoundary, worldSeed, seedSpacingBlocks, backtrackDepthCap);
-
-        long startNanos = System.nanoTime();
         RegionSolveResult result = RegionSolver.solve(input);
-        long durationMillis = (System.nanoTime() - startNanos) / 1_000_000;
-
-        onRegionSolved.onSolved(region, result, durationMillis);
+        onRegionSolved.accept(region, result);
         return result;
     }
 }

@@ -21,6 +21,7 @@ class GrowthEngineTest {
     private static final BiomeId DESERT = id("desert");
     private static final BiomeId PLAINS = id("plains");
     private static final BiomeId OCEAN = id("ocean");
+    private static final long WORLD_SEED = 1L;
 
     private static BiomeGraph graphWithDesertForbiddenNextToOcean() {
         return new BiomeGraph(
@@ -35,7 +36,7 @@ class GrowthEngineTest {
         MacroCellPos seed = new MacroCellPos(8, 8);
 
         GrowthEngine.GrowthAttempt attempt = GrowthEngine.attemptGrowth(
-            seed, DESERT, 20, 20, REGION, GRID, graph, Map.of()
+            seed, DESERT, 20, 20, REGION, GRID, graph, Map.of(), WORLD_SEED
         );
 
         assertTrue(attempt.success());
@@ -50,7 +51,7 @@ class GrowthEngineTest {
         Map<MacroCellPos, BiomeId> externallyAssigned = Map.of(new MacroCellPos(9, 8), OCEAN);
 
         GrowthEngine.GrowthAttempt attempt = GrowthEngine.attemptGrowth(
-            seed, DESERT, 5, 20, REGION, GRID, graph, externallyAssigned
+            seed, DESERT, 5, 20, REGION, GRID, graph, externallyAssigned, WORLD_SEED
         );
 
         assertFalse(attempt.success());
@@ -64,7 +65,7 @@ class GrowthEngineTest {
         Map<MacroCellPos, BiomeId> externallyAssigned = Map.of(new MacroCellPos(1, 0), PLAINS);
 
         GrowthEngine.GrowthAttempt attempt = GrowthEngine.attemptGrowth(
-            seed, DESERT, 1, 5, REGION, GRID, graph, externallyAssigned
+            seed, DESERT, 1, 5, REGION, GRID, graph, externallyAssigned, WORLD_SEED
         );
 
         assertTrue(attempt.success());

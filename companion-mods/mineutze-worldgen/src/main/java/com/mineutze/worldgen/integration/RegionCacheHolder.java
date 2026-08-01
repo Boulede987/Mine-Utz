@@ -72,11 +72,10 @@ public final class RegionCacheHolder {
         }
     }
 
-    private static void logRegionSolved(RegionPos region, RegionSolveResult result, long durationMillis) {
+    private static void logRegionSolved(RegionPos region, RegionSolveResult result) {
         LOGGER.info(
-            "[mineutze_worldgen] Solved region {},{} on {}: {} cells, {} backtrack step(s), {} warning(s), {}ms",
-            region.x(), region.z(), Thread.currentThread().getName(),
-            result.assignment().size(), result.backtrackStepsUsed(), result.warnings().size(), durationMillis
+            "[mineutze_worldgen] Solved region {},{}: {} cells, {} warning(s)",
+            region.x(), region.z(), result.assignment().size(), result.warnings().size()
         );
         result.warnings().forEach(warning -> LOGGER.warn("[mineutze_worldgen] region {},{}: {}", region.x(), region.z(), warning));
     }

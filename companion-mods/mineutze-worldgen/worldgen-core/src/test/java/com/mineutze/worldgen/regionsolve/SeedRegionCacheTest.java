@@ -101,7 +101,7 @@ class SeedRegionCacheTest {
         List<RegionPos> solvedRegions = new ArrayList<>();
         SeedRegionCache cache = new SeedRegionCache(
             smallGraph(), MacroGridConfig.DEFAULT, 9L, 300, 20,
-            (region, result, durationMillis) -> solvedRegions.add(region)
+            (region, result) -> solvedRegions.add(region)
         );
         RegionPos region = new RegionPos(1, 1);
 
