@@ -36,14 +36,12 @@ public final class SeedRegionCache {
     private final BiomeGraph graph;
     private final MacroGridConfig gridConfig;
     private final long worldSeed;
-    private final int seedSpacingBlocks;
-    private final int backtrackDepthCap;
     private final RegionSolveListener onRegionSolved;
     private final Map<RegionPos, RegionSolveResult> solved = new ConcurrentHashMap<>();
     private final Object solveLock = new Object();
 
-    public SeedRegionCache(BiomeGraph graph, MacroGridConfig gridConfig, long worldSeed, int seedSpacingBlocks, int backtrackDepthCap) {
-        this(graph, gridConfig, worldSeed, seedSpacingBlocks, backtrackDepthCap, (region, result, durationMillis) -> { });
+    public SeedRegionCache(BiomeGraph graph, MacroGridConfig gridConfig, long worldSeed) {
+        this(graph, gridConfig, worldSeed, (region, result, durationMillis) -> { });
     }
 
     /**
@@ -54,17 +52,13 @@ public final class SeedRegionCache {
      *                       supplies its own logger here for visibility
      *                       into what's actually happening during world
      *                       generation, e.g. which region is slow or
-     *                       stuck, or how often the filler fallback fires
+     *                       stuck, or how often a budgeted patch gets
+     *                       dropped for lack of a legal spot
      */
-    public SeedRegionCache(
-        BiomeGraph graph, MacroGridConfig gridConfig, long worldSeed, int seedSpacingBlocks, int backtrackDepthCap,
-        RegionSolveListener onRegionSolved
-    ) {
+    public SeedRegionCache(BiomeGraph graph, MacroGridConfig gridConfig, long worldSeed, RegionSolveListener onRegionSolved) {
         this.graph = graph;
         this.gridConfig = gridConfig;
         this.worldSeed = worldSeed;
-        this.seedSpacingBlocks = seedSpacingBlocks;
-        this.backtrackDepthCap = backtrackDepthCap;
         this.onRegionSolved = onRegionSolved;
     }
 
@@ -109,7 +103,7 @@ public final class SeedRegionCache {
                 return neighborResult == null ? null : neighborResult.assignment();
             }
         );
-        RegionSolveInput input = new RegionSolveInput(graph, gridConfig, region, fixedBoundary, worldSeed, seedSpacingBlocks, backtrackDepthCap);
+        RegionSolveInput input = new RegionSolveInput(graph, gridConfig, region, fixedBoundary, worldSeed);
 
         long startNanos = System.nanoTime();
         RegionSolveResult result = RegionSolver.solve(input);

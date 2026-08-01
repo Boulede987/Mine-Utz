@@ -40,7 +40,7 @@ class SeedRegionCacheTest {
     }
 
     private static SeedRegionCache newCache(long worldSeed) {
-        return new SeedRegionCache(smallGraph(), MacroGridConfig.DEFAULT, worldSeed, 300, 20);
+        return new SeedRegionCache(smallGraph(), MacroGridConfig.DEFAULT, worldSeed);
     }
 
     @Test
@@ -68,7 +68,7 @@ class SeedRegionCacheTest {
     @Test
     void adjacentRegionsSolvedThroughTheSameCacheStitchWithNoRuleViolation() {
         BiomeGraph graph = smallGraph();
-        SeedRegionCache cache = new SeedRegionCache(graph, MacroGridConfig.DEFAULT, 42L, 300, 20);
+        SeedRegionCache cache = new SeedRegionCache(graph, MacroGridConfig.DEFAULT, 42L);
         RegionPos west = new RegionPos(0, 0);
         RegionPos east = new RegionPos(1, 0);
 
@@ -105,7 +105,7 @@ class SeedRegionCacheTest {
     void onRegionSolvedFiresExactlyOncePerRegionNeverOnACacheHit() {
         List<RegionPos> solvedRegions = new ArrayList<>();
         SeedRegionCache cache = new SeedRegionCache(
-            smallGraph(), MacroGridConfig.DEFAULT, 9L, 300, 20,
+            smallGraph(), MacroGridConfig.DEFAULT, 9L,
             (region, result, durationMillis) -> solvedRegions.add(region)
         );
         RegionPos region = new RegionPos(1, 1);
@@ -130,7 +130,7 @@ class SeedRegionCacheTest {
     void concurrentlySolvingAdjacentRegionsNeverProducesAnIllegalBorder() throws Exception {
         BiomeGraph graph = smallGraph();
         MacroGridConfig grid = MacroGridConfig.DEFAULT;
-        SeedRegionCache cache = new SeedRegionCache(graph, grid, 123L, 300, 20);
+        SeedRegionCache cache = new SeedRegionCache(graph, grid, 123L);
 
         List<RegionPos> regions = new ArrayList<>();
         for (int x = 0; x < 4; x++) {

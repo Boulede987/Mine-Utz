@@ -50,10 +50,7 @@ public final class RegionCacheManager {
                 return neighborData == null ? null : neighborData.assignment();
             }
         );
-        RegionSolveInput input = new RegionSolveInput(
-            ModBiomeGraph.DEFAULT, grid, region, fixedBoundary, level.getSeed(),
-            RegionSolveDefaults.SEED_SPACING_BLOCKS, RegionSolveDefaults.BACKTRACK_DEPTH_CAP
-        );
+        RegionSolveInput input = new RegionSolveInput(ModBiomeGraph.DEFAULT, grid, region, fixedBoundary, level.getSeed());
 
         RegionSolveResult result = RegionSolver.solve(input);
         for (String warning : result.warnings()) {

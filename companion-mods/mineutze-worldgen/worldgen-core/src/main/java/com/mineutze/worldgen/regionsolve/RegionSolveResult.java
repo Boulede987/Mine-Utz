@@ -6,15 +6,20 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * @param assignment         biome-id per macro-cell, this region's cells only
- * @param warnings           non-empty when the backtrack depth cap was hit and a
- *                           seed had to fall back to a universal-filler biome —
- *                           signals a graph-config bug worth investigating (see
- *                           doc/ARCHITECTURE.md "Decided")
- * @param backtrackStepsUsed total backtrack steps across the whole solve — high
- *                           relative to seed count is a direct sign the graph is
- *                           over-constrained for this region's grid, independent
- *                           of whether it ever hit the cap
+ * @param assignment          biome-id per macro-cell, this region's cells only
+ * @param warnings             non-empty when {@link BudgetPlanner} committed to a
+ *                             patch that ultimately couldn't find a legal spot
+ *                             anywhere in the region — never forced or shrunk,
+ *                             just dropped; its space goes to whatever
+ *                             {@link GapFiller} extends into it afterward.
+ *                             Should be rare — total demand is bounded to fit
+ *                             the region's capacity before placement even
+ *                             starts, so this is a genuine adjacency conflict,
+ *                             not an over-subscription artifact.
+ * @param droppedDemandCount  how many of the budgeted patches got dropped —
+ *                            same information as {@code warnings.size()},
+ *                            exposed directly for logging/diagnosis without
+ *                            parsing warning strings
  */
-public record RegionSolveResult(Map<MacroCellPos, BiomeId> assignment, List<String> warnings, int backtrackStepsUsed) {
+public record RegionSolveResult(Map<MacroCellPos, BiomeId> assignment, List<String> warnings, int droppedDemandCount) {
 }

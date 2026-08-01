@@ -5,73 +5,144 @@ import com.mineutze.worldgen.biomegraph.BiomeId;
 import com.mineutze.worldgen.biomegraph.BiomeNode;
 
 import java.util.ArrayList;
-import java.util.Collections;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Random;
+import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
- * Solves one region: CSP backtracking over seeds, no constraint relaxation.
- * See doc/ARCHITECTURE.md layer 2 and doc/region-solve-activity.puml.
+ * Solves one region: {@link BudgetPlanner} decides WHAT to place (a list of
+ * (biome, target size) demands bounded to fit the region's total capacity),
+ * this class decides the placement ORDER (most adjacency-constrained biomes
+ * first, largest-first within a tier — see {@link #orderByPlacementPriority})
+ * and WHERE — trying each demand at {@link SeedPlacer}'s candidate positions,
+ * preferring ones already touching a compatible neighbor, via
+ * {@link GrowthEngine} until one succeeds. No constraint relaxation: a demand
+ * that can't find a legal spot anywhere is dropped entirely, never forced or
+ * shrunk (see doc/ARCHITECTURE.md "Decided" — replaces the old per-position
+ * candidate-biome backtracking, which fought the wrong problem: over-
+ * subscription from placing a fixed seed grid before knowing what sizes
+ * would be needed, not adjacency conflicts).
  *
- * On conflict, a seed tries its next candidate biome before anything backs
- * up to an earlier seed. If the backtrack depth cap is hit (or there's no
- * earlier seed left to back up to), the seed falls back to a
- * universal-filler biome — guaranteed legal by {@link BiomeGraph}'s
- * validated invariant, so this always terminates. Once every seed is
- * resolved, {@link GapFiller} and {@link PatchSizeEnforcer} clean up what
- * the seed-growth phase alone can't guarantee (full coverage and each
- * patch's own minimum size, respectively).
+ * Once every demand has been tried, {@link GapFiller}, {@link PatchSizeEnforcer}
+ * and {@link SeparatorOrganicizer} clean up what placement alone can't
+ * guarantee: full coverage, each patch's own minimum size, and — for forced
+ * separators between biome pairs with no direct adjacency rule at all —
+ * an organic edge instead of a straight wall.
  */
 public final class RegionSolver {
 
-    private static final long CANDIDATE_SHUFFLE_SALT = 0xC0FFEE_D15CL;
-    private static final long TARGET_SIZE_SALT = 0x517E_5EEDL;
+    // How many candidate positions to generate relative to the budget's demand
+    // count - enough slack that most demands have more than one shot at a legal
+    // spot, without generating so many that most go unused. Placeholder, tune
+    // from logged solve output like the grid constants in doc/ARCHITECTURE.md.
+    private static final double POSITION_COUNT_SLACK = 1.5;
 
     private RegionSolver() {
     }
 
     public static RegionSolveResult solve(RegionSolveInput input) {
-        List<MacroCellPos> seeds = SeedPlacer.placeSeeds(input.region(), input.gridConfig(), input.worldSeed(), input.seedSpacingBlocks());
-        List<BiomeId> baseCandidateOrder = input.graph().nodes().stream().map(BiomeNode::id).sorted().toList();
-        List<List<BiomeId>> candidateOrders = seeds.stream()
-            .map(seed -> shuffledCandidates(baseCandidateOrder, input.worldSeed(), seed))
-            .toList();
+        List<PatchDemand> budget = BudgetPlanner.plan(input.graph(), input.gridConfig(), input.region(), input.worldSeed());
+        List<PatchDemand> placementOrder = orderByPlacementPriority(budget, input.graph());
+        List<MacroCellPos> positions = new ArrayList<>(
+            SeedPlacer.placeSeeds(input.region(), input.gridConfig(), input.worldSeed(), spacingForDesiredCount(input.gridConfig(), budget.size()))
+        );
 
-        SolverState state = new SolverState(seeds.size());
+        Map<MacroCellPos, BiomeId> assignment = new LinkedHashMap<>();
         List<String> warnings = new ArrayList<>();
 
-        int seedIndex = 0;
-        while (seedIndex < seeds.size()) {
-            if (state.fillerLocked[seedIndex]) {
-                seedIndex++;
-                continue;
-            }
-
-            MacroCellPos seedCell = seeds.get(seedIndex);
-            List<BiomeId> candidates = candidateOrders.get(seedIndex);
-
-            GrowthEngine.GrowthAttempt attempt = tryCandidates(input, seedCell, candidates, state, seedIndex);
+        for (PatchDemand demand : placementOrder) {
+            GrowthEngine.GrowthAttempt attempt = tryPositions(input, demand, positions, assignment);
             if (attempt != null) {
-                state.commit(seedIndex, attempt.claimedCells());
-                seedIndex++;
-                continue;
-            }
-
-            int backtrackTarget = state.findBacktrackTarget(seedIndex);
-            if (backtrackTarget < 0 || state.backtrackStepsUsed >= input.backtrackDepthCap()) {
-                warnings.add(fallbackToFiller(input, seedCell, state, seedIndex));
-                seedIndex++;
+                assignment.putAll(attempt.claimedCells());
             } else {
-                state.candidateIndex[seedIndex] = 0;
-                seedIndex = state.backtrackTo(backtrackTarget);
+                warnings.add(
+                    "Could not place " + demand.biomeId() + " (target " + demand.targetCells()
+                        + " cells, min " + demand.minCells() + ") anywhere in the region — dropped, not forced or shrunk."
+                );
             }
         }
 
-        return new RegionSolveResult(cleanUp(state.assignment, input), List.copyOf(warnings), state.backtrackStepsUsed);
+        return new RegionSolveResult(cleanUp(assignment, input), List.copyOf(warnings), warnings.size());
+    }
+
+    /**
+     * Placement order, not the budget's own largest-first order (that one only bounds
+     * total demand to capacity — a separate concern). A biome with few legal partners
+     * (e.g. badlands: only desert/plains) can get boxed out by whichever OTHER biomes
+     * happen to claim the surrounding territory first, even when total space is fine —
+     * placing the most constrained biomes first, while the most open territory is still
+     * up for grabs, avoids that. Ties within the same constraint tier keep largest-first,
+     * since that's still what gets a good size fit.
+     */
+    private static List<PatchDemand> orderByPlacementPriority(List<PatchDemand> budget, BiomeGraph graph) {
+        Map<BiomeId, Long> legalPartnerCount = graph.nodes().stream()
+            .map(BiomeNode::id)
+            .collect(Collectors.toMap(id -> id, id -> graph.nodes().stream()
+                .map(BiomeNode::id)
+                .filter(other -> !other.equals(id) && graph.isAllowed(id, other))
+                .count()));
+
+        return budget.stream()
+            .sorted(
+                Comparator.<PatchDemand>comparingLong(demand -> legalPartnerCount.get(demand.biomeId()))
+                    .thenComparing(Comparator.comparingInt(PatchDemand::targetCells).reversed())
+            )
+            .toList();
+    }
+
+    /**
+     * Tries every remaining position, removing it once claimed so a later demand can't
+     * reuse it. Positions already touching a legally-compatible committed cell go first —
+     * clusters related biomes together (organic-looking, matches the design's adjacency
+     * intent) and gives narrow-adjacency biomes their best shot at a legal spot, instead
+     * of scattering into open territory that may end up surrounded by incompatible
+     * neighbors by the time growth reaches the edges.
+     */
+    private static GrowthEngine.GrowthAttempt tryPositions(
+        RegionSolveInput input, PatchDemand demand, List<MacroCellPos> positions, Map<MacroCellPos, BiomeId> committedSoFar
+    ) {
+        Map<MacroCellPos, BiomeId> externallyAssigned = mergeExternalContext(committedSoFar, input.fixedBoundaryCells());
+        List<MacroCellPos> searchOrder = orderPositionsByCompatibleProximity(positions, demand.biomeId(), externallyAssigned, input.graph());
+
+        for (MacroCellPos position : searchOrder) {
+            GrowthEngine.GrowthAttempt attempt = GrowthEngine.attemptGrowth(
+                position, demand.biomeId(), demand.minCells(), demand.targetCells(),
+                input.region(), input.gridConfig(), input.graph(), externallyAssigned, input.worldSeed()
+            );
+            if (attempt.success()) {
+                positions.remove(position);
+                return attempt;
+            }
+        }
+        return null;
+    }
+
+    private static List<MacroCellPos> orderPositionsByCompatibleProximity(
+        List<MacroCellPos> positions, BiomeId demandBiome, Map<MacroCellPos, BiomeId> committed, BiomeGraph graph
+    ) {
+        List<MacroCellPos> nearCompatibleNeighbor = new ArrayList<>();
+        List<MacroCellPos> rest = new ArrayList<>();
+        for (MacroCellPos position : positions) {
+            boolean touchesCompatible = position.orthogonalNeighbors().stream()
+                .map(committed::get)
+                .filter(Objects::nonNull)
+                .anyMatch(neighborBiome -> graph.isAllowed(demandBiome, neighborBiome));
+            (touchesCompatible ? nearCompatibleNeighbor : rest).add(position);
+        }
+        nearCompatibleNeighbor.addAll(rest);
+        return nearCompatibleNeighbor;
+    }
+
+    /** Spacing that makes {@link SeedPlacer} generate roughly desiredCount positions (with some slack), not tied to a fixed constant. */
+    private static int spacingForDesiredCount(MacroGridConfig grid, int desiredCount) {
+        int sideLength = grid.regionSizeCellsPerSide();
+        int positionsPerAxis = Math.max(1, (int) Math.ceil(Math.sqrt(desiredCount * POSITION_COUNT_SLACK)));
+        int spacingCells = Math.max(1, sideLength / positionsPerAxis);
+        return spacingCells * grid.macroCellSizeBlocks();
     }
 
     /**
@@ -86,54 +157,11 @@ public final class RegionSolver {
 
         GapFiller.fillGaps(workingAssignment, regionCellSet, input.graph());
         PatchSizeEnforcer.enforceMinimumPatchSize(workingAssignment, regionCellSet, input.gridConfig(), input.graph());
+        SeparatorOrganicizer.organicizeThinSeparators(workingAssignment, regionCellSet, input.gridConfig(), input.graph(), input.worldSeed());
 
         return Map.copyOf(workingAssignment.entrySet().stream()
             .filter(entry -> regionCellSet.contains(entry.getKey()))
             .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue)));
-    }
-
-    private static GrowthEngine.GrowthAttempt tryCandidates(
-        RegionSolveInput input, MacroCellPos seedCell, List<BiomeId> candidates, SolverState state, int seedIndex
-    ) {
-        while (state.candidateIndex[seedIndex] < candidates.size()) {
-            BiomeId candidate = candidates.get(state.candidateIndex[seedIndex]);
-            GrowthEngine.GrowthAttempt attempt = attemptCandidateGrowth(input, seedCell, candidate, state.assignment);
-            if (attempt.success()) {
-                return attempt;
-            }
-            state.candidateIndex[seedIndex]++;
-        }
-        return null;
-    }
-
-    private static GrowthEngine.GrowthAttempt attemptCandidateGrowth(
-        RegionSolveInput input, MacroCellPos seedCell, BiomeId candidate, Map<MacroCellPos, BiomeId> committedSoFar
-    ) {
-        BiomeNode node = input.graph().node(candidate);
-        int minCells = input.gridConfig().cellCountForWidthBlocks(node.sizeRange().minWidthBlocks());
-        int maxCells = input.gridConfig().cellCountForWidthBlocks(node.sizeRange().maxWidthBlocks());
-        int targetCells = pickTargetCells(minCells, maxCells, input.worldSeed(), seedCell, candidate);
-
-        Map<MacroCellPos, BiomeId> externallyAssigned = mergeExternalContext(committedSoFar, input.fixedBoundaryCells());
-        return GrowthEngine.attemptGrowth(
-            seedCell, candidate, minCells, targetCells, input.region(), input.gridConfig(), input.graph(), externallyAssigned, input.worldSeed()
-        );
-    }
-
-    private static String fallbackToFiller(RegionSolveInput input, MacroCellPos seedCell, SolverState state, int seedIndex) {
-        BiomeId filler = input.graph().firstUniversalFiller();
-        BiomeNode fillerNode = input.graph().node(filler);
-        int maxCells = input.gridConfig().cellCountForWidthBlocks(fillerNode.sizeRange().maxWidthBlocks());
-
-        Map<MacroCellPos, BiomeId> externallyAssigned = mergeExternalContext(state.assignment, input.fixedBoundaryCells());
-        // minCells=1: filler is allowed next to every node by BiomeGraph's validated
-        // invariant, so growth always succeeds for at least the seed cell itself.
-        GrowthEngine.GrowthAttempt attempt = GrowthEngine.attemptGrowth(
-            seedCell, filler, 1, maxCells, input.region(), input.gridConfig(), input.graph(), externallyAssigned, input.worldSeed()
-        );
-        state.commitFiller(seedIndex, attempt.claimedCells());
-        return "Backtrack depth cap reached at seed " + seedCell + " — assigned universal filler " + filler
-            + " instead. Check the biome graph for an over-constrained region.";
     }
 
     private static Map<MacroCellPos, BiomeId> mergeExternalContext(
@@ -142,84 +170,5 @@ public final class RegionSolver {
         Map<MacroCellPos, BiomeId> merged = new LinkedHashMap<>(fixedBoundaryCells);
         merged.putAll(committedSoFar);
         return merged;
-    }
-
-    private static List<BiomeId> shuffledCandidates(List<BiomeId> baseOrder, long worldSeed, MacroCellPos seedCell) {
-        List<BiomeId> shuffled = new ArrayList<>(baseOrder);
-        long seed = worldSeed ^ CANDIDATE_SHUFFLE_SALT;
-        seed = seed * 31 + seedCell.x();
-        seed = seed * 31 + seedCell.z();
-        Collections.shuffle(shuffled, new Random(seed));
-        return shuffled;
-    }
-
-    private static int pickTargetCells(int minCells, int maxCells, long worldSeed, MacroCellPos seedCell, BiomeId candidate) {
-        if (minCells >= maxCells) {
-            return minCells;
-        }
-        long seed = worldSeed ^ TARGET_SIZE_SALT;
-        seed = seed * 31 + seedCell.x();
-        seed = seed * 31 + seedCell.z();
-        seed = seed * 31 + candidate.hashCode();
-        return minCells + new Random(seed).nextInt(maxCells - minCells + 1);
-    }
-
-    /** Mutable bookkeeping for the backtracking search — one CSP solve attempt. */
-    private static final class SolverState {
-        final Map<MacroCellPos, BiomeId> assignment = new LinkedHashMap<>();
-        final int[] candidateIndex;
-        final boolean[] fillerLocked;
-        final List<Map<MacroCellPos, BiomeId>> claimedBySeed;
-        int backtrackStepsUsed = 0;
-
-        SolverState(int seedCount) {
-            this.candidateIndex = new int[seedCount];
-            this.fillerLocked = new boolean[seedCount];
-            this.claimedBySeed = new ArrayList<>(Collections.nCopies(seedCount, Map.of()));
-        }
-
-        void commit(int seedIndex, Map<MacroCellPos, BiomeId> claimedCells) {
-            claimedBySeed.set(seedIndex, claimedCells);
-            assignment.putAll(claimedCells);
-        }
-
-        /**
-         * A filler-committed seed had no alternative candidate left — it isn't a
-         * choice that can be revisited, so it must never be undone or re-attempted
-         * (see {@link #findBacktrackTarget}). Without this, a later seed's backtrack
-         * could land on it, advance its already-exhausted candidate pointer further
-         * past the end of its list, and force it to immediately re-fail and
-         * re-fallback every time anything backtracks that far again — the
-         * observed-in-practice symptom was the exact same fallback warning logged
-         * repeatedly for the exact same seed.
-         */
-        void commitFiller(int seedIndex, Map<MacroCellPos, BiomeId> claimedCells) {
-            commit(seedIndex, claimedCells);
-            fillerLocked[seedIndex] = true;
-        }
-
-        /**
-         * Walks backward from currentSeedIndex-1, skipping filler-locked seeds (they
-         * have nothing left to retry — see {@link #commitFiller}). Returns the seed
-         * index to actually retry, or -1 if every earlier seed is filler-locked or
-         * there is no earlier seed at all.
-         */
-        int findBacktrackTarget(int currentSeedIndex) {
-            for (int i = currentSeedIndex - 1; i >= 0; i--) {
-                if (!fillerLocked[i]) {
-                    return i;
-                }
-            }
-            return -1;
-        }
-
-        /** Undoes the target seed's claim and advances its candidate pointer. */
-        int backtrackTo(int targetIndex) {
-            backtrackStepsUsed++;
-            assignment.keySet().removeAll(claimedBySeed.get(targetIndex).keySet());
-            claimedBySeed.set(targetIndex, Map.of());
-            candidateIndex[targetIndex]++;
-            return targetIndex;
-        }
     }
 }

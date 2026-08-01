@@ -8,7 +8,6 @@ import org.junit.jupiter.api.Test;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 import static com.mineutze.worldgen.regionsolve.TestBiomeNodes.id;
 import static com.mineutze.worldgen.regionsolve.TestBiomeNodes.node;
@@ -53,9 +52,7 @@ class RegionSolverTest {
     }
 
     private static RegionSolveInput inputFor(BiomeGraph graph, long worldSeed) {
-        return new RegionSolveInput(
-            graph, MacroGridConfig.DEFAULT, new RegionPos(0, 0), Map.of(), worldSeed, 300, 20
-        );
+        return new RegionSolveInput(graph, MacroGridConfig.DEFAULT, new RegionPos(0, 0), Map.of(), worldSeed);
     }
 
     @Test
@@ -94,47 +91,68 @@ class RegionSolverTest {
         assertEquals(MacroGridConfig.DEFAULT.regionSizeCellsPerSide() * MacroGridConfig.DEFAULT.regionSizeCellsPerSide(), result.assignment().size());
     }
 
+    /**
+     * BudgetPlanner checks capacity BEFORE ever attempting placement - a region too
+     * small for any node's own minimum gets an empty plan, not a doomed attempt. The
+     * single cell still ends up filler, just via GapFiller's own terminal fallback
+     * (no assigned neighbors at all to vote on) rather than a dropped/forced demand.
+     */
     @Test
-    void whenEveryCandidateIsTooBigForAnUndersizedRegionFirstSeedFallsBackToFiller() {
+    void aRegionTooSmallForAnyBiomeGetsAnEmptyPlanAndFallsToGapFillerInstead() {
         MacroGridConfig oneCellGrid = new MacroGridConfig(128, 1);
         BiomeGraph graph = new BiomeGraph(
             List.of(node("a", 700, 900, false), node("b", 700, 900, false), node("filler", 700, 900, true)),
             List.of(AdjacencyRule.allow(id("filler"), id("a"), 10), AdjacencyRule.allow(id("filler"), id("b"), 10))
         );
-        RegionSolveInput input = new RegionSolveInput(graph, oneCellGrid, new RegionPos(0, 0), Map.of(), 1L, 128, 0);
+        RegionSolveInput input = new RegionSolveInput(graph, oneCellGrid, new RegionPos(0, 0), Map.of(), 1L);
 
         RegionSolveResult result = RegionSolver.solve(input);
 
-        assertFalse(result.warnings().isEmpty(), "undersized region should force the fallback-to-filler path");
+        assertTrue(result.warnings().isEmpty(), "nothing was ever attempted, so nothing was dropped either");
         assertEquals(Map.of(new MacroCellPos(0, 0), id("filler")), result.assignment());
     }
 
     /**
-     * Regression test for a real bug: once a seed falls back to filler, its
-     * candidate list is already exhausted. If a later seed's backtrack landed on
-     * it (old code did, unconditionally targeting seedIndex-1), it would advance
-     * that already-exhausted pointer further past the end of the list, forcing
-     * it to immediately re-fail and re-fallback every time anything backtracked
-     * that far again - observed in practice as the exact same fallback warning
-     * logged repeatedly for the exact same seed. Many seeds over a small,
-     * over-constrained region reliably exercises the backtrack-past-a-
-     * filler-locked-seed path.
+     * Regression-relevant for the old design's actual bug (chronic over-subscription:
+     * a fixed seed grid placed before knowing what sizes would be needed, causing most
+     * seeds to fail). BudgetPlanner bounds total demand to the region's capacity before
+     * placement starts, so a real biome graph at realistic sizes should place almost
+     * everything - not a hard guarantee (adjacency conflicts can still drop a demand),
+     * but dropped demands should be rare, not the majority.
+     *
+     * Deliberately NOT richGraph() here: its 150-300 block widths are small enough,
+     * relative to MacroGridConfig.DEFAULT's real 64-block cells, that dozens of tiny
+     * demands get generated and legitimately stress badlands/forest's narrow
+     * adjacency (each only has 2 legal partners) - real signal about that graph at
+     * that scale, not a bug. Using ModBiomeGraph-proportioned sizes (700-1000 etc.)
+     * for a realistic "how well does this work in practice" check instead.
      */
     @Test
-    void fallbackToFillerNeverRepeatsForTheSameSeed() {
-        MacroGridConfig tinyGrid = new MacroGridConfig(64, 4);
+    void mostBudgetedDemandsSuccessfullyPlaceOnARealisticGraph() {
         BiomeGraph graph = new BiomeGraph(
-            List.of(node("a", 5000, 6000, false), node("b", 5000, 6000, false), node("filler", 5000, 6000, true)),
-            List.of(AdjacencyRule.allow(id("filler"), id("a"), 10), AdjacencyRule.allow(id("filler"), id("b"), 10))
+            List.of(
+                node("desert", 700, 1000, false),
+                node("savanna", 500, 800, false),
+                node("badlands", 500, 800, false),
+                node("ocean", 600, 1000, false),
+                node("forest", 500, 800, false),
+                node("plains", 300, 600, true)
+            ),
+            List.of(
+                AdjacencyRule.allow(DESERT, SAVANNA, 10),
+                AdjacencyRule.allow(DESERT, BADLANDS, 10),
+                AdjacencyRule.allow(OCEAN, FOREST, 10),
+                AdjacencyRule.allow(PLAINS, DESERT, 10),
+                AdjacencyRule.allow(PLAINS, SAVANNA, 10),
+                AdjacencyRule.allow(PLAINS, BADLANDS, 10),
+                AdjacencyRule.allow(PLAINS, OCEAN, 10),
+                AdjacencyRule.allow(PLAINS, FOREST, 10)
+            )
         );
-        // Dense seed placement (spacing == cell size -> up to one seed per cell,
-        // 16 cells here) so multiple seeds compete over the same tiny region.
-        RegionSolveInput input = new RegionSolveInput(graph, tinyGrid, new RegionPos(0, 0), Map.of(), 99L, 64, 20);
 
-        RegionSolveResult result = RegionSolver.solve(input);
+        RegionSolveResult result = RegionSolver.solve(inputFor(graph, 42L));
 
-        assertEquals(Set.copyOf(result.warnings()).size(), result.warnings().size(), "no fallback warning should repeat for the same seed");
-        assertTrue(result.warnings().size() <= 16, "at most one fallback per macro-cell (16 here), never more");
+        assertTrue(result.droppedDemandCount() <= 2, "at most a couple of dropped demands expected, not chronic failure: " + result.warnings());
     }
 
     @Test
@@ -142,7 +160,7 @@ class RegionSolverTest {
         BiomeId boundaryBiome = OCEAN;
         MacroCellPos boundaryCell = new MacroCellPos(-1, 0);
         RegionSolveInput input = new RegionSolveInput(
-            richGraph(), MacroGridConfig.DEFAULT, new RegionPos(0, 0), Map.of(boundaryCell, boundaryBiome), 3L, 300, 20
+            richGraph(), MacroGridConfig.DEFAULT, new RegionPos(0, 0), Map.of(boundaryCell, boundaryBiome), 3L
         );
 
         RegionSolveResult result = RegionSolver.solve(input);
@@ -163,7 +181,7 @@ class RegionSolverTest {
             fixedBoundary.put(new MacroCellPos(-1, z), OCEAN);
         }
 
-        RegionSolveInput input = new RegionSolveInput(graph, grid, region, Map.copyOf(fixedBoundary), 3L, 300, 20);
+        RegionSolveInput input = new RegionSolveInput(graph, grid, region, Map.copyOf(fixedBoundary), 3L);
         RegionSolveResult result = RegionSolver.solve(input);
 
         for (int z = 0; z < grid.regionSizeCellsPerSide(); z++) {
@@ -171,5 +189,4 @@ class RegionSolverTest {
             assertTrue(graph.isAllowed(edgeBiome, OCEAN), "cell (0," + z + ") = " + edgeBiome + " is not allowed next to the fixed ocean boundary");
         }
     }
-
 }

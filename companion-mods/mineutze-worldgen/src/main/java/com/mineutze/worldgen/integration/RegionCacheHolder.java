@@ -45,11 +45,7 @@ public final class RegionCacheHolder {
         if (event.getLevel() instanceof ServerLevel serverLevel && serverLevel.dimension().equals(Level.OVERWORLD)) {
             long seed = serverLevel.getSeed();
             LOGGER.info("[mineutze_worldgen] Overworld loaded, seed {} — region solving starts on first query", seed);
-            current = new SeedRegionCache(
-                ModBiomeGraph.DEFAULT, MacroGridConfig.DEFAULT, seed,
-                RegionSolveDefaults.SEED_SPACING_BLOCKS, RegionSolveDefaults.BACKTRACK_DEPTH_CAP,
-                RegionCacheHolder::logRegionSolved
-            );
+            current = new SeedRegionCache(ModBiomeGraph.DEFAULT, MacroGridConfig.DEFAULT, seed, RegionCacheHolder::logRegionSolved);
             READY.countDown();
         }
     }
@@ -74,9 +70,9 @@ public final class RegionCacheHolder {
 
     private static void logRegionSolved(RegionPos region, RegionSolveResult result, long durationMillis) {
         LOGGER.info(
-            "[mineutze_worldgen] Solved region {},{} on {}: {} cells, {} backtrack step(s), {} warning(s), {}ms",
+            "[mineutze_worldgen] Solved region {},{} on {}: {} cells, {} dropped demand(s), {}ms",
             region.x(), region.z(), Thread.currentThread().getName(),
-            result.assignment().size(), result.backtrackStepsUsed(), result.warnings().size(), durationMillis
+            result.assignment().size(), result.droppedDemandCount(), durationMillis
         );
         result.warnings().forEach(warning -> LOGGER.warn("[mineutze_worldgen] region {},{}: {}", region.x(), region.z(), warning));
     }

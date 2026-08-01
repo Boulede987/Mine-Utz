@@ -3,8 +3,12 @@ package com.mineutze.worldgen.regionsolve;
 import com.mineutze.worldgen.biomegraph.BiomeGraph;
 import com.mineutze.worldgen.biomegraph.BiomeId;
 
+import java.util.ArrayDeque;
 import java.util.Comparator;
+import java.util.Deque;
+import java.util.HashSet;
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
@@ -22,6 +26,14 @@ import java.util.TreeSet;
  * same legality rule as {@link GrowthEngine} — only claims a cell if this
  * biome stays legal against every OTHER neighbor that cell touches, so a
  * non-filler separator can't widen itself into a new illegal adjacency.
+ * Also refuses to claim a cell if doing so would cut its donor patch into
+ * two pieces (a "neck" cell) — stealing cells is fundamentally different
+ * from {@link GrowthEngine} claiming untouched space, and a stolen cell
+ * that severs its owner's connectivity creates exactly the kind of
+ * disconnected island the rest of this pipeline goes out of its way to
+ * avoid (see {@code GapFiller}'s doc comment — only stealing, never plain
+ * claiming unclaimed cells, can actually cause this).
+ *
  * Stops at the target size or when no more legally-claimable cells exist,
  * whichever comes first — it's a best-effort widen, not a guarantee.
  */
@@ -44,7 +56,7 @@ final class SeparatorWidener {
 
         while (claimed.size() < targetMinCells && !frontier.isEmpty()) {
             MacroCellPos next = frontier.pollFirst();
-            if (!isLegalToClaim(next, ownBiome, claimed, assignment, graph)) {
+            if (!isLegalToClaim(next, ownBiome, claimed, assignment, graph) || !stealingPreservesDonorConnectivity(next, assignment, regionCellSet, claimed)) {
                 continue;
             }
             claimed.add(next);
@@ -78,5 +90,42 @@ final class SeparatorWidener {
             }
         }
         return true;
+    }
+
+    /**
+     * True if {@code cell} isn't a cut vertex of its current (donor) patch — i.e.
+     * removing it wouldn't split the donor into two disconnected pieces. Only
+     * meaningful when the donor has 2+ same-biome neighbors still outside the
+     * claimed set; with 0 or 1, {@code cell} can't be bridging two other parts
+     * of the patch. Checked by flood-filling from one such neighbor, through
+     * donor-biome cells only, without ever stepping on {@code cell} itself,
+     * and confirming that reaches every other same-biome neighbor too.
+     */
+    static boolean stealingPreservesDonorConnectivity(MacroCellPos cell, Map<MacroCellPos, BiomeId> assignment, Set<MacroCellPos> regionCellSet, Set<MacroCellPos> claimed) {
+        BiomeId donorBiome = assignment.get(cell);
+        if (donorBiome == null) {
+            return true;
+        }
+
+        List<MacroCellPos> donorNeighbors = cell.orthogonalNeighbors().stream()
+            .filter(n -> regionCellSet.contains(n) && !claimed.contains(n) && donorBiome.equals(assignment.get(n)))
+            .toList();
+        if (donorNeighbors.size() <= 1) {
+            return true;
+        }
+
+        Set<MacroCellPos> reached = new HashSet<>();
+        Deque<MacroCellPos> stack = new ArrayDeque<>(List.of(donorNeighbors.get(0)));
+        reached.add(donorNeighbors.get(0));
+        while (!stack.isEmpty()) {
+            MacroCellPos current = stack.pop();
+            for (MacroCellPos neighbor : current.orthogonalNeighbors()) {
+                if (regionCellSet.contains(neighbor) && !neighbor.equals(cell) && !claimed.contains(neighbor)
+                    && donorBiome.equals(assignment.get(neighbor)) && reached.add(neighbor)) {
+                    stack.push(neighbor);
+                }
+            }
+        }
+        return reached.containsAll(donorNeighbors);
     }
 }
