@@ -18,18 +18,23 @@ import java.util.Set;
 
 /**
  * Adjacency legality alone doesn't guarantee a biome's own declared size
- * range. In practice this shouldn't currently trigger: {@link GrowthEngine}
- * only commits a patch once it already meets minCells, and
- * {@link GapFiller} only ever extends an existing same-biome component (a
- * gap cell's chosen biome always comes from an already-assigned neighbor,
- * so it fuses onto that neighbor's component rather than starting a
- * disconnected one) — so no code path today produces an undersized
- * non-filler patch. Kept as a safety net against that invariant breaking
- * later (e.g. a future weighted candidate selection or gap-fill change);
- * package-visible so it can be exercised directly in tests rather than
- * only through the (currently unreachable) integration path.
- * Universal-filler patches are exempt — they're already the fallback of
- * last resort, nothing to merge them into.
+ * range — gap-fill's majority-vote can leave an undersized patch of any
+ * biome, filler included. Two genuinely different situations produce that:
+ * <ul>
+ *   <li>The patch has a legal neighbor to merge into — it wasn't actually
+ *       needed there, so absorb it and move on.
+ *   <li>No neighbor can legally absorb it — which means it's bridging two
+ *       biomes that aren't allowed to touch each other (a "required
+ *       separator": removing it would put them in direct contact). It
+ *       still has to respect its own size range, so {@link SeparatorWidener}
+ *       grows it into its flanking patches instead of merging it away —
+ *       DESIGN.md's adjacency prohibitions were never meant to produce a
+ *       1-cell token seam standing in for a real buffer.
+ * </ul>
+ * Universal-filler patches are NOT exempt from either path — filler is a
+ * normal, legitimately-placeable biome with its own size range, and an
+ * undersized filler separator is exactly as visible a workaround as an
+ * undersized anything-else separator.
  */
 final class PatchSizeEnforcer {
 
@@ -49,13 +54,16 @@ final class PatchSizeEnforcer {
             BiomeId biome = assignment.get(component.iterator().next());
             BiomeNode node = graph.node(biome);
             int minCells = grid.cellCountForWidthBlocks(node.sizeRange().minWidthBlocks());
-            if (node.universalFiller() || component.size() >= minCells) {
+            if (component.size() >= minCells) {
                 continue;
             }
 
-            BiomeId replacement = bestMergeTarget(component, biome, assignment, patchSizeByCell, graph)
-                .orElseGet(graph::firstUniversalFiller);
-            component.forEach(cell -> assignment.put(cell, replacement));
+            Optional<BiomeId> mergeTarget = bestMergeTarget(component, biome, assignment, patchSizeByCell, graph);
+            if (mergeTarget.isPresent()) {
+                component.forEach(cell -> assignment.put(cell, mergeTarget.get()));
+            } else {
+                SeparatorWidener.widen(component, biome, minCells, assignment, regionCellSet, graph);
+            }
         }
     }
 

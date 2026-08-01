@@ -72,15 +72,47 @@ class PatchSizeEnforcerTest {
     }
 
     @Test
-    void fallsBackToFillerWhenNoNeighborIsLegal() {
+    void widensARequiredSeparatorInsteadOfMergingItAway() {
         BiomeGraph graph = richGraph();
         MacroGridConfig grid = new MacroGridConfig(128, 7);
         RegionPos region = new RegionPos(0, 0);
         Set<MacroCellPos> regionCellSet = Set.copyOf(grid.cellsInRegion(region));
 
-        // 1-cell desert patch bordering both ocean and badlands, which aren't
-        // legal next to each other (no rule between them, default-deny).
-        // Neither can legally absorb the patch without also touching the other.
+        // 1-cell desert patch bordering both savanna and a properly-sized (2-cell,
+        // meeting its own minimum so it isn't itself merged away first) ocean patch.
+        // Savanna-ocean aren't legal next to each other (no rule, default-deny), so
+        // desert can't merge into either without also touching the other illegally.
+        // Desert IS legal next to savanna, so it should widen into the savanna sea
+        // instead of being replaced by filler.
+        Map<MacroCellPos, BiomeId> assignment = new HashMap<>();
+        for (MacroCellPos cell : regionCellSet) {
+            assignment.put(cell, SAVANNA);
+        }
+        MacroCellPos undersizedCell = new MacroCellPos(3, 3);
+        assignment.put(undersizedCell, DESERT);
+        assignment.put(new MacroCellPos(3, 2), OCEAN);
+        assignment.put(new MacroCellPos(3, 1), OCEAN);
+
+        PatchSizeEnforcer.enforceMinimumPatchSize(assignment, regionCellSet, grid, graph);
+
+        // Desert's minWidthBlocks (200) is a 2-cell minimum at this grid's cell size.
+        long desertCells = regionCellSet.stream().filter(cell -> DESERT.equals(assignment.get(cell))).count();
+        assertEquals(2, desertCells, "desert should widen to its own 2-cell minimum, not get replaced by filler");
+        assertEquals(DESERT, assignment.get(undersizedCell), "the original cell keeps its own identity");
+    }
+
+    @Test
+    void keepsItsOwnIdentityWhenNoLegalMergeOrWidenRoomExists() {
+        BiomeGraph graph = richGraph();
+        MacroGridConfig grid = new MacroGridConfig(128, 7);
+        RegionPos region = new RegionPos(0, 0);
+        Set<MacroCellPos> regionCellSet = Set.copyOf(grid.cellsInRegion(region));
+
+        // 1-cell desert patch entirely surrounded by ocean except one badlands cell,
+        // which is itself also boxed in by ocean - no legal merge target, and no
+        // legal cell to widen into either (every candidate touches ocean, which
+        // desert isn't allowed next to). Best-effort widening can't do anything
+        // here, but desert must still never be silently replaced by filler.
         Map<MacroCellPos, BiomeId> assignment = new HashMap<>();
         for (MacroCellPos cell : regionCellSet) {
             assignment.put(cell, OCEAN);
@@ -92,33 +124,39 @@ class PatchSizeEnforcerTest {
 
         PatchSizeEnforcer.enforceMinimumPatchSize(assignment, regionCellSet, grid, graph);
 
-        assertEquals(PLAINS, assignment.get(undersizedCell), "no legal neighbor to merge into should fall back to the universal filler");
+        assertEquals(DESERT, assignment.get(undersizedCell), "no legal merge or widen target should still never silently become filler");
     }
 
     @Test
-    void leavesUndersizedFillerPatchesAlone() {
+    void widensAnUndersizedFillerSeparatorTooNotJustNonFillerBiomes() {
         // Filler's own declared minimum is deliberately large here so a 1-cell
-        // filler patch really is undersized by the same test that would trigger
-        // a merge for any other biome - the point is that it's exempt anyway.
+        // filler patch really is undersized - filler is no longer exempt from
+        // enforcement, so it should widen the same as any other biome.
         BiomeId filler = id("filler");
         BiomeId savanna = id("savanna");
+        BiomeId ocean = id("ocean");
         BiomeGraph graph = new BiomeGraph(
-            List.of(node("filler", 1000, 1000, true), node("savanna", 100, 200, false)),
-            List.of(AdjacencyRule.allow(filler, savanna, 10))
+            List.of(node("filler", 500, 500, true), node("savanna", 100, 200, false), node("ocean", 100, 200, false)),
+            List.of(AdjacencyRule.allow(filler, savanna, 10), AdjacencyRule.allow(filler, ocean, 10))
         );
         MacroGridConfig grid = new MacroGridConfig(128, 7);
         RegionPos region = new RegionPos(0, 0);
         Set<MacroCellPos> regionCellSet = Set.copyOf(grid.cellsInRegion(region));
 
+        // savanna-ocean has no rule (default-deny), so a filler cell bridging them
+        // can't legally merge into either - it should widen into the savanna sea.
         Map<MacroCellPos, BiomeId> assignment = new HashMap<>();
         for (MacroCellPos cell : regionCellSet) {
             assignment.put(cell, savanna);
         }
         MacroCellPos fillerCell = new MacroCellPos(3, 3);
+        MacroCellPos oceanNeighbor = new MacroCellPos(3, 2);
         assignment.put(fillerCell, filler);
+        assignment.put(oceanNeighbor, ocean);
 
         PatchSizeEnforcer.enforceMinimumPatchSize(assignment, regionCellSet, grid, graph);
 
-        assertEquals(filler, assignment.get(fillerCell), "universal-filler patches are the fallback of last resort, not something to merge away");
+        long fillerCells = regionCellSet.stream().filter(cell -> filler.equals(assignment.get(cell))).count();
+        assertEquals(15, fillerCells, "filler's minWidthBlocks (500) is a 15-cell minimum at this grid's cell size - it should widen to it, not stay at 1 cell");
     }
 }
