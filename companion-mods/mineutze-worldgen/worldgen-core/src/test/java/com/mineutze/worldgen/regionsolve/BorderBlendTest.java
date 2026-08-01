@@ -122,4 +122,24 @@ class BorderBlendTest {
 
         assertTrue(value > 0.0, "corner point should blend away from pure desert (0.0) toward its other 3 neighbors");
     }
+
+    @Test
+    void neverThrowsWhenAnOrthogonalNeighborIsIllegallyAdjacent() {
+        // Regression test for a real crash: a cross-region solve race let a forest cell
+        // end up directly touching a desert one with no rule between them, and this used
+        // to call graph.rule(...) unconditionally, throwing during world gen. desert/forest
+        // deliberately has no rule here, simulating that "shouldn't happen but did" state.
+        BiomeId forest = id("forest");
+        BiomeGraph graph = new BiomeGraph(
+            List.of(node("desert", 200, 300, false), node("forest", 200, 300, false), node("plains", 100, 200, true)),
+            List.of(AdjacencyRule.allow(PLAINS, DESERT, 10), AdjacencyRule.allow(PLAINS, forest, 10))
+        );
+        Map<BiomeId, Double> values = Map.of(DESERT, 0.0, forest, 10.0, PLAINS, 100.0);
+
+        double value = BorderBlend.blendedValue(
+            63, 32, GRID, graph, cell -> cell.x() == 1 ? forest : DESERT, values::get
+        );
+
+        assertEquals(0.0, value, "an illegal neighbor pair should degrade to no blend, not throw");
+    }
 }

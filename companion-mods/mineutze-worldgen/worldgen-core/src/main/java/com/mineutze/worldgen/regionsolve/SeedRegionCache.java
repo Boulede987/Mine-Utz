@@ -16,9 +16,21 @@ import java.util.function.BiConsumer;
  * (used by the mod's debug command) is purely a performance/restart-cache
  * concern layered on top, not a source of truth in its own right.
  *
- * Thread-safe: {@link ConcurrentHashMap#computeIfAbsent} only ever reads
- * (never solves) neighboring regions while computing one, so it can't
- * recursively re-enter computation for the same map.
+ * Thread-safe, including across regions: chunk generation runs on a
+ * worker pool, so two ADJACENT regions can genuinely be first-solved on
+ * different threads at the same time. {@code ConcurrentHashMap} alone
+ * only guarantees one solve per region (key) — it does nothing to stop
+ * two neighboring regions from both starting their neighbor-boundary
+ * scan before either has cached a result, each seeing the other as
+ * "not solved yet" and proceeding unconstrained by it. That's not
+ * hypothetical: it produced a real crash (forest directly touching
+ * desert, no rule between them, in {@code BorderBlend}) once regions got
+ * cheap enough to solve that two could race. Fixed with a single global
+ * lock around the solve path (not per-region — two regions racing is
+ * exactly the case that needs serializing, so a per-region lock
+ * wouldn't help); {@link #resultFor} still fast-paths a plain map read
+ * for the overwhelmingly common already-cached case, so the lock is
+ * only ever contended on a region's first-ever solve.
  */
 public final class SeedRegionCache {
 
@@ -29,6 +41,7 @@ public final class SeedRegionCache {
     private final int backtrackDepthCap;
     private final BiConsumer<RegionPos, RegionSolveResult> onRegionSolved;
     private final Map<RegionPos, RegionSolveResult> solved = new ConcurrentHashMap<>();
+    private final Object solveLock = new Object();
 
     public SeedRegionCache(BiomeGraph graph, MacroGridConfig gridConfig, long worldSeed, int seedSpacingBlocks, int backtrackDepthCap) {
         this(graph, gridConfig, worldSeed, seedSpacingBlocks, backtrackDepthCap, (region, result) -> { });
@@ -61,7 +74,17 @@ public final class SeedRegionCache {
     }
 
     public RegionSolveResult resultFor(RegionPos region) {
-        return solved.computeIfAbsent(region, this::solve);
+        RegionSolveResult cached = solved.get(region);
+        if (cached != null) {
+            return cached;
+        }
+        // Whole solve (neighbor-boundary scan through the actual cache write) happens
+        // while holding this lock, so no other region's solve can interleave with it -
+        // by the time this returns, any concurrently-waiting solve for a neighboring
+        // region is guaranteed to see this one already cached, not mid-solve.
+        synchronized (solveLock) {
+            return solved.computeIfAbsent(region, this::solve);
+        }
     }
 
     /** Package-visible so tests can confirm a region was never force-solved as a side effect of solving a neighbor. */

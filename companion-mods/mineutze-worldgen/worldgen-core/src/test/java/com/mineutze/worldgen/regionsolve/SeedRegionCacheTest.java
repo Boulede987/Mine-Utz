@@ -8,6 +8,11 @@ import org.junit.jupiter.api.Test;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 
 import static com.mineutze.worldgen.regionsolve.TestBiomeNodes.id;
 import static com.mineutze.worldgen.regionsolve.TestBiomeNodes.node;
@@ -110,5 +115,56 @@ class SeedRegionCacheTest {
         cache.biomeAt(new MacroCellPos(1 * MacroGridConfig.DEFAULT.regionSizeCellsPerSide(), 1 * MacroGridConfig.DEFAULT.regionSizeCellsPerSide()));
 
         assertEquals(List.of(region), solvedRegions, "callback must fire exactly once, only for the actual solve");
+    }
+
+    /**
+     * Regression test for a real crash: chunk generation runs on a worker pool, so two
+     * adjacent regions could genuinely be first-solved on different threads at the same
+     * time, each seeing the other as "not solved yet" and proceeding unconstrained by it -
+     * produced a forest cell directly touching a desert one with no rule between them,
+     * crashing world gen in BorderBlend. Fire many threads at a grid of adjacent regions
+     * simultaneously (a CountDownLatch maximizes actual overlap) and check every solved
+     * region's borders are still legal against every neighbor it touches.
+     */
+    @Test
+    void concurrentlySolvingAdjacentRegionsNeverProducesAnIllegalBorder() throws Exception {
+        BiomeGraph graph = smallGraph();
+        MacroGridConfig grid = MacroGridConfig.DEFAULT;
+        SeedRegionCache cache = new SeedRegionCache(graph, grid, 123L, 300, 20);
+
+        List<RegionPos> regions = new ArrayList<>();
+        for (int x = 0; x < 4; x++) {
+            for (int z = 0; z < 4; z++) {
+                regions.add(new RegionPos(x, z));
+            }
+        }
+
+        ExecutorService executor = Executors.newFixedThreadPool(8);
+        CountDownLatch startLatch = new CountDownLatch(1);
+        List<Future<?>> futures = new ArrayList<>();
+        for (RegionPos region : regions) {
+            futures.add(executor.submit(() -> {
+                startLatch.await();
+                return cache.resultFor(region);
+            }));
+        }
+        startLatch.countDown();
+        for (Future<?> future : futures) {
+            future.get(30, TimeUnit.SECONDS);
+        }
+        executor.shutdown();
+
+        for (RegionPos region : regions) {
+            Map<MacroCellPos, BiomeId> assignment = cache.resultFor(region).assignment();
+            for (Map.Entry<MacroCellPos, BiomeId> entry : assignment.entrySet()) {
+                for (MacroCellPos neighbor : entry.getKey().orthogonalNeighbors()) {
+                    BiomeId neighborBiome = cache.biomeAt(neighbor);
+                    assertTrue(
+                        graph.isAllowed(entry.getValue(), neighborBiome),
+                        entry.getValue() + " at " + entry.getKey() + " not allowed next to " + neighborBiome + " at " + neighbor
+                    );
+                }
+            }
+        }
     }
 }
