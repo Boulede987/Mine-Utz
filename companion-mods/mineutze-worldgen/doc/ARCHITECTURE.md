@@ -87,6 +87,16 @@ and never force generation of something just to satisfy a dependency.
      neighbors at all) gets the universal filler. Implemented in
      `GapFiller.fillGaps`; discovered by testing "does every cell in
      the region get assigned?", not planned upfront.
+   - **Required separators must be real patches, not a token seam.** When
+     two biomes have no AdjacencyRule between them (default-deny), a patch
+     bridging them can't legally merge into either side — that's not
+     leftover cleanup, it's the mechanism doing its job. It still has to
+     respect its own declared size range though: forbidding a pair was
+     never meant to produce a 1-cell "these two aren't allowed to touch"
+     placeholder standing in for an actual biome. `SeparatorWidener` grows
+     it into its flanking patches (same legality rule as growth) until it
+     reaches its own minimum or runs out of legal room. Universal-filler
+     patches are NOT exempt from this — filler has its own size range too.
 
 3. **Density Router** — vanilla's NoiseRouter equivalent, but its
    parameters are selected per-column from the biome-id at that column's
