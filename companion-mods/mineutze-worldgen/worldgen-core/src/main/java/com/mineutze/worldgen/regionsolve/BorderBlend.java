@@ -53,21 +53,17 @@ public final class BorderBlend {
 
     /**
      * 0 = fully centerBiome, 1 = fully neighborBiome; only nonzero within
-     * that specific pair's own blend width of the shared border.
-     * Orthogonally-adjacent cells are supposed to always be a legal
-     * (rule-bearing) pair by construction — but that guarantee is only as
-     * good as the region solver's own invariants, and it has been wrong
-     * once already (a since-fixed cross-region solve race let a forest
-     * cell end up directly touching a desert one, no rule between them,
-     * which crashed world gen when this called {@code graph.rule(...)}
-     * unconditionally). Treating "not actually allowed" as "no blend"
-     * rather than trusting the precondition means a bug here degrades to
-     * a visible seam, never a crash.
+     * that specific pair's own blend width of the shared border. Only
+     * ever called for orthogonally-adjacent cells, which the region
+     * solver already guarantees have a legal (and thus rule-bearing)
+     * pair — never called for the diagonal cell, which has no such
+     * guarantee. If that guarantee is ever violated (it was once, by a
+     * since-fixed cross-region solve race), this throws via
+     * {@code graph.rule(...)} rather than silently blending as if
+     * nothing were wrong — a crash here means a real bug surfaces
+     * immediately instead of quietly producing wrong terrain.
      */
     private static double blendFactor(int local, int neighborDirection, int cellSize, BiomeId centerBiome, BiomeId neighborBiome, BiomeGraph graph) {
-        if (!graph.isAllowed(centerBiome, neighborBiome)) {
-            return 0.0;
-        }
         if (centerBiome.equals(neighborBiome)) {
             return 0.0;
         }

@@ -12,6 +12,7 @@ import java.util.function.Function;
 import static com.mineutze.worldgen.regionsolve.TestBiomeNodes.id;
 import static com.mineutze.worldgen.regionsolve.TestBiomeNodes.node;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class BorderBlendTest {
@@ -124,11 +125,12 @@ class BorderBlendTest {
     }
 
     @Test
-    void neverThrowsWhenAnOrthogonalNeighborIsIllegallyAdjacent() {
-        // Regression test for a real crash: a cross-region solve race let a forest cell
-        // end up directly touching a desert one with no rule between them, and this used
-        // to call graph.rule(...) unconditionally, throwing during world gen. desert/forest
-        // deliberately has no rule here, simulating that "shouldn't happen but did" state.
+    void throwsWhenAnOrthogonalNeighborIsIllegallyAdjacent() {
+        // A cross-region solve race once let a forest cell end up directly touching a
+        // desert one with no rule between them, and this crashed world gen - which is the
+        // intended behavior (a real bug surfacing loudly beats silently blending as if
+        // nothing were wrong). desert/forest deliberately has no rule here, simulating
+        // that "shouldn't happen but did" state to confirm it still throws, not degrades.
         BiomeId forest = id("forest");
         BiomeGraph graph = new BiomeGraph(
             List.of(node("desert", 200, 300, false), node("forest", 200, 300, false), node("plains", 100, 200, true)),
@@ -136,10 +138,8 @@ class BorderBlendTest {
         );
         Map<BiomeId, Double> values = Map.of(DESERT, 0.0, forest, 10.0, PLAINS, 100.0);
 
-        double value = BorderBlend.blendedValue(
+        assertThrows(IllegalArgumentException.class, () -> BorderBlend.blendedValue(
             63, 32, GRID, graph, cell -> cell.x() == 1 ? forest : DESERT, values::get
-        );
-
-        assertEquals(0.0, value, "an illegal neighbor pair should degrade to no blend, not throw");
+        ));
     }
 }
