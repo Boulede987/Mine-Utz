@@ -3,6 +3,11 @@ plugins {
     id 'java'
 }
 
+// Needed so worldgen-core's `jar` task exists by the time this script
+// configures its own `jar` task below (cross-project task lookup during
+// configuration otherwise races the subproject's plugin application).
+evaluationDependsOn(':worldgen-core')
+
 version = '1.0.0'
 group = 'com.mineutze'
 
@@ -23,6 +28,14 @@ dependencies {
 }
 
 jar {
+    // worldgen-core has zero external dependencies of its own, so merging its
+    // compiled classes straight in is enough - no shading/relocation needed.
+    // Without this, `implementation project(':worldgen-core')` only puts it on
+    // the dev-time classpath; the shipped jar silently omits it and crashes
+    // with NoClassDefFoundError the moment anything in that package loads.
+    dependsOn(':worldgen-core:jar')
+    from(zipTree(project(':worldgen-core').tasks.named('jar').get().archiveFile))
+
     manifest {
         attributes(['Implementation-Version': project.version])
     }
