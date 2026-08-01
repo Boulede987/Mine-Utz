@@ -15,7 +15,7 @@ infinite world.
 - Split the world into **macro-cells**: 64x64 block squares (4x4 chunks).
   This is the grid the constraint solver operates on (not the same as
   chunks).
-- Group macro-cells into **solve-regions**: 16x16 macro-cells = 1024x1024
+- Group macro-cells into **solve-regions**: 32x32 macro-cells = 2048x2048
   blocks. A solve-region is the unit of work: solved once, cached to disk,
   never resolved.
 - **Never force-solve a neighbor to solve this region.** Earlier draft of
@@ -127,10 +127,21 @@ hand-roll the Anvil region-file format ourselves.
 
 ## Decided
 
-- Macro-cell size: 64 blocks (4x4 chunks). Solve-region: 16x16 cells
-  (1024x1024 blocks). Started at 128 blocks; live in-game testing showed
-  that read as far too coarse, so cut in half. Still a placeholder —
-  further tuning comes from logged region-solve output, not upfront math.
+- Macro-cell size: 64 blocks (4x4 chunks). Started at 128 blocks; live
+  in-game testing showed that read as far too coarse, so cut in half.
+  Solve-region: 32x32 cells (2048x2048 blocks) — briefly 16x16 (1024
+  blocks) right after the cell-size cut, but that let a single max-size
+  biome patch (desert's 1000-block width needs 244 of a region's cells)
+  eat 95% of a region, leaving nothing but the region's own square
+  boundary to shape it. Both still placeholders — further tuning comes
+  from logged region-solve output and in-game testing, not upfront math.
+- Growth's frontier order includes a small deterministic jitter (seeded
+  from worldSeed + seed cell + candidate cell) on top of nearest-
+  distance-to-seed, so patch outlines are irregular blobs rather than a
+  perfect circle/diamond. Biome patch outlines are still a blocky union
+  of square macro-cells at the macro-cell's own resolution — smoothing
+  that further (if the finer 64-block cells plus jitter aren't enough)
+  is a deliberately deferred, separate question.
 - Backtracking never relaxes a constraint. On conflict, try a different
   biome candidate first, then backtrack to an earlier seed decision.
   Requires the biome graph to have a universal-filler node so backtracking
