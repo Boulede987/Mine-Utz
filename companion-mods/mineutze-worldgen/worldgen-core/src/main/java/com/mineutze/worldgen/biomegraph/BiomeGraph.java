@@ -22,12 +22,15 @@ public final class BiomeGraph {
 
     private final Map<BiomeId, BiomeNode> nodesById;
     private final Map<UnorderedBiomePair, AdjacencyRule> rulesByPair;
+    private final BiomeId firstUniversalFiller;
 
     public BiomeGraph(Collection<BiomeNode> nodes, Collection<AdjacencyRule> rules) {
         this.nodesById = indexNodes(nodes);
         this.rulesByPair = indexRules(rules);
         requireAllRuleNodesKnown();
         requireUniversalFillerExists();
+        // Safe to pick one canonical filler now - validated non-empty above.
+        this.firstUniversalFiller = universalFillers().stream().sorted().findFirst().orElseThrow();
     }
 
     private static Map<BiomeId, BiomeNode> indexNodes(Collection<BiomeNode> nodes) {
@@ -121,5 +124,10 @@ public final class BiomeGraph {
             }
         }
         return Set.copyOf(fillers);
+    }
+
+    /** The canonical fallback everything else in the solver defers to — guaranteed to exist, see the constructor. */
+    public BiomeId firstUniversalFiller() {
+        return firstUniversalFiller;
     }
 }
