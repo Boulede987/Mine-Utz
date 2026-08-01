@@ -6,36 +6,36 @@
       "Bash(git log*)",
       "Bash(git branch*)",
       "Bash(git check-ignore *)",
-
       "Bash(./gradlew build)",
       "Bash(./gradlew test)",
       "Bash(./gradlew --version)",
       "Bash(./gradlew clean)",
       "Bash(./gradlew runClient)",
       "Bash(./gradlew runServer)",
-
       "Bash(packwiz list)",
       "Bash(packwiz refresh)",
-
       "Bash(python pythonScripts/*)",
       "Bash(python3 pythonScripts/*)",
-
       "Bash(mysql --version)",
       "Bash(mysql -u root -e \"SHOW DATABASES;\")",
-
       "Bash(jar tf *)",
       "Bash(javap *)",
-      
       "Bash(git add*)",
       "Bash(git commit*)",
-
       "WebSearch",
       "WebFetch(domain:github.com)",
       "WebFetch(domain:api.github.com)",
       "WebFetch(domain:raw.githubusercontent.com)",
       "Bash(gh api *)",
-
-      "Read(./**)"
+      "Read(./**)",
+      "Read(//c/Users/alixm/.gradle/caches/neoformruntime/intermediate_results/**)",
+      "Bash(unzip -l sourcesAndCompiledWithNeoForge_4bdd1bc2fb2e82d23d54b3482b9d7b021d51d45d_output.jar)",
+      "Read(//c/Program Files/Microsoft//**)",
+      "Read(//c/Program Files/Java//**)",
+      "Read(//c/Program Files/**)",
+      "Bash(unzip -p \"minecraft/mods/tectonic-3.0.19-neoforge-1.21.1.jar\" \"resourcepacks/tectonic/data/tectonic/worldgen/density_function/terrain_spline/offset/regions.json\")",
+      "Bash(unzip -p \"minecraft/mods/tectonic-3.0.19-neoforge-1.21.1.jar\" \"resourcepacks/tectonic/data/tectonic/worldgen/density_function/terrain_spline/offset/regions_weak.json\")",
+      "Read(//tmp/**)"
     ],
     "deny": [
       "Bash(del *)",
@@ -47,7 +47,6 @@
       "Bash(packwiz remove*)",
       "Bash(curl *)",
       "Bash(wget *)",
-
       "Read(./.env)",
       "Read(./.env.*)",
       "Read(**/*credentials*)",
