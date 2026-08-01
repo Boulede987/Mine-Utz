@@ -84,7 +84,7 @@ and never force generation of something just to satisfy a dependency.
      common already-assigned neighboring biome that's still legal there.
      Any cell with no legal neighbor option (isolated, or no assigned
      neighbors at all) gets the universal filler. Implemented in
-     `RegionSolver.fillGaps`; discovered by testing "does every cell in
+     `GapFiller.fillGaps`; discovered by testing "does every cell in
      the region get assigned?", not planned upfront.
 
 3. **Density Router** — vanilla's NoiseRouter equivalent, but its
