@@ -1,0 +1,7 @@
+namespace com.mineutze.worldgen.integration {
+class BiomeIdAdapter {
+  + {static} toBiomeId(ResourceLocation) : BiomeId
+  + {static} toResourceLocation(BiomeId) : ResourceLocation
+}
+
+}

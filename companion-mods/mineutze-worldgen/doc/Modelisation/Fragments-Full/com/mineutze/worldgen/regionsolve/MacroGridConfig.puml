@@ -1,0 +1,13 @@
+namespace com.mineutze.worldgen.regionsolve {
+class MacroGridConfig <<record>> {
+  + macroCellSizeBlocks : int
+  + regionSizeCellsPerSide : int
+  + {static} DEFAULT : MacroGridConfig
+  + regionOf(MacroCellPos) : RegionPos
+  + cellsInRegion(RegionPos) : List<MacroCellPos>
+  + cellCountForWidthBlocks(int) : int
+}
+
+MacroGridConfig ..> MacroCellPos
+MacroGridConfig ..> RegionPos
+}

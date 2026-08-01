@@ -1,0 +1,12 @@
+namespace com.mineutze.worldgen.regionsolve {
+class SeedPlacer {
+  - {static} JITTER_SALT : long
+  + {static} placeSeeds(RegionPos, MacroGridConfig, long, int) : List<MacroCellPos>
+  - {static} clampToRegion(int, int, int, int, int) : MacroCellPos
+  - {static} jitterSeed(long, int, int) : long
+}
+
+SeedPlacer ..> MacroCellPos
+SeedPlacer ..> MacroGridConfig
+SeedPlacer ..> RegionPos
+}

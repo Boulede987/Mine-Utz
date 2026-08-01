@@ -1,0 +1,56 @@
+@startuml RegionCacheManager
+
+skinparam classAttributeIconSize 0
+skinparam shadowing false
+
+skinparam class {
+  BackgroundColor<<interface>> #D6EAF8
+  BorderColor<<interface>> #2E86C1
+}
+skinparam class {
+  BackgroundColor<<abstract>> #E8DAEF
+  BorderColor<<abstract>> #8E44AD
+}
+skinparam class {
+  BackgroundColor #D5F5E3
+  BorderColor #27AE60
+}
+skinparam class {
+  BackgroundColor<<record>> #FCF3CF
+  BorderColor<<record>> #B7950B
+}
+skinparam class {
+  BackgroundColor<<static>> #a7faa0
+  BorderColor<<static>> #38d610
+}
+skinparam class {
+  BackgroundColor<<enum>> #F5B7B1
+  BorderColor<<enum>> #C0392B
+}
+
+namespace com.mineutze.worldgen.integration {
+class RegionCacheManager {
+  - {static} LOGGER : Logger
+  - {static} SEED_SPACING_BLOCKS : int
+  - {static} BACKTRACK_DEPTH_CAP : int
+  + {static} getOrSolve(ServerLevel, RegionPos) : Map<MacroCellPos, BiomeId>
+  - {static} factoryFor(ServerLevel, RegionPos, MacroGridConfig) : SavedData.Factory<RegionCacheData>
+  - {static} solveRegion(ServerLevel, RegionPos, MacroGridConfig) : RegionCacheData
+  - {static} boundaryFromAlreadyCachedNeighbors(ServerLevel, RegionPos, MacroGridConfig) : Map<MacroCellPos, BiomeId>
+  - {static} neighborRegions(RegionPos) : List<RegionPos>
+  - {static} cellsBorderingRegion(Map<MacroCellPos, BiomeId>, RegionPos, MacroGridConfig) : Map<MacroCellPos, BiomeId>
+  - {static} saveName(RegionPos) : String
+}
+
+RegionCacheManager ..> BiomeId
+RegionCacheManager ..> MacroCellPos
+RegionCacheManager ..> MacroGridConfig
+RegionCacheManager ..> ModBiomeGraph
+RegionCacheManager ..> RegionCacheData
+RegionCacheManager ..> RegionPos
+RegionCacheManager ..> RegionSolveInput
+RegionCacheManager ..> RegionSolveResult
+RegionCacheManager ..> RegionSolver
+}
+
+@enduml

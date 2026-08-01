@@ -1,0 +1,7 @@
+namespace com.mineutze.worldgen.biomegraph {
+class BiomeSizeRange <<record>> {
+  + minWidthBlocks : int
+  + maxWidthBlocks : int
+}
+
+}

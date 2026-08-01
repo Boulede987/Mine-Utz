@@ -1,0 +1,9 @@
+namespace com.mineutze.worldgen.biomegraph {
+class UnorderedBiomePair <<record>> {
+  + first : BiomeId
+  + second : BiomeId
+  ~ {static} of(BiomeId, BiomeId) : UnorderedBiomePair
+}
+
+UnorderedBiomePair *--> BiomeId
+}

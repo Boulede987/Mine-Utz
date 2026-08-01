@@ -1,0 +1,26 @@
+namespace com.mineutze.worldgen.regionsolve {
+class RegionSolver {
+  - {static} CANDIDATE_SHUFFLE_SALT : long
+  - {static} TARGET_SIZE_SALT : long
+  + {static} solve(RegionSolveInput) : RegionSolveResult
+  - {static} fillGaps(Map<MacroCellPos, BiomeId>, Set<MacroCellPos>, BiomeGraph)
+  ~ {static} enforceMinimumPatchSize(Map<MacroCellPos, BiomeId>, Set<MacroCellPos>, MacroGridConfig, BiomeGraph)
+  - {static} connectedComponents(Map<MacroCellPos, BiomeId>, Set<MacroCellPos>) : List<Set<MacroCellPos>>
+  - {static} bestMergeTarget(Set<MacroCellPos>, BiomeId, Map<MacroCellPos, BiomeId>, Map<MacroCellPos, Integer>, BiomeGraph) : Optional<BiomeId>
+  - {static} isLegalForWholeComponent(Set<MacroCellPos>, BiomeId, Map<MacroCellPos, BiomeId>, BiomeGraph) : boolean
+  - {static} firstUniversalFiller(BiomeGraph) : BiomeId
+  - {static} mostCommonLegalNeighborBiome(MacroCellPos, Map<MacroCellPos, BiomeId>, BiomeGraph) : Optional<BiomeId>
+  - {static} tryCandidates(RegionSolveInput, MacroCellPos, List<BiomeId>, SolverState, int) : GrowthEngine.GrowthAttempt
+  - {static} attemptCandidateGrowth(RegionSolveInput, MacroCellPos, BiomeId, Map<MacroCellPos, BiomeId>) : GrowthEngine.GrowthAttempt
+  - {static} fallbackToFiller(RegionSolveInput, MacroCellPos, SolverState, int) : String
+  - {static} mergeExternalContext(Map<MacroCellPos, BiomeId>, Map<MacroCellPos, BiomeId>) : Map<MacroCellPos, BiomeId>
+  - {static} shuffledCandidates(List<BiomeId>, long, MacroCellPos) : List<BiomeId>
+  - {static} pickTargetCells(int, int, long, MacroCellPos, BiomeId) : int
+}
+class SolverState <<static>> {
+  ~ assignment : Map<MacroCellPos, BiomeId>
+  ~ candidateIndex : int[*]
+  ~ claimedBySeed : Map<MacroCellPos, BiomeId>[*]
+}
+
+}

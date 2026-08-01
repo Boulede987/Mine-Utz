@@ -1,0 +1,22 @@
+namespace com.mineutze.worldgen.biomegraph {
+class BiomeGraph {
+  - nodesById : Map<BiomeId, BiomeNode>
+  - rulesByPair : Map<UnorderedBiomePair, AdjacencyRule>
+  - {static} indexNodes(Collection<BiomeNode>) : Map<BiomeId, BiomeNode>
+  - {static} indexRules(Collection<AdjacencyRule>) : Map<UnorderedBiomePair, AdjacencyRule>
+  - requireAllRuleNodesKnown()
+  - requireKnownNode(BiomeId)
+  - requireUniversalFillerExists()
+  - requireFillerAllowedNextToEveryOtherNode(BiomeId)
+  + node(BiomeId) : BiomeNode
+  + nodes() : Collection<BiomeNode>
+  + isAllowed(BiomeId, BiomeId) : boolean
+  + rule(BiomeId, BiomeId) : AdjacencyRule
+  + universalFillers() : Set<BiomeId>
+}
+
+BiomeGraph --> AdjacencyRule
+BiomeGraph --> BiomeId
+BiomeGraph --> BiomeNode
+BiomeGraph --> UnorderedBiomePair
+}

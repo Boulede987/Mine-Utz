@@ -1,0 +1,17 @@
+namespace com.mineutze.worldgen.integration {
+class RegionCacheData {
+  - {static} CELL_X_KEY : String
+  - {static} CELL_Z_KEY : String
+  - {static} CELL_BIOME_KEY : String
+  - {static} CELLS_KEY : String
+  - assignment : Map<MacroCellPos, BiomeId>
+  + assignment() : Map<MacroCellPos, BiomeId>
+  + save(CompoundTag, HolderLookup.Provider) : CompoundTag
+  + {static} load(CompoundTag, HolderLookup.Provider) : RegionCacheData
+}
+
+RegionCacheData --|> SavedData
+RegionCacheData *--> MacroCellPos
+RegionCacheData --> BiomeId
+RegionCacheData ..> BiomeIdAdapter
+}

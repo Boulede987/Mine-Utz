@@ -1,0 +1,15 @@
+namespace com.mineutze.worldgen.integration {
+class RegionCacheManager {
+  - {static} LOGGER : Logger
+  - {static} SEED_SPACING_BLOCKS : int
+  - {static} BACKTRACK_DEPTH_CAP : int
+  + {static} getOrSolve(ServerLevel, RegionPos) : Map<MacroCellPos, BiomeId>
+  - {static} factoryFor(ServerLevel, RegionPos, MacroGridConfig) : SavedData.Factory<RegionCacheData>
+  - {static} solveRegion(ServerLevel, RegionPos, MacroGridConfig) : RegionCacheData
+  - {static} boundaryFromAlreadyCachedNeighbors(ServerLevel, RegionPos, MacroGridConfig) : Map<MacroCellPos, BiomeId>
+  - {static} neighborRegions(RegionPos) : List<RegionPos>
+  - {static} cellsBorderingRegion(Map<MacroCellPos, BiomeId>, RegionPos, MacroGridConfig) : Map<MacroCellPos, BiomeId>
+  - {static} saveName(RegionPos) : String
+}
+
+}

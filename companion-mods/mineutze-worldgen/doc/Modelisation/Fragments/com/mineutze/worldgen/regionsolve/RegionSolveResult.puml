@@ -1,0 +1,9 @@
+namespace com.mineutze.worldgen.regionsolve {
+class RegionSolveResult <<record>> {
+  + assignment : Map<MacroCellPos, BiomeId>
+  + warnings : String[*]
+}
+
+RegionSolveResult *--> BiomeId
+RegionSolveResult *--> MacroCellPos
+}

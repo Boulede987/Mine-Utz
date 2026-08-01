@@ -1,0 +1,17 @@
+namespace com.mineutze.worldgen.regionsolve {
+class RegionSolveInput <<record>> {
+  + graph : BiomeGraph
+  + gridConfig : MacroGridConfig
+  + region : RegionPos
+  + fixedBoundaryCells : Map<MacroCellPos, BiomeId>
+  + worldSeed : long
+  + seedSpacingBlocks : int
+  + backtrackDepthCap : int
+}
+
+RegionSolveInput *--> BiomeGraph
+RegionSolveInput *--> BiomeId
+RegionSolveInput *--> MacroCellPos
+RegionSolveInput *--> MacroGridConfig
+RegionSolveInput *--> RegionPos
+}

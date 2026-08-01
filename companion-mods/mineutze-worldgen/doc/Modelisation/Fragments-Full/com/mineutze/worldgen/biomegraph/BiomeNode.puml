@@ -1,0 +1,14 @@
+namespace com.mineutze.worldgen.biomegraph {
+class BiomeNode <<record>> {
+  + id : BiomeId
+  + sizeRange : BiomeSizeRange
+  + shapeHints : BiomeShapeHints
+  + featureToggles : BiomeFeatureToggles
+  + universalFiller : boolean
+}
+
+BiomeNode *--> BiomeFeatureToggles
+BiomeNode *--> BiomeId
+BiomeNode *--> BiomeShapeHints
+BiomeNode *--> BiomeSizeRange
+}

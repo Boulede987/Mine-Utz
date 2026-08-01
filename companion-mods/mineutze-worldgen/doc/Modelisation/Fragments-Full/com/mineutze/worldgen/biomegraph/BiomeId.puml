@@ -1,0 +1,10 @@
+namespace com.mineutze.worldgen.biomegraph {
+class BiomeId <<record>> {
+  + namespace : String
+  + path : String
+  + compareTo(BiomeId) : int
+  + toString() : String
+}
+
+BiomeId ..|> Comparable
+}

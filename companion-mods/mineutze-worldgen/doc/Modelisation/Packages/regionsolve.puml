@@ -1,0 +1,147 @@
+@startuml regionsolve
+
+skinparam classAttributeIconSize 0
+skinparam shadowing false
+
+skinparam class {
+  BackgroundColor<<interface>> #D6EAF8
+  BorderColor<<interface>> #2E86C1
+}
+skinparam class {
+  BackgroundColor<<abstract>> #E8DAEF
+  BorderColor<<abstract>> #8E44AD
+}
+skinparam class {
+  BackgroundColor #D5F5E3
+  BorderColor #27AE60
+}
+skinparam class {
+  BackgroundColor<<record>> #FCF3CF
+  BorderColor<<record>> #B7950B
+}
+skinparam class {
+  BackgroundColor<<static>> #a7faa0
+  BorderColor<<static>> #38d610
+}
+skinparam class {
+  BackgroundColor<<enum>> #F5B7B1
+  BorderColor<<enum>> #C0392B
+}
+
+skinparam class {
+  BackgroundColor<<external>> #EAECEE
+  BorderColor<<external>> #839192
+}
+
+class GrowthEngine {
+  + {static} attemptGrowth(MacroCellPos, BiomeId, int, int, RegionPos, MacroGridConfig, BiomeGraph, Map<MacroCellPos, BiomeId>) : GrowthAttempt
+  - {static} addLegalUnclaimedNeighbors(MacroCellPos, BiomeId, Set<MacroCellPos>, Map<MacroCellPos, BiomeId>, Map<MacroCellPos, BiomeId>, TreeSet<MacroCellPos>, BiomeGraph)
+  ~ {static} isLegal(MacroCellPos, BiomeId, Map<MacroCellPos, BiomeId>, BiomeGraph) : boolean
+  - {static} frontierOrder(MacroCellPos) : Comparator<MacroCellPos>
+}
+class GrowthAttempt <<record>> {
+  + success : boolean
+  + claimedCells : Map<MacroCellPos, BiomeId>
+}
+class MacroCellPos <<record>> {
+  + x : int
+  + z : int
+  + orthogonalNeighbors() : List<MacroCellPos>
+  + distanceSquaredTo(MacroCellPos) : long
+}
+class MacroGridConfig <<record>> {
+  + macroCellSizeBlocks : int
+  + regionSizeCellsPerSide : int
+  + {static} DEFAULT : MacroGridConfig
+  + regionOf(MacroCellPos) : RegionPos
+  + cellsInRegion(RegionPos) : List<MacroCellPos>
+  + cellCountForWidthBlocks(int) : int
+}
+class RegionPos <<record>> {
+  + x : int
+  + z : int
+}
+class RegionSolveInput <<record>> {
+  + graph : BiomeGraph
+  + gridConfig : MacroGridConfig
+  + region : RegionPos
+  + fixedBoundaryCells : Map<MacroCellPos, BiomeId>
+  + worldSeed : long
+  + seedSpacingBlocks : int
+  + backtrackDepthCap : int
+}
+class RegionSolver {
+  - {static} CANDIDATE_SHUFFLE_SALT : long
+  - {static} TARGET_SIZE_SALT : long
+  + {static} solve(RegionSolveInput) : RegionSolveResult
+  - {static} fillGaps(Map<MacroCellPos, BiomeId>, Set<MacroCellPos>, BiomeGraph)
+  ~ {static} enforceMinimumPatchSize(Map<MacroCellPos, BiomeId>, Set<MacroCellPos>, MacroGridConfig, BiomeGraph)
+  - {static} connectedComponents(Map<MacroCellPos, BiomeId>, Set<MacroCellPos>) : List<Set<MacroCellPos>>
+  - {static} bestMergeTarget(Set<MacroCellPos>, BiomeId, Map<MacroCellPos, BiomeId>, Map<MacroCellPos, Integer>, BiomeGraph) : Optional<BiomeId>
+  - {static} isLegalForWholeComponent(Set<MacroCellPos>, BiomeId, Map<MacroCellPos, BiomeId>, BiomeGraph) : boolean
+  - {static} firstUniversalFiller(BiomeGraph) : BiomeId
+  - {static} mostCommonLegalNeighborBiome(MacroCellPos, Map<MacroCellPos, BiomeId>, BiomeGraph) : Optional<BiomeId>
+  - {static} tryCandidates(RegionSolveInput, MacroCellPos, List<BiomeId>, SolverState, int) : GrowthEngine.GrowthAttempt
+  - {static} attemptCandidateGrowth(RegionSolveInput, MacroCellPos, BiomeId, Map<MacroCellPos, BiomeId>) : GrowthEngine.GrowthAttempt
+  - {static} fallbackToFiller(RegionSolveInput, MacroCellPos, SolverState, int) : String
+  - {static} mergeExternalContext(Map<MacroCellPos, BiomeId>, Map<MacroCellPos, BiomeId>) : Map<MacroCellPos, BiomeId>
+  - {static} shuffledCandidates(List<BiomeId>, long, MacroCellPos) : List<BiomeId>
+  - {static} pickTargetCells(int, int, long, MacroCellPos, BiomeId) : int
+}
+class SolverState <<static>> {
+  ~ assignment : Map<MacroCellPos, BiomeId>
+  ~ candidateIndex : int[*]
+  ~ claimedBySeed : Map<MacroCellPos, BiomeId>[*]
+}
+class RegionSolveResult <<record>> {
+  + assignment : Map<MacroCellPos, BiomeId>
+  + warnings : String[*]
+}
+class SeedPlacer {
+  - {static} JITTER_SALT : long
+  + {static} placeSeeds(RegionPos, MacroGridConfig, long, int) : List<MacroCellPos>
+  - {static} clampToRegion(int, int, int, int, int) : MacroCellPos
+  - {static} jitterSeed(long, int, int) : long
+}
+class BiomeGraph <<external>> [[biomegraph.svg]] {
+}
+class BiomeId <<external>> [[biomegraph.svg]] {
+}
+class BiomeNode <<external>> [[biomegraph.svg]] {
+}
+
+GrowthAttempt *--> BiomeId
+GrowthAttempt *--> MacroCellPos
+GrowthEngine ..> BiomeGraph
+GrowthEngine ..> BiomeId
+GrowthEngine ..> GrowthAttempt
+GrowthEngine ..> MacroCellPos
+GrowthEngine ..> MacroGridConfig
+GrowthEngine ..> RegionPos
+MacroGridConfig ..> MacroCellPos
+MacroGridConfig ..> RegionPos
+RegionSolveInput *--> BiomeGraph
+RegionSolveInput *--> BiomeId
+RegionSolveInput *--> MacroCellPos
+RegionSolveInput *--> MacroGridConfig
+RegionSolveInput *--> RegionPos
+RegionSolver ..> BiomeGraph
+RegionSolver ..> BiomeId
+RegionSolver ..> BiomeNode
+RegionSolver ..> GrowthAttempt
+RegionSolver ..> GrowthEngine
+RegionSolver ..> MacroCellPos
+RegionSolver ..> MacroGridConfig
+RegionSolver ..> RegionSolveInput
+RegionSolver ..> RegionSolveResult
+RegionSolver ..> SeedPlacer
+RegionSolver ..> SolverState
+SolverState --> "0..*" BiomeId
+SolverState --> "0..*" MacroCellPos
+RegionSolveResult *--> BiomeId
+RegionSolveResult *--> MacroCellPos
+SeedPlacer ..> MacroCellPos
+SeedPlacer ..> MacroGridConfig
+SeedPlacer ..> RegionPos
+
+@enduml

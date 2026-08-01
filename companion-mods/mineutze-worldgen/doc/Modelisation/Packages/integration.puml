@@ -1,0 +1,113 @@
+@startuml integration
+
+skinparam classAttributeIconSize 0
+skinparam shadowing false
+
+skinparam class {
+  BackgroundColor<<interface>> #D6EAF8
+  BorderColor<<interface>> #2E86C1
+}
+skinparam class {
+  BackgroundColor<<abstract>> #E8DAEF
+  BorderColor<<abstract>> #8E44AD
+}
+skinparam class {
+  BackgroundColor #D5F5E3
+  BorderColor #27AE60
+}
+skinparam class {
+  BackgroundColor<<record>> #FCF3CF
+  BorderColor<<record>> #B7950B
+}
+skinparam class {
+  BackgroundColor<<static>> #a7faa0
+  BorderColor<<static>> #38d610
+}
+skinparam class {
+  BackgroundColor<<enum>> #F5B7B1
+  BorderColor<<enum>> #C0392B
+}
+
+skinparam class {
+  BackgroundColor<<external>> #EAECEE
+  BorderColor<<external>> #839192
+}
+
+class BiomeIdAdapter {
+  + {static} toBiomeId(ResourceLocation) : BiomeId
+  + {static} toResourceLocation(BiomeId) : ResourceLocation
+}
+class ModBiomeGraph {
+  - {static} DEFAULT_BLEND_WIDTH_BLOCKS : int
+  - {static} DESERT : BiomeId
+  - {static} SAVANNA : BiomeId
+  - {static} BADLANDS : BiomeId
+  - {static} OCEAN : BiomeId
+  - {static} FOREST : BiomeId
+  - {static} PLAINS : BiomeId
+  + {static} DEFAULT : BiomeGraph
+}
+class RegionCacheData {
+  - {static} CELL_X_KEY : String
+  - {static} CELL_Z_KEY : String
+  - {static} CELL_BIOME_KEY : String
+  - {static} CELLS_KEY : String
+  - assignment : Map<MacroCellPos, BiomeId>
+  + assignment() : Map<MacroCellPos, BiomeId>
+  + save(CompoundTag, HolderLookup.Provider) : CompoundTag
+  + {static} load(CompoundTag, HolderLookup.Provider) : RegionCacheData
+}
+class RegionCacheManager {
+  - {static} LOGGER : Logger
+  - {static} SEED_SPACING_BLOCKS : int
+  - {static} BACKTRACK_DEPTH_CAP : int
+  + {static} getOrSolve(ServerLevel, RegionPos) : Map<MacroCellPos, BiomeId>
+  - {static} factoryFor(ServerLevel, RegionPos, MacroGridConfig) : SavedData.Factory<RegionCacheData>
+  - {static} solveRegion(ServerLevel, RegionPos, MacroGridConfig) : RegionCacheData
+  - {static} boundaryFromAlreadyCachedNeighbors(ServerLevel, RegionPos, MacroGridConfig) : Map<MacroCellPos, BiomeId>
+  - {static} neighborRegions(RegionPos) : List<RegionPos>
+  - {static} cellsBorderingRegion(Map<MacroCellPos, BiomeId>, RegionPos, MacroGridConfig) : Map<MacroCellPos, BiomeId>
+  - {static} saveName(RegionPos) : String
+}
+class RegionDebugCommand {
+  - {static} SERVER_OPERATOR_PERMISSION_LEVEL : int
+  + {static} register(RegisterCommandsEvent)
+  - {static} solveRegionAtSource(CommandContext<CommandSourceStack>) : int
+  - {static} countByBiome(Map<MacroCellPos, BiomeId>) : Map<BiomeId, Long>
+}
+class BiomeId <<external>> [[biomegraph.svg]] {
+}
+class MacroCellPos <<external>> [[regionsolve.svg]] {
+}
+class MacroGridConfig <<external>> [[regionsolve.svg]] {
+}
+class RegionPos <<external>> [[regionsolve.svg]] {
+}
+class RegionSolveInput <<external>> [[regionsolve.svg]] {
+}
+class RegionSolveResult <<external>> [[regionsolve.svg]] {
+}
+class RegionSolver <<external>> [[regionsolve.svg]] {
+}
+
+BiomeIdAdapter ..> BiomeId
+RegionCacheData --|> SavedData
+RegionCacheData *--> MacroCellPos
+RegionCacheData --> BiomeId
+RegionCacheData ..> BiomeIdAdapter
+RegionCacheManager ..> BiomeId
+RegionCacheManager ..> MacroCellPos
+RegionCacheManager ..> MacroGridConfig
+RegionCacheManager ..> ModBiomeGraph
+RegionCacheManager ..> RegionCacheData
+RegionCacheManager ..> RegionPos
+RegionCacheManager ..> RegionSolveInput
+RegionCacheManager ..> RegionSolveResult
+RegionCacheManager ..> RegionSolver
+RegionDebugCommand ..> BiomeId
+RegionDebugCommand ..> MacroCellPos
+RegionDebugCommand ..> MacroGridConfig
+RegionDebugCommand ..> RegionCacheManager
+RegionDebugCommand ..> RegionPos
+
+@enduml

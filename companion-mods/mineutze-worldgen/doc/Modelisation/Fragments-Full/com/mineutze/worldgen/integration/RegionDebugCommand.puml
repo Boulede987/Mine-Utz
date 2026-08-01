@@ -1,0 +1,14 @@
+namespace com.mineutze.worldgen.integration {
+class RegionDebugCommand {
+  - {static} SERVER_OPERATOR_PERMISSION_LEVEL : int
+  + {static} register(RegisterCommandsEvent)
+  - {static} solveRegionAtSource(CommandContext<CommandSourceStack>) : int
+  - {static} countByBiome(Map<MacroCellPos, BiomeId>) : Map<BiomeId, Long>
+}
+
+RegionDebugCommand ..> BiomeId
+RegionDebugCommand ..> MacroCellPos
+RegionDebugCommand ..> MacroGridConfig
+RegionDebugCommand ..> RegionCacheManager
+RegionDebugCommand ..> RegionPos
+}
