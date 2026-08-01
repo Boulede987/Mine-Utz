@@ -30,10 +30,6 @@ public final class RegionCacheManager {
 
     private static final Logger LOGGER = LogUtils.getLogger();
 
-    // Placeholders, same as the grid constants in doc/ARCHITECTURE.md - tune from logged solve output.
-    private static final int SEED_SPACING_BLOCKS = 300;
-    private static final int BACKTRACK_DEPTH_CAP = 50;
-
     private RegionCacheManager() {
     }
 
@@ -55,7 +51,8 @@ public final class RegionCacheManager {
             }
         );
         RegionSolveInput input = new RegionSolveInput(
-            ModBiomeGraph.DEFAULT, grid, region, fixedBoundary, level.getSeed(), SEED_SPACING_BLOCKS, BACKTRACK_DEPTH_CAP
+            ModBiomeGraph.DEFAULT, grid, region, fixedBoundary, level.getSeed(),
+            RegionSolveDefaults.SEED_SPACING_BLOCKS, RegionSolveDefaults.BACKTRACK_DEPTH_CAP
         );
 
         RegionSolveResult result = RegionSolver.solve(input);
