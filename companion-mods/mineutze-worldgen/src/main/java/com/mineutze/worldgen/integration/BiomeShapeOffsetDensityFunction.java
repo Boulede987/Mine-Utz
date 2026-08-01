@@ -15,33 +15,47 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Small additive nudge on top of vanilla's Overworld final_density — see
+ * Additive nudge on top of vanilla's Overworld final_density — see
  * data/minecraft/worldgen/noise_settings/overworld.json, which wraps the
  * untouched original tree as add(original, this) rather than replacing
  * it. Caves/aquifers/ore veins key off other parts of the noise router
- * and are unaffected.
+ * and are unaffected; {@link #verticalFade} keeps this term away from
+ * vanilla's own build-limit taper (see below) so it can't push a whole
+ * y-band across the solid/air threshold there.
  *
- * First step of doc/ARCHITECTURE.md layer 3 (Density Router): proves
- * biome shape hints actually reach terrain before attempting full
- * biome-driven shape. Deliberately modest amplitude and no cross-
- * macro-cell blending yet (visible steps at 128-block cell borders) —
- * both known simplifications for this first pass, not oversights.
+ * Deliberately exaggerated for now: the +-0.05 version was too subtle to
+ * confirm visually against vanilla's own continentalness/erosion noise,
+ * which still independently shapes terrain everywhere right now (full
+ * biome-driven shape, and cross-macro-cell blending so cell borders
+ * aren't visible steps, are later doc/ARCHITECTURE.md layer 3 work).
+ * This amplitude is a "prove the wiring, make it unmistakable" value, not
+ * a tuned one — dial it back down once confirmed.
  */
 public record BiomeShapeOffsetDensityFunction() implements DensityFunction.SimpleFunction {
 
     public static final MapCodec<BiomeShapeOffsetDensityFunction> CODEC = MapCodec.unit(BiomeShapeOffsetDensityFunction::new);
     private static final KeyDispatchDataCodec<BiomeShapeOffsetDensityFunction> KEY_DISPATCH_CODEC = KeyDispatchDataCodec.of(CODEC);
 
-    // Placeholder, same as the grid constants in doc/ARCHITECTURE.md - tune once
-    // the effect is visible in-game. depthBias in [0,1] maps to [-HALF, HALF].
-    private static final double MAX_OFFSET = 0.1;
+    // Placeholders, tune once the effect is visible in-game.
+    // - verticalShift: depthBias 0..1 -> shift in [-VERTICAL_SHIFT_AMPLITUDE/2, +.../2].
+    //   Sign matters: higher depthBias means "should read as deeper" (DESIGN.md's
+    //   "ocean -> deep"), and LESS density is what pushes terrain down/underwater,
+    //   so the multiplier is (0.5 - depthBias), not (depthBias - 0.5).
+    // - wave: roughness*(1-flatness) scales a simple sin*cos ripple, so flat/low-
+    //   roughness biomes (desert) stay near-flat and rough ones (badlands) get
+    //   visible hills. No world-seed dependence yet (same pattern every world) and
+    //   no cross-macro-cell blending - both known follow-ups, not oversights.
+    private static final double VERTICAL_SHIFT_AMPLITUDE = 3.0;
+    private static final double WAVE_AMPLITUDE = 4.0;
+    private static final double WAVELENGTH_BLOCKS = 96.0;
+    private static final double WAVE_FREQUENCY = 2.0 * Math.PI / WAVELENGTH_BLOCKS;
 
     // Vanilla's own final_density has a y_clamped_gradient tapering density to
     // air between y=240 and y=256 (build-limit taper - see the real overworld.json
-    // this wraps). Applying our offset untapered there pushed cells that were
-    // barely air back over the solid threshold across a whole y-band at once -
-    // a floating slab, worst for ocean (highest depthBias -> biggest offset).
-    // Taper our own offset to 0 well before that zone, and near the y=-64 floor too.
+    // this wraps). Applying our offset untapered there could push a whole y-band
+    // that's barely air back over the solid threshold at once - a floating slab,
+    // worst for whichever biome has the biggest offset. Taper our own offset to 0
+    // well before that zone, and near the y=-64 floor too.
     private static final int TOP_FADE_START_Y = 192;
     private static final int TOP_FADE_END_Y = 232;
     private static final int BOTTOM_FADE_START_Y = -64;
@@ -64,11 +78,19 @@ public record BiomeShapeOffsetDensityFunction() implements DensityFunction.Simpl
 
         BiomeId biomeId = RegionCacheHolder.get().biomeAt(cell);
         BiomeShapeHints hints = ModBiomeGraph.DEFAULT.node(biomeId).shapeHints();
-        double baseOffset = (hints.depthBias() - 0.5) * MAX_OFFSET;
+
+        double verticalShift = (0.5 - hints.depthBias()) * VERTICAL_SHIFT_AMPLITUDE;
+        double waveAmplitude = hints.roughness() * (1.0 - hints.flatness()) * WAVE_AMPLITUDE;
+        double wave = Math.sin(context.blockX() * WAVE_FREQUENCY) * Math.cos(context.blockZ() * WAVE_FREQUENCY) * waveAmplitude;
+
+        double baseOffset = verticalShift + wave;
         double offset = baseOffset * verticalFade(context.blockY());
 
         if (LOGGED_CELLS.size() < MAX_LOGGED_CELLS && LOGGED_CELLS.add(cell)) {
-            LOGGER.info("[mineutze_worldgen] density offset at macro-cell {},{} (biome {}): {}", cell.x(), cell.z(), biomeId, offset);
+            LOGGER.info(
+                "[mineutze_worldgen] macro-cell {},{} (biome {}): verticalShift={} waveAmplitude={} baseOffset={}",
+                cell.x(), cell.z(), biomeId, verticalShift, waveAmplitude, baseOffset
+            );
         }
 
         return offset;
@@ -82,12 +104,12 @@ public record BiomeShapeOffsetDensityFunction() implements DensityFunction.Simpl
 
     @Override
     public double minValue() {
-        return -MAX_OFFSET / 2;
+        return -(VERTICAL_SHIFT_AMPLITUDE / 2.0 + WAVE_AMPLITUDE);
     }
 
     @Override
     public double maxValue() {
-        return MAX_OFFSET / 2;
+        return VERTICAL_SHIFT_AMPLITUDE / 2.0 + WAVE_AMPLITUDE;
     }
 
     @Override
