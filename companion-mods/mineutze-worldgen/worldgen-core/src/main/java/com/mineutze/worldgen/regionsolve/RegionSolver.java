@@ -46,6 +46,11 @@ public final class RegionSolver {
 
         int seedIndex = 0;
         while (seedIndex < seeds.size()) {
+            if (state.fillerLocked[seedIndex]) {
+                seedIndex++;
+                continue;
+            }
+
             MacroCellPos seedCell = seeds.get(seedIndex);
             List<BiomeId> candidates = candidateOrders.get(seedIndex);
 
@@ -56,15 +61,17 @@ public final class RegionSolver {
                 continue;
             }
 
-            if (seedIndex == 0 || state.backtrackStepsUsed >= input.backtrackDepthCap()) {
+            int backtrackTarget = state.findBacktrackTarget(seedIndex);
+            if (backtrackTarget < 0 || state.backtrackStepsUsed >= input.backtrackDepthCap()) {
                 warnings.add(fallbackToFiller(input, seedCell, state, seedIndex));
                 seedIndex++;
             } else {
-                seedIndex = state.backtrackOneSeed(seedIndex);
+                state.candidateIndex[seedIndex] = 0;
+                seedIndex = state.backtrackTo(backtrackTarget);
             }
         }
 
-        return new RegionSolveResult(cleanUp(state.assignment, input), List.copyOf(warnings));
+        return new RegionSolveResult(cleanUp(state.assignment, input), List.copyOf(warnings), state.backtrackStepsUsed);
     }
 
     /**
@@ -124,7 +131,7 @@ public final class RegionSolver {
         GrowthEngine.GrowthAttempt attempt = GrowthEngine.attemptGrowth(
             seedCell, filler, 1, maxCells, input.region(), input.gridConfig(), input.graph(), externallyAssigned, input.worldSeed()
         );
-        state.commit(seedIndex, attempt.claimedCells());
+        state.commitFiller(seedIndex, attempt.claimedCells());
         return "Backtrack depth cap reached at seed " + seedCell + " — assigned universal filler " + filler
             + " instead. Check the biome graph for an over-constrained region.";
     }
@@ -161,11 +168,13 @@ public final class RegionSolver {
     private static final class SolverState {
         final Map<MacroCellPos, BiomeId> assignment = new LinkedHashMap<>();
         final int[] candidateIndex;
+        final boolean[] fillerLocked;
         final List<Map<MacroCellPos, BiomeId>> claimedBySeed;
         int backtrackStepsUsed = 0;
 
         SolverState(int seedCount) {
             this.candidateIndex = new int[seedCount];
+            this.fillerLocked = new boolean[seedCount];
             this.claimedBySeed = new ArrayList<>(Collections.nCopies(seedCount, Map.of()));
         }
 
@@ -174,16 +183,43 @@ public final class RegionSolver {
             assignment.putAll(claimedCells);
         }
 
-        /** Undoes the previous seed's claim, advances its candidate pointer, returns its index. */
-        int backtrackOneSeed(int currentSeedIndex) {
-            backtrackStepsUsed++;
-            candidateIndex[currentSeedIndex] = 0;
+        /**
+         * A filler-committed seed had no alternative candidate left — it isn't a
+         * choice that can be revisited, so it must never be undone or re-attempted
+         * (see {@link #findBacktrackTarget}). Without this, a later seed's backtrack
+         * could land on it, advance its already-exhausted candidate pointer further
+         * past the end of its list, and force it to immediately re-fail and
+         * re-fallback every time anything backtracks that far again — the
+         * observed-in-practice symptom was the exact same fallback warning logged
+         * repeatedly for the exact same seed.
+         */
+        void commitFiller(int seedIndex, Map<MacroCellPos, BiomeId> claimedCells) {
+            commit(seedIndex, claimedCells);
+            fillerLocked[seedIndex] = true;
+        }
 
-            int previousSeedIndex = currentSeedIndex - 1;
-            assignment.keySet().removeAll(claimedBySeed.get(previousSeedIndex).keySet());
-            claimedBySeed.set(previousSeedIndex, Map.of());
-            candidateIndex[previousSeedIndex]++;
-            return previousSeedIndex;
+        /**
+         * Walks backward from currentSeedIndex-1, skipping filler-locked seeds (they
+         * have nothing left to retry — see {@link #commitFiller}). Returns the seed
+         * index to actually retry, or -1 if every earlier seed is filler-locked or
+         * there is no earlier seed at all.
+         */
+        int findBacktrackTarget(int currentSeedIndex) {
+            for (int i = currentSeedIndex - 1; i >= 0; i--) {
+                if (!fillerLocked[i]) {
+                    return i;
+                }
+            }
+            return -1;
+        }
+
+        /** Undoes the target seed's claim and advances its candidate pointer. */
+        int backtrackTo(int targetIndex) {
+            backtrackStepsUsed++;
+            assignment.keySet().removeAll(claimedBySeed.get(targetIndex).keySet());
+            claimedBySeed.set(targetIndex, Map.of());
+            candidateIndex[targetIndex]++;
+            return targetIndex;
         }
     }
 }

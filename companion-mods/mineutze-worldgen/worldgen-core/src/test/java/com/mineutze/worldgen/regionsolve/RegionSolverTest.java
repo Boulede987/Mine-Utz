@@ -8,6 +8,7 @@ import org.junit.jupiter.api.Test;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import static com.mineutze.worldgen.regionsolve.TestBiomeNodes.id;
 import static com.mineutze.worldgen.regionsolve.TestBiomeNodes.node;
@@ -106,6 +107,34 @@ class RegionSolverTest {
 
         assertFalse(result.warnings().isEmpty(), "undersized region should force the fallback-to-filler path");
         assertEquals(Map.of(new MacroCellPos(0, 0), id("filler")), result.assignment());
+    }
+
+    /**
+     * Regression test for a real bug: once a seed falls back to filler, its
+     * candidate list is already exhausted. If a later seed's backtrack landed on
+     * it (old code did, unconditionally targeting seedIndex-1), it would advance
+     * that already-exhausted pointer further past the end of the list, forcing
+     * it to immediately re-fail and re-fallback every time anything backtracked
+     * that far again - observed in practice as the exact same fallback warning
+     * logged repeatedly for the exact same seed. Many seeds over a small,
+     * over-constrained region reliably exercises the backtrack-past-a-
+     * filler-locked-seed path.
+     */
+    @Test
+    void fallbackToFillerNeverRepeatsForTheSameSeed() {
+        MacroGridConfig tinyGrid = new MacroGridConfig(64, 4);
+        BiomeGraph graph = new BiomeGraph(
+            List.of(node("a", 5000, 6000, false), node("b", 5000, 6000, false), node("filler", 5000, 6000, true)),
+            List.of(AdjacencyRule.allow(id("filler"), id("a"), 10), AdjacencyRule.allow(id("filler"), id("b"), 10))
+        );
+        // Dense seed placement (spacing == cell size -> up to one seed per cell,
+        // 16 cells here) so multiple seeds compete over the same tiny region.
+        RegionSolveInput input = new RegionSolveInput(graph, tinyGrid, new RegionPos(0, 0), Map.of(), 99L, 64, 20);
+
+        RegionSolveResult result = RegionSolver.solve(input);
+
+        assertEquals(Set.copyOf(result.warnings()).size(), result.warnings().size(), "no fallback warning should repeat for the same seed");
+        assertTrue(result.warnings().size() <= 16, "at most one fallback per macro-cell (16 here), never more");
     }
 
     @Test
