@@ -71,7 +71,7 @@ public final class RegionSolver {
             }
         }
 
-        return new RegionSolveResult(cleanUp(state.assignment, input), List.copyOf(warnings));
+        return new RegionSolveResult(cleanUp(state.assignment, input), List.copyOf(warnings), state.backtrackStepsUsed);
     }
 
     /**

@@ -67,6 +67,7 @@ class RegionSolverTest {
 
         assertEquals(first.assignment(), second.assignment());
         assertEquals(first.warnings(), second.warnings());
+        assertEquals(first.backtrackStepsUsed(), second.backtrackStepsUsed());
     }
 
     @Test
@@ -135,6 +136,7 @@ class RegionSolverTest {
 
         assertEquals(Set.copyOf(result.warnings()).size(), result.warnings().size(), "no fallback warning should repeat for the same seed");
         assertTrue(result.warnings().size() <= 16, "at most one fallback per macro-cell (16 here), never more");
+        assertTrue(result.backtrackStepsUsed() <= 20, "backtrackStepsUsed must respect the configured cap (20 here)");
     }
 
     @Test
