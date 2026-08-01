@@ -5,12 +5,13 @@ import java.util.List;
 
 /**
  * The macro-cell/solve-region grid the constraint solver operates on. See
- * doc/ARCHITECTURE.md "Decided" — 128-block cells, 16x16-cell regions are
- * placeholders to be tuned from logged solve output, not derived here.
+ * doc/ARCHITECTURE.md "Decided" — 64-block (4x4 chunk) cells, 16x16-cell
+ * regions are placeholders tuned from live testing (128-block cells read
+ * as far too coarse in-game), not derived here.
  */
 public record MacroGridConfig(int macroCellSizeBlocks, int regionSizeCellsPerSide) {
 
-    public static final MacroGridConfig DEFAULT = new MacroGridConfig(128, 16);
+    public static final MacroGridConfig DEFAULT = new MacroGridConfig(64, 16);
 
     public MacroGridConfig {
         if (macroCellSizeBlocks <= 0) {

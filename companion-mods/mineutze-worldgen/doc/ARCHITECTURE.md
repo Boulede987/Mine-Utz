@@ -12,9 +12,10 @@ infinite world.
 
 **Fix: solve in cached regions, not globally.**
 
-- Split the world into **macro-cells**: 128x128 block squares. This is the
-  grid the constraint solver operates on (not the same as chunks).
-- Group macro-cells into **solve-regions**: 16x16 macro-cells = 2048x2048
+- Split the world into **macro-cells**: 64x64 block squares (4x4 chunks).
+  This is the grid the constraint solver operates on (not the same as
+  chunks).
+- Group macro-cells into **solve-regions**: 16x16 macro-cells = 1024x1024
   blocks. A solve-region is the unit of work: solved once, cached to disk,
   never resolved.
 - **Never force-solve a neighbor to solve this region.** Earlier draft of
@@ -126,9 +127,10 @@ hand-roll the Anvil region-file format ourselves.
 
 ## Decided
 
-- Macro-cell size: 128 blocks. Solve-region: 16x16 cells (2048x2048 blocks).
-  Not proven against desired biome sizes yet — will tune from logged
-  region-solve output (actual biome widths produced) instead of upfront math.
+- Macro-cell size: 64 blocks (4x4 chunks). Solve-region: 16x16 cells
+  (1024x1024 blocks). Started at 128 blocks; live in-game testing showed
+  that read as far too coarse, so cut in half. Still a placeholder —
+  further tuning comes from logged region-solve output, not upfront math.
 - Backtracking never relaxes a constraint. On conflict, try a different
   biome candidate first, then backtrack to an earlier seed decision.
   Requires the biome graph to have a universal-filler node so backtracking

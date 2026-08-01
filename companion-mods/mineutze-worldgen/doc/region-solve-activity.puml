@@ -1,5 +1,5 @@
 @startuml
-title Solving one region (2048x2048 blocks, 16x16 macro-cells)
+title Solving one region (1024x1024 blocks, 16x16 macro-cells)
 
 start
 :Chunk request lands in\nan unsolved region;
