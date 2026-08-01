@@ -46,17 +46,20 @@ tasks.register('deployMod', Copy) {
     rename { "mineutze-worldgen-${project.version}.jar" }
 }
 
-// Wipes the DEV_TEST PrismLauncher instance's mods folder and deploys only this
-// mod there - for testing in isolation from the full modpack, where another
-// worldgen mod's own datapack overrides (e.g. Tectonic also shipping a
+// Deploys only this mod's jar into the DEV_TEST PrismLauncher instance's mods
+// folder, alongside the debug/utility mods already installed there by hand -
+// for testing in isolation from the full modpack, where another worldgen
+// mod's own datapack overrides (e.g. Tectonic also shipping a
 // noise_settings/overworld.json - datapacks replace that file wholesale, they
 // don't merge) can produce symptoms that look like our own bugs but aren't.
+// Only deletes this mod's own previously-deployed jar (name-matched), never
+// the whole folder - the other installed mods must survive redeploys.
 def devTestModsDir = '../../../DEV_TEST/minecraft/mods'
 
 tasks.register('deployToDevTest', Copy) {
     dependsOn jar
     doFirst {
-        delete fileTree(devTestModsDir)
+        delete fileTree(devTestModsDir) { include 'mineutze-worldgen-*.jar' }
     }
     from jar.outputs
     into devTestModsDir
