@@ -5,6 +5,7 @@ import com.mineutze.worldgen.biomegraph.BiomeId;
 
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.BiConsumer;
 
 /**
  * In-memory, seed-only region cache. Density function evaluation only gets
@@ -26,14 +27,33 @@ public final class SeedRegionCache {
     private final long worldSeed;
     private final int seedSpacingBlocks;
     private final int backtrackDepthCap;
+    private final BiConsumer<RegionPos, RegionSolveResult> onRegionSolved;
     private final Map<RegionPos, RegionSolveResult> solved = new ConcurrentHashMap<>();
 
     public SeedRegionCache(BiomeGraph graph, MacroGridConfig gridConfig, long worldSeed, int seedSpacingBlocks, int backtrackDepthCap) {
+        this(graph, gridConfig, worldSeed, seedSpacingBlocks, backtrackDepthCap, (region, result) -> { });
+    }
+
+    /**
+     * @param onRegionSolved called exactly once per region, right after it's
+     *                       newly solved (never on a cache hit) — this
+     *                       module stays framework-free on purpose (no
+     *                       logging library dependency), so the mod layer
+     *                       supplies its own logger here for visibility
+     *                       into what's actually happening during world
+     *                       generation, e.g. which region is slow or
+     *                       stuck, or how often the filler fallback fires
+     */
+    public SeedRegionCache(
+        BiomeGraph graph, MacroGridConfig gridConfig, long worldSeed, int seedSpacingBlocks, int backtrackDepthCap,
+        BiConsumer<RegionPos, RegionSolveResult> onRegionSolved
+    ) {
         this.graph = graph;
         this.gridConfig = gridConfig;
         this.worldSeed = worldSeed;
         this.seedSpacingBlocks = seedSpacingBlocks;
         this.backtrackDepthCap = backtrackDepthCap;
+        this.onRegionSolved = onRegionSolved;
     }
 
     public BiomeId biomeAt(MacroCellPos cell) {
@@ -57,6 +77,8 @@ public final class SeedRegionCache {
             }
         );
         RegionSolveInput input = new RegionSolveInput(graph, gridConfig, region, fixedBoundary, worldSeed, seedSpacingBlocks, backtrackDepthCap);
-        return RegionSolver.solve(input);
+        RegionSolveResult result = RegionSolver.solve(input);
+        onRegionSolved.accept(region, result);
+        return result;
     }
 }

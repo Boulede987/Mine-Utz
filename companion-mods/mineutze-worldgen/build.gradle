@@ -3,9 +3,8 @@ plugins {
     id 'java'
 }
 
-// Needed so worldgen-core's `jar` task exists by the time this script
-// configures its own `jar` task below (cross-project task lookup during
-// configuration otherwise races the subproject's plugin application).
+// Needed so jar{}'s reference to worldgen-core's sourceSets below sees it
+// already configured, not an empty/not-yet-evaluated project.
 evaluationDependsOn(':worldgen-core')
 
 version = '1.0.0'
@@ -28,14 +27,12 @@ dependencies {
 }
 
 jar {
-    // worldgen-core has zero external dependencies of its own, so merging its
-    // compiled classes straight in is enough - no shading/relocation needed.
-    // Without this, `implementation project(':worldgen-core')` only puts it on
-    // the dev-time classpath; the shipped jar silently omits it and crashes
-    // with NoClassDefFoundError the moment anything in that package loads.
-    dependsOn(':worldgen-core:jar')
-    from(zipTree(project(':worldgen-core').tasks.named('jar').get().archiveFile))
-
+    // NeoForge mod jars are standalone - Minecraft only loads this one file from
+    // the mods folder, it doesn't resolve sibling Gradle subprojects at runtime.
+    // implementation project(':worldgen-core') only puts it on the classpath for
+    // dev-environment runs (./gradlew runServer etc). Without this, worldgen-core's
+    // classes are simply missing at runtime -> NoClassDefFoundError on level load.
+    from project(':worldgen-core').sourceSets.main.output
     manifest {
         attributes(['Implementation-Version': project.version])
     }

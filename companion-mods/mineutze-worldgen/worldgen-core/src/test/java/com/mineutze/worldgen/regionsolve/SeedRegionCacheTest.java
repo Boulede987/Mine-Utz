@@ -5,6 +5,7 @@ import com.mineutze.worldgen.biomegraph.BiomeGraph;
 import com.mineutze.worldgen.biomegraph.BiomeId;
 import org.junit.jupiter.api.Test;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -93,5 +94,21 @@ class SeedRegionCacheTest {
 
         assertEquals(viaResultFor, viaBiomeAt);
         assertNotNull(viaBiomeAt);
+    }
+
+    @Test
+    void onRegionSolvedFiresExactlyOncePerRegionNeverOnACacheHit() {
+        List<RegionPos> solvedRegions = new ArrayList<>();
+        SeedRegionCache cache = new SeedRegionCache(
+            smallGraph(), MacroGridConfig.DEFAULT, 9L, 300, 20,
+            (region, result) -> solvedRegions.add(region)
+        );
+        RegionPos region = new RegionPos(1, 1);
+
+        cache.resultFor(region);
+        cache.resultFor(region);
+        cache.biomeAt(new MacroCellPos(1 * MacroGridConfig.DEFAULT.regionSizeCellsPerSide(), 1 * MacroGridConfig.DEFAULT.regionSizeCellsPerSide()));
+
+        assertEquals(List.of(region), solvedRegions, "callback must fire exactly once, only for the actual solve");
     }
 }
