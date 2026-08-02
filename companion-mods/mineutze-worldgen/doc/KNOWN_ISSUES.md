@@ -222,6 +222,25 @@ a test that didn't mirror that ordering hit it immediately. Documented as an
 explicit precondition on `PatchOpener.openThinProtrusions` rather than
 defensively working around it.
 
+**Follow-up, found in real game data (not synthetic export output) once the
+new `/mineutzeworldgen exportbiomes` command could scan an actually-
+generated world**: a lone forest cell dangling off a solid mass, with
+exactly `MIN_COHESION_TO_OPEN` (2) Moore-neighbors of support — one
+orthogonal contact plus its one diagonal, nothing more. Erosion correctly
+identified it as a spur (not part of any full 2x2), but re-dilation
+reclaimed it right back using the biome's own normal cohesion threshold,
+same bare minimum a genuine spur needs to have been flagged in the first
+place. Fixed: re-dilation now runs against a stricter-cohesion view of the
+graph (`PatchOpener.stricterCohesion`, +1 Moore-neighbor for every opened
+biome, biomes exempt from opening left untouched) instead of the biome's
+own profile — a confirmed ordinary blob boundary scores 3 on re-dilation
+(see `GrowthEngine.satisfiesCohesion`'s doc), so requiring one more than the
+opened threshold blocks the bare-minimum reattachment without blocking real
+regrowth. Measured on the same seed-42 export: spur count 113 → 91 (a real
+~19% reduction, well past the ~1% the plain fixed-point loop achieved on its
+own). `PatchOpenerTest`'s protrusion case now asserts the exact two cells
+that regrew in the live-game report stay gone.
+
 Measured effect is real but narrower than hoped — see open item #1 above:
 solves short tendrils, does much less for long seams between two patches.
 

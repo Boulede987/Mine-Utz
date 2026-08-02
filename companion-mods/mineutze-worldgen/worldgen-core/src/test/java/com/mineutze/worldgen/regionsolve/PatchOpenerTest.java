@@ -28,11 +28,13 @@ class PatchOpenerTest {
      * Reproduces the exact in-game shape reported: a solid 3x3 forest block with a
      * 4-cell "peninsula" trailing off it (1,2)-(1,3)-(1,4)-(2,4). Every peninsula cell
      * has Moore-neighborhood same-biome count >= 2 (the old, insufficient check) but
-     * none belongs to a full 2x2 forest square, so all 4 erode. Re-dilation may
-     * legitimately reclaim the 1-2 cells immediately touching the solid block (that's
-     * just normal blob-edge growth once the long finger is gone) but must not let the
-     * far tip regrow - a length-4 single-file protrusion is exactly what this exists
-     * to remove.
+     * none belongs to a full 2x2 forest square, so all 4 erode. (1,2) and (1,3) each
+     * have EXACTLY 2 Moore-neighbors of support from the solid block (one orthogonal
+     * contact plus its one diagonal) - re-dilation's stricter cohesion (opened
+     * threshold + 1) must refuse to reclaim them on that alone; a real ordinary blob
+     * boundary scores 3. This is the exact case a live-game export caught after the
+     * first version of this class shipped: those two cells regrew right back even
+     * though the far tip correctly stayed gone.
      */
     @Test
     void trimsALongOneWideProtrusionButKeepsTheSolidCore() {
@@ -59,6 +61,8 @@ class PatchOpenerTest {
         assertEquals(F, assignment.get(new MacroCellPos(3, 1)), "interior of the solid block must survive untouched");
         assertNotEquals(F, assignment.get(new MacroCellPos(1, 4)), "far tip of the 4-long protrusion must not survive or regrow");
         assertNotEquals(F, assignment.get(new MacroCellPos(2, 4)), "far tip of the 4-long protrusion must not survive or regrow");
+        assertNotEquals(F, assignment.get(new MacroCellPos(1, 2)), "a bare 2-neighbor reclaim must not regrow a dangling stub - this exact cell did before the stricter re-dilation fix");
+        assertNotEquals(F, assignment.get(new MacroCellPos(1, 3)), "a bare 2-neighbor reclaim must not regrow a dangling stub - this exact cell did before the stricter re-dilation fix");
     }
 
     @Test

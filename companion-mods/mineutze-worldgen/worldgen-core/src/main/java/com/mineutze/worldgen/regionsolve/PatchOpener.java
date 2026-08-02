@@ -1,9 +1,14 @@
 package com.mineutze.worldgen.regionsolve;
 
+import com.mineutze.worldgen.biomegraph.AdjacencyRule;
 import com.mineutze.worldgen.biomegraph.BiomeGraph;
 import com.mineutze.worldgen.biomegraph.BiomeId;
+import com.mineutze.worldgen.biomegraph.BiomeNode;
+import com.mineutze.worldgen.biomegraph.GrowthCohesionProfile;
 
+import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -48,11 +53,28 @@ import java.util.Set;
  * {@link #MAX_PASSES} is a sanity cap on top of that, same role as
  * {@code BudgetPlanner.MAX_DRAWS} — not expected to ever bind given the
  * strictly-decreasing check already terminates first in every case tried.
+ *
+ * Re-dilation uses a {@link #stricterCohesion stricter-cohesion} view of the
+ * graph (min neighbors +1 for every opened biome), not the biome's own
+ * normal profile — confirmed against real game data that a bare-minimum
+ * reclaim (exactly {@link #MIN_COHESION_TO_OPEN} Moore-neighbors: one
+ * orthogonal contact plus its one diagonal, nothing more) regrows exactly
+ * the kind of short dangling finger this class exists to remove, even
+ * though it isn't a full 2x2 and even though erosion correctly identified
+ * it as a spur in the first place. A confirmed round blob boundary normally
+ * scores 3 Moore-neighbors on re-dilation (see
+ * {@link GrowthEngine#satisfiesCohesion}'s own doc for the worked example),
+ * so requiring one more than the opened threshold
+ * blocks the bare-minimum reattachment without blocking ordinary regrowth.
+ * A cell too weakly connected to clear that bar simply stays unclaimed and
+ * falls to {@link GapFiller}'s own filler fallback — same "never force"
+ * behavior as everywhere else in this pipeline, not a special case.
  */
 final class PatchOpener {
 
     private static final int MIN_COHESION_TO_OPEN = 2;
     private static final int MAX_PASSES = 50;
+    private static final int REDILATION_EXTRA_COHESION = 1;
 
     private PatchOpener() {
     }
@@ -66,6 +88,7 @@ final class PatchOpener {
      * from an unassigned cell.
      */
     static void openThinProtrusions(Map<MacroCellPos, BiomeId> assignment, Set<MacroCellPos> regionCellSet, BiomeGraph graph, long worldSeed) {
+        BiomeGraph redilationGraph = stricterCohesion(graph);
         int previousSpurCount = Integer.MAX_VALUE;
         for (int pass = 0; pass < MAX_PASSES; pass++) {
             Set<MacroCellPos> spurs = findSpurs(assignment, regionCellSet, graph);
@@ -74,8 +97,43 @@ final class PatchOpener {
             }
             previousSpurCount = spurs.size();
             spurs.forEach(assignment::remove);
-            GapFiller.fillGaps(assignment, regionCellSet, graph, worldSeed);
+            GapFiller.fillGaps(assignment, regionCellSet, redilationGraph, worldSeed);
         }
+    }
+
+    /**
+     * Same nodes/rules as {@code graph}, but every opened biome's cohesion profile
+     * requires {@link #REDILATION_EXTRA_COHESION} more Moore-neighbors than usual.
+     * A biome exempt from opening (below {@link #MIN_COHESION_TO_OPEN}) is left
+     * exactly as-is - it never had spurs removed in the first place, so nothing
+     * about it should reclaim any differently than normal {@link GapFiller} would.
+     */
+    private static BiomeGraph stricterCohesion(BiomeGraph graph) {
+        List<BiomeId> ids = graph.nodes().stream().map(BiomeNode::id).sorted().toList();
+
+        List<BiomeNode> stricterNodes = new ArrayList<>();
+        for (BiomeId id : ids) {
+            BiomeNode node = graph.node(id);
+            GrowthCohesionProfile cohesion = node.cohesionProfile();
+            GrowthCohesionProfile stricter = cohesion.minSameBiomeNeighbors() < MIN_COHESION_TO_OPEN
+                ? cohesion
+                : new GrowthCohesionProfile(
+                    Math.min(8, cohesion.minSameBiomeNeighbors() + REDILATION_EXTRA_COHESION),
+                    cohesion.directionalRunMajor(), cohesion.directionalRunMinor()
+                );
+            stricterNodes.add(new BiomeNode(node.id(), node.sizeRange(), node.shapeHints(), node.featureToggles(), node.universalFiller(), stricter));
+        }
+
+        List<AdjacencyRule> rules = new ArrayList<>();
+        for (int i = 0; i < ids.size(); i++) {
+            for (int j = i + 1; j < ids.size(); j++) {
+                if (graph.isAllowed(ids.get(i), ids.get(j))) {
+                    rules.add(graph.rule(ids.get(i), ids.get(j)));
+                }
+            }
+        }
+
+        return new BiomeGraph(stricterNodes, rules);
     }
 
     private static Set<MacroCellPos> findSpurs(Map<MacroCellPos, BiomeId> assignment, Set<MacroCellPos> regionCellSet, BiomeGraph graph) {
