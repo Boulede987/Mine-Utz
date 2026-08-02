@@ -5,10 +5,17 @@
 // for the whole test task.
 plugins {
     id 'java'
+    id 'application'
 }
 
 java {
     toolchain.languageVersion = JavaLanguageVersion.of(21)
+}
+
+application {
+    // Standalone region-solve export (PNG/ASCII/JSON) — run with:
+    //   ./gradlew :worldgen-core:run --args="<worldSeed> <regionSpan> <outputDir>"
+    mainClass = 'com.mineutze.worldgen.export.ExportCli'
 }
 
 repositories {

@@ -1,6 +1,7 @@
 package com.mineutze.worldgen.integration;
 
 import com.mineutze.worldgen.biomegraph.BiomeId;
+import com.mineutze.worldgen.biomegraph.ModBiomeGraph;
 import com.mineutze.worldgen.regionsolve.MacroCellPos;
 import com.mineutze.worldgen.regionsolve.MacroGridConfig;
 import com.mineutze.worldgen.regionsolve.RegionBoundaryCollector;
