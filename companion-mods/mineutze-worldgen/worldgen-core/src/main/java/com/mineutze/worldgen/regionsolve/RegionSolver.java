@@ -32,7 +32,9 @@ import java.util.stream.Collectors;
  * placement alone can't guarantee: full coverage, no thin one-cell-wide
  * spurs, each patch's own minimum size, and — for forced separators between
  * biome pairs with no direct adjacency rule at all — an organic edge instead
- * of a straight wall.
+ * of a straight wall. {@link SeamWidener} exists for a locally-pinched seam
+ * inside an otherwise large patch but isn't wired in yet — see
+ * doc/KNOWN_ISSUES.md.
  */
 public final class RegionSolver {
 
@@ -158,6 +160,12 @@ public final class RegionSolver {
 
         GapFiller.fillGaps(workingAssignment, regionCellSet, input.graph(), input.worldSeed());
         PatchOpener.openThinProtrusions(workingAssignment, regionCellSet, input.graph(), input.worldSeed());
+        // SeamWidener.widenNarrowSeams intentionally NOT wired in yet - see
+        // doc/KNOWN_ISSUES.md. Measured on real output: widens the specific pinch it
+        // targets, but SeparatorWidener's isotropic (centroid-nearest) growth has no
+        // sense of "away from the incompatible pair" and can encroach on a THIRD,
+        // unrelated biome instead, making a different pair's distance worse (measured:
+        // forest/badlands and ocean/badlands both went from 2 cells apart to 1).
         PatchSizeEnforcer.enforceMinimumPatchSize(workingAssignment, regionCellSet, input.gridConfig(), input.graph());
         SeparatorOrganicizer.organicizeThinSeparators(workingAssignment, regionCellSet, input.gridConfig(), input.graph(), input.worldSeed());
 

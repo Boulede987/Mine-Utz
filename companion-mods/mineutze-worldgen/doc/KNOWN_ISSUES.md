@@ -7,6 +7,38 @@ Ordered roughly by visual/structural impact, not urgency.
 
 ## Open
 
+### -1. `SeamWidener` exists but isn't wired in — undirected widening can worsen a different pair
+Built to fix item #1's "long seam" case: a giant, otherwise-adequately-sized
+buffer patch (typically filler) can still have one local spot pinched thin
+where it happens to sit between two mutually-incompatible neighbors, which
+neither `PatchOpener` (checks the buffer's OWN shape, blind to what's on
+either side of it) nor `PatchSizeEnforcer`/`SeparatorWidener` (checks the
+WHOLE component's total size, blind to local width) catch. `SeamWidener`
+finds cells whose small neighborhood contains an incompatible pair neither
+of which is that cell's own biome, clusters them, and widens each cluster
+with `SeparatorWidener.widen` - same steal-cells/preserve-legality/preserve-
+connectivity mechanism already used elsewhere.
+
+Measured on a real 9-region export (seed 42), it does what it says for the
+pair it targets, but `SeparatorWidener.widen`'s growth is isotropic
+(nearest-to-centroid, no concept of "away from the incompatible pair") - if
+the widened cluster's biome also happens to sit near a THIRD, unrelated
+biome in some direction, growth can encroach on that one instead. Minimum
+approach distance between every incompatible pair, before -> after enabling
+`SeamWidener`: most unchanged or improved (savanna/ocean 6->8), but two got
+*worse* - forest/badlands 2->1, ocean/badlands 2->1 (down to touching-
+distance). Not caught by `SeamWidenerTest` because its fixtures only ever
+have one incompatible pair present; the interaction needs 3+ biomes in
+range of each other to show up.
+
+Currently disabled (`RegionSolver.cleanUp` has the call commented out) -
+code and tests are in place (`SeamWidener.java`, `SeamWidenerTest.java`),
+but it's not safe to wire in until the widening direction accounts for
+every nearby incompatible biome, not just the one pair that triggered the
+pinch in the first place. Likely fix: bias `SeparatorWidener`'s frontier
+order (or a variant used only here) toward cells that increase distance
+from EVERY nearby incompatible biome, not just nearest-to-centroid.
+
 ### 0. `GrowthCohesionProfile.directionalRunMajor/Minor` deadlocks whenever minor >= 2
 Per-biome shape identity (`GrowthCohesionProfile`, `BiomeNode.cohesionProfile()`):
 lets a biome require a minimum count of already-claimed same-biome neighbors to
