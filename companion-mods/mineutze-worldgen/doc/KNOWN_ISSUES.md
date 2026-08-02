@@ -7,7 +7,7 @@ Ordered roughly by visual/structural impact, not urgency.
 
 ## Open
 
-### -1. `SeamWidener` exists but isn't wired in — undirected widening can worsen a different pair
+### -1. [CURRENT FOCUS] `SeamWidener` exists but isn't wired in — undirected widening can worsen a different pair
 Built to fix item #1's "long seam" case: a giant, otherwise-adequately-sized
 buffer patch (typically filler) can still have one local spot pinched thin
 where it happens to sit between two mutually-incompatible neighbors, which
@@ -18,6 +18,34 @@ finds cells whose small neighborhood contains an incompatible pair neither
 of which is that cell's own biome, clusters them, and widens each cluster
 with `SeparatorWidener.widen` - same steal-cells/preserve-legality/preserve-
 connectivity mechanism already used elsewhere.
+
+**The shape, reported directly (o=ocean, b=badlands, .=plains buffer, x=the
+exact pinch cells — reproduced verbatim as `SeamWidenerTest`'s
+`widensALocallyPinchedSeamBetweenIncompatibleBiomes` fixture):**
+
+```
+..bbb
+..bbb
+.xbbb
+ox...
+o....
+```
+
+Ocean and badlands have no `AdjacencyRule` (default-deny — mutually
+incompatible), so they can never touch directly; that part is correctly
+enforced everywhere, always 0 illegal adjacencies measured. The problem is
+purely the WIDTH of the plains buffer: 2 cells everywhere except at the `x`
+pinch, where it narrows to 1 — and each `x` cell still individually has 3+
+Moore same-biome neighbors from the wider buffer just above it, so neither
+`PatchOpener` nor a per-cell cohesion check ever flags it. The whole plains
+region this pinch belongs to can easily be thousands of cells (it's the
+universal filler), miles past its own declared minimum size — so
+`PatchSizeEnforcer` doesn't flag it either. Nothing in the pipeline
+currently asks "is the buffer wide enough AT THIS SPECIFIC SPOT," only
+"is this patch big enough overall" or "is this cell part of a locally
+chunky shape of its OWN biome" — this pinch passes both of those and still
+looks like a hairline crack between two biomes that were never supposed to
+get this close.
 
 Measured on a real 9-region export (seed 42), it does what it says for the
 pair it targets, but `SeparatorWidener.widen`'s growth is isotropic
@@ -88,10 +116,9 @@ technique that works for tendrils (a 2x2-completion requirement) isn't
 strong enough to un-stick a seam that's mutually reinforced from both sides.
 
 Two structurally different problems were sharing the "corridor" label. Short
-tendril off one blob: solved. Long seam between two blobs: still open — was
-about to be investigated as a follow-up (possibly a stronger structuring
-element, or a dedicated seam-width pass distinct from `PatchOpener`) when
-this doc entry was written.
+tendril off one blob: mostly solved (re-dilation tightened further since —
+see "Fixed" below), deprioritized past this point. Long seam between two
+blobs: promoted to item -1's `SeamWidener` work, current focus.
 
 ### 2. Hard straight-line seam at every region boundary
 Patches stop dead at the 2048-block region edge instead of curving across
