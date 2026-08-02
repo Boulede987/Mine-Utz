@@ -59,13 +59,32 @@ distance). Not caught by `SeamWidenerTest` because its fixtures only ever
 have one incompatible pair present; the interaction needs 3+ biomes in
 range of each other to show up.
 
-Currently disabled (`RegionSolver.cleanUp` has the call commented out) -
-code and tests are in place (`SeamWidener.java`, `SeamWidenerTest.java`),
-but it's not safe to wire in until the widening direction accounts for
-every nearby incompatible biome, not just the one pair that triggered the
-pinch in the first place. Likely fix: bias `SeparatorWidener`'s frontier
-order (or a variant used only here) toward cells that increase distance
-from EVERY nearby incompatible biome, not just nearest-to-centroid.
+**Second attempt, also reverted — regressed WORSE than the first.** Gave
+`SeparatorWidener.widen` a `repelFrom` parameter (cells to steer away from,
+not just toward the component's centroid) and had `SeamWidener` pass the
+union of every incompatible-pair member found across the whole pinch
+cluster's own detection window, not just the one pair that flagged the
+first cell. Backward compatible (empty set = old behavior, `PatchSizeEnforcer`
+unaffected), all tests passed, but measured on the same real export: **4
+pairs** regressed to touching-distance (savanna/forest, savanna/badlands,
+forest/badlands, badlands/ocean), worse than the first attempt's 2.
+
+Root cause of the second failure: the repulsion set is computed ONCE, up
+front, from cells within `PINCH_RADIUS` (2) of the ORIGINAL pinch cluster —
+but `widen()` can grow that cluster up to `MIN_SEAM_WIDTH_CELLS` (9) cells
+outward, easily reaching biomes that were never inside the radius-2 window
+when the repulsion set was built. A static precomputed "avoid list" can't
+account for what growth encounters partway through.
+
+Currently disabled again (`RegionSolver.cleanUp` has the call commented
+out) — code and tests are in place (`SeamWidener.java`,
+`SeparatorWidener.widen`'s `repelFrom` param, `SeamWidenerTest.java`), but
+neither attempt is safe to ship. Needs a fundamentally different check, not
+a third tuning pass on the same "precompute avoid list, then BFS" shape:
+re-evaluate safety at EVERY candidate cell during growth (is claiming this
+cell now the closest approach between any two incompatible biomes anywhere
+nearby, checked fresh, not against a set frozen at the start) rather than
+biasing a BFS toward a fixed target computed once.
 
 ### 0. `GrowthCohesionProfile.directionalRunMajor/Minor` deadlocks whenever minor >= 2
 Per-biome shape identity (`GrowthCohesionProfile`, `BiomeNode.cohesionProfile()`):

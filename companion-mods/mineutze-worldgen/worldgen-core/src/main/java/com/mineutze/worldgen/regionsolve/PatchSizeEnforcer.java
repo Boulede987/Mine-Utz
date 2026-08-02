@@ -57,7 +57,7 @@ final class PatchSizeEnforcer {
             if (mergeTarget.isPresent()) {
                 component.forEach(cell -> assignment.put(cell, mergeTarget.get()));
             } else {
-                SeparatorWidener.widen(component, biome, minCells, assignment, regionCellSet, graph);
+                SeparatorWidener.widen(component, biome, minCells, assignment, regionCellSet, graph, Set.of());
             }
         }
     }

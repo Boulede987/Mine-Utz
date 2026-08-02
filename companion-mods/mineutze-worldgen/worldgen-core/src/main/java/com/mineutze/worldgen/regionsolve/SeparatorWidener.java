@@ -42,16 +42,27 @@ final class SeparatorWidener {
     private SeparatorWidener() {
     }
 
+    /**
+     * @param repelFrom cells to actively grow AWAY from, not just toward the
+     *                  component's own centroid — {@link SeamWidener}'s use case:
+     *                  widening a locally-pinched buffer must not drift toward a
+     *                  THIRD, unrelated incompatible biome just because it happens
+     *                  to be nearest-to-centroid. Empty set (every other caller,
+     *                  e.g. {@link PatchSizeEnforcer}) is exactly today's plain
+     *                  centroid-only behavior — this is an additive capability,
+     *                  not a rewrite. See {@link #frontierOrder}.
+     */
     static void widen(
         Set<MacroCellPos> component, BiomeId ownBiome, int targetMinCells,
-        Map<MacroCellPos, BiomeId> assignment, Set<MacroCellPos> regionCellSet, BiomeGraph graph
+        Map<MacroCellPos, BiomeId> assignment, Set<MacroCellPos> regionCellSet, BiomeGraph graph,
+        Set<MacroCellPos> repelFrom
     ) {
         if (component.size() >= targetMinCells) {
             return;
         }
 
         Set<MacroCellPos> claimed = new LinkedHashSet<>(component);
-        TreeSet<MacroCellPos> frontier = new TreeSet<>(frontierOrder(centroidOf(component)));
+        TreeSet<MacroCellPos> frontier = new TreeSet<>(frontierOrder(centroidOf(component), repelFrom));
         addUnclaimedNeighbors(component, claimed, regionCellSet, frontier);
 
         while (claimed.size() < targetMinCells && !frontier.isEmpty()) {
@@ -69,20 +80,36 @@ final class SeparatorWidener {
     }
 
     /**
-     * Distance from the undersized patch's own centroid (fixed at the start of one
-     * widen() call, not recomputed as cells get claimed) — same "grow round, not
-     * toward wherever the frontier happens to sort first" fix {@link GrowthEngine}
-     * already applies via its own seed-distance ordering. Without this, the plain
-     * coordinate-order TreeSet claimed whichever legal cell sorted first by (x, z),
-     * which systematically extends in one direction — every separator this widens
-     * came out a long snake, not a blob, even once it hit its own declared minimum
-     * size (reported as "tunnels, not patches" from in-game testing).
+     * Primary key is distance AWAY from every {@code repelFrom} cell (negated, so
+     * the farthest candidate sorts first) — 0 when {@code repelFrom} is empty, which
+     * makes this degenerate to pure centroid-distance order, unchanged from before
+     * this parameter existed. Secondary key is distance from the undersized patch's
+     * own centroid (fixed at the start of one widen() call, not recomputed as cells
+     * get claimed) — same "grow round, not toward wherever the frontier happens to
+     * sort first" fix {@link GrowthEngine} already applies via its own seed-distance
+     * ordering. Without ANY distance ordering at all, the plain coordinate-order
+     * TreeSet claimed whichever legal cell sorted first by (x, z), which
+     * systematically extends in one direction — every separator this widens came
+     * out a long snake, not a blob, even once it hit its own declared minimum size
+     * (reported as "tunnels, not patches" from in-game testing).
      */
-    private static Comparator<MacroCellPos> frontierOrder(MacroCellPos centroid) {
+    private static Comparator<MacroCellPos> frontierOrder(MacroCellPos centroid, Set<MacroCellPos> repelFrom) {
         return Comparator
-            .comparingLong((MacroCellPos cell) -> cell.distanceSquaredTo(centroid))
+            .comparingLong((MacroCellPos cell) -> -minDistanceSquaredTo(cell, repelFrom))
+            .thenComparingLong((MacroCellPos cell) -> cell.distanceSquaredTo(centroid))
             .thenComparingInt(MacroCellPos::x)
             .thenComparingInt(MacroCellPos::z);
+    }
+
+    private static long minDistanceSquaredTo(MacroCellPos cell, Set<MacroCellPos> repelFrom) {
+        if (repelFrom.isEmpty()) {
+            return 0;
+        }
+        long min = Long.MAX_VALUE;
+        for (MacroCellPos source : repelFrom) {
+            min = Math.min(min, cell.distanceSquaredTo(source));
+        }
+        return min;
     }
 
     private static MacroCellPos centroidOf(Set<MacroCellPos> component) {

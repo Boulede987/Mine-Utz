@@ -115,7 +115,7 @@ class SeparatorWidenerTest {
         }
 
         Set<MacroCellPos> fillerComponent = Set.of(new MacroCellPos(3, 0));
-        SeparatorWidener.widen(fillerComponent, filler, 5000, assignment, regionCellSet, graph);
+        SeparatorWidener.widen(fillerComponent, filler, 5000, assignment, regionCellSet, graph, Set.of());
 
         long badlandsComponents = countComponents(assignment, regionCellSet, BADLANDS);
         assertTrue(badlandsComponents <= 1, "badlands must stay in one connected piece (or be fully consumed), never split into islands");

@@ -161,11 +161,15 @@ public final class RegionSolver {
         GapFiller.fillGaps(workingAssignment, regionCellSet, input.graph(), input.worldSeed());
         PatchOpener.openThinProtrusions(workingAssignment, regionCellSet, input.graph(), input.worldSeed());
         // SeamWidener.widenNarrowSeams intentionally NOT wired in yet - see
-        // doc/KNOWN_ISSUES.md. Measured on real output: widens the specific pinch it
-        // targets, but SeparatorWidener's isotropic (centroid-nearest) growth has no
-        // sense of "away from the incompatible pair" and can encroach on a THIRD,
-        // unrelated biome instead, making a different pair's distance worse (measured:
-        // forest/badlands and ocean/badlands both went from 2 cells apart to 1).
+        // doc/KNOWN_ISSUES.md. Second attempt (repulsion-set-aware widening) STILL
+        // regresses on real output, and worse than the first attempt: 4 pairs down
+        // to touching-distance instead of 2. The repulsion set is computed once from
+        // the pinch cluster's own PINCH_RADIUS=2 detection window, but widen() can
+        // grow the cluster up to MIN_SEAM_WIDTH_CELLS=9 cells outward - far enough to
+        // reach biomes never considered when the repulsion set was built. Needs a
+        // fundamentally different check (re-evaluate safety at every candidate cell
+        // during growth, not a static precomputed set), not another tuning pass on
+        // this same mechanism.
         PatchSizeEnforcer.enforceMinimumPatchSize(workingAssignment, regionCellSet, input.gridConfig(), input.graph());
         SeparatorOrganicizer.organicizeThinSeparators(workingAssignment, regionCellSet, input.gridConfig(), input.graph(), input.worldSeed());
 

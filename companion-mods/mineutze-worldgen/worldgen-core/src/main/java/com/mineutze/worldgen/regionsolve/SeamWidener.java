@@ -33,6 +33,16 @@ import java.util.Set;
  * connectivity mechanism {@link PatchSizeEnforcer} already uses for
  * whole undersized separator patches — just re-targeted at a local
  * pinch instead of an entire component.
+ *
+ * First version passed an empty repulsion set (plain centroid-distance
+ * growth) — measured on a real export: it widened the targeted pair fine,
+ * but growth could drift toward a THIRD, unrelated incompatible biome
+ * instead, making a different pair's approach distance worse (forest/
+ * badlands and ocean/badlands both went from 2 cells apart to 1). Now
+ * passes {@link SeparatorWidener#widen}'s {@code repelFrom} as the union of
+ * every incompatible-pair member found across the WHOLE cluster's pinch
+ * detection, not just the one pair that flagged any single cell — growth
+ * steers away from everything locally relevant at once.
  */
 final class SeamWidener {
 
@@ -55,25 +65,60 @@ final class SeamWidener {
 
         for (Set<MacroCellPos> cluster : clusters) {
             BiomeId biome = assignment.get(cluster.iterator().next());
-            SeparatorWidener.widen(cluster, biome, MIN_SEAM_WIDTH_CELLS, assignment, regionCellSet, graph);
+            Set<BiomeId> repulsionBiomes = incompatibleBiomesNear(cluster, assignment, graph);
+            Set<MacroCellPos> repelFrom = cellsOfBiomes(assignment, repulsionBiomes);
+            SeparatorWidener.widen(cluster, biome, MIN_SEAM_WIDTH_CELLS, assignment, regionCellSet, graph, repelFrom);
         }
     }
 
     private static Set<MacroCellPos> findPinchCells(Map<MacroCellPos, BiomeId> assignment, Set<MacroCellPos> regionCellSet, BiomeGraph graph) {
         Set<MacroCellPos> pinch = new HashSet<>();
         for (MacroCellPos cell : regionCellSet) {
-            if (isPinchCell(cell, assignment, graph)) {
+            if (!incompatiblePairsNear(cell, assignment, graph).isEmpty()) {
                 pinch.add(cell);
             }
         }
         return pinch;
     }
 
-    /** True if two mutually-incompatible biomes, both different from this cell's own, both appear within PINCH_RADIUS of it. */
-    private static boolean isPinchCell(MacroCellPos cell, Map<MacroCellPos, BiomeId> assignment, BiomeGraph graph) {
+    /**
+     * Every biome (from anywhere in the cluster's own pinch detection, not just
+     * whichever single cell/pair was found first) that must be widened away from —
+     * the actual fix for the measured regression: undirected widening previously
+     * only knew about the ONE pair that triggered a given cell, so growth could
+     * still drift toward a THIRD, unrelated incompatible biome nearby. Unioning
+     * every incompatible-pair member detected across the whole cluster means
+     * nothing locally relevant is left out of what growth steers away from.
+     */
+    private static Set<BiomeId> incompatibleBiomesNear(Set<MacroCellPos> cluster, Map<MacroCellPos, BiomeId> assignment, BiomeGraph graph) {
+        Set<BiomeId> repulsion = new HashSet<>();
+        for (MacroCellPos cell : cluster) {
+            for (UnorderedBiomePair pair : incompatiblePairsNear(cell, assignment, graph)) {
+                repulsion.add(pair.a());
+                repulsion.add(pair.b());
+            }
+        }
+        return repulsion;
+    }
+
+    private static Set<MacroCellPos> cellsOfBiomes(Map<MacroCellPos, BiomeId> assignment, Set<BiomeId> biomes) {
+        Set<MacroCellPos> cells = new HashSet<>();
+        for (Map.Entry<MacroCellPos, BiomeId> entry : assignment.entrySet()) {
+            if (biomes.contains(entry.getValue())) {
+                cells.add(entry.getKey());
+            }
+        }
+        return cells;
+    }
+
+    private record UnorderedBiomePair(BiomeId a, BiomeId b) {
+    }
+
+    /** Every mutually-incompatible pair, both members different from this cell's own biome, found within PINCH_RADIUS of it. */
+    private static Set<UnorderedBiomePair> incompatiblePairsNear(MacroCellPos cell, Map<MacroCellPos, BiomeId> assignment, BiomeGraph graph) {
         BiomeId ownBiome = assignment.get(cell);
         if (ownBiome == null) {
-            return false;
+            return Set.of();
         }
 
         Set<BiomeId> nearbyBiomes = new HashSet<>();
@@ -86,13 +131,14 @@ final class SeamWidener {
             }
         }
 
+        Set<UnorderedBiomePair> pairs = new HashSet<>();
         for (BiomeId a : nearbyBiomes) {
             for (BiomeId b : nearbyBiomes) {
                 if (!a.equals(b) && !graph.isAllowed(a, b)) {
-                    return true;
+                    pairs.add(a.compareTo(b) <= 0 ? new UnorderedBiomePair(a, b) : new UnorderedBiomePair(b, a));
                 }
             }
         }
-        return false;
+        return pairs;
     }
 }
