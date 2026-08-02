@@ -27,11 +27,12 @@ import java.util.stream.Collectors;
  * subscription from placing a fixed seed grid before knowing what sizes
  * would be needed, not adjacency conflicts).
  *
- * Once every demand has been tried, {@link GapFiller}, {@link PatchSizeEnforcer}
- * and {@link SeparatorOrganicizer} clean up what placement alone can't
- * guarantee: full coverage, each patch's own minimum size, and — for forced
- * separators between biome pairs with no direct adjacency rule at all —
- * an organic edge instead of a straight wall.
+ * Once every demand has been tried, {@link GapFiller}, {@link PatchOpener},
+ * {@link PatchSizeEnforcer} and {@link SeparatorOrganicizer} clean up what
+ * placement alone can't guarantee: full coverage, no thin one-cell-wide
+ * spurs, each patch's own minimum size, and — for forced separators between
+ * biome pairs with no direct adjacency rule at all — an organic edge instead
+ * of a straight wall.
  */
 public final class RegionSolver {
 
@@ -155,7 +156,8 @@ public final class RegionSolver {
         Set<MacroCellPos> regionCellSet = Set.copyOf(input.gridConfig().cellsInRegion(input.region()));
         Map<MacroCellPos, BiomeId> workingAssignment = mergeExternalContext(solvedAssignment, input.fixedBoundaryCells());
 
-        GapFiller.fillGaps(workingAssignment, regionCellSet, input.graph());
+        GapFiller.fillGaps(workingAssignment, regionCellSet, input.graph(), input.worldSeed());
+        PatchOpener.openThinProtrusions(workingAssignment, regionCellSet, input.graph(), input.worldSeed());
         PatchSizeEnforcer.enforceMinimumPatchSize(workingAssignment, regionCellSet, input.gridConfig(), input.graph());
         SeparatorOrganicizer.organicizeThinSeparators(workingAssignment, regionCellSet, input.gridConfig(), input.graph(), input.worldSeed());
 

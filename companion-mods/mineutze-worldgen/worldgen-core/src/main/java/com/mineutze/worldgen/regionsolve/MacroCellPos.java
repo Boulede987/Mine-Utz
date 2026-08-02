@@ -14,6 +14,16 @@ public record MacroCellPos(int x, int z) {
         );
     }
 
+    /** The 4 corner-touching neighbors — orthogonalNeighbors() plus these is the full 8-cell Moore neighborhood. */
+    public List<MacroCellPos> diagonalNeighbors() {
+        return List.of(
+            new MacroCellPos(x + 1, z + 1),
+            new MacroCellPos(x + 1, z - 1),
+            new MacroCellPos(x - 1, z + 1),
+            new MacroCellPos(x - 1, z - 1)
+        );
+    }
+
     public long distanceSquaredTo(MacroCellPos other) {
         long dx = x - other.x;
         long dz = z - other.z;

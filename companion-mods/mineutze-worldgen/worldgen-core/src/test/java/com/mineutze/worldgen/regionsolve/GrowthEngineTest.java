@@ -3,8 +3,10 @@ package com.mineutze.worldgen.regionsolve;
 import com.mineutze.worldgen.biomegraph.AdjacencyRule;
 import com.mineutze.worldgen.biomegraph.BiomeGraph;
 import com.mineutze.worldgen.biomegraph.BiomeId;
+import com.mineutze.worldgen.biomegraph.GrowthCohesionProfile;
 import org.junit.jupiter.api.Test;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -70,5 +72,59 @@ class GrowthEngineTest {
 
         assertTrue(attempt.success());
         assertFalse(attempt.claimedCells().containsKey(new MacroCellPos(1, 0)), "must not claim an externally-assigned cell");
+    }
+
+    /**
+     * A wall of externally-assigned PLAINS (legal next to desert, so isLegal alone
+     * never blocks it) splits the 16x16 region at x=5, with exactly one gap at
+     * (5, 8). Growth must funnel through that single cell to reach the far side.
+     */
+    private static Map<MacroCellPos, BiomeId> wallWithOneGap() {
+        Map<MacroCellPos, BiomeId> wall = new HashMap<>();
+        for (int z = 0; z < 16; z++) {
+            if (z != 8) {
+                wall.put(new MacroCellPos(5, z), PLAINS);
+            }
+        }
+        return wall;
+    }
+
+    @Test
+    void unrestrictedProfileCanSnakeThroughAOneCellGap() {
+        BiomeGraph graph = new BiomeGraph(
+            List.of(
+                node("desert", 100, 900, false, GrowthCohesionProfile.UNRESTRICTED),
+                node("plains", 100, 900, true)
+            ),
+            List.of(AdjacencyRule.allow(PLAINS, DESERT, 10))
+        );
+
+        GrowthEngine.GrowthAttempt attempt = GrowthEngine.attemptGrowth(
+            new MacroCellPos(2, 8), DESERT, 90, 90, REGION, GRID, graph, wallWithOneGap(), WORLD_SEED
+        );
+
+        assertTrue(attempt.success(), "unrestricted growth should be able to squeeze through the 1-cell gap to reach enough cells");
+        assertTrue(attempt.claimedCells().containsKey(new MacroCellPos(6, 8)), "must have crossed to the far side of the wall");
+    }
+
+    @Test
+    void compactProfileRefusesToSnakeThroughAOneCellGap() {
+        GrowthCohesionProfile compact = new GrowthCohesionProfile(2, 0, 0);
+        BiomeGraph graph = new BiomeGraph(
+            List.of(
+                node("desert", 100, 900, false, compact),
+                node("plains", 100, 900, true)
+            ),
+            List.of(AdjacencyRule.allow(PLAINS, DESERT, 10))
+        );
+
+        GrowthEngine.GrowthAttempt attempt = GrowthEngine.attemptGrowth(
+            new MacroCellPos(2, 8), DESERT, 5, 90, REGION, GRID, graph, wallWithOneGap(), WORLD_SEED
+        );
+
+        assertFalse(
+            attempt.claimedCells().containsKey(new MacroCellPos(6, 8)),
+            "a patch requiring 2 same-biome neighbors must never cross a 1-cell-wide gap — the gap cell only ever touches 1 claimed neighbor"
+        );
     }
 }

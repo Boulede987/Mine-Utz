@@ -5,6 +5,7 @@ import com.mineutze.worldgen.biomegraph.BiomeId;
 import com.mineutze.worldgen.biomegraph.BiomeNode;
 import com.mineutze.worldgen.biomegraph.BiomeShapeHints;
 import com.mineutze.worldgen.biomegraph.BiomeSizeRange;
+import com.mineutze.worldgen.biomegraph.GrowthCohesionProfile;
 
 final class TestBiomeNodes {
 
@@ -18,12 +19,17 @@ final class TestBiomeNodes {
     }
 
     static BiomeNode node(String path, int minWidthBlocks, int maxWidthBlocks, boolean universalFiller) {
+        return node(path, minWidthBlocks, maxWidthBlocks, universalFiller, GrowthCohesionProfile.UNRESTRICTED);
+    }
+
+    static BiomeNode node(String path, int minWidthBlocks, int maxWidthBlocks, boolean universalFiller, GrowthCohesionProfile cohesionProfile) {
         return new BiomeNode(
             id(path),
             new BiomeSizeRange(minWidthBlocks, maxWidthBlocks),
             new BiomeShapeHints(0.5, 0.5, 0.5),
             new BiomeFeatureToggles(true, true),
-            universalFiller
+            universalFiller,
+            cohesionProfile
         );
     }
 }

@@ -19,21 +19,37 @@ import java.util.Random;
  * Repeatedly draws a random (biome, target size) pair and adds it to the
  * plan as long as there's room left for it; keeps trying smaller draws
  * even after a big one doesn't fit, until nothing could possibly fit
- * anymore (remaining capacity < the smallest minCells of any node). The
- * result is sorted largest-first: placing big patches while space is
- * still open is what actually gets a good fit (classic bin-packing
- * heuristic) — the reverse order boxes big patches out.
+ * anymore, or the packing target is reached. The result is sorted
+ * largest-first: placing big patches while space is still open is what
+ * actually gets a good fit (classic bin-packing heuristic) — the reverse
+ * order boxes big patches out.
+ *
+ * Deliberately stops short of filling the region to the brim: budgeting
+ * demands up to full capacity left {@link GrowthEngine} nothing but
+ * thin leftover slivers between already-placed patches by the time the
+ * last few demands grew — geometrically, the gap between tightly-packed
+ * blobs IS thin and winding, so a size-targeted flood-fill through it
+ * traces a corridor, not a patch. Capping demand at
+ * {@link #TARGET_PACKING_FRACTION} of capacity leaves real open space
+ * for growth to stay round, and hands the rest to {@link GapFiller}'s
+ * neighbor-majority sweep instead — which has no size target to chase
+ * through a gap, so it blobs outward from existing edges organically.
+ * Placeholder fraction, same as the grid/blend-width constants in
+ * doc/ARCHITECTURE.md — tune from how patch shapes actually look
+ * in-game (or via the export CLI), not upfront math.
  */
 final class BudgetPlanner {
 
     private static final long SALT = 0xB0DE_57A5L;
     private static final int MAX_DRAWS = 10_000;
+    private static final double TARGET_PACKING_FRACTION = 0.72;
 
     private BudgetPlanner() {
     }
 
     static List<PatchDemand> plan(BiomeGraph graph, MacroGridConfig grid, RegionPos region, long worldSeed) {
-        int capacity = grid.regionSizeCellsPerSide() * grid.regionSizeCellsPerSide();
+        int fullCapacity = grid.regionSizeCellsPerSide() * grid.regionSizeCellsPerSide();
+        int capacity = (int) (fullCapacity * TARGET_PACKING_FRACTION);
         List<BiomeId> nodeIds = graph.nodes().stream().map(BiomeNode::id).sorted().toList();
         int smallestMinCells = nodeIds.stream()
             .mapToInt(id -> grid.cellCountForWidthBlocks(graph.node(id).sizeRange().minWidthBlocks()))

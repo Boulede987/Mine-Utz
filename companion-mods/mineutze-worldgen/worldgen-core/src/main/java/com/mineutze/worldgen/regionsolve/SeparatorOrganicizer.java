@@ -15,9 +15,9 @@ import java.util.Set;
 /**
  * Some biome pairs have no direct adjacency rule at all (e.g. two "climate
  * clusters" that only ever touch through a shared filler biome) — wherever
- * those clusters end up spatially adjacent, {@link GapFiller}'s majority-
- * vote has no legal choice but to paint the entire shared boundary with the
- * one biome that's legal on both sides. That boundary is already at or
+ * those clusters end up spatially adjacent, {@link GapFiller} has no legal
+ * choice but to fill the entire shared boundary with the one biome that's
+ * legal on both sides. That boundary is already at or
  * above its own minimum size (see {@link PatchSizeEnforcer}), so nothing
  * upstream flags it — but a straight, cell-wide wall running the length of
  * the region is exactly the "ugly seam" this design set out to avoid, just

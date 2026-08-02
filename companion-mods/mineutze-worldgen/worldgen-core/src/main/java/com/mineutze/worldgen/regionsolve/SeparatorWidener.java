@@ -51,7 +51,7 @@ final class SeparatorWidener {
         }
 
         Set<MacroCellPos> claimed = new LinkedHashSet<>(component);
-        TreeSet<MacroCellPos> frontier = new TreeSet<>(Comparator.comparingInt(MacroCellPos::x).thenComparingInt(MacroCellPos::z));
+        TreeSet<MacroCellPos> frontier = new TreeSet<>(frontierOrder(centroidOf(component)));
         addUnclaimedNeighbors(component, claimed, regionCellSet, frontier);
 
         while (claimed.size() < targetMinCells && !frontier.isEmpty()) {
@@ -66,6 +66,29 @@ final class SeparatorWidener {
         for (MacroCellPos cell : claimed) {
             assignment.put(cell, ownBiome);
         }
+    }
+
+    /**
+     * Distance from the undersized patch's own centroid (fixed at the start of one
+     * widen() call, not recomputed as cells get claimed) — same "grow round, not
+     * toward wherever the frontier happens to sort first" fix {@link GrowthEngine}
+     * already applies via its own seed-distance ordering. Without this, the plain
+     * coordinate-order TreeSet claimed whichever legal cell sorted first by (x, z),
+     * which systematically extends in one direction — every separator this widens
+     * came out a long snake, not a blob, even once it hit its own declared minimum
+     * size (reported as "tunnels, not patches" from in-game testing).
+     */
+    private static Comparator<MacroCellPos> frontierOrder(MacroCellPos centroid) {
+        return Comparator
+            .comparingLong((MacroCellPos cell) -> cell.distanceSquaredTo(centroid))
+            .thenComparingInt(MacroCellPos::x)
+            .thenComparingInt(MacroCellPos::z);
+    }
+
+    private static MacroCellPos centroidOf(Set<MacroCellPos> component) {
+        double averageX = component.stream().mapToInt(MacroCellPos::x).average().orElseThrow();
+        double averageZ = component.stream().mapToInt(MacroCellPos::z).average().orElseThrow();
+        return new MacroCellPos((int) Math.round(averageX), (int) Math.round(averageZ));
     }
 
     private static void addUnclaimedNeighbors(Set<MacroCellPos> from, Set<MacroCellPos> claimed, Set<MacroCellPos> regionCellSet, TreeSet<MacroCellPos> frontier) {

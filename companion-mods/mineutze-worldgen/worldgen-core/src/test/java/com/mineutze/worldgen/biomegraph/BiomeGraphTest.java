@@ -23,7 +23,8 @@ class BiomeGraphTest {
             new BiomeSizeRange(700, 1000),
             new BiomeShapeHints(0.5, 0.5, 0.5),
             new BiomeFeatureToggles(true, true),
-            universalFiller
+            universalFiller,
+            GrowthCohesionProfile.UNRESTRICTED
         );
     }
 
