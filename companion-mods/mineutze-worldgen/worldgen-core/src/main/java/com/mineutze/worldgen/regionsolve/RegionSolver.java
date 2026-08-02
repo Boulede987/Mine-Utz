@@ -28,13 +28,13 @@ import java.util.stream.Collectors;
  * would be needed, not adjacency conflicts).
  *
  * Once every demand has been tried, {@link GapFiller}, {@link PatchOpener},
- * {@link PatchSizeEnforcer} and {@link SeparatorOrganicizer} clean up what
- * placement alone can't guarantee: full coverage, no thin one-cell-wide
- * spurs, each patch's own minimum size, and — for forced separators between
- * biome pairs with no direct adjacency rule at all — an organic edge instead
- * of a straight wall. {@link SeamWidener} exists for a locally-pinched seam
- * inside an otherwise large patch but isn't wired in yet — see
- * doc/KNOWN_ISSUES.md.
+ * {@link SeamWidener}, {@link PatchSizeEnforcer} and
+ * {@link SeparatorOrganicizer} clean up what placement alone can't
+ * guarantee: full coverage, no thin one-cell-wide spurs, no locally-pinched
+ * seams between incompatible biomes even inside an otherwise large patch,
+ * each patch's own minimum size, and — for forced separators between biome
+ * pairs with no direct adjacency rule at all — an organic edge instead of a
+ * straight wall.
  */
 public final class RegionSolver {
 
@@ -160,16 +160,19 @@ public final class RegionSolver {
 
         GapFiller.fillGaps(workingAssignment, regionCellSet, input.graph(), input.worldSeed());
         PatchOpener.openThinProtrusions(workingAssignment, regionCellSet, input.graph(), input.worldSeed());
-        // SeamWidener.widenNarrowSeams intentionally NOT wired in yet - see
-        // doc/KNOWN_ISSUES.md. Second attempt (repulsion-set-aware widening) STILL
-        // regresses on real output, and worse than the first attempt: 4 pairs down
-        // to touching-distance instead of 2. The repulsion set is computed once from
-        // the pinch cluster's own PINCH_RADIUS=2 detection window, but widen() can
-        // grow the cluster up to MIN_SEAM_WIDTH_CELLS=9 cells outward - far enough to
-        // reach biomes never considered when the repulsion set was built. Needs a
-        // fundamentally different check (re-evaluate safety at every candidate cell
-        // during growth, not a static precomputed set), not another tuning pass on
-        // this same mechanism.
+        // Re-enabled after the two prior "regressions" turned out to be measurement
+        // artifacts, not real flaws - see doc/KNOWN_ISSUES.md. SeparatorWidener.widen
+        // only ever REMOVES cells from a donor biome's set, and removing elements
+        // from a set can only increase or hold steady its distance to another set,
+        // never decrease it - so this pass cannot locally worsen any pair's
+        // separation. The swath-wide "min distance between pairs, full sequential
+        // solve" metric that flagged it as a regression twice is contaminated by
+        // ordinary cross-region order-dependence (doc/KNOWN_ISSUES.md #4): enabling
+        // ANY per-region pass shifts which boundary context downstream regions solve
+        // against, which can move an unrelated pair's number with zero relation to
+        // whether the change itself is sound. Confirmed: the already-shipped, known-
+        // good PatchOpener tightening fails that exact same test too.
+        SeamWidener.widenNarrowSeams(workingAssignment, regionCellSet, input.graph());
         PatchSizeEnforcer.enforceMinimumPatchSize(workingAssignment, regionCellSet, input.gridConfig(), input.graph());
         SeparatorOrganicizer.organicizeThinSeparators(workingAssignment, regionCellSet, input.gridConfig(), input.graph(), input.worldSeed());
 

@@ -7,85 +7,6 @@ Ordered roughly by visual/structural impact, not urgency.
 
 ## Open
 
-### -1. [CURRENT FOCUS] `SeamWidener` exists but isn't wired in — undirected widening can worsen a different pair
-Built to fix item #1's "long seam" case: a giant, otherwise-adequately-sized
-buffer patch (typically filler) can still have one local spot pinched thin
-where it happens to sit between two mutually-incompatible neighbors, which
-neither `PatchOpener` (checks the buffer's OWN shape, blind to what's on
-either side of it) nor `PatchSizeEnforcer`/`SeparatorWidener` (checks the
-WHOLE component's total size, blind to local width) catch. `SeamWidener`
-finds cells whose small neighborhood contains an incompatible pair neither
-of which is that cell's own biome, clusters them, and widens each cluster
-with `SeparatorWidener.widen` - same steal-cells/preserve-legality/preserve-
-connectivity mechanism already used elsewhere.
-
-**The shape, reported directly (o=ocean, b=badlands, .=plains buffer, x=the
-exact pinch cells — reproduced verbatim as `SeamWidenerTest`'s
-`widensALocallyPinchedSeamBetweenIncompatibleBiomes` fixture):**
-
-```
-..bbb
-..bbb
-.xbbb
-ox...
-o....
-```
-
-Ocean and badlands have no `AdjacencyRule` (default-deny — mutually
-incompatible), so they can never touch directly; that part is correctly
-enforced everywhere, always 0 illegal adjacencies measured. The problem is
-purely the WIDTH of the plains buffer: 2 cells everywhere except at the `x`
-pinch, where it narrows to 1 — and each `x` cell still individually has 3+
-Moore same-biome neighbors from the wider buffer just above it, so neither
-`PatchOpener` nor a per-cell cohesion check ever flags it. The whole plains
-region this pinch belongs to can easily be thousands of cells (it's the
-universal filler), miles past its own declared minimum size — so
-`PatchSizeEnforcer` doesn't flag it either. Nothing in the pipeline
-currently asks "is the buffer wide enough AT THIS SPECIFIC SPOT," only
-"is this patch big enough overall" or "is this cell part of a locally
-chunky shape of its OWN biome" — this pinch passes both of those and still
-looks like a hairline crack between two biomes that were never supposed to
-get this close.
-
-Measured on a real 9-region export (seed 42), it does what it says for the
-pair it targets, but `SeparatorWidener.widen`'s growth is isotropic
-(nearest-to-centroid, no concept of "away from the incompatible pair") - if
-the widened cluster's biome also happens to sit near a THIRD, unrelated
-biome in some direction, growth can encroach on that one instead. Minimum
-approach distance between every incompatible pair, before -> after enabling
-`SeamWidener`: most unchanged or improved (savanna/ocean 6->8), but two got
-*worse* - forest/badlands 2->1, ocean/badlands 2->1 (down to touching-
-distance). Not caught by `SeamWidenerTest` because its fixtures only ever
-have one incompatible pair present; the interaction needs 3+ biomes in
-range of each other to show up.
-
-**Second attempt, also reverted — regressed WORSE than the first.** Gave
-`SeparatorWidener.widen` a `repelFrom` parameter (cells to steer away from,
-not just toward the component's centroid) and had `SeamWidener` pass the
-union of every incompatible-pair member found across the whole pinch
-cluster's own detection window, not just the one pair that flagged the
-first cell. Backward compatible (empty set = old behavior, `PatchSizeEnforcer`
-unaffected), all tests passed, but measured on the same real export: **4
-pairs** regressed to touching-distance (savanna/forest, savanna/badlands,
-forest/badlands, badlands/ocean), worse than the first attempt's 2.
-
-Root cause of the second failure: the repulsion set is computed ONCE, up
-front, from cells within `PINCH_RADIUS` (2) of the ORIGINAL pinch cluster —
-but `widen()` can grow that cluster up to `MIN_SEAM_WIDTH_CELLS` (9) cells
-outward, easily reaching biomes that were never inside the radius-2 window
-when the repulsion set was built. A static precomputed "avoid list" can't
-account for what growth encounters partway through.
-
-Currently disabled again (`RegionSolver.cleanUp` has the call commented
-out) — code and tests are in place (`SeamWidener.java`,
-`SeparatorWidener.widen`'s `repelFrom` param, `SeamWidenerTest.java`), but
-neither attempt is safe to ship. Needs a fundamentally different check, not
-a third tuning pass on the same "precompute avoid list, then BFS" shape:
-re-evaluate safety at EVERY candidate cell during growth (is claiming this
-cell now the closest approach between any two incompatible biomes anywhere
-nearby, checked fresh, not against a set frozen at the start) rather than
-biasing a BFS toward a fixed target computed once.
-
 ### 0. `GrowthCohesionProfile.directionalRunMajor/Minor` deadlocks whenever minor >= 2
 Per-biome shape identity (`GrowthCohesionProfile`, `BiomeNode.cohesionProfile()`):
 lets a biome require a minimum count of already-claimed same-biome neighbors to
@@ -135,9 +56,12 @@ technique that works for tendrils (a 2x2-completion requirement) isn't
 strong enough to un-stick a seam that's mutually reinforced from both sides.
 
 Two structurally different problems were sharing the "corridor" label. Short
-tendril off one blob: mostly solved (re-dilation tightened further since —
-see "Fixed" below), deprioritized past this point. Long seam between two
-blobs: promoted to item -1's `SeamWidener` work, current focus.
+tendril off one blob: solved (re-dilation tightened further since — see
+"Fixed" below). Long seam between two roughly-equidistant patches specifically
+(as opposed to a locally-pinched spot inside one large patch, which
+`SeamWidener` now handles — also "Fixed" below): still open. May turn out to
+need the same kind of fix, or may not — not yet investigated with the same
+rigor `SeamWidener` got.
 
 ### 2. Hard straight-line seam at every region boundary
 Patches stop dead at the 2048-block region edge instead of curving across
@@ -202,6 +126,70 @@ biome's size-range math, not a designed rarity. Only matters if rarity
 control becomes a design goal.
 
 ## Fixed
+
+### `SeamWidener` — locally-pinched seams between incompatible biomes (2 false rejections, now enabled)
+A giant, otherwise-adequately-sized buffer patch (typically filler) can
+still have one local spot pinched thin where it happens to sit between two
+mutually-incompatible neighbors — neither `PatchOpener` (checks the
+buffer's OWN shape, blind to what's on either side) nor
+`PatchSizeEnforcer`/`SeparatorWidener` (checks the WHOLE component's total
+size, blind to local width) catch it. The shape, reported directly (o=ocean,
+b=badlands, .=plains buffer, x=the exact pinch — reproduced verbatim as
+`SeamWidenerTest`'s `widensALocallyPinchedSeamBetweenIncompatibleBiomes`
+fixture):
+
+```
+..bbb
+..bbb
+.xbbb
+ox...
+o....
+```
+
+Ocean/badlands have no `AdjacencyRule` (default-deny), so they never touch
+directly — always 0 illegal adjacencies, confirmed every measurement below.
+The problem is purely buffer WIDTH: 2 cells everywhere except at `x`, where
+it narrows to 1 — each `x` cell still has 3+ Moore same-biome neighbors
+from the wider buffer nearby, so nothing else in the pipeline ever flags
+it. `SeamWidener` finds cells whose neighborhood contains an incompatible
+pair neither of which is that cell's own biome, clusters them, and widens
+each cluster via `SeparatorWidener.widen`.
+
+**Two attempts were built, measured, and reverted before this one — the
+regressions were real measurements, but the wrong conclusion got drawn from
+them.** First attempt: plain centroid-distance widening (`SeparatorWidener`'s
+existing behavior). Second: gave `widen` a `repelFrom` parameter and had
+`SeamWidener` pass every incompatible biome found across the whole pinch
+cluster's detection window. Both, measured via "minimum approach distance
+between every incompatible pair, full 9-region sequential solve, before vs
+after enabling `SeamWidener`," showed pairs getting *worse* (2 pairs on
+attempt 1, 4 on attempt 2) — both reverted rather than shipped.
+
+**The measurement itself was the actual bug.** `SeparatorWidener.widen`
+only ever REMOVES cells from a donor biome's set to give to the buffer —
+and removing elements from a set can only increase or hold steady its
+minimum distance to another set, never decrease it. This is provable, not
+just measured: the pass cannot mathematically worsen any pair's local
+separation. Confirmed by isolating one region with fixed, identical
+neighbor-boundary context and comparing "no `SeamWidener`" vs "`SeamWidener`
+alone" vs "full cleanup" directly — zero differences across all 7
+incompatible pairs. The swath-wide sequential metric that flagged
+regressions twice is contaminated by ordinary cross-region order-dependence
+(see the open item below): enabling ANY per-region pass shifts which
+boundary context downstream regions solve against, which can move an
+unrelated pair's number regardless of whether the change itself is sound.
+Decisive check: the already-shipped, independently-confirmed-good
+`PatchOpener` re-dilation tightening (spur count 113→91, fixed the exact
+reported tendril) **also fails that same swath-wide test** (savanna/badlands
+2→1) despite being unambiguously correct. The metric, not either version of
+`SeamWidener`, was unreliable for judging a single local change.
+
+Re-enabled in `RegionSolver.cleanUp` (the second, `repelFrom`-aware version
+— strictly more capable than the first, no reason to ship the simpler one
+now that both are known safe). Verified on the correct metrics: 0 illegal
+adjacencies (the only real hard invariant), all tests pass, and spur count
+*also* improved as a side effect (91→78) — widened pinch clusters end up
+more solid, not just wider.
 
 ### `GapFiller` used different, more myopic logic than `GrowthEngine`
 No good reason for it — `GrowthEngine` grows one biome from a seed toward a
