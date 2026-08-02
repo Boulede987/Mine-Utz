@@ -20,6 +20,10 @@ public final class PngExporter {
 
     private static final int PIXELS_PER_CELL = 4;
     private static final Color REGION_BOUNDARY_COLOR = new Color(0, 0, 0, 160);
+    // A solved region never has a gap; a real-world scan can (an ungenerated chunk,
+    // world border, etc). Distinct mid-gray, unlikely to collide with a hashed biome
+    // color, so a gap reads as "no data" at a glance instead of a wrong biome.
+    private static final Color GAP_COLOR = new Color(128, 128, 128);
 
     private PngExporter() {
     }
@@ -36,8 +40,8 @@ public final class PngExporter {
 
         for (int localZ = 0; localZ < span; localZ++) {
             for (int localX = 0; localX < span; localX++) {
-                int rgb = legend.rgbOf(snapshot.biomeAt(new MacroCellPos(minCellX + localX, minCellZ + localZ)));
-                g.setColor(new Color(rgb));
+                MacroCellPos cell = new MacroCellPos(minCellX + localX, minCellZ + localZ);
+                g.setColor(snapshot.cells().containsKey(cell) ? new Color(legend.rgbOf(snapshot.biomeAt(cell))) : GAP_COLOR);
                 g.fillRect(localX * PIXELS_PER_CELL, localZ * PIXELS_PER_CELL, PIXELS_PER_CELL, PIXELS_PER_CELL);
             }
         }

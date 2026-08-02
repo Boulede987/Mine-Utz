@@ -1,12 +1,15 @@
 package com.mineutze.worldgen.export;
 
 import com.mineutze.worldgen.biomegraph.BiomeGraph;
+import com.mineutze.worldgen.biomegraph.BiomeId;
+import com.mineutze.worldgen.regionsolve.MacroCellPos;
 import com.mineutze.worldgen.regionsolve.MacroGridConfig;
 import com.mineutze.worldgen.regionsolve.RegionPos;
 import com.mineutze.worldgen.regionsolve.RegionSolveResult;
 import com.mineutze.worldgen.regionsolve.SeedRegionCache;
 
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.function.BiConsumer;
 
@@ -30,14 +33,17 @@ public final class RegionGridSolver {
             (region, result, durationMillis) -> onRegionSolved.accept(region, result)
         );
 
-        Map<RegionPos, RegionSolveResult> results = new LinkedHashMap<>();
+        Map<MacroCellPos, BiomeId> cells = new LinkedHashMap<>();
+        Map<RegionPos, List<String>> warningsByRegion = new LinkedHashMap<>();
         for (int dx = 0; dx < regionSpan; dx++) {
             for (int dz = 0; dz < regionSpan; dz++) {
                 RegionPos region = new RegionPos(minRegion.x() + dx, minRegion.z() + dz);
-                results.put(region, cache.resultFor(region));
+                RegionSolveResult result = cache.resultFor(region);
+                cells.putAll(result.assignment());
+                warningsByRegion.put(region, result.warnings());
             }
         }
 
-        return new ExportSnapshot(graph, gridConfig, worldSeed, minRegion, regionSpan, Map.copyOf(results));
+        return new ExportSnapshot(graph, gridConfig, worldSeed, minRegion, regionSpan, Map.copyOf(cells), Map.copyOf(warningsByRegion));
     }
 }

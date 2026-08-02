@@ -9,6 +9,7 @@ import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 
 /**
  * Runs the region solver standalone — no Minecraft, no world, no ServerLevel
@@ -65,10 +66,10 @@ public final class ExportCli {
         AsciiExporter.write(asciiFile, snapshot, legend);
         JsonExporter.write(jsonFile, snapshot, legend);
 
-        int totalDropped = snapshot.regionResults().values().stream().mapToInt(r -> r.droppedDemandCount()).sum();
+        int totalDropped = snapshot.warningsByRegion().values().stream().mapToInt(List::size).sum();
         System.out.printf(
             "%nDone. %d region(s) solved, %d dropped demand(s) total.%n  %s%n  %s%n  %s%n",
-            snapshot.regionResults().size(), totalDropped, pngFile.toAbsolutePath(), asciiFile.toAbsolutePath(), jsonFile.toAbsolutePath()
+            snapshot.warningsByRegion().size(), totalDropped, pngFile.toAbsolutePath(), asciiFile.toAbsolutePath(), jsonFile.toAbsolutePath()
         );
     }
 

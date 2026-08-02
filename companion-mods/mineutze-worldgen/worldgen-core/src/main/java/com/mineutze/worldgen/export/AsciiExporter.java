@@ -54,7 +54,8 @@ public final class AsciiExporter {
             int z = minCellZ + localZ;
             for (int localX = 0; localX < span; localX++) {
                 int x = minCellX + localX;
-                out.append(legend.glyphOf(snapshot.biomeAt(new MacroCellPos(x, z))));
+                MacroCellPos cell = new MacroCellPos(x, z);
+                out.append(snapshot.cells().containsKey(cell) ? legend.glyphOf(snapshot.biomeAt(cell)) : '?');
                 if (localX + 1 < span && (localX + 1) % regionSize == 0) {
                     out.append('|');
                 }

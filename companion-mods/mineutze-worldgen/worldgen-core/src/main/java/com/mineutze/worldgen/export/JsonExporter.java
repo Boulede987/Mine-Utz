@@ -5,8 +5,8 @@ import com.mineutze.worldgen.biomegraph.BiomeGraph;
 import com.mineutze.worldgen.biomegraph.BiomeId;
 import com.mineutze.worldgen.biomegraph.BiomeNode;
 import com.mineutze.worldgen.regionsolve.MacroCellPos;
+import com.mineutze.worldgen.regionsolve.MacroGridConfig;
 import com.mineutze.worldgen.regionsolve.RegionPos;
-import com.mineutze.worldgen.regionsolve.RegionSolveResult;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -94,38 +94,44 @@ public final class JsonExporter {
     }
 
     private static void writeRegions(StringBuilder out, ExportSnapshot snapshot) {
-        List<RegionPos> regions = snapshot.regionResults().keySet().stream()
-            .sorted(java.util.Comparator.comparingInt(RegionPos::x).thenComparingInt(RegionPos::z))
-            .toList();
+        MacroGridConfig grid = snapshot.gridConfig();
+        List<RegionPos> regions = new java.util.ArrayList<>();
+        for (int dx = 0; dx < snapshot.regionSpan(); dx++) {
+            for (int dz = 0; dz < snapshot.regionSpan(); dz++) {
+                regions.add(new RegionPos(snapshot.minRegion().x() + dx, snapshot.minRegion().z() + dz));
+            }
+        }
 
         out.append("  \"regions\": [\n");
         for (int i = 0; i < regions.size(); i++) {
             RegionPos region = regions.get(i);
-            RegionSolveResult result = snapshot.regionResults().get(region);
+            List<String> warnings = snapshot.warningsByRegion().getOrDefault(region, List.of());
             out.append("    {\n      \"x\": ").append(region.x()).append(", \"z\": ").append(region.z())
-                .append(",\n      \"droppedDemandCount\": ").append(result.droppedDemandCount())
+                .append(",\n      \"droppedDemandCount\": ").append(warnings.size())
                 .append(",\n      \"warnings\": [");
-            List<String> warnings = result.warnings();
             for (int w = 0; w < warnings.size(); w++) {
                 out.append("\"").append(escape(warnings.get(w))).append("\"").append(w + 1 < warnings.size() ? ", " : "");
             }
             out.append("],\n      \"cells\": [\n");
-            writeCells(out, result);
+            writeCells(out, snapshot, region);
             out.append("      ]\n    }").append(i + 1 < regions.size() ? "," : "").append('\n');
         }
         out.append("  ]");
     }
 
-    private static void writeCells(StringBuilder out, RegionSolveResult result) {
-        List<Map.Entry<MacroCellPos, BiomeId>> cells = result.assignment().entrySet().stream()
-            .sorted(Map.Entry.<MacroCellPos, BiomeId>comparingByKey(
-                java.util.Comparator.comparingInt(MacroCellPos::x).thenComparingInt(MacroCellPos::z)))
+    /** Only cells the snapshot actually has a biome for - a real-world scan can have gaps (e.g. an ungenerated chunk) a solved region never does. */
+    private static void writeCells(StringBuilder out, ExportSnapshot snapshot, RegionPos region) {
+        List<Map.Entry<MacroCellPos, BiomeId>> present = snapshot.gridConfig().cellsInRegion(region).stream()
+            .sorted(java.util.Comparator.comparingInt(MacroCellPos::x).thenComparingInt(MacroCellPos::z))
+            .filter(cell -> snapshot.cells().containsKey(cell))
+            .map(cell -> Map.entry(cell, snapshot.cells().get(cell)))
             .toList();
-        for (int i = 0; i < cells.size(); i++) {
-            Map.Entry<MacroCellPos, BiomeId> entry = cells.get(i);
-            out.append("        { \"x\": ").append(entry.getKey().x()).append(", \"z\": ").append(entry.getKey().z())
-                .append(", \"biome\": \"").append(escape(entry.getValue().toString())).append("\" }")
-                .append(i + 1 < cells.size() ? "," : "").append('\n');
+        for (int i = 0; i < present.size(); i++) {
+            MacroCellPos cell = present.get(i).getKey();
+            BiomeId biome = present.get(i).getValue();
+            out.append("        { \"x\": ").append(cell.x()).append(", \"z\": ").append(cell.z())
+                .append(", \"biome\": \"").append(escape(biome.toString())).append("\" }")
+                .append(i + 1 < present.size() ? "," : "").append('\n');
         }
     }
 
