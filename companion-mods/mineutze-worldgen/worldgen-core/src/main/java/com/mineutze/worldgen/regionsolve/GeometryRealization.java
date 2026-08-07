@@ -26,7 +26,18 @@ import java.util.stream.Collectors;
  * own single-patch-at-a-time flow, though it reuses {@link GrowthEngine}'s
  * legality/cohesion/frontier-ordering building blocks directly. Whatever
  * territory no patch's growth reached falls to {@link GapFiller#fillGaps},
- * unchanged. See doc/Modelisation/ActivityDiagram/geometry-realization.puml.
+ * then the same shape/size cleanup passes {@link RegionSolver#cleanUp} always
+ * ran — {@link PatchOpener}, {@link SeamWidener}, {@link PatchSizeEnforcer},
+ * {@link SeparatorOrganicizer}, same order, unchanged — run here too. Missing
+ * these on the first pass of this class produced real, visible defects on a
+ * deployed world: single-cell-wide plains slivers standing in as the entire
+ * "buffer" between forest and badlands (a pair that needs the 3-hop
+ * plains-desert bridge to be legal at all), instead of the real, own-
+ * minimum-size patch {@code ARCHITECTURE.md} requires a forced separator to
+ * be. GapFiller only guarantees every cell gets SOME legal value — it was
+ * never the thing responsible for widening a separator or trimming a thin
+ * tendril, in either pipeline. See
+ * doc/Modelisation/ActivityDiagram/geometry-realization.puml.
  */
 public final class GeometryRealization {
 
@@ -41,6 +52,10 @@ public final class GeometryRealization {
         growPatchesToTarget(patches, workingAssignment, regionCells, input.graph());
 
         GapFiller.fillGaps(workingAssignment, regionCells, input.gridConfig(), input.graph(), input.worldSeed());
+        PatchOpener.openThinProtrusions(workingAssignment, regionCells, input.gridConfig(), input.graph(), input.worldSeed());
+        SeamWidener.widenNarrowSeams(workingAssignment, regionCells, input.graph());
+        PatchSizeEnforcer.enforceMinimumPatchSize(workingAssignment, regionCells, input.gridConfig(), input.graph());
+        SeparatorOrganicizer.organicizeThinSeparators(workingAssignment, regionCells, input.gridConfig(), input.graph(), input.worldSeed());
 
         return workingAssignment.entrySet().stream()
             .filter(entry -> regionCells.contains(entry.getKey()))
