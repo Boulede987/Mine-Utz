@@ -20,13 +20,8 @@ repeat
     if (reseed attempts remaining\nat this dropped-node count?) then (yes)
       :Discard graph, regenerate seed scatter\n(cheap - abstract graph only, no geometry to undo);
     else (no)
-      if (more than 1 interior node\nstill remains in the graph?) then (yes)
-        :Drop the most-constrained interior node\nentirely (its territory absorbs into\nneighbors at geometry time - safe,\nnothing geometric committed yet);
-        :Increment dropped-node count,\nreset reseed budget;
-      else (no)
-        :FAIL LOUD - crash with diagnostic\n(fixed boundary context already\ncontains an illegal edge - the only\ncase this ladder cannot resolve);
-        stop
-      endif
+      :Drop the most-constrained free node\nentirely (its territory absorbs into\nwhatever geometry realization + GapFiller\nreach it with - safe, nothing geometric\ncommitted yet, and dropping the LAST free\nnode makes the next attempt trivially\ncolorable - zero free nodes left to color);
+      :Increment dropped-node count,\nreset reseed budget;
     endif
   endif
 repeat while (assignment not found) is (retry)
@@ -54,25 +49,31 @@ note right
   expensive and testing showed raising it just relocated
   crashes further into the region, not eliminated them -
   see KNOWN_ISSUES.md). Dropping a node only ever REMOVES
-  a constraint, never adds one, so it's monotonic: floor
-  out at 1 interior node, and that node is provably
-  colorable (zero remaining edges to violate, and its
-  domain is non-empty by construction - BiomeGraph
-  guarantees at least one identity exists with no
-  incompatible-neighbor constraint on an unconstrained
-  node). This is a PROOF of eventual success, not a tuned
-  cap, because the graph is dozens of nodes (cheap to
-  drop down to 1) - the same guarantee pixel-level
-  GapFiller can't afford at thousands-of-cells scale.
+  a constraint, never adds one, so free-node count is
+  monotonically decreasing - drop far enough (worst case,
+  every free node) and the graph has ZERO free nodes left
+  to color. CSP over zero free nodes succeeds vacuously,
+  unconditionally, every time - not a near-guarantee, an
+  actual proof, because the graph is dozens of nodes
+  (cheap to drop down to zero if truly needed).
 
-  FAIL LOUD is reachable in exactly one case: the fixed
-  boundary itself already contains an illegal edge
-  (inherited from a buggy neighbor-region cache) - nothing
-  this region's own ladder does can un-fix a contradiction
-  baked into input it doesn't control. That's a genuine
-  invariant violation elsewhere, correctly loud here. See
-  feedback_fail_loud memory: prove the bad state
-  unreachable by construction; this ladder does that for
-  every case except an already-corrupt boundary.
+  An earlier draft of this ladder stopped dropping at 1
+  remaining free node and FAIL-LOUD'd past that, reasoning
+  the lone node must be trivially colorable - WRONG: a lone
+  free node can still be pinned between two already-FIXED
+  neighbors (context from an already-solved adjacent
+  region) whose legal sets don't overlap, and no amount of
+  dropping OTHER nodes fixes that. Corrected: drop that
+  node too. Its territory doesn't vanish - geometry
+  realization plus GapFiller's own already-proven,
+  always-terminating pixel-level guarantee (same one the
+  pre-redesign pipeline already ships with, including its
+  documented small accepted illegal-adjacency rate as an
+  absolute last resort) covers whatever's left. There was
+  never a real case this ladder couldn't resolve - no FAIL
+  LOUD branch belongs here. See feedback_fail_loud memory:
+  prove the bad state unreachable by construction, not
+  "unreachable except this one case" - that phrase is
+  itself the tell that the proof isn't finished yet.
 end note
 @enduml

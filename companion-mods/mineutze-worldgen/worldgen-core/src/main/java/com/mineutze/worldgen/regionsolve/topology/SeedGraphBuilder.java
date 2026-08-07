@@ -26,15 +26,28 @@ import java.util.stream.Collectors;
  */
 public final class SeedGraphBuilder {
 
+    // Folded into the scatter's own seed so a reseed attempt actually produces a
+    // different scatter (SeedPlacer is otherwise fully deterministic in worldSeed)
+    // while staying fully reproducible for a given (worldSeed, region, attempt).
+    private static final long RESEED_ATTEMPT_SALT = 0x5C47_7E12L;
+
     private SeedGraphBuilder() {
     }
 
     public static SeedGraph build(RegionSolveInput input, int seedSpacingBlocks) {
+        return build(input, seedSpacingBlocks, 0, Set.of());
+    }
+
+    /**
+     * @param reseedAttempt          which retry of the interior scatter this is — 0 the first time, incremented by {@code TopologyFirstRegionSolver}'s reseed tier on failure
+     * @param excludedSeedPositions  positions dropped by {@code TopologyFirstRegionSolver}'s node-drop tier — never turned into a node, regardless of what this attempt's scatter would otherwise place there
+     */
+    public static SeedGraph build(RegionSolveInput input, int seedSpacingBlocks, int reseedAttempt, Set<MacroCellPos> excludedSeedPositions) {
         List<SeedGraphNode> nodes = new ArrayList<>();
         List<Point2D> points = new ArrayList<>();
 
         addFixedBoundaryNodes(input, nodes, points);
-        addInteriorSeedNodes(input, seedSpacingBlocks, nodes, points);
+        addInteriorSeedNodes(input, seedSpacingBlocks, reseedAttempt, excludedSeedPositions, nodes, points);
 
         Set<NodeEdge> edges = DelaunayTriangulation.triangulate(points);
         List<SeedGraphNode> narrowedNodes = narrowFreeDomains(input.graph(), nodes, edges);
@@ -55,13 +68,19 @@ public final class SeedGraphBuilder {
             });
     }
 
-    private static void addInteriorSeedNodes(RegionSolveInput input, int seedSpacingBlocks, List<SeedGraphNode> nodes, List<Point2D> points) {
+    private static void addInteriorSeedNodes(
+        RegionSolveInput input, int seedSpacingBlocks, int reseedAttempt, Set<MacroCellPos> excludedSeedPositions, List<SeedGraphNode> nodes, List<Point2D> points
+    ) {
         Set<BiomeId> allBiomeIds = input.graph().nodes().stream()
             .map(BiomeNode::id)
             .collect(Collectors.toUnmodifiableSet());
 
-        List<MacroCellPos> interiorSeeds = SeedPlacer.placeSeeds(input.region(), input.gridConfig(), input.worldSeed(), seedSpacingBlocks);
+        long scatterSeed = input.worldSeed() ^ (reseedAttempt * RESEED_ATTEMPT_SALT);
+        List<MacroCellPos> interiorSeeds = SeedPlacer.placeSeeds(input.region(), input.gridConfig(), scatterSeed, seedSpacingBlocks);
         for (MacroCellPos seed : interiorSeeds) {
+            if (excludedSeedPositions.contains(seed)) {
+                continue;
+            }
             int id = nodes.size();
             nodes.add(SeedGraphNode.free(id, seed, allBiomeIds));
             points.add(toPoint(seed));
