@@ -1,0 +1,27 @@
+@startuml
+title Realize geometry from fixed topology (priority-driven flood-fill onto macro-cells)
+
+start
+:Map each seed node to a macro-cell\nseed position (deterministic from world seed);
+:Identity and target size range for every\npatch already fixed by the CSP stage -\nno legality decision left to make here;
+
+while (any patch below its min size\nand still has claimable frontier?) is (yes)
+  :Pick the patch furthest below\nits target size (priority);
+  :Claim its highest-priority frontier cell\n(nearest-to-seed + deterministic jitter -\nsame ordering GrowthEngine uses today);
+  note right
+    Frontier is restricted to cells whose other
+    touching patches are already-fixed CSP-graph
+    neighbors. Legality was decided in Step 2 -
+    this pass only races patches to size.
+  end note
+endwhile (no)
+
+:Sweep any macro-cells still unclaimed\n(pockets left between patches);
+if (unclaimed cell has an assigned\nMoore-neighbor patch?) then (yes)
+  :Assign to nearest claiming patch\n(multi-source BFS - same mechanism as\ntoday's GapFiller.fillGaps);
+else (no)
+  :Isolated pocket with no adjacent\nclaimed patch - flag for local repair\n(caller's job, not this pass);
+endif
+
+stop
+@enduml

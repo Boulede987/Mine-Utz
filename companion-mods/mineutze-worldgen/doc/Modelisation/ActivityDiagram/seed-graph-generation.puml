@@ -1,0 +1,29 @@
+@startuml
+title Build abstract seed graph (topology only, no geometry yet)
+
+start
+:Scatter seed points inside region\n(blue-noise/Poisson-disc,\ndeterministic from world seed + region coords);
+:Add one fixed node per boundary macro-cell\nfrom already-cached neighbor regions\n(pre-colored, single-value domain, not assignable);
+:Compute Delaunay triangulation\nover seed points + fixed boundary nodes;
+:Take the dual (relaxed Voronoi) -\nedges = "these will touch";
+
+:Seed each unassigned node's domain =\nevery identity compatible with any\nfixed boundary edge already touching it\n(unconstrained nodes start with the full identity set);
+
+if (graph looks colorable in principle?\n(edge density/connectivity roughly matches\nthe compatibility graph's own connectivity -\nsee ARCHITECTURE.md open question)) then (no)
+  :Flag graph for reseed;
+else (yes)
+endif
+
+:Return graph to caller\n(nodes, edges, per-node domain, reseed flag);
+stop
+
+note right
+  This check is a cheap heuristic, not a proof -
+  BiomeGraph's existing eager BFS validation
+  (construction-time, whole-graph) already rules out
+  "impossible in principle" configs. This step only
+  screens for a bad *scatter* (e.g. a node this
+  region's scatter isolated from every compatible
+  neighbor), not a bad compatibility graph.
+end note
+@enduml

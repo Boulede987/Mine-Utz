@@ -1,0 +1,78 @@
+@startuml
+title Topology-first region solve (proposed replacement for SeedPlacer/RegionSolver's flood-fill-first flow)
+
+start
+:Chunk request lands in an unsolved region;
+:Check all 4 neighbor directions for an already-cached region\n(never force-solve one that's missing - ARCHITECTURE.md invariant);
+:Fix those cached edges' macro-cell biome-ids as boundary context;
+:Reset dropped-node count = 0;
+
+repeat
+  :Build abstract seed graph for region\n(see seed-graph-generation.puml);
+
+  if (graph connectivity sane\n(not flagged for reseed)?) then (yes)
+    :Run CSP identity assignment on abstract graph\n(see csp-identity-assignment.puml);
+  else (no)
+  endif
+
+  if (assignment found?) then (yes)
+  else (no)
+    if (reseed attempts remaining\nat this dropped-node count?) then (yes)
+      :Discard graph, regenerate seed scatter\n(cheap - abstract graph only, no geometry to undo);
+    else (no)
+      if (more than 1 interior node\nstill remains in the graph?) then (yes)
+        :Drop the most-constrained interior node\nentirely (its territory absorbs into\nneighbors at geometry time - safe,\nnothing geometric committed yet);
+        :Increment dropped-node count,\nreset reseed budget;
+      else (no)
+        :FAIL LOUD - crash with diagnostic\n(fixed boundary context already\ncontains an illegal edge - the only\ncase this ladder cannot resolve);
+        stop
+      endif
+    endif
+  endif
+repeat while (assignment not found) is (retry)
+->resolved;
+
+:Realize geometry onto macro-cell grid\nfrom fixed topology + identities\n(see geometry-realization.puml);
+
+if (any cell stranded, or patch short of its min size?) then (yes)
+  :Local repair: adjust weights or\nmerge/reshuffle a small neighborhood only\n(not a full region re-solve);
+else (no)
+endif
+
+:Write macro-cell -> biome-id for region to cache;
+stop
+
+note right
+  Every fallback tier only REMOVES or REGENERATES
+  graph structure - reseed (new scatter) and node-drop
+  (territory absorbed by neighbors pre-geometry) - it
+  never commits an edge the compatibility graph forbids.
+
+  Node-drop is NOT capped at a small arbitrary constant
+  like GapFiller's pixel-level MAX_PATCH_DROP_RETRIES (3,
+  tuned empirically because dropping pixel patches is
+  expensive and testing showed raising it just relocated
+  crashes further into the region, not eliminated them -
+  see KNOWN_ISSUES.md). Dropping a node only ever REMOVES
+  a constraint, never adds one, so it's monotonic: floor
+  out at 1 interior node, and that node is provably
+  colorable (zero remaining edges to violate, and its
+  domain is non-empty by construction - BiomeGraph
+  guarantees at least one identity exists with no
+  incompatible-neighbor constraint on an unconstrained
+  node). This is a PROOF of eventual success, not a tuned
+  cap, because the graph is dozens of nodes (cheap to
+  drop down to 1) - the same guarantee pixel-level
+  GapFiller can't afford at thousands-of-cells scale.
+
+  FAIL LOUD is reachable in exactly one case: the fixed
+  boundary itself already contains an illegal edge
+  (inherited from a buggy neighbor-region cache) - nothing
+  this region's own ladder does can un-fix a contradiction
+  baked into input it doesn't control. That's a genuine
+  invariant violation elsewhere, correctly loud here. See
+  feedback_fail_loud memory: prove the bad state
+  unreachable by construction; this ladder does that for
+  every case except an already-corrupt boundary.
+end note
+@enduml

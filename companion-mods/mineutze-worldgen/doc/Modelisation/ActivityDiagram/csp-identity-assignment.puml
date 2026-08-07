@@ -1,0 +1,53 @@
+@startuml
+title CSP identity assignment on abstract seed graph (backtracking + MRV + AC-3)
+
+start
+:Initialize domain(node) = all identities\ncompatible with fixed boundary edges,\nfor every unassigned node;
+:Run AC-3 once up front\n(propagate fixed-boundary constraints\ninto neighboring domains before any guess);
+
+if (any domain emptied by initial AC-3?) then (yes)
+  :Report failure to caller -\nnothing assigned yet, this triggers\nthe outer reseed, not backtracking;
+  stop
+else (no)
+endif
+
+while (unassigned nodes remain?) is (yes)
+  :Select node with fewest remaining\ndomain values (MRV);
+
+  if (domain has an untried identity?) then (yes)
+    :Pick next untried identity;
+    if (identity's size class fits this\nnode's estimated realized area?) then (no)
+      :Mark identity tried, discard;
+    else (yes)
+      :Tentatively assign;
+      :AC-3 - prune neighbors' domains\nof now-incompatible identities;
+      if (any neighbor domain emptied?) then (yes)
+        :Undo assignment and every\npruning it caused;
+        :Mark identity tried, discard;
+      else (no)
+        :Commit assignment,\nadvance to next node;
+      endif
+    endif
+  else (no)
+    if (a previous decision exists\nto backtrack to?) then (yes)
+      :Undo that earlier node's assignment\nand its AC-3 pruning;
+      :Resume there, try its\nnext untried identity;
+    else (no)
+      :No assignment possible from\nthis graph - report failure to caller;
+      stop
+    endif
+  endif
+endwhile (no)
+:All nodes assigned - success;
+stop
+
+note right
+  "Size class fits" here is an ESTIMATE (node's
+  Voronoi-cell area from the abstract graph, not
+  final geometry) - Step 3 (geometry-realization.puml)
+  can still come up short of an assigned identity's
+  true min_size, which is why local repair exists
+  downstream instead of treating this stage's
+  success as a hard size guarantee.
+end note
+@enduml
