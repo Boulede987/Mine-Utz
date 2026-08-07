@@ -2,17 +2,19 @@ package com.mineutze.worldgen.regionsolve.topology;
 
 import com.mineutze.worldgen.biomegraph.BiomeGraph;
 import com.mineutze.worldgen.biomegraph.BiomeId;
+import com.mineutze.worldgen.regionsolve.MacroCellPos;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.Deque;
 import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Random;
 import java.util.Set;
-import java.util.TreeSet;
 
 /**
  * CSP identity assignment over a {@link SeedGraph}: backtracking search with
@@ -23,19 +25,37 @@ import java.util.TreeSet;
  * doc/Modelisation/ActivityDiagram/csp-identity-assignment.puml.
  *
  * <p>Fixed nodes' domains never change — propagation and backtracking only
- * ever touch free nodes. Deterministic: candidate identities are tried in
- * {@link BiomeId}'s natural order, and MRV ties break on the lower node id,
- * so the same {@link SeedGraph} always produces the same result (or the same
- * failure) — required for a world generator, where the same seed must
- * always produce the same world.
+ * ever touch free nodes. Deterministic: candidate identities are tried in a
+ * per-(worldSeed, node position) jittered order — same technique as {@code
+ * GrowthEngine}/{@code GapFiller}'s own frontier jitter — and MRV ties break
+ * on the lower node id, so the same {@link SeedGraph} + worldSeed always
+ * produces the same result (or the same failure).
+ *
+ * <p><b>Candidate order is not cosmetic — an earlier version tried candidates
+ * in {@link BiomeId}'s plain natural (alphabetical) order and it broke real
+ * in-game generation</b>: with no fixed boundary (the common case — most of a
+ * region's interior nodes start fully unconstrained) and every biome
+ * trivially self-compatible, a fixed alphabetical order means whichever
+ * biome sorts first always succeeds on the very first try, for every node,
+ * every time — nothing ever forces a backtrack, so the greedy search always
+ * converges on one single biome for the entire region. Confirmed on a real
+ * deployed world (seed 42): 9216 cells, 9216 badlands, zero of anything
+ * else. Small hand-built test graphs never caught this because they were
+ * deliberately constructed to require exploring past the first candidate —
+ * the exact case a fixed order never actually fails on.
  */
 public final class CspIdentityAssignment {
+
+    // Same role as GrowthEngine.JITTER_MAGNITUDE/GapFiller's own salt: an
+    // arbitrary constant that only needs to differ per class so unrelated
+    // jitters don't accidentally correlate.
+    private static final long CANDIDATE_JITTER_SALT = 0x4C57_1D3AL;
 
     private CspIdentityAssignment() {
     }
 
     /** Empty means the graph, as generated, has no legal coloring — the caller's reseed tier handles that, not this class. */
-    public static Optional<Map<Integer, BiomeId>> solve(SeedGraph graph, BiomeGraph biomeGraph) {
+    public static Optional<Map<Integer, BiomeId>> solve(SeedGraph graph, BiomeGraph biomeGraph, long worldSeed) {
         Map<Integer, List<NodeEdge>> edgesByNode = groupEdgesByNode(graph);
         Map<Integer, Set<BiomeId>> domains = initialDomains(graph);
 
@@ -50,7 +70,7 @@ public final class CspIdentityAssignment {
             }
         }
 
-        return backtrack(domains, assignment, graph, biomeGraph, edgesByNode);
+        return backtrack(domains, assignment, graph, biomeGraph, edgesByNode, worldSeed);
     }
 
     private static Optional<Map<Integer, BiomeId>> backtrack(
@@ -58,22 +78,24 @@ public final class CspIdentityAssignment {
         Map<Integer, BiomeId> assignment,
         SeedGraph graph,
         BiomeGraph biomeGraph,
-        Map<Integer, List<NodeEdge>> edgesByNode
+        Map<Integer, List<NodeEdge>> edgesByNode,
+        long worldSeed
     ) {
         Optional<SeedGraphNode> nextNode = selectMostConstrainedUnassignedNode(graph, assignment, domains);
         if (nextNode.isEmpty()) {
             return Optional.of(Map.copyOf(assignment));
         }
-        int nodeId = nextNode.get().id();
+        SeedGraphNode node = nextNode.get();
+        int nodeId = node.id();
 
-        for (BiomeId candidate : new TreeSet<>(domains.get(nodeId))) {
+        for (BiomeId candidate : orderedCandidates(domains.get(nodeId), node.position(), worldSeed)) {
             Map<Integer, Set<BiomeId>> domainsAfterChoice = deepCopy(domains);
             domainsAfterChoice.put(nodeId, Set.of(candidate));
             assignment.put(nodeId, candidate);
 
             Deque<NodeEdge> propagationQueue = new ArrayDeque<>(edgesByNode.getOrDefault(nodeId, List.of()));
             if (ac3(domainsAfterChoice, graph, biomeGraph, edgesByNode, propagationQueue)) {
-                Optional<Map<Integer, BiomeId>> result = backtrack(domainsAfterChoice, assignment, graph, biomeGraph, edgesByNode);
+                Optional<Map<Integer, BiomeId>> result = backtrack(domainsAfterChoice, assignment, graph, biomeGraph, edgesByNode, worldSeed);
                 if (result.isPresent()) {
                     return result;
                 }
@@ -81,6 +103,21 @@ public final class CspIdentityAssignment {
             assignment.remove(nodeId);
         }
         return Optional.empty();
+    }
+
+    private static List<BiomeId> orderedCandidates(Set<BiomeId> domain, MacroCellPos position, long worldSeed) {
+        return domain.stream()
+            .sorted(Comparator.comparingDouble(candidate -> candidateJitter(worldSeed, position, candidate)))
+            .toList();
+    }
+
+    /** Deterministic: same (worldSeed, position, candidate) always jitters the same way, so the search stays reproducible. */
+    private static double candidateJitter(long worldSeed, MacroCellPos position, BiomeId candidate) {
+        long hash = worldSeed ^ CANDIDATE_JITTER_SALT;
+        hash = hash * 31 + position.x();
+        hash = hash * 31 + position.z();
+        hash = hash * 31 + candidate.toString().hashCode();
+        return new Random(hash).nextDouble();
     }
 
     private static Optional<SeedGraphNode> selectMostConstrainedUnassignedNode(

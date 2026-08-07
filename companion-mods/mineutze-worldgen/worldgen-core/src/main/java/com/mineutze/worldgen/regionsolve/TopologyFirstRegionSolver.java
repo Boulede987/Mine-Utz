@@ -66,7 +66,7 @@ public final class TopologyFirstRegionSolver {
             SeedGraph seedGraph = SeedGraphBuilder.build(input, seedSpacingBlocks, reseedAttempt, excludedSeedPositions);
 
             if (!seedGraph.reseedRecommended()) {
-                Optional<Map<Integer, BiomeId>> assignment = CspIdentityAssignment.solve(seedGraph, input.graph());
+                Optional<Map<Integer, BiomeId>> assignment = CspIdentityAssignment.solve(seedGraph, input.graph(), input.worldSeed());
                 if (assignment.isPresent()) {
                     Map<MacroCellPos, BiomeId> realized = GeometryRealization.realize(seedGraph, assignment.get(), input);
                     return new RegionSolveResult(realized, List.copyOf(warnings), excludedSeedPositions.size());
