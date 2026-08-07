@@ -8,9 +8,10 @@ import org.junit.jupiter.api.Test;
 import java.util.List;
 import java.util.Map;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class TopologyFirstRegionSolverTest {
 
@@ -27,24 +28,29 @@ class TopologyFirstRegionSolverTest {
         MacroGridConfig grid = new MacroGridConfig(64, 8);
         RegionSolveInput input = new RegionSolveInput(graph, grid, new RegionPos(0, 0), Map.of(), WORLD_SEED);
 
-        Map<MacroCellPos, BiomeId> result = TopologyFirstRegionSolver.solve(input, 200);
+        RegionSolveResult result = TopologyFirstRegionSolver.solve(input, 200);
 
-        assertEquals(grid.regionSizeCellsPerSide() * grid.regionSizeCellsPerSide(), result.size());
-        assertNoIllegalAdjacency(result, graph);
+        assertEquals(grid.regionSizeCellsPerSide() * grid.regionSizeCellsPerSide(), result.assignment().size());
+        assertEquals(0, result.droppedDemandCount(), "a conflict-free graph should never need the node-drop tier");
+        assertNoIllegalAdjacency(result.assignment(), graph);
     }
 
     /**
      * A 1x1 region so SeedPlacer's jitter is irrelevant — every reseed
      * attempt places the exact same single seed at the exact same position,
-     * wedged between two fixed boundary neighbors (west = x, east = y) whose
+     * wedged between two fixed boundary neighbors (west = x, north = y) whose
      * legal sets share nothing (x's only allies: x, a; y's only allies: y,
      * b — the x-a-b-y chain bridges them for BiomeGraph's own eager
-     * validation without ever making x directly legal next to y). Reseeding
-     * genuinely cannot help here, proving the node-drop tier (not reseed)
-     * is what makes this terminate: drop the one free node to zero, CSP
-     * succeeds vacuously, and GapFiller's own already-accepted last-resort
-     * tier settles the single remaining pixel-level conflict, exactly as it
-     * already does in the pre-redesign pipeline.
+     * validation without ever making x directly legal next to y). West and
+     * north rather than west and east deliberately avoids collinearity with
+     * the seed at (0,0) — DelaunayTriangulation doesn't handle 3 exactly
+     * collinear points (documented limitation), which would make this test
+     * exercise that gap instead of the node-drop tier it's actually
+     * targeting. Reseeding genuinely cannot help here, proving the node-drop
+     * tier (not reseed) is what makes this terminate: drop the one free node
+     * to zero, CSP succeeds vacuously, and GapFiller's own already-accepted
+     * last-resort tier settles the single remaining pixel-level conflict,
+     * exactly as it already does in the pre-redesign pipeline.
      */
     @Test
     void dropsAPositionallyInvariantWedgedNodeAndStillTerminates() {
@@ -63,14 +69,16 @@ class TopologyFirstRegionSolverTest {
         MacroGridConfig oneCellRegion = new MacroGridConfig(64, 1);
         Map<MacroCellPos, BiomeId> fixedBoundaryCells = Map.of(
             new MacroCellPos(-1, 0), biomeX,
-            new MacroCellPos(1, 0), biomeY
+            new MacroCellPos(0, 1), biomeY
         );
         RegionSolveInput input = new RegionSolveInput(graph, oneCellRegion, new RegionPos(0, 0), fixedBoundaryCells, WORLD_SEED);
 
-        Map<MacroCellPos, BiomeId> result = assertDoesNotThrow(() -> TopologyFirstRegionSolver.solve(input, 1000));
+        RegionSolveResult result = assertDoesNotThrow(() -> TopologyFirstRegionSolver.solve(input, 1000));
 
-        assertEquals(1, result.size());
-        assertTrue(result.containsKey(new MacroCellPos(0, 0)));
+        assertEquals(1, result.assignment().size());
+        assertTrue(result.assignment().containsKey(new MacroCellPos(0, 0)));
+        assertEquals(1, result.droppedDemandCount(), "the one wedged free node should have been dropped, not force-committed");
+        assertFalse(result.warnings().isEmpty());
     }
 
     private static void assertNoIllegalAdjacency(Map<MacroCellPos, BiomeId> result, BiomeGraph graph) {

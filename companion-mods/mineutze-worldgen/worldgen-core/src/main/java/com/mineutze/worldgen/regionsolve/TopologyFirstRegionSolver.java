@@ -6,8 +6,10 @@ import com.mineutze.worldgen.regionsolve.topology.SeedGraph;
 import com.mineutze.worldgen.regionsolve.topology.SeedGraphBuilder;
 import com.mineutze.worldgen.regionsolve.topology.SeedGraphNode;
 
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -15,9 +17,10 @@ import java.util.Set;
 /**
  * Orchestrates the topology-first region solve: build an abstract seed
  * graph, color it via CSP, only then realize geometry. See
- * doc/Modelisation/ActivityDiagram/topology-first-region-solve.puml. Not yet
- * wired in to replace {@link RegionSolver} — this is the standalone pipeline
- * entry point for that eventual swap.
+ * doc/Modelisation/ActivityDiagram/topology-first-region-solve.puml. Wired in
+ * as {@link SeedRegionCache}'s solve path, replacing {@link RegionSolver}
+ * (kept in the codebase, unused by the live path, as a rollback option until
+ * this pipeline has real in-game verification behind it).
  *
  * <p>The failure ladder is a genuine termination PROOF, not a tuned cap: a
  * graph that fails to color gets a bounded number of reseed attempts (cheap —
@@ -50,12 +53,13 @@ public final class TopologyFirstRegionSolver {
     private TopologyFirstRegionSolver() {
     }
 
-    public static Map<MacroCellPos, BiomeId> solve(RegionSolveInput input) {
+    public static RegionSolveResult solve(RegionSolveInput input) {
         return solve(input, DEFAULT_SEED_SPACING_BLOCKS);
     }
 
-    public static Map<MacroCellPos, BiomeId> solve(RegionSolveInput input, int seedSpacingBlocks) {
+    public static RegionSolveResult solve(RegionSolveInput input, int seedSpacingBlocks) {
         Set<MacroCellPos> excludedSeedPositions = new HashSet<>();
+        List<String> warnings = new ArrayList<>();
         int reseedAttempt = 0;
 
         while (true) {
@@ -64,7 +68,8 @@ public final class TopologyFirstRegionSolver {
             if (!seedGraph.reseedRecommended()) {
                 Optional<Map<Integer, BiomeId>> assignment = CspIdentityAssignment.solve(seedGraph, input.graph());
                 if (assignment.isPresent()) {
-                    return GeometryRealization.realize(seedGraph, assignment.get(), input);
+                    Map<MacroCellPos, BiomeId> realized = GeometryRealization.realize(seedGraph, assignment.get(), input);
+                    return new RegionSolveResult(realized, List.copyOf(warnings), excludedSeedPositions.size());
                 }
             }
 
@@ -73,12 +78,17 @@ public final class TopologyFirstRegionSolver {
                 continue;
             }
 
-            excludedSeedPositions.add(mostConstrainedFreeNodePosition(seedGraph).orElseThrow(() -> new IllegalStateException(
+            MacroCellPos dropped = mostConstrainedFreeNodePosition(seedGraph).orElseThrow(() -> new IllegalStateException(
                 "TopologyFirstRegionSolver: reached node-drop with zero free nodes in the graph, but a graph with "
                     + "zero free nodes must already have succeeded via vacuous CSP success (nothing left to color) - "
                     + "reaching this point means that proof is wrong. That's a real bug in this class, not a "
                     + "legitimately unsolvable region."
-            )));
+            ));
+            excludedSeedPositions.add(dropped);
+            warnings.add(
+                "Dropped seed node at " + dropped + " after " + (MAX_RESEED_ATTEMPTS_PER_DROP_LEVEL + 1)
+                    + " reseed attempts couldn't color it — its territory falls to GeometryRealization/GapFiller instead."
+            );
             reseedAttempt = 0;
         }
     }

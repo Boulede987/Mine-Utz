@@ -106,7 +106,7 @@ public final class SeedRegionCache {
         RegionSolveInput input = new RegionSolveInput(graph, gridConfig, region, fixedBoundary, worldSeed);
 
         long startNanos = System.nanoTime();
-        RegionSolveResult result = RegionSolver.solve(input);
+        RegionSolveResult result = TopologyFirstRegionSolver.solve(input);
         long durationMillis = (System.nanoTime() - startNanos) / 1_000_000;
 
         onRegionSolved.onSolved(region, result, durationMillis);
