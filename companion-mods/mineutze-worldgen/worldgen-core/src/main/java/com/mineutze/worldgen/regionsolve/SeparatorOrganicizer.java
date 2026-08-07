@@ -134,12 +134,13 @@ final class SeparatorOrganicizer {
         return new Random(hash).nextDouble() < BULGE_PROBABILITY;
     }
 
-    private static int minCellsFor(BiomeId biome, MacroGridConfig grid, BiomeGraph graph) {
+    /** Package-visible: {@link GapFiller}'s dead-end fallback reuses this exact check when considering whether reassigning a neighbor is safe. */
+    static int minCellsFor(BiomeId biome, MacroGridConfig grid, BiomeGraph graph) {
         return grid.cellCountForWidthBlocks(graph.node(biome).sizeRange().minWidthBlocks());
     }
 
-    /** Size the donor patch would have with {@code stolen} removed — computed fresh so it reflects steals already applied earlier in this pass. */
-    private static int donorComponentSizeWithout(
+    /** Size the donor patch would have with {@code stolen} removed — computed fresh so it reflects steals already applied earlier in this pass. Package-visible: see {@link #minCellsFor}. */
+    static int donorComponentSizeWithout(
         MacroCellPos stolen, BiomeId donorBiome, Map<MacroCellPos, BiomeId> assignment, Set<MacroCellPos> regionCellSet
     ) {
         List<MacroCellPos> starts = stolen.orthogonalNeighbors().stream()

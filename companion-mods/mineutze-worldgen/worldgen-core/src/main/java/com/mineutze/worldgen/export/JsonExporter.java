@@ -61,7 +61,6 @@ public final class JsonExporter {
                 .append(", \"glyph\": \"").append(legend.glyphOf(node.id())).append("\"")
                 .append(", \"minWidthBlocks\": ").append(node.sizeRange().minWidthBlocks())
                 .append(", \"maxWidthBlocks\": ").append(node.sizeRange().maxWidthBlocks())
-                .append(", \"universalFiller\": ").append(node.universalFiller())
                 .append(", \"roughness\": ").append(node.shapeHints().roughness())
                 .append(", \"depthBias\": ").append(node.shapeHints().depthBias())
                 .append(", \"flatness\": ").append(node.shapeHints().flatness())

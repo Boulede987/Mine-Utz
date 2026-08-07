@@ -39,7 +39,6 @@ public class ModOverworldBiomeSource extends BiomeSource {
     );
 
     private final Map<ResourceLocation, Holder<Biome>> biomesById;
-    private final Holder<Biome> fallback;
 
     private ModOverworldBiomeSource(
         Holder<Biome> desert, Holder<Biome> savanna, Holder<Biome> badlands,
@@ -53,8 +52,6 @@ public class ModOverworldBiomeSource extends BiomeSource {
             ResourceLocation.fromNamespaceAndPath("minecraft", "forest"), forest,
             ResourceLocation.fromNamespaceAndPath("minecraft", "plains"), plains
         );
-        // Universal filler in ModBiomeGraph - always a legal fallback if a biome-id lookup ever misses.
-        this.fallback = plains;
     }
 
     @Override
@@ -77,6 +74,15 @@ public class ModOverworldBiomeSource extends BiomeSource {
 
         BiomeId biomeId = RegionCacheHolder.get().biomeAt(cell);
         Holder<Biome> resolved = biomesById.get(BiomeIdAdapter.toResourceLocation(biomeId));
-        return resolved != null ? resolved : fallback;
+        if (resolved == null) {
+            // Should be unreachable: the solver only ever assigns biomes from
+            // ModBiomeGraph.DEFAULT's own node set, which is exactly this class's 6
+            // registered biomes. No silent fallback (there's no more universal filler
+            // to fall back to anyway, see BiomeGraph's own doc) - a biome id this class
+            // doesn't recognize means the graph and this registration have drifted
+            // apart, a real bug worth surfacing immediately.
+            throw new IllegalStateException("Region solver assigned " + biomeId + " at " + cell + ", which ModOverworldBiomeSource has no registered Holder<Biome> for.");
+        }
+        return resolved;
     }
 }

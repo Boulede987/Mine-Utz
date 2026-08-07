@@ -39,8 +39,7 @@ public final class AsciiExporter {
             .append(" from ").append(snapshot.minRegion()).append("):\n");
         for (BiomeNode node : snapshot.graph().nodes().stream().sorted((a, b) -> a.id().compareTo(b.id())).toList()) {
             BiomeId id = node.id();
-            out.append("  ").append(legend.glyphOf(id)).append(" = ").append(id)
-                .append(node.universalFiller() ? " (universal filler)" : "").append('\n');
+            out.append("  ").append(legend.glyphOf(id)).append(" = ").append(id).append('\n');
         }
     }
 

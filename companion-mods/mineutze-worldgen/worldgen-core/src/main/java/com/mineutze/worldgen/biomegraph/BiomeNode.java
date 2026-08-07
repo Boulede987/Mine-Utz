@@ -1,18 +1,16 @@
 package com.mineutze.worldgen.biomegraph;
 
 /**
- * One biome family in the graph. {@code universalFiller} marks the node that
- * every other node must be allowed to sit next to (see
- * {@link BiomeGraph}'s validation) — it's the backtracking solver's
- * guaranteed-legal fallback, so backtracking always terminates without
- * relaxing an adjacency constraint.
+ * One biome family in the graph. No node is privileged — every biome,
+ * including whichever one plays a filler-like role in a given graph, is
+ * just as restrictable as any other (see {@link BiomeGraph}'s own doc for
+ * why the earlier "universal filler" concept was removed).
  */
 public record BiomeNode(
     BiomeId id,
     BiomeSizeRange sizeRange,
     BiomeShapeHints shapeHints,
     BiomeFeatureToggles featureToggles,
-    boolean universalFiller,
     GrowthCohesionProfile cohesionProfile
 ) {
 

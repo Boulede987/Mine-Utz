@@ -87,7 +87,7 @@ final class PatchOpener {
      * Caught by a test that skipped the GapFiller pre-step and got a NullPointerException
      * from an unassigned cell.
      */
-    static void openThinProtrusions(Map<MacroCellPos, BiomeId> assignment, Set<MacroCellPos> regionCellSet, BiomeGraph graph, long worldSeed) {
+    static void openThinProtrusions(Map<MacroCellPos, BiomeId> assignment, Set<MacroCellPos> regionCellSet, MacroGridConfig grid, BiomeGraph graph, long worldSeed) {
         BiomeGraph redilationGraph = stricterCohesion(graph);
         int previousSpurCount = Integer.MAX_VALUE;
         for (int pass = 0; pass < MAX_PASSES; pass++) {
@@ -97,7 +97,7 @@ final class PatchOpener {
             }
             previousSpurCount = spurs.size();
             spurs.forEach(assignment::remove);
-            GapFiller.fillGaps(assignment, regionCellSet, redilationGraph, worldSeed);
+            GapFiller.fillGaps(assignment, regionCellSet, grid, redilationGraph, worldSeed);
         }
     }
 
@@ -121,7 +121,7 @@ final class PatchOpener {
                     Math.min(8, cohesion.minSameBiomeNeighbors() + REDILATION_EXTRA_COHESION),
                     cohesion.directionalRunMajor(), cohesion.directionalRunMinor()
                 );
-            stricterNodes.add(new BiomeNode(node.id(), node.sizeRange(), node.shapeHints(), node.featureToggles(), node.universalFiller(), stricter));
+            stricterNodes.add(new BiomeNode(node.id(), node.sizeRange(), node.shapeHints(), node.featureToggles(), stricter));
         }
 
         List<AdjacencyRule> rules = new ArrayList<>();

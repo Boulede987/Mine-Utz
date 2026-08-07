@@ -158,8 +158,8 @@ public final class RegionSolver {
         Set<MacroCellPos> regionCellSet = Set.copyOf(input.gridConfig().cellsInRegion(input.region()));
         Map<MacroCellPos, BiomeId> workingAssignment = mergeExternalContext(solvedAssignment, input.fixedBoundaryCells());
 
-        GapFiller.fillGaps(workingAssignment, regionCellSet, input.graph(), input.worldSeed());
-        PatchOpener.openThinProtrusions(workingAssignment, regionCellSet, input.graph(), input.worldSeed());
+        GapFiller.fillGaps(workingAssignment, regionCellSet, input.gridConfig(), input.graph(), input.worldSeed());
+        PatchOpener.openThinProtrusions(workingAssignment, regionCellSet, input.gridConfig(), input.graph(), input.worldSeed());
         // Re-enabled after the two prior "regressions" turned out to be measurement
         // artifacts, not real flaws - see doc/KNOWN_ISSUES.md. SeparatorWidener.widen
         // only ever REMOVES cells from a donor biome's set, and removing elements
