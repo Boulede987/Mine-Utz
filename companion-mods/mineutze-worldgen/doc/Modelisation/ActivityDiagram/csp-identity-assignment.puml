@@ -16,17 +16,13 @@ while (unassigned nodes remain?) is (yes)
 
   if (domain has an untried identity?) then (yes)
     :Pick next untried identity;
-    if (identity's size class fits this\nnode's estimated realized area?) then (no)
+    :Tentatively assign;
+    :AC-3 - prune neighbors' domains\nof now-incompatible identities;
+    if (any neighbor domain emptied?) then (yes)
+      :Undo assignment and every\npruning it caused;
       :Mark identity tried, discard;
-    else (yes)
-      :Tentatively assign;
-      :AC-3 - prune neighbors' domains\nof now-incompatible identities;
-      if (any neighbor domain emptied?) then (yes)
-        :Undo assignment and every\npruning it caused;
-        :Mark identity tried, discard;
-      else (no)
-        :Commit assignment,\nadvance to next node;
-      endif
+    else (no)
+      :Commit assignment,\nadvance to next node;
     endif
   else (no)
     if (a previous decision exists\nto backtrack to?) then (yes)
@@ -42,12 +38,15 @@ endwhile (no)
 stop
 
 note right
-  "Size class fits" here is an ESTIMATE (node's
-  Voronoi-cell area from the abstract graph, not
-  final geometry) - Step 3 (geometry-realization.puml)
-  can still come up short of an assigned identity's
-  true min_size, which is why local repair exists
-  downstream instead of treating this stage's
-  success as a hard size guarantee.
+  Deliberately adjacency-only, no size check here — matches
+  fix_dieas.md's own Step 2 formulation (variables = nodes,
+  domain = identities, constraint = adjacency legality per
+  edge). A per-node "does this identity's size class fit"
+  gate would need a real area estimate (Voronoi-cell area),
+  which doesn't exist until Step 3 realizes geometry - a
+  fuzzy pre-geometry proxy isn't worth building. Step 3
+  (geometry-realization.puml) can still come up short of an
+  assigned identity's true min_size; that's what local
+  repair downstream exists to catch, not this stage.
 end note
 @enduml
