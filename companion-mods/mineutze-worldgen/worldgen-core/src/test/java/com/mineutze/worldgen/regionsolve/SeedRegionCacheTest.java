@@ -30,7 +30,7 @@ class SeedRegionCacheTest {
 
     private static BiomeGraph smallGraph() {
         return new BiomeGraph(
-            List.of(node("desert", 200, 300, false), node("savanna", 200, 300, false), node("plains", 100, 200, true)),
+            List.of(node("desert", 200, 300), node("savanna", 200, 300), node("plains", 100, 200)),
             List.of(
                 AdjacencyRule.allow(DESERT, SAVANNA, 10),
                 AdjacencyRule.allow(PLAINS, DESERT, 10),

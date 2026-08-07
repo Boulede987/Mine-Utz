@@ -18,17 +18,16 @@ final class TestBiomeNodes {
         return new BiomeId(NAMESPACE, path);
     }
 
-    static BiomeNode node(String path, int minWidthBlocks, int maxWidthBlocks, boolean universalFiller) {
-        return node(path, minWidthBlocks, maxWidthBlocks, universalFiller, GrowthCohesionProfile.UNRESTRICTED);
+    static BiomeNode node(String path, int minWidthBlocks, int maxWidthBlocks) {
+        return node(path, minWidthBlocks, maxWidthBlocks, GrowthCohesionProfile.UNRESTRICTED);
     }
 
-    static BiomeNode node(String path, int minWidthBlocks, int maxWidthBlocks, boolean universalFiller, GrowthCohesionProfile cohesionProfile) {
+    static BiomeNode node(String path, int minWidthBlocks, int maxWidthBlocks, GrowthCohesionProfile cohesionProfile) {
         return new BiomeNode(
             id(path),
             new BiomeSizeRange(minWidthBlocks, maxWidthBlocks),
             new BiomeShapeHints(0.5, 0.5, 0.5),
             new BiomeFeatureToggles(true, true),
-            universalFiller,
             cohesionProfile
         );
     }

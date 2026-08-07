@@ -30,12 +30,12 @@ class PatchSizeEnforcerTest {
     private static BiomeGraph richGraph() {
         return new BiomeGraph(
             List.of(
-                node("desert", 200, 300, false),
-                node("savanna", 200, 300, false),
-                node("badlands", 150, 250, false),
-                node("ocean", 200, 300, false),
-                node("forest", 150, 250, false),
-                node("plains", 100, 200, true)
+                node("desert", 200, 300),
+                node("savanna", 200, 300),
+                node("badlands", 150, 250),
+                node("ocean", 200, 300),
+                node("forest", 150, 250),
+                node("plains", 100, 200)
             ),
             List.of(
                 AdjacencyRule.allow(DESERT, SAVANNA, 10),
@@ -136,7 +136,7 @@ class PatchSizeEnforcerTest {
         BiomeId savanna = id("savanna");
         BiomeId ocean = id("ocean");
         BiomeGraph graph = new BiomeGraph(
-            List.of(node("filler", 500, 500, true), node("savanna", 100, 200, false), node("ocean", 100, 200, false)),
+            List.of(node("filler", 500, 500), node("savanna", 100, 200), node("ocean", 100, 200)),
             List.of(AdjacencyRule.allow(filler, savanna, 10), AdjacencyRule.allow(filler, ocean, 10))
         );
         MacroGridConfig grid = new MacroGridConfig(128, 7);

@@ -27,7 +27,7 @@ class GrowthEngineTest {
 
     private static BiomeGraph graphWithDesertForbiddenNextToOcean() {
         return new BiomeGraph(
-            List.of(node("desert", 100, 900, false), node("plains", 100, 900, true), node("ocean", 100, 900, false)),
+            List.of(node("desert", 100, 900), node("plains", 100, 900), node("ocean", 100, 900)),
             List.of(AdjacencyRule.allow(PLAINS, DESERT, 10), AdjacencyRule.allow(PLAINS, OCEAN, 10))
         );
     }
@@ -93,8 +93,8 @@ class GrowthEngineTest {
     void unrestrictedProfileCanSnakeThroughAOneCellGap() {
         BiomeGraph graph = new BiomeGraph(
             List.of(
-                node("desert", 100, 900, false, GrowthCohesionProfile.UNRESTRICTED),
-                node("plains", 100, 900, true)
+                node("desert", 100, 900, GrowthCohesionProfile.UNRESTRICTED),
+                node("plains", 100, 900)
             ),
             List.of(AdjacencyRule.allow(PLAINS, DESERT, 10))
         );
@@ -112,8 +112,8 @@ class GrowthEngineTest {
         GrowthCohesionProfile compact = new GrowthCohesionProfile(2, 0, 0);
         BiomeGraph graph = new BiomeGraph(
             List.of(
-                node("desert", 100, 900, false, compact),
-                node("plains", 100, 900, true)
+                node("desert", 100, 900, compact),
+                node("plains", 100, 900)
             ),
             List.of(AdjacencyRule.allow(PLAINS, DESERT, 10))
         );

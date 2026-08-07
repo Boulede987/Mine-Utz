@@ -40,7 +40,7 @@ class PatchOpenerTest {
     void trimsALongOneWideProtrusionButKeepsTheSolidCore() {
         MacroGridConfig grid = new MacroGridConfig(128, 5);
         BiomeGraph graph = new BiomeGraph(
-            List.of(node("f", 100, 900, false, COMPACT), node("p", 100, 900, true)),
+            List.of(node("f", 100, 900, COMPACT), node("p", 100, 900)),
             List.of(AdjacencyRule.allow(P, F, 10))
         );
         Map<MacroCellPos, BiomeId> assignment = new HashMap<>();
@@ -56,7 +56,7 @@ class PatchOpenerTest {
         }
         Set<MacroCellPos> regionCellSet = Set.copyOf(grid.cellsInRegion(REGION));
 
-        PatchOpener.openThinProtrusions(assignment, regionCellSet, graph, WORLD_SEED);
+        PatchOpener.openThinProtrusions(assignment, regionCellSet, grid, graph, WORLD_SEED);
 
         assertEquals(F, assignment.get(new MacroCellPos(3, 1)), "interior of the solid block must survive untouched");
         assertNotEquals(F, assignment.get(new MacroCellPos(1, 4)), "far tip of the 4-long protrusion must not survive or regrow");
@@ -69,7 +69,7 @@ class PatchOpenerTest {
     void aSolidBlockIsUntouched() {
         MacroGridConfig grid = new MacroGridConfig(128, 6);
         BiomeGraph graph = new BiomeGraph(
-            List.of(node("f", 100, 900, false, COMPACT), node("p", 100, 900, true)),
+            List.of(node("f", 100, 900, COMPACT), node("p", 100, 900)),
             List.of(AdjacencyRule.allow(P, F, 10))
         );
         Set<MacroCellPos> forestBlock = Set.of(
@@ -85,7 +85,7 @@ class PatchOpenerTest {
         Map<MacroCellPos, BiomeId> before = Map.copyOf(assignment);
         Set<MacroCellPos> regionCellSet = Set.copyOf(grid.cellsInRegion(REGION));
 
-        PatchOpener.openThinProtrusions(assignment, regionCellSet, graph, WORLD_SEED);
+        PatchOpener.openThinProtrusions(assignment, regionCellSet, grid, graph, WORLD_SEED);
 
         assertEquals(before, assignment, "a solid rectangle has full 2x2 support everywhere - opening must be a no-op");
     }
@@ -96,7 +96,7 @@ class PatchOpenerTest {
         BiomeId a = id("a");
         BiomeId b = id("b");
         BiomeGraph graph = new BiomeGraph(
-            List.of(node("a", 100, 900, false, COMPACT), node("b", 100, 900, false, COMPACT), node("p", 100, 900, true)),
+            List.of(node("a", 100, 900, COMPACT), node("b", 100, 900, COMPACT), node("p", 100, 900)),
             // No a/b rule: default-deny, mutually incompatible.
             List.of(AdjacencyRule.allow(P, a, 10), AdjacencyRule.allow(P, b, 10))
         );
@@ -112,9 +112,9 @@ class PatchOpenerTest {
         // immediately before it, so every regionCellSet cell is already assigned by the
         // time PatchOpener sees it - mirror that here rather than leaving the middle
         // columns null, which PatchOpener (correctly) doesn't defensively re-cover.
-        GapFiller.fillGaps(assignment, regionCellSet, graph, WORLD_SEED);
+        GapFiller.fillGaps(assignment, regionCellSet, grid, graph, WORLD_SEED);
 
-        PatchOpener.openThinProtrusions(assignment, regionCellSet, graph, WORLD_SEED);
+        PatchOpener.openThinProtrusions(assignment, regionCellSet, grid, graph, WORLD_SEED);
 
         for (MacroCellPos cell : regionCellSet) {
             BiomeId biome = assignment.get(cell);
@@ -138,7 +138,7 @@ class PatchOpenerTest {
     void aFullyErodedPatchStillLeavesEveryCellAssigned() {
         MacroGridConfig grid = new MacroGridConfig(128, 5);
         BiomeGraph graph = new BiomeGraph(
-            List.of(node("f", 100, 900, false, COMPACT), node("p", 100, 900, true)),
+            List.of(node("f", 100, 900, COMPACT), node("p", 100, 900)),
             List.of(AdjacencyRule.allow(P, F, 10))
         );
         // A pure 1-wide plus-shape: no cell is ever part of a full 2x2 square, so the
@@ -150,7 +150,7 @@ class PatchOpenerTest {
         }
         Set<MacroCellPos> regionCellSet = Set.copyOf(grid.cellsInRegion(REGION));
 
-        PatchOpener.openThinProtrusions(assignment, regionCellSet, graph, WORLD_SEED);
+        PatchOpener.openThinProtrusions(assignment, regionCellSet, grid, graph, WORLD_SEED);
 
         assertEquals(regionCellSet.size(), assignment.size(), "every cell must still end up assigned after erosion + re-dilation");
     }
@@ -159,7 +159,7 @@ class PatchOpenerTest {
     void unrestrictedBiomeIsExemptFromOpening() {
         MacroGridConfig grid = new MacroGridConfig(128, 5);
         BiomeGraph graph = new BiomeGraph(
-            List.of(node("f", 100, 900, false, GrowthCohesionProfile.UNRESTRICTED), node("p", 100, 900, true)),
+            List.of(node("f", 100, 900, GrowthCohesionProfile.UNRESTRICTED), node("p", 100, 900)),
             List.of(AdjacencyRule.allow(P, F, 10))
         );
         Set<MacroCellPos> line = Set.of(new MacroCellPos(2, 1), new MacroCellPos(2, 2), new MacroCellPos(2, 3), new MacroCellPos(1, 2), new MacroCellPos(3, 2));
@@ -170,7 +170,7 @@ class PatchOpenerTest {
         Map<MacroCellPos, BiomeId> before = Map.copyOf(assignment);
         Set<MacroCellPos> regionCellSet = Set.copyOf(grid.cellsInRegion(REGION));
 
-        PatchOpener.openThinProtrusions(assignment, regionCellSet, graph, WORLD_SEED);
+        PatchOpener.openThinProtrusions(assignment, regionCellSet, grid, graph, WORLD_SEED);
 
         assertEquals(before, assignment, "UNRESTRICTED biome opted out of chunkiness - opening must leave it alone");
     }

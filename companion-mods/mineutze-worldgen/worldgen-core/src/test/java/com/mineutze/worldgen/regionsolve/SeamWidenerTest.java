@@ -26,7 +26,7 @@ class SeamWidenerTest {
 
     private static BiomeGraph graph() {
         return new BiomeGraph(
-            List.of(node("ocean", 100, 900, false), node("badlands", 100, 900, false), node("plains", 100, 900, true)),
+            List.of(node("ocean", 100, 900), node("badlands", 100, 900), node("plains", 100, 900)),
             // No ocean/badlands rule: default-deny, mutually incompatible.
             List.of(AdjacencyRule.allow(PLAINS, OCEAN, 10), AdjacencyRule.allow(PLAINS, BADLANDS, 10))
         );

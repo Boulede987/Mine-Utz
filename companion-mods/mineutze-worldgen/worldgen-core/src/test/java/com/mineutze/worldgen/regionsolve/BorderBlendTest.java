@@ -30,7 +30,7 @@ class BorderBlendTest {
 
     private static BiomeGraph graphWithBlendWidths(int desertSavannaBlend, int desertPlainsBlend) {
         return new BiomeGraph(
-            List.of(node("desert", 200, 300, false), node("savanna", 200, 300, false), node("plains", 100, 200, true)),
+            List.of(node("desert", 200, 300), node("savanna", 200, 300), node("plains", 100, 200)),
             List.of(
                 AdjacencyRule.allow(DESERT, SAVANNA, desertSavannaBlend),
                 AdjacencyRule.allow(PLAINS, DESERT, desertPlainsBlend),
@@ -133,7 +133,7 @@ class BorderBlendTest {
         // that "shouldn't happen but did" state to confirm it still throws, not degrades.
         BiomeId forest = id("forest");
         BiomeGraph graph = new BiomeGraph(
-            List.of(node("desert", 200, 300, false), node("forest", 200, 300, false), node("plains", 100, 200, true)),
+            List.of(node("desert", 200, 300), node("forest", 200, 300), node("plains", 100, 200)),
             List.of(AdjacencyRule.allow(PLAINS, DESERT, 10), AdjacencyRule.allow(PLAINS, forest, 10))
         );
         Map<BiomeId, Double> values = Map.of(DESERT, 0.0, forest, 10.0, PLAINS, 100.0);

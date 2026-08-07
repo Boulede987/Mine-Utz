@@ -26,17 +26,19 @@ class RegionSolverTest {
 
     /**
      * Desert: only savanna/badlands/plains. Ocean: only forest/plains.
-     * Everything else falls to default-deny. Plains is the universal filler.
+     * Everything else falls to default-deny. Plains happens to be legal next to
+     * every other node here, but that's just this graph's own data - nothing
+     * requires or enforces it (see BiomeGraph's own doc).
      */
     private static BiomeGraph richGraph() {
         return new BiomeGraph(
             List.of(
-                node("desert", 200, 300, false),
-                node("savanna", 200, 300, false),
-                node("badlands", 150, 250, false),
-                node("ocean", 200, 300, false),
-                node("forest", 150, 250, false),
-                node("plains", 100, 200, true)
+                node("desert", 200, 300),
+                node("savanna", 200, 300),
+                node("badlands", 150, 250),
+                node("ocean", 200, 300),
+                node("forest", 150, 250),
+                node("plains", 100, 200)
             ),
             List.of(
                 AdjacencyRule.allow(DESERT, SAVANNA, 10),
@@ -94,14 +96,17 @@ class RegionSolverTest {
     /**
      * BudgetPlanner checks capacity BEFORE ever attempting placement - a region too
      * small for any node's own minimum gets an empty plan, not a doomed attempt. The
-     * single cell still ends up filler, just via GapFiller's own terminal fallback
-     * (no assigned neighbors at all to vote on) rather than a dropped/forced demand.
+     * single cell still needs SOME resolution though: GapFiller.resolveRemaining
+     * picks deterministically among every legal candidate (all three, here - zero
+     * neighbors means every node is vacuously legal) via its natural-order tie-break,
+     * which happens to land on "filler" (lexicographically last of "a"/"b"/"filler").
+     * Not special-cased - a differently-named third node would win instead.
      */
     @Test
     void aRegionTooSmallForAnyBiomeGetsAnEmptyPlanAndFallsToGapFillerInstead() {
         MacroGridConfig oneCellGrid = new MacroGridConfig(128, 1);
         BiomeGraph graph = new BiomeGraph(
-            List.of(node("a", 700, 900, false), node("b", 700, 900, false), node("filler", 700, 900, true)),
+            List.of(node("a", 700, 900), node("b", 700, 900), node("filler", 700, 900)),
             List.of(AdjacencyRule.allow(id("filler"), id("a"), 10), AdjacencyRule.allow(id("filler"), id("b"), 10))
         );
         RegionSolveInput input = new RegionSolveInput(graph, oneCellGrid, new RegionPos(0, 0), Map.of(), 1L);
@@ -131,12 +136,12 @@ class RegionSolverTest {
     void mostBudgetedDemandsSuccessfullyPlaceOnARealisticGraph() {
         BiomeGraph graph = new BiomeGraph(
             List.of(
-                node("desert", 700, 1000, false),
-                node("savanna", 500, 800, false),
-                node("badlands", 500, 800, false),
-                node("ocean", 600, 1000, false),
-                node("forest", 500, 800, false),
-                node("plains", 300, 600, true)
+                node("desert", 700, 1000),
+                node("savanna", 500, 800),
+                node("badlands", 500, 800),
+                node("ocean", 600, 1000),
+                node("forest", 500, 800),
+                node("plains", 300, 600)
             ),
             List.of(
                 AdjacencyRule.allow(DESERT, SAVANNA, 10),

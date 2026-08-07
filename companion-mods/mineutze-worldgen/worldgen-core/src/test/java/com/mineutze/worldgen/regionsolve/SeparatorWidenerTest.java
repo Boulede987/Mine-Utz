@@ -80,10 +80,10 @@ class SeparatorWidenerTest {
         BiomeId filler = id("filler");
         BiomeGraph graph = new BiomeGraph(
             List.of(
-                node("badlands", 100, 200, false),
-                node("savanna", 100, 200, false),
-                node("ocean", 100, 200, false),
-                node("filler", 5000, 5000, true)
+                node("badlands", 100, 200),
+                node("savanna", 100, 200),
+                node("ocean", 100, 200),
+                node("filler", 5000, 5000)
             ),
             List.of(
                 AdjacencyRule.allow(BADLANDS, filler, 10),

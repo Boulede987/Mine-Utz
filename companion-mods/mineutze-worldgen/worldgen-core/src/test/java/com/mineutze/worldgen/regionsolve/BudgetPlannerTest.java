@@ -22,7 +22,7 @@ class BudgetPlannerTest {
 
     private static BiomeGraph smallGraph() {
         return new BiomeGraph(
-            List.of(node("desert", 700, 1000, false), node("savanna", 500, 800, false), node("plains", 300, 600, true)),
+            List.of(node("desert", 700, 1000), node("savanna", 500, 800), node("plains", 300, 600)),
             List.of(AdjacencyRule.allow(DESERT, SAVANNA, 10), AdjacencyRule.allow(PLAINS, DESERT, 10), AdjacencyRule.allow(PLAINS, SAVANNA, 10))
         );
     }
