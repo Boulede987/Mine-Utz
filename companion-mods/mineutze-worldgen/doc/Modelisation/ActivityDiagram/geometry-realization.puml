@@ -2,26 +2,35 @@
 title Realize geometry from fixed topology (priority-driven flood-fill onto macro-cells)
 
 start
-:Map each seed node to a macro-cell\nseed position (deterministic from world seed);
-:Identity and target size range for every\npatch already fixed by the CSP stage -\nno legality decision left to make here;
+:Each free SeedGraphNode's position becomes\na growth seed; its CSP-assigned identity's\nsize range converts to a target cell count;
+:Seed cell claimed for each patch\n(skipped if the seed spot itself turns out\nillegal - GapFiller's sweep below\nreclaims that territory from a neighbor);
 
-while (any patch below its min size\nand still has claimable frontier?) is (yes)
-  :Pick the patch furthest below\nits target size (priority);
-  :Claim its highest-priority frontier cell\n(nearest-to-seed + deterministic jitter -\nsame ordering GrowthEngine uses today);
-  note right
-    Frontier is restricted to cells whose other
-    touching patches are already-fixed CSP-graph
-    neighbors. Legality was decided in Step 2 -
-    this pass only races patches to size.
-  end note
+while (any patch still below\nits target and has claimable frontier?) is (yes)
+  :Pick the patch furthest below\nits target (priority);
+  :Pop its highest-priority frontier cell\n(nearest-to-seed + deterministic jitter -\nsame ordering GrowthEngine uses today);
+  if (still unclaimed, still legal,\nstill cohesive right now?) then (yes)
+    :Claim it for this patch;
+    :Push its legal, cohesive,\nstill-unclaimed neighbors\ninto this patch's frontier;
+  else (no)
+    :Discard - gone stale since it was\npushed (a competing patch claimed it,\nor a neighbor's claim since then\nmade it illegal/incohesive);
+  endif
 endwhile (no)
 
-:Sweep any macro-cells still unclaimed\n(pockets left between patches);
-if (unclaimed cell has an assigned\nMoore-neighbor patch?) then (yes)
-  :Assign to nearest claiming patch\n(multi-source BFS - same mechanism as\ntoday's GapFiller.fillGaps);
-else (no)
-  :Isolated pocket with no adjacent\nclaimed patch - flag for local repair\n(caller's job, not this pass);
-endif
+:Run GapFiller.fillGaps over whatever's\nstill unclaimed - the same always-\nterminating multi-source-BFS-plus-three-\ntier-resolver the flood-fill-first\npipeline already relies on, unchanged;
 
 stop
+
+note right
+  Legality/cohesion are NOT fully pre-decided by
+  the CSP stage - Delaunay edges approximate which
+  seeds will actually end up touching in the final
+  geometry, they don't guarantee it exactly. So
+  every claim here is still checked live against
+  the CURRENT shared assignment (same "recheck
+  fresh, don't trust push-time state" principle
+  GapFiller's own fill pass already uses) - this
+  stage narrows how OFTEN a conflict can happen
+  (CSP already resolved the common case), it
+  doesn't eliminate the need for the check.
+end note
 @enduml

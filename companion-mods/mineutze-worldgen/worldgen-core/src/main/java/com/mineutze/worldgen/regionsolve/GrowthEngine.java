@@ -187,7 +187,8 @@ public final class GrowthEngine {
         return true;
     }
 
-    private static Comparator<MacroCellPos> frontierOrder(MacroCellPos seedCell, long worldSeed) {
+    /** Package-visible: {@code GeometryRealization}'s interleaved multi-patch growth reuses this exact ordering, one cell per patch per round instead of one patch grown to completion at a time. */
+    static Comparator<MacroCellPos> frontierOrder(MacroCellPos seedCell, long worldSeed) {
         return Comparator
             .comparingDouble((MacroCellPos cell) -> cell.distanceSquaredTo(seedCell) + jitter(worldSeed, seedCell, cell))
             .thenComparingInt(MacroCellPos::x)
