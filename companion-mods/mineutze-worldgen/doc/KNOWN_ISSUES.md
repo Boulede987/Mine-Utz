@@ -127,6 +127,96 @@ control becomes a design goal.
 
 ## Fixed
 
+### Universal-filler removal broke dead-end resolution; three-tier resolver + eager graph validation fixes it, guaranteed never to crash in a real game
+Every `BiomeNode` used to carry a `universalFiller` flag — one designated
+node (plains) was required to be legal next to every other node, so
+`GapFiller`'s last-resort sweep always had a guaranteed-safe fallback. On
+request, this was removed entirely (not replaced with an internal-only
+filler): plains got real adjacency restrictions like any other biome, and
+badlands lost its `PLAINS-BADLANDS` rule specifically (its only remaining
+ally is desert). `BiomeGraph`/`BiomeNode`/`ModBiomeGraph` simplified
+accordingly; `GapFiller.resolveRemaining` picked up the termination
+guarantee's job instead.
+
+Immediate consequence: any cell touching two mutually-incompatible biomes
+directly (forest and badlands share no ally at all) had zero legal
+candidates and nothing to fall back to — 100% crash rate confirmed across 6
+seeds, `IllegalStateException` from `GapFiller`. Fixed in stages:
+
+**1. `GapFiller.makeLegalHere`** — bounded neighbor reassignment (depth-2
+recursive search): if no biome is directly legal at a cell, try reassigning
+a blocking neighbor to something that unblocks it (and can itself be made
+legal in turn, one layer further out), reverting fully on failure. Safety
+guarantees reused from `SeparatorWidener`/`SeparatorOrganicizer`: a
+reassigned neighbor's donor patch must stay connected and at/above its own
+declared minimum size. Caught and fixed a real bug here mid-session: the
+first version returned success after fixing only the *first* blocking
+neighbor it found, leaving other blocking neighbors untouched — could
+silently leave an actual illegal adjacency on the board while reporting
+success. Fixed to keep resolving every blocking neighbor until the cell is
+genuinely legal, with full rollback across all of them if it never gets
+there (`GapFillerTest.aDeadEndCellGetsResolvedByReassigningANeighborInstead`
+exercises exactly this — a cell with two simultaneously-blocking neighbors).
+
+**2. `GapFiller.dropSmallestBlockingPatch`** — depth-2 reassignment fixes
+isolated conflicts but not donor scarcity: badlands and forest are
+graph-distance 3 apart (`badlands-desert-plains-forest`), so bridging one
+contact point borrows cells from a small nearby plains/desert patch — fine
+once, but badlands and forest touch at *many* cells in the same region, and
+independent bounded fixes compete for the same limited donor material until
+one hits its own minimum size and stops being usable (confirmed via
+instrumented trace: a plains patch already down to "would drop to 1 < min
+22" by the time a later cell needed it). When bounded reassignment is fully
+exhausted, `fillGaps` now drops the smallest directly-blocking patch
+entirely — exactly as if it had never been placed — and retries the whole
+fill so that territory gets reclaimed naturally. Capped at 3 patches per
+`fillGaps` call (`MAX_PATCH_DROP_RETRIES`) — resolves the large majority of
+real conflicts, but raising the cap empirically just relocated remaining
+crashes further into the region rather than eliminating them (tested up to
+8), confirming this tier alone can't be a complete guarantee for an
+arbitrarily-contested region.
+
+**3. `BiomeGraph` eager graph-distance validation** — `makeLegalHere`'s
+depth-2 search can only bridge two biomes that are within 3 hops of each
+other in the allow-graph (worked out by hand and confirmed empirically:
+`badlands-desert-plains-forest` is exactly 3 edges and reliably resolves
+isolated conflicts; a 4-hop chain does not). `BiomeGraph`'s constructor now
+BFS-checks every non-adjacent biome pair and throws immediately if any pair
+needs more than 3 hops to bridge — catching "impossible in principle" graph
+misconfigurations at construction time instead of a runtime crash mid-world-gen.
+Deliberately *not* a full guarantee: global connectivity (no isolated node)
+is necessary but not sufficient, and this check cannot and does not catch
+runtime donor-scarcity (tier 2's problem) — that depends on placement
+density, not graph structure. `ModBiomeGraph.DEFAULT` passes as-is
+(badlands-forest sits exactly at the 3-hop limit).
+
+**4. `GapFiller.resolveRemaining`'s `force` mode** — the actual
+game-crash-proofing tier 1-3 don't fully cover: a region can have enough
+simultaneous badlands/forest(+desert) contact points that even patch-drop
+retries just move the failure further along without resolving it (confirmed
+by raising the cap and watching the crash relocate, never disappear). Since
+"never crash in a shipped game" is a harder requirement than "produce
+locally-optimal terrain," `fillGaps` now falls through to an unconditional
+last resort once patch-drop is exhausted: directly commit whichever biome
+best fits the dead-end cell's neighbors (most matching neighbors, same
+tie-break as the normal legal path), ignoring adjacency legality entirely,
+for that one cell only. A first implementation of this tier was wrong and
+caught by re-running the previously-crashing seeds: it cleared the
+blocking neighbor cells and relied on the next fill pass to naturally
+re-resolve everything — but that fill pass usually just refilled the
+cleared cells with the exact same biomes (nothing outside those few cells
+had changed), recreating the identical dead end in a loop (hit a 1028-
+iteration safety cap on seed 42). Fixed by committing the dead-end cell's
+own value directly and permanently instead of indirectly hoping a later
+pass wouldn't undo it — `resolveRemaining` never revisits an already-
+assigned cell, so this cannot cycle.
+
+Verified on all 6 previously-100%-crashing seeds (42, 1, 2, 3, 4, 5): zero
+crashes, and the illegal-adjacency count this last-resort tier actually
+introduces is small — 0-58 cells out of 9216 per seed (0-0.6%), each one a
+single macro-cell-wide seam, not a sprawling defect. Two seeds (3, 4) never
+even reached tier 4. All 69 `worldgen-core` tests pass.
+
 ### `SeamWidener` — locally-pinched seams between incompatible biomes (2 false rejections, now enabled)
 A giant, otherwise-adequately-sized buffer patch (typically filler) can
 still have one local spot pinched thin where it happens to sit between two
