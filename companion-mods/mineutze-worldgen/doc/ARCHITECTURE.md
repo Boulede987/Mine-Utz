@@ -135,6 +135,72 @@ it's the standard mechanism for "extra world data that isn't a chunk"
 (vanilla uses the equivalent for maps, raid state, etc.). No need to
 hand-roll the Anvil region-file format ourselves.
 
+## Mesh-based geometry realization (branch `worldgen/mesh-geometry-realization`, not live)
+
+**Note**: most of this document (macro-cell flood-fill growth, universal-filler,
+plain CSP backtracking) describes the ORIGINAL v2 design and is known-stale —
+the actual live solve path replaced flood-fill-first placement with a
+topology-first CSP redesign (Delaunay-triangulated seed graph, colored via
+MRV+AC-3 backtracking, geometry realized only afterward) and removed the
+universal-filler invariant entirely. See `doc/fix_dieas.md` (the design
+conversation) and `SESSION_HANDOFF.md`'s 2026-08-07/08 entries for that
+history — this document was never updated to match at the time. Don't trust
+the "Region Solver" section above as current; verify against
+`TopologyFirstRegionSolver`/`GeometryRealization` in the source instead.
+
+Even after that redesign, one visual defect remained unfixed: a *required
+separator* — a buffer patch forced between two mutually-incompatible biomes
+(no `AdjacencyRule` between them) — has to trace the entire shared contact
+perimeter between the two, so it's inherently elongated. No amount of
+pixel-grid cleanup passes (`PatchOpener`, `SeamWidener`,
+`SeparatorWidthEnforcer`, `SeparatorOrganicizer`, `PinchResolver`,
+`DiagonalCornerResolver` — see `KNOWN_ISSUES.md`) can make that shape read as
+organic; they can only round its corners. User's words: *"These are NOT
+blobs, they are lines. It is cheating and goes against our principles."*
+
+This branch builds a real alternative to `GeometryRealization` (the
+macro-cell-grid growth stage), swappable via
+`TopologyFirstRegionSolver.GeometryRealizer` (currently only wired for the
+export CLI's `MINEUTZE_WORLDGEN_MESH_GEOMETRY` env var, NOT the live game
+path): instead of growing directly on the macro-cell grid, build a real
+triangulated planar mesh over the region, merge triangle faces into patches,
+displace the shared boundary between two different patches with noise, then
+rasterize back to the macro-cell grid only as the final step. Six new stages
+under `com.mineutze.worldgen.regionsolve.mesh`:
+`FineMeshPointScatter` (fine point scatter — every already-colored seed from
+the coarse CSP graph as a "germ" point, a boundary ring, uncolored filler
+points) → `FineMesh` (Delaunay triangulation + face-adjacency/vertex-fan/
+edge-registry structures) → `PatchMerger` (area-based priority growth,
+mesh-native legality/cohesion) → `MeshGapFiller` (the same 3-tier dead-end
+resolver `GapFiller` already proved, ported to face adjacency) →
+`EdgeDisplacement` (the actual visual payoff — perpendicular noise on shared
+boundaries) → `MeshRasterizer` (back to `Map<MacroCellPos,BiomeId>`, the only
+thing anything outside this stage ever sees) →
+`MeshGeometryRealization.repairRasterizationArtifacts` (a discretization
+safety net — see its own doc for two real gaps found and fixed via direct
+measurement, not anticipated up front).
+
+**Status as of 2026-08-08**: built, unit-tested (every class has its own
+JUnit suite), and compared directly against the live pixel pipeline on the
+project's standing reference seed (42, 3×3 regions from `RegionPos(-1,-1)`).
+User's own visual review: prefers the mesh pipeline specifically because it
+eliminates the separator-reads-as-a-line problem (no more single-biome-wide
+"border" patch) — the actual goal this whole effort exists for. Real
+residuals remain, not yet resolved, tracked as harness tasks at the time of
+writing (search this repo's task history or ask for current status, task
+numbers aren't stable across sessions): total patch count is still notably
+higher than the pixel baseline (fragmentation), one biome's competitive
+share of territory can come out worse than another's depending on how
+restrictive its own adjacency rules are (a genuine multi-biome fair-
+allocation question in `MeshGapFiller`'s fill priority, not a bug), and
+neither pipeline (pixel or mesh) currently enforces every biome's own
+declared minimum patch size — small legal-but-undersized fragments can
+appear, more visibly on the mesh side purely because of the higher patch
+count. **Do not flip `TopologyFirstRegionSolver`'s live call site
+(`GeometryRealization::realize` → `MeshGeometryRealization::realize`) until
+these are resolved or explicitly accepted** — that swap is a deliberate
+one-line change, not accidental.
+
 ## Decided
 
 - Macro-cell size: 64 blocks (4x4 chunks). Started at 128 blocks; live
