@@ -123,6 +123,43 @@ class MeshGapFillerTest {
     }
 
     /**
+     * The actual point of the 6-arg overload: a biome far below its own
+     * target must win contested territory over a biome that's already at
+     * (or past) its target, even when the "already satisfied" biome's own
+     * seed is otherwise just as reachable. Direct regression for the bug
+     * this restructuring fixes (see this class's own doc) — a flat
+     * distance-only priority would split contested territory roughly by
+     * proximity regardless of either biome's actual remaining demand.
+     */
+    @Test
+    void aBiomeFurtherBelowItsTargetWinsContestedTerritoryOverOneAlreadyAtTarget() {
+        BiomeId hungry = id("hungry");
+        BiomeId satisfied = id("satisfied");
+        BiomeGraph graph = new BiomeGraph(
+            List.of(node(hungry, 100, 900), node(satisfied, 100, 900)),
+            List.of(AdjacencyRule.allow(hungry, satisfied, 10))
+        );
+        FineMesh mesh = jitteredScatterMesh(10, 10, 6);
+
+        int hungrySeed = 0;
+        int satisfiedSeed = mesh.faces().size() - 1;
+        Map<Integer, BiomeId> faceIdentity = new LinkedHashMap<>(Map.of(hungrySeed, hungry, satisfiedSeed, satisfied));
+        MeshAssignment assignment = new MeshAssignment(faceIdentity, Set.of());
+
+        // "satisfied" already has all the territory it needs (target 0, any claimed
+        // area already exceeds that); "hungry" has a huge remaining gap.
+        Map<BiomeId, Double> targetAreaByBiome = Map.of(hungry, 100_000.0, satisfied, 0.0);
+        MeshGapFiller.fillGaps(mesh, assignment, graph, GRID, WORLD_SEED, targetAreaByBiome);
+
+        long hungryCount = assignment.faceIdentity().values().stream().filter(hungry::equals).count();
+        long satisfiedCount = assignment.faceIdentity().values().stream().filter(satisfied::equals).count();
+        assertEquals(mesh.faces().size(), assignment.faceIdentity().size(), "every face must end up assigned");
+        assertTrue(hungryCount > satisfiedCount,
+            "hungry (" + hungryCount + " faces) should have claimed most of the mesh over satisfied (" + satisfiedCount + " faces)");
+        assertEquals(1, satisfiedCount, "satisfied should never have grown past its own single starting face");
+    }
+
+    /**
      * The dead-end/reassignment tier, ported in spirit rather than as an
      * exact geometric replica of GapFillerTest's hand-built pixel fixture
      * (a triangulated mesh has no equivalent of "column x=0"). Any two

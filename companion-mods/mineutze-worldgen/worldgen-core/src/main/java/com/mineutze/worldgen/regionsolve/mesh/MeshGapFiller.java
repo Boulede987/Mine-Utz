@@ -17,6 +17,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.PriorityQueue;
 import java.util.Random;
 import java.util.Set;
@@ -67,15 +68,32 @@ import java.util.stream.Collectors;
  * catch (a solid patch flooding through a literal 1-cell gap in a wall) is
  * still caught by legality and the natural shape of a multi-source BFS,
  * not by strictness.
+ *
+ * <p><b>The fill pass itself is target-aware, not a single shared
+ * nearest-wins queue.</b> An earlier version pooled every biome's frontier
+ * into one {@code PriorityQueue} ordered purely by distance — found (via
+ * direct per-biome-area measurement at every pipeline stage, seed 42) to
+ * systematically favor whichever biome already had more/bigger claimed
+ * territory: a restrictively-legal biome (few compatible neighbors, so a
+ * narrow frontier) lost the competition for contested cells to a
+ * broadly-legal, numerous-germ biome even when the restricted biome was
+ * still far below its own target and the dominant one was already near or
+ * past its own. Each biome now gets its OWN frontier queue; every claim
+ * step picks whichever biome (with a non-empty frontier) has the largest
+ * remaining gap to its own aggregate target area, then claims its single
+ * best (distance+jitter) candidate — the exact same "furthest below target
+ * goes first" discipline {@link PatchMerger#merge} already uses one
+ * layer up, just extended into gap-fill instead of stopping at growth.
  */
 public final class MeshGapFiller {
 
     // Same technique and same value as the pixel GapFiller's own frontier jitter —
-    // deterministic per (worldSeed, face, biome), so competing patches at equal
-    // distance resolve reproducibly instead of by insertion order. Now that distance
-    // is real geometric distance (see FillCandidate's own doc) rather than a hop
-    // count, this is in the same macro-cell-unit scale as a real single hop through
-    // this mesh's ~4-macro-cell-wide triangles (FineMeshPointScatter.FINE_MESH_SPACING_BLOCKS)
+    // deterministic per (worldSeed, face), so competing candidates within the same
+    // biome's own frontier at equal distance resolve reproducibly instead of by
+    // insertion order. Now that distance is real geometric distance (see
+    // FillCandidate's own doc) rather than a hop count, this is in the same
+    // macro-cell-unit scale as a real single hop through this mesh's
+    // ~4-macro-cell-wide triangles (FineMeshPointScatter.FINE_MESH_SPACING_BLOCKS)
     // — re-tune if that spacing constant changes significantly.
     private static final double JITTER_MAGNITUDE = 12.0;
     private static final long JITTER_SALT = 0x6A9F_11E4L;
@@ -96,16 +114,33 @@ public final class MeshGapFiller {
      * hop count would systematically favor whichever biome has more/smaller
      * already-claimed faces nearby on this mesh's non-uniform triangle
      * sizes (unlike the pixel grid, where a hop IS a fixed-size macro-cell
-     * step and the two metrics coincide).
+     * step and the two metrics coincide). No {@code biome} field — each
+     * instance only ever lives in that one biome's own frontier queue, so
+     * it's implied by which queue it's in, not carried per-candidate.
      */
-    private record FillCandidate(int faceId, BiomeId biome, double distance) {
+    private record FillCandidate(int faceId, double distance) {
     }
 
+    /** Convenience overload: nominal "1 unit of demand per biome present in the graph" target, for callers with no real per-germ target info (most tests). The real production call site ({@code MeshGeometryRealization}) uses the 6-arg overload with each biome's actual aggregate germ-target area. */
     public static void fillGaps(FineMesh mesh, MeshAssignment assignment, BiomeGraph graph, MacroGridConfig grid, long worldSeed) {
+        fillGaps(mesh, assignment, graph, grid, worldSeed, nominalTargetAreaByBiome(graph, grid));
+    }
+
+    private static Map<BiomeId, Double> nominalTargetAreaByBiome(BiomeGraph graph, MacroGridConfig grid) {
+        Map<BiomeId, Double> targets = new LinkedHashMap<>();
+        for (BiomeNode node : graph.nodes()) {
+            double sideInCells = (double) node.sizeRange().maxWidthBlocks() / grid.macroCellSizeBlocks();
+            targets.put(node.id(), sideInCells * sideInCells);
+        }
+        return targets;
+    }
+
+    /** @param targetAreaByBiome each biome's aggregate target area (macro-cell² units, sum across all its germs) — a biome absent from this map is treated as having no further demand (target 0), so it's never preferred over one that's actually short of its own target. */
+    public static void fillGaps(FineMesh mesh, MeshAssignment assignment, BiomeGraph graph, MacroGridConfig grid, long worldSeed, Map<BiomeId, Double> targetAreaByBiome) {
         int patchDropAttempt = 0;
 
         while (true) {
-            runFillPass(mesh, assignment.faceIdentity(), graph, worldSeed);
+            runFillPass(mesh, assignment.faceIdentity(), graph, worldSeed, targetAreaByBiome);
 
             try {
                 resolveRemaining(mesh, assignment, grid, graph, false);
@@ -121,32 +156,71 @@ public final class MeshGapFiller {
         }
     }
 
-    private static void runFillPass(FineMesh mesh, Map<Integer, BiomeId> faceIdentity, BiomeGraph graph, long worldSeed) {
-        PriorityQueue<FillCandidate> frontier = new PriorityQueue<>(candidateOrder(worldSeed));
+    private static void runFillPass(FineMesh mesh, Map<Integer, BiomeId> faceIdentity, BiomeGraph graph, long worldSeed, Map<BiomeId, Double> targetAreaByBiome) {
+        Map<BiomeId, PriorityQueue<FillCandidate>> frontierByBiome = new LinkedHashMap<>();
+        Map<BiomeId, Double> claimedAreaByBiome = new LinkedHashMap<>();
 
         for (Map.Entry<Integer, BiomeId> entry : faceIdentity.entrySet()) {
-            addUnclaimedNeighbors(mesh, entry.getKey(), entry.getValue(), 0.0, faceIdentity, frontier);
+            BiomeId biome = entry.getValue();
+            claimedAreaByBiome.merge(biome, MeshAreas.area(mesh, mesh.face(entry.getKey())), Double::sum);
+            addUnclaimedNeighbors(mesh, entry.getKey(), 0.0, faceIdentity, frontierFor(frontierByBiome, biome, worldSeed));
         }
 
-        while (!frontier.isEmpty()) {
-            FillCandidate candidate = frontier.poll();
-            int faceId = candidate.faceId();
-            if (faceIdentity.containsKey(faceId)) {
-                continue; // already claimed by a competing biome that reached it first
+        while (true) {
+            Optional<BiomeId> mostBehind = mostBehindTarget(frontierByBiome, claimedAreaByBiome, targetAreaByBiome);
+            if (mostBehind.isEmpty()) {
+                return;
             }
-
-            boolean stillLegal = MeshLegality.isLegal(mesh, faceId, candidate.biome(), faceIdentity, graph);
-            if (!stillLegal) {
-                continue; // stale by the time it was popped - some other source may still legally reach it later
-            }
-
-            faceIdentity.put(faceId, candidate.biome());
-            WorldgenTrace.log("MESH GAPFILL claim face " + faceId + " = " + candidate.biome() + " (distance=" + candidate.distance() + ")");
-            addUnclaimedNeighbors(mesh, faceId, candidate.biome(), candidate.distance(), faceIdentity, frontier);
+            BiomeId biome = mostBehind.get();
+            claimNextValidFrontierFace(mesh, biome, frontierByBiome.get(biome), faceIdentity, graph, claimedAreaByBiome);
         }
     }
 
-    private static void addUnclaimedNeighbors(FineMesh mesh, int faceId, BiomeId biome, double distance, Map<Integer, BiomeId> faceIdentity, PriorityQueue<FillCandidate> frontier) {
+    private static PriorityQueue<FillCandidate> frontierFor(Map<BiomeId, PriorityQueue<FillCandidate>> frontierByBiome, BiomeId biome, long worldSeed) {
+        return frontierByBiome.computeIfAbsent(biome, key -> new PriorityQueue<>(candidateOrder(worldSeed)));
+    }
+
+    /** Whichever biome (with at least one still-claimable frontier candidate) has the largest gap to its own target — same "furthest below target" tie-break idea PatchMerger uses, natural BiomeId order as the deterministic fallback for an exact tie. */
+    private static Optional<BiomeId> mostBehindTarget(Map<BiomeId, PriorityQueue<FillCandidate>> frontierByBiome, Map<BiomeId, Double> claimedAreaByBiome, Map<BiomeId, Double> targetAreaByBiome) {
+        return frontierByBiome.entrySet().stream()
+            .filter(entry -> !entry.getValue().isEmpty())
+            .max(Comparator.<Map.Entry<BiomeId, PriorityQueue<FillCandidate>>>comparingDouble(
+                    entry -> remainingGap(entry.getKey(), claimedAreaByBiome, targetAreaByBiome))
+                .thenComparing(entry -> entry.getKey().toString()))
+            .map(Map.Entry::getKey);
+    }
+
+    private static double remainingGap(BiomeId biome, Map<BiomeId, Double> claimedAreaByBiome, Map<BiomeId, Double> targetAreaByBiome) {
+        return targetAreaByBiome.getOrDefault(biome, 0.0) - claimedAreaByBiome.getOrDefault(biome, 0.0);
+    }
+
+    /**
+     * Drains {@code frontier} (that one biome's own queue) until a still-
+     * legal, still-unclaimed candidate is found and claimed, or the queue
+     * runs dry — mirrors {@code PatchMerger}'s own "recheck fresh, a stale
+     * entry just gets skipped, not treated as a stall" discipline: an entry
+     * valid when pushed can go stale by the time it's popped, since a
+     * competing biome may have claimed it (or a neighbor that made it
+     * illegal) in the meantime.
+     */
+    private static void claimNextValidFrontierFace(
+        FineMesh mesh, BiomeId biome, PriorityQueue<FillCandidate> frontier, Map<Integer, BiomeId> faceIdentity, BiomeGraph graph, Map<BiomeId, Double> claimedAreaByBiome
+    ) {
+        while (!frontier.isEmpty()) {
+            FillCandidate candidate = frontier.poll();
+            int faceId = candidate.faceId();
+            if (faceIdentity.containsKey(faceId) || !MeshLegality.isLegal(mesh, faceId, biome, faceIdentity, graph)) {
+                continue;
+            }
+            faceIdentity.put(faceId, biome);
+            claimedAreaByBiome.merge(biome, MeshAreas.area(mesh, mesh.face(faceId)), Double::sum);
+            WorldgenTrace.log("MESH GAPFILL claim face " + faceId + " = " + biome + " (distance=" + candidate.distance() + ")");
+            addUnclaimedNeighbors(mesh, faceId, candidate.distance(), faceIdentity, frontier);
+            return;
+        }
+    }
+
+    private static void addUnclaimedNeighbors(FineMesh mesh, int faceId, double distance, Map<Integer, BiomeId> faceIdentity, PriorityQueue<FillCandidate> frontier) {
         Point2D fromCentroid = MeshAreas.centroid(mesh, mesh.face(faceId));
         for (int neighborFaceId : mesh.edgeAdjacentFaces(faceId)) {
             if (!faceIdentity.containsKey(neighborFaceId)) {
@@ -154,21 +228,19 @@ public final class MeshGapFiller {
                 double dx = toCentroid.x() - fromCentroid.x();
                 double dz = toCentroid.z() - fromCentroid.z();
                 double hopDistance = Math.sqrt(dx * dx + dz * dz);
-                frontier.add(new FillCandidate(neighborFaceId, biome, distance + hopDistance));
+                frontier.add(new FillCandidate(neighborFaceId, distance + hopDistance));
             }
         }
     }
 
     private static Comparator<FillCandidate> candidateOrder(long worldSeed) {
-        return Comparator.<FillCandidate>comparingDouble(candidate -> candidate.distance() + jitter(worldSeed, candidate.faceId(), candidate.biome()))
-            .thenComparingInt(FillCandidate::faceId)
-            .thenComparing(candidate -> candidate.biome().toString());
+        return Comparator.<FillCandidate>comparingDouble(candidate -> candidate.distance() + jitter(worldSeed, candidate.faceId()))
+            .thenComparingInt(FillCandidate::faceId);
     }
 
-    private static double jitter(long worldSeed, int faceId, BiomeId biome) {
+    private static double jitter(long worldSeed, int faceId) {
         long hash = worldSeed ^ JITTER_SALT;
         hash = hash * 31 + faceId;
-        hash = hash * 31 + biome.toString().hashCode();
         return new Random(hash).nextDouble() * JITTER_MAGNITUDE;
     }
 

@@ -13,6 +13,7 @@ import com.mineutze.worldgen.regionsolve.mesh.PatchMerger;
 import com.mineutze.worldgen.regionsolve.mesh.ScatteredPoint;
 import com.mineutze.worldgen.regionsolve.topology.Point2D;
 import com.mineutze.worldgen.regionsolve.topology.SeedGraph;
+import com.mineutze.worldgen.regionsolve.topology.SeedGraphNode;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -99,11 +100,35 @@ public final class MeshGeometryRealization {
         FineMesh mesh = FineMesh.build(scatter);
 
         MeshAssignment assignment = PatchMerger.merge(mesh, input, seedGraph, assignedIdentities);
-        MeshGapFiller.fillGaps(mesh, assignment, input.graph(), input.gridConfig(), input.worldSeed());
+        Map<BiomeId, Double> targetAreaByBiome = aggregateTargetAreaByBiome(seedGraph, assignedIdentities, input);
+        MeshGapFiller.fillGaps(mesh, assignment, input.graph(), input.gridConfig(), input.worldSeed(), targetAreaByBiome);
         Map<Integer, Point2D> displaced = EdgeDisplacement.displace(mesh, assignment, input.graph(), input.gridConfig(), input.worldSeed());
         Map<MacroCellPos, BiomeId> rasterized = MeshRasterizer.rasterize(mesh, assignment, displaced, input);
 
         return repairRasterizationArtifacts(rasterized, input.graph());
+    }
+
+    /**
+     * Each free germ's own target area (same formula {@link PatchMerger}'s
+     * own growth phase uses), summed per biome across every germ that biome
+     * has — the real per-biome demand signal {@link MeshGapFiller}'s fill
+     * priority needs (see that class's own doc for why a flat distance-only
+     * priority systematically starved restrictively-legal, sparse-germ
+     * biomes on the seed-42 comparison). A biome absent here (e.g. only
+     * present via fixed boundary context, never a free germ this solve)
+     * simply has no further demand — correct, not an oversight.
+     */
+    private static Map<BiomeId, Double> aggregateTargetAreaByBiome(SeedGraph seedGraph, Map<Integer, BiomeId> assignedIdentities, RegionSolveInput input) {
+        Map<BiomeId, Double> targets = new LinkedHashMap<>();
+        for (SeedGraphNode node : seedGraph.nodes()) {
+            if (node.fixed()) {
+                continue;
+            }
+            BiomeId biome = assignedIdentities.get(node.id());
+            double sideInCells = (double) input.graph().node(biome).sizeRange().maxWidthBlocks() / input.gridConfig().macroCellSizeBlocks();
+            targets.merge(biome, sideInCells * sideInCells, Double::sum);
+        }
+        return targets;
     }
 
     /**
