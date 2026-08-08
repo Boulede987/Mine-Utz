@@ -21,6 +21,7 @@ import java.util.Random;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
@@ -87,15 +88,19 @@ class MeshGapFillerTest {
     }
 
     /**
-     * A COMPACT profile (minSameBiomeNeighbors=2, mesh threshold 2-of-3
-     * edge-neighbors) pre-seeded as a small solid cluster should be able to
-     * extend along its own already-solid boundary, but must not flood the
-     * entire rest of an otherwise wide-open mesh - the mesh mirror of
-     * GapFillerTest's own "cohesion stops a patch flooding through the
-     * gap" case.
+     * Documents a deliberate design decision (see this class's own doc):
+     * unlike the pixel {@code GapFiller}, fill does NOT apply {@code
+     * MeshCohesion}'s neck-prevention — a COMPACT profile has no special
+     * protection here and legitimately floods everything legally reachable,
+     * same as an unrestricted one would. Neck-prevention for a COMPACT
+     * biome is still fully enforced during {@code PatchMerger}'s own growth
+     * phase (see {@code MeshCohesionTest}) — this test exists so a future
+     * change re-adding a cohesion check to fill is a deliberate choice, not
+     * an accidental regression back to the sparse-biome starvation bug this
+     * design avoids.
      */
     @Test
-    void compactCohesionProfileStopsAPatchFloodingTheWholeMesh() {
+    void compactProfileHasNoSpecialProtectionDuringFillUnlikeDuringGrowth() {
         GrowthCohesionProfile compact = new GrowthCohesionProfile(2, 0, 0);
         BiomeId a = id("a");
         BiomeId filler = id("filler");
@@ -105,19 +110,16 @@ class MeshGapFillerTest {
         );
         FineMesh mesh = jitteredScatterMesh(10, 10, 4);
 
-        // Seed A as a solid cluster: face 0 plus every face edge-adjacent to it.
-        Map<Integer, BiomeId> faceIdentity = new LinkedHashMap<>();
-        faceIdentity.put(0, a);
-        for (int neighbor : mesh.edgeAdjacentFaces(0)) {
-            faceIdentity.put(neighbor, a);
-        }
+        // Seed A as a single face - if fill applied cohesion the same way growth
+        // does, a lone seed with no established thickness would stall immediately.
+        Map<Integer, BiomeId> faceIdentity = new LinkedHashMap<>(Map.of(0, a));
         MeshAssignment assignment = new MeshAssignment(faceIdentity, Set.of());
 
         MeshGapFiller.fillGaps(mesh, assignment, graph, GRID, WORLD_SEED);
 
-        long aCount = assignment.faceIdentity().values().stream().filter(a::equals).count();
-        assertTrue(aCount < mesh.faces().size(),
-            "a compact profile must not flood the entire mesh - filler should have claimed the far side");
+        assertEquals(mesh.faces().size(), assignment.faceIdentity().size(), "every face must end up assigned");
+        assertTrue(assignment.faceIdentity().values().stream().allMatch(a::equals),
+            "with only one other (mutually legal) biome present and no cohesion check during fill, A legitimately claims everything reachable");
     }
 
     /**

@@ -3,9 +3,9 @@ package com.mineutze.worldgen.regionsolve.mesh;
 import com.mineutze.worldgen.biomegraph.BiomeGraph;
 import com.mineutze.worldgen.biomegraph.BiomeId;
 import com.mineutze.worldgen.biomegraph.BiomeNode;
-import com.mineutze.worldgen.biomegraph.GrowthCohesionProfile;
 import com.mineutze.worldgen.regionsolve.MacroGridConfig;
 import com.mineutze.worldgen.regionsolve.WorldgenTrace;
+import com.mineutze.worldgen.regionsolve.topology.Point2D;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -38,12 +38,45 @@ import java.util.stream.Collectors;
  * already-solved neighbor-region context, not this solve's to revise, the
  * mesh analog of the pixel version's "never touches a cell outside
  * regionCellSet."
+ *
+ * <p><b>Unlike the pixel {@code GapFiller}, this class does NOT apply
+ * {@link MeshCohesion}'s neck-prevention during fill — only {@link
+ * MeshLegality}.</b> Tried it first (biome's own profile, no bootstrap
+ * exemption, matching the pixel version's own "gap-fill extends
+ * already-established patches" reasoning) and it measurably starved
+ * sparse-germ biomes on seed 42: a biome with only 3 germs got literally
+ * ZERO additional territory from a full fill pass once its growth-phase
+ * patches stalled, while denser biomes (13-14 germs) kept growing
+ * substantially through the same fill. Root cause: gap-fill's frontier
+ * seeds from EVERY already-assigned face of a biome simultaneously
+ * (possibly several separate, disconnected clusters from growth), so a
+ * fresh gap-fill candidate typically has only 1 same-identity edge-neighbor
+ * — whichever face it's extending from — even when it's a completely
+ * ordinary, non-pathological extension, not a real neck. That's
+ * structurally different from {@link PatchMerger}'s serial single-patch
+ * growth, where the same 2-of-3 threshold is a correct, proven
+ * neck-blocker (see {@link MeshCohesion}'s own doc, including a reverted
+ * attempt to fix this by counting diagonal partners too — that nearly
+ * disabled neck-prevention mesh-wide instead). {@link MeshLegality} (fully
+ * enforced here, unchanged) plus gap-fill's inherently fair multi-source
+ * nearest-wins competition are enough protection against pathological
+ * flooding on their own — the same real-world lesson the pixel
+ * {@code GapFiller} already demonstrates from the other direction: its own
+ * cohesion check is lenient enough (2 of 8 Moore-neighbors) that it barely
+ * constrains ordinary fills either, and the one case it actually needs to
+ * catch (a solid patch flooding through a literal 1-cell gap in a wall) is
+ * still caught by legality and the natural shape of a multi-source BFS,
+ * not by strictness.
  */
 public final class MeshGapFiller {
 
-    // Same technique as GrowthEngine/GapFiller's own frontier jitter — deterministic
-    // per (worldSeed, face, biome), so competing patches at equal distance resolve
-    // reproducibly instead of by insertion order.
+    // Same technique and same value as the pixel GapFiller's own frontier jitter —
+    // deterministic per (worldSeed, face, biome), so competing patches at equal
+    // distance resolve reproducibly instead of by insertion order. Now that distance
+    // is real geometric distance (see FillCandidate's own doc) rather than a hop
+    // count, this is in the same macro-cell-unit scale as a real single hop through
+    // this mesh's ~4-macro-cell-wide triangles (FineMeshPointScatter.FINE_MESH_SPACING_BLOCKS)
+    // — re-tune if that spacing constant changes significantly.
     private static final double JITTER_MAGNITUDE = 12.0;
     private static final long JITTER_SALT = 0x6A9F_11E4L;
 
@@ -56,7 +89,16 @@ public final class MeshGapFiller {
     private MeshGapFiller() {
     }
 
-    private record FillCandidate(int faceId, BiomeId biome, int distance) {
+    /**
+     * {@code distance} is real accumulated centroid-to-centroid geometric
+     * distance (macro-cell units), not a flat hop count — {@code PatchMerger}'s
+     * own frontier already orders by real distance from the germ, and a
+     * hop count would systematically favor whichever biome has more/smaller
+     * already-claimed faces nearby on this mesh's non-uniform triangle
+     * sizes (unlike the pixel grid, where a hop IS a fixed-size macro-cell
+     * step and the two metrics coincide).
+     */
+    private record FillCandidate(int faceId, BiomeId biome, double distance) {
     }
 
     public static void fillGaps(FineMesh mesh, MeshAssignment assignment, BiomeGraph graph, MacroGridConfig grid, long worldSeed) {
@@ -83,7 +125,7 @@ public final class MeshGapFiller {
         PriorityQueue<FillCandidate> frontier = new PriorityQueue<>(candidateOrder(worldSeed));
 
         for (Map.Entry<Integer, BiomeId> entry : faceIdentity.entrySet()) {
-            addUnclaimedNeighbors(mesh, entry.getKey(), entry.getValue(), 1, faceIdentity, frontier);
+            addUnclaimedNeighbors(mesh, entry.getKey(), entry.getValue(), 0.0, faceIdentity, frontier);
         }
 
         while (!frontier.isEmpty()) {
@@ -93,29 +135,26 @@ public final class MeshGapFiller {
                 continue; // already claimed by a competing biome that reached it first
             }
 
-            GrowthCohesionProfile cohesion = graph.node(candidate.biome()).cohesionProfile();
             boolean stillLegal = MeshLegality.isLegal(mesh, faceId, candidate.biome(), faceIdentity, graph);
-            boolean stillCohesive = satisfiesCohesionForGapFill(mesh, faceId, candidate.biome(), faceIdentity, cohesion);
-            if (!stillLegal || !stillCohesive) {
+            if (!stillLegal) {
                 continue; // stale by the time it was popped - some other source may still legally reach it later
             }
 
             faceIdentity.put(faceId, candidate.biome());
             WorldgenTrace.log("MESH GAPFILL claim face " + faceId + " = " + candidate.biome() + " (distance=" + candidate.distance() + ")");
-            addUnclaimedNeighbors(mesh, faceId, candidate.biome(), candidate.distance() + 1, faceIdentity, frontier);
+            addUnclaimedNeighbors(mesh, faceId, candidate.biome(), candidate.distance(), faceIdentity, frontier);
         }
     }
 
-    /** Gap-fill extends already-established patches, never has GrowthEngine's own seed-bootstrap problem, so the real already-claimed count (not a hardcoded exemption) is what MeshCohesion should see. */
-    private static boolean satisfiesCohesionForGapFill(FineMesh mesh, int faceId, BiomeId biome, Map<Integer, BiomeId> faceIdentity, GrowthCohesionProfile cohesion) {
-        long alreadyClaimedFaces = faceIdentity.values().stream().filter(biome::equals).count();
-        return MeshCohesion.satisfies(mesh, faceId, biome, faceIdentity, cohesion, (int) alreadyClaimedFaces);
-    }
-
-    private static void addUnclaimedNeighbors(FineMesh mesh, int faceId, BiomeId biome, int distance, Map<Integer, BiomeId> faceIdentity, PriorityQueue<FillCandidate> frontier) {
+    private static void addUnclaimedNeighbors(FineMesh mesh, int faceId, BiomeId biome, double distance, Map<Integer, BiomeId> faceIdentity, PriorityQueue<FillCandidate> frontier) {
+        Point2D fromCentroid = MeshAreas.centroid(mesh, mesh.face(faceId));
         for (int neighborFaceId : mesh.edgeAdjacentFaces(faceId)) {
             if (!faceIdentity.containsKey(neighborFaceId)) {
-                frontier.add(new FillCandidate(neighborFaceId, biome, distance));
+                Point2D toCentroid = MeshAreas.centroid(mesh, mesh.face(neighborFaceId));
+                double dx = toCentroid.x() - fromCentroid.x();
+                double dz = toCentroid.z() - fromCentroid.z();
+                double hopDistance = Math.sqrt(dx * dx + dz * dz);
+                frontier.add(new FillCandidate(neighborFaceId, biome, distance + hopDistance));
             }
         }
     }

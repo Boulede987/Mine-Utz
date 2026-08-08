@@ -18,6 +18,17 @@ import java.util.Map;
  * and fails. A 1-wide triangle strip structurally cannot grow past its
  * second face under this rule.
  *
+ * <p><b>Counting diagonal partners too (tried, reverted) nearly disabled
+ * neck-prevention entirely</b>: a real mesh's average vertex degree is ~6
+ * (Euler's formula), so diagonal partners proliferate almost everywhere —
+ * confirmed directly with a deliberately-engineered "dumbbell" test
+ * fixture (two dense clusters joined by a visually thin bridge) where even
+ * a COMPACT profile flooded 100% of the mesh once diagonal partners
+ * counted toward the threshold too. The real fix for {@code MeshGapFiller}
+ * starving sparse-germ biomes (see that class's own doc) lives there, not
+ * here — this class's edge-only neck-prevention stays exactly as
+ * originally designed and proven.
+ *
  * <p>{@link GrowthCohesionProfile#directionalRunMajor()} has no mesh
  * equivalent (no x/z axis on a triangle) but its INTENT does: a biome that
  * opted into a directional-run profile is explicitly saying "I'm allowed to
