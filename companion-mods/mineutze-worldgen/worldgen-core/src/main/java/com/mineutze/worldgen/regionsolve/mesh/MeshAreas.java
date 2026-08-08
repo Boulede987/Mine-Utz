@@ -1,5 +1,6 @@
 package com.mineutze.worldgen.regionsolve.mesh;
 
+import com.mineutze.worldgen.regionsolve.MacroGridConfig;
 import com.mineutze.worldgen.regionsolve.topology.IndexedTriangle;
 import com.mineutze.worldgen.regionsolve.topology.Point2D;
 
@@ -30,5 +31,11 @@ public final class MeshAreas {
         Point2D b = mesh.position(face.b());
         Point2D c = mesh.position(face.c());
         return new Point2D((a.x() + b.x() + c.x()) / 3.0, (a.z() + b.z() + c.z()) / 3.0);
+    }
+
+    /** A width-in-blocks (e.g. a {@code BiomeSizeRange}'s min or max) expressed as a square-patch area in macro-cell² units — shared by every caller that needs to compare a mesh area against a biome's declared size range. */
+    public static double areaForWidthBlocks(int widthBlocks, MacroGridConfig grid) {
+        double sideInCells = (double) widthBlocks / grid.macroCellSizeBlocks();
+        return sideInCells * sideInCells;
     }
 }

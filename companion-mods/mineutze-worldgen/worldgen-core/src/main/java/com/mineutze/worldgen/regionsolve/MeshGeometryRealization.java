@@ -8,6 +8,7 @@ import com.mineutze.worldgen.regionsolve.mesh.FineMesh;
 import com.mineutze.worldgen.regionsolve.mesh.FineMeshPointScatter;
 import com.mineutze.worldgen.regionsolve.mesh.MeshAssignment;
 import com.mineutze.worldgen.regionsolve.mesh.MeshGapFiller;
+import com.mineutze.worldgen.regionsolve.mesh.MeshPatchSizeEnforcer;
 import com.mineutze.worldgen.regionsolve.mesh.MeshRasterizer;
 import com.mineutze.worldgen.regionsolve.mesh.PatchMerger;
 import com.mineutze.worldgen.regionsolve.mesh.ScatteredPoint;
@@ -49,14 +50,18 @@ import java.util.stream.Collectors;
  * after the topology-first redesign — {@code TopologyFirstRegionSolver}
  * still calls {@link GeometryRealization#realize} until that swap is made.
  *
- * <p>Five stages, each its own class under {@code regionsolve.mesh}:
+ * <p>Six stages, each its own class under {@code regionsolve.mesh}:
  * {@link FineMeshPointScatter} (fine point scatter: fixed/CSP-colored germ
  * points, a boundary ring, uncolored filler) → {@link FineMesh} (Delaunay
  * triangulation + adjacency structures) → {@link PatchMerger} (area-based
  * priority growth, reusing the same legality/cohesion discipline
  * {@code GeometryRealization} itself uses) → {@link MeshGapFiller} (the
- * same 3-tier dead-end resolver {@link GapFiller} already proved) →
- * {@link EdgeDisplacement} (the actual visual payoff) →
+ * same 3-tier dead-end resolver {@link GapFiller} already proved, plus a
+ * target-aware fill priority — see its own doc) →
+ * {@link MeshPatchSizeEnforcer} (absorbs any component that's still under
+ * its biome's own declared minimum size — a real, pre-existing gap on
+ * BOTH pipelines, found via user review, not something the mesh rewrite
+ * introduced) → {@link EdgeDisplacement} (the actual visual payoff) →
  * {@link MeshRasterizer} (back to {@code Map<MacroCellPos,BiomeId>}) →
  * {@link #repairRasterizationArtifacts} (see its own doc — real gaps found
  * via the seed-42 comparison this rewrite's plan calls for, not anticipated
@@ -102,6 +107,7 @@ public final class MeshGeometryRealization {
         MeshAssignment assignment = PatchMerger.merge(mesh, input, seedGraph, assignedIdentities);
         Map<BiomeId, Double> targetAreaByBiome = aggregateTargetAreaByBiome(seedGraph, assignedIdentities, input);
         MeshGapFiller.fillGaps(mesh, assignment, input.graph(), input.gridConfig(), input.worldSeed(), targetAreaByBiome);
+        MeshPatchSizeEnforcer.enforceMinimumPatchSize(mesh, assignment, input.graph(), input.gridConfig());
         Map<Integer, Point2D> displaced = EdgeDisplacement.displace(mesh, assignment, input.graph(), input.gridConfig(), input.worldSeed());
         Map<MacroCellPos, BiomeId> rasterized = MeshRasterizer.rasterize(mesh, assignment, displaced, input);
 

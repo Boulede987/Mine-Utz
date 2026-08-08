@@ -171,8 +171,8 @@ public final class EdgeDisplacement {
         Map<Integer, ThroughVertex> throughVertices, Map<Integer, Point2D> displaced, long worldSeed
     ) {
         BiomeSizeRange sizeRange = graph.node(biome).sizeRange();
-        double minArea = areaFor(sizeRange.minWidthBlocks(), grid);
-        double maxArea = areaFor(sizeRange.maxWidthBlocks(), grid);
+        double minArea = MeshAreas.areaForWidthBlocks(sizeRange.minWidthBlocks(), grid);
+        double maxArea = MeshAreas.areaForWidthBlocks(sizeRange.maxWidthBlocks(), grid);
 
         Set<Integer> componentVertices = new HashSet<>();
         for (int faceId : component) {
@@ -199,11 +199,6 @@ public final class EdgeDisplacement {
         // Cheapest-fix ceiling reached - accept whatever the last roll produced, same
         // "drop, don't force" philosophy as everywhere else in this pipeline: this is
         // purely cosmetic, not a hard invariant.
-    }
-
-    private static double areaFor(int widthBlocks, MacroGridConfig grid) {
-        double sideInCells = (double) widthBlocks / grid.macroCellSizeBlocks();
-        return sideInCells * sideInCells;
     }
 
     private static List<Set<Integer>> patchComponents(FineMesh mesh, Map<Integer, BiomeId> faceIdentity, Set<Integer> fixedFaceIds) {

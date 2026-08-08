@@ -309,9 +309,8 @@ public final class MeshGapFiller {
         return totalArea - MeshAreas.area(mesh, mesh.face(donorFaceId));
     }
 
-    private static double minAreaFor(BiomeId biome, MacroGridConfig grid, BiomeGraph graph) {
-        double sideInCells = (double) graph.node(biome).sizeRange().minWidthBlocks() / grid.macroCellSizeBlocks();
-        return sideInCells * sideInCells;
+    static double minAreaFor(BiomeId biome, MacroGridConfig grid, BiomeGraph graph) {
+        return MeshAreas.areaForWidthBlocks(graph.node(biome).sizeRange().minWidthBlocks(), grid);
     }
 
     private static final class DeadEndException extends RuntimeException {
