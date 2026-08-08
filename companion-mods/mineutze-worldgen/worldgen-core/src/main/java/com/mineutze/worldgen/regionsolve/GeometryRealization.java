@@ -52,10 +52,12 @@ public final class GeometryRealization {
         growPatchesToTarget(patches, workingAssignment, regionCells, input.graph());
 
         GapFiller.fillGaps(workingAssignment, regionCells, input.gridConfig(), input.graph(), input.worldSeed());
-        PatchOpener.openThinProtrusions(workingAssignment, regionCells, input.gridConfig(), input.graph(), input.worldSeed());
-        SeamWidener.widenNarrowSeams(workingAssignment, regionCells, input.graph());
-        PatchSizeEnforcer.enforceMinimumPatchSize(workingAssignment, regionCells, input.gridConfig(), input.graph());
-        SeparatorOrganicizer.organicizeThinSeparators(workingAssignment, regionCells, input.gridConfig(), input.graph(), input.worldSeed());
+        if (System.getenv("MINEUTZE_SKIP_CLEANUP") == null) {
+            PatchOpener.openThinProtrusions(workingAssignment, regionCells, input.gridConfig(), input.graph(), input.worldSeed());
+            SeamWidener.widenNarrowSeams(workingAssignment, regionCells, input.graph());
+            PatchSizeEnforcer.enforceMinimumPatchSize(workingAssignment, regionCells, input.gridConfig(), input.graph());
+            SeparatorOrganicizer.organicizeThinSeparators(workingAssignment, regionCells, input.gridConfig(), input.graph(), input.worldSeed());
+        }
 
         return workingAssignment.entrySet().stream()
             .filter(entry -> regionCells.contains(entry.getKey()))
@@ -138,6 +140,7 @@ public final class GeometryRealization {
             }
             patch.claimedCount++;
             workingAssignment.put(cell, patch.biome);
+            WorldgenTrace.log("GROWTH claim " + cell + " = " + patch.biome + " (seed=" + patch.seedCell + ", claimedCount=" + patch.claimedCount + "/" + patch.targetCells + ")");
             pushLegalFrontierNeighbors(patch, cell, workingAssignment, regionCells, graph);
             return;
         }

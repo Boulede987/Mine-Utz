@@ -142,6 +142,7 @@ final class GapFiller {
             }
 
             assignment.put(cell, candidate.biome());
+            WorldgenTrace.log("GAPFILL claim " + cell + " = " + candidate.biome() + " (distance=" + candidate.distance() + ")");
             addUnclaimedRegionNeighbors(cell, candidate.biome(), candidate.distance() + 1, assignment, regionCellSet, frontier);
         }
     }
@@ -262,7 +263,9 @@ final class GapFiller {
             .toList();
 
         for (MacroCellPos cell : remaining) {
-            assignment.put(cell, bestLegalChoice(cell, assignment, regionCellSet, grid, graph, force));
+            BiomeId chosen = bestLegalChoice(cell, assignment, regionCellSet, grid, graph, force);
+            assignment.put(cell, chosen);
+            WorldgenTrace.log("RESOLVEREMAINING claim " + cell + " = " + chosen + " (force=" + force + ")");
         }
     }
 
