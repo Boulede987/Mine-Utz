@@ -98,6 +98,46 @@ control becomes a design goal.
 
 ## Fixed
 
+### `SeparatorOrganicizer` gated on a whole connected component's shape, so a biome that sprawls into one huge component (plains, spanning 800+ cells across many regions) never got organicized anywhere, even where a specific stretch was a perfectly straight corridor
+User feedback after the pinch/diagonal/width-3 fixes above: "plains still
+act as a border, even if it is thicker... These are NOT blobs, they are
+lines." Measured directly rather than assumed: a plains separator's width
+after `SeparatorWidthEnforcer` ran was a perfectly uniform 3-4 cells across
+every one of 16 sampled rows in the middle region — zero organic variation,
+a straight-edged corridor.
+
+Root cause: `SeparatorOrganicizer.isElongated`/`isRequiredSeparator` (the
+old gate deciding whether to bulge a patch's edges at all) measured the
+cell's WHOLE connected component's bounding-box aspect ratio. Correct for a
+small, genuinely wall-shaped separator — wrong for plains, which connects
+through many regions into one 807-cell component spanning nearly the entire
+9-region export (bbox -29,-32 to 31,63). That component's overall aspect
+ratio is ~1.57 — well under the 3.0 threshold — so the gate read "this is
+blobby enough overall" and skipped bulging entirely, even on the specific
+corridor-shaped stretch inside it.
+
+Fixed by measuring shape LOCALLY per cell instead of globally per
+component (`doc/Modelisation/ActivityDiagram/separator-organicizer-local-corridors.puml`):
+a cell counts as a corridor cell if its bounded run (extracted into a new
+shared `AxisRunFinder`, reused from `SeparatorWidthEnforcer`) on either axis
+is capped by a real, mutually-incompatible-with-each-other biome pair and no
+wider than `CORRIDOR_WIDTH_THRESHOLD` (6). Corridor cells get clustered
+(same `ConnectedComponents.find`-on-a-subset pattern `SeamWidener` already
+uses for pinch clusters) and each cluster gets bulged with the exact same
+unchanged `bulge()` steal mechanism — only cluster SELECTION changed, not
+how a cluster gets bulged once found.
+
+Measured on seed 42: the same middle-region stretch that was a uniform 3-4
+cells wide across all 16 sampled rows now varies 3-5 — real organic
+variation, not a straight edge. Side effect confirmed harmless: the last
+remaining diagonal collision (6→1 from the earlier fix) also resolved to 0,
+and pinch points dropped 5→4, both from the extra legal bulging shifting
+context slightly, not a regression (re-verified: 0 illegal adjacencies, 0
+isolated cells throughout). No test file existed for `SeparatorOrganicizer`
+before this — added `SeparatorOrganicizerTest` covering the exact bug
+(a big blob + thin corridor tail, whole-component aspect ratio well under
+3.0, tail still gets bulged).
+
 ### Nothing checked diagonals - two mutually-incompatible biomes could touch at a bare corner (`d./.f`); `DiagonalCornerResolver` gives one of the two cells away
 `GrowthEngine.isLegal`/`GapFiller` only ever check the 4 orthogonal
 neighbors — nothing anywhere checked the 4 diagonals, so two biomes with no

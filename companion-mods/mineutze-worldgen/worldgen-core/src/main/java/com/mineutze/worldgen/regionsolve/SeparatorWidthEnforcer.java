@@ -81,15 +81,15 @@ final class SeparatorWidthEnforcer {
         MacroCellPos cell, BiomeId biome, boolean alongX,
         Map<MacroCellPos, BiomeId> assignment, Set<MacroCellPos> regionCellSet, MacroGridConfig grid, BiomeGraph graph
     ) {
-        MacroCellPos low = boundaryJustPast(cell, alongX, -1, biome, assignment);
-        MacroCellPos high = boundaryJustPast(cell, alongX, 1, biome, assignment);
+        MacroCellPos low = AxisRunFinder.boundaryJustPast(cell, alongX, -1, biome, assignment);
+        MacroCellPos high = AxisRunFinder.boundaryJustPast(cell, alongX, 1, biome, assignment);
         BiomeId lowBiome = assignment.get(low);
         BiomeId highBiome = assignment.get(high);
         if (lowBiome == null || highBiome == null || graph.isAllowed(lowBiome, highBiome)) {
             return false; // open-ended (edge of known data), or not actually bridging an incompatible pair
         }
 
-        int runLength = runLengthBetween(low, high, alongX);
+        int runLength = AxisRunFinder.runLengthBetween(low, high, alongX);
         if (runLength >= MIN_LOCAL_WIDTH) {
             return false;
         }
@@ -97,9 +97,9 @@ final class SeparatorWidthEnforcer {
         boolean widened = false;
         while (runLength < MIN_LOCAL_WIDTH) {
             if (tryStealBoundary(low, biome, lowBiome, assignment, regionCellSet, grid, graph)) {
-                low = stepOnce(low, alongX, -1);
+                low = AxisRunFinder.stepOnce(low, alongX, -1);
             } else if (tryStealBoundary(high, biome, highBiome, assignment, regionCellSet, grid, graph)) {
-                high = stepOnce(high, alongX, 1);
+                high = AxisRunFinder.stepOnce(high, alongX, 1);
             } else {
                 break; // neither side legally/safely stealable right now - leave the rest as-is
             }
@@ -109,22 +109,6 @@ final class SeparatorWidthEnforcer {
             highBiome = assignment.get(high);
         }
         return widened;
-    }
-
-    private static MacroCellPos boundaryJustPast(MacroCellPos from, boolean alongX, int direction, BiomeId biome, Map<MacroCellPos, BiomeId> assignment) {
-        MacroCellPos cursor = from;
-        while (biome.equals(assignment.get(cursor))) {
-            cursor = stepOnce(cursor, alongX, direction);
-        }
-        return cursor;
-    }
-
-    private static MacroCellPos stepOnce(MacroCellPos from, boolean alongX, int direction) {
-        return alongX ? new MacroCellPos(from.x() + direction, from.z()) : new MacroCellPos(from.x(), from.z() + direction);
-    }
-
-    private static int runLengthBetween(MacroCellPos low, MacroCellPos high, boolean alongX) {
-        return alongX ? (high.x() - low.x() - 1) : (high.z() - low.z() - 1);
     }
 
     private static boolean tryStealBoundary(

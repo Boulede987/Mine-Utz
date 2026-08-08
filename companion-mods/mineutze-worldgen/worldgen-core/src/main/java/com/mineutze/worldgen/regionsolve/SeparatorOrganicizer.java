@@ -24,8 +24,8 @@ import java.util.Set;
  * arrived at honestly through the graph's own rules instead of a placement
  * bug.
  *
- * This pass finds separator patches with an elongated bounding box and
- * roughens their edges: for each boundary cell, deterministically (same
+ * This pass finds LOCAL corridor segments (see {@link #findCorridorCells})
+ * and roughens their edges: for each boundary cell, deterministically (same
  * jitter technique as {@link GrowthEngine}'s organic patch outlines) tries
  * to steal one adjacent cell from whichever flanking patch is touching it.
  * A steal only happens if it stays legal, doesn't cut the donor patch into
@@ -33,10 +33,29 @@ import java.util.Set;
  * size — the same guarantees {@link SeparatorWidener} enforces, reused
  * directly. Purely cosmetic: never runs before every correctness pass
  * above it, and any cell it can't legally claim is simply left alone.
+ *
+ * Detection used to gate on the cell's WHOLE connected component's
+ * bounding-box aspect ratio — correct for a small, genuinely wall-shaped
+ * separator patch, but wrong for a biome like plains, which can sprawl into
+ * one 800+-cell component spanning nearly an entire multi-region export by
+ * connecting through many regions. That component's overall aspect ratio
+ * reads as roughly square (blobby elsewhere), so the old check skipped it
+ * entirely — confirmed on real data (seed 42): a specific middle-region
+ * stretch of that same component measured a perfectly uniform 3-4 cells
+ * wide across every sampled row, a straight corridor with zero organic
+ * variation, hiding inside a component that looked fine in aggregate.
+ * Reported directly by the user as "these are lines, not blobs." Fixed by
+ * measuring shape LOCALLY per cell via {@link AxisRunFinder} instead of
+ * globally per component — see {@link #findCorridorCells}.
  */
 final class SeparatorOrganicizer {
 
-    private static final double ASPECT_RATIO_THRESHOLD = 3.0;
+    // A corridor segment up to this many cells wide still reads as a "wall," not a
+    // blob - wider than SeparatorWidthEnforcer's own hard MIN_LOCAL_WIDTH=3 floor
+    // (this pass only adds organic variation on top of that, never enforces the
+    // floor itself). Placeholder, tune from visual output like every other
+    // grid/blend constant in this pipeline.
+    private static final int CORRIDOR_WIDTH_THRESHOLD = 6;
     private static final double BULGE_PROBABILITY = 0.35;
     private static final long BULGE_SALT = 0x0BB1_6EEDL;
 
@@ -46,50 +65,45 @@ final class SeparatorOrganicizer {
     static void organicizeThinSeparators(
         Map<MacroCellPos, BiomeId> assignment, Set<MacroCellPos> regionCellSet, MacroGridConfig grid, BiomeGraph graph, long worldSeed
     ) {
-        for (Set<MacroCellPos> component : ConnectedComponents.find(assignment, regionCellSet)) {
-            if (isElongated(component) && isRequiredSeparator(component, assignment, graph)) {
-                bulge(component, assignment, regionCellSet, grid, graph, worldSeed);
-            }
+        Set<MacroCellPos> corridorCells = findCorridorCells(assignment, regionCellSet, graph);
+        for (Set<MacroCellPos> cluster : ConnectedComponents.find(assignment, corridorCells)) {
+            bulge(cluster, assignment, regionCellSet, grid, graph, worldSeed);
         }
     }
 
     /**
-     * Only a patch that's actually bridging two mutually-incompatible neighbors is a
-     * forced separator (same concept {@link PatchSizeEnforcer} uses to decide whether a
-     * merge is even possible). A patch that merely happens to run in a straight line
-     * because it borders one of those bridges — e.g. the flanking biome's own edge along
-     * a long wall — is NOT one, and must never bulge into the actual separator: eating
-     * cells out of a 1-wide wall from both sides at once can isolate a middle cell even
-     * though each individual steal passes its own connectivity check.
+     * A cell counts as a "corridor cell" if its bounded run (see {@link
+     * AxisRunFinder}) on EITHER axis is capped on both ends by a real,
+     * mutually-incompatible-with-each-other biome pair — i.e. this exact
+     * spot is actually bridging two biomes that aren't allowed to touch —
+     * AND that run is no wider than {@link #CORRIDOR_WIDTH_THRESHOLD}.
+     * Local, not component-wide: a cell deep inside a huge blobby patch
+     * elsewhere in the same component never gets flagged just because some
+     * distant part of that component happens to be a corridor.
      */
-    private static boolean isRequiredSeparator(Set<MacroCellPos> component, Map<MacroCellPos, BiomeId> assignment, BiomeGraph graph) {
-        Set<BiomeId> neighborBiomes = new HashSet<>();
-        for (MacroCellPos cell : component) {
-            for (MacroCellPos neighbor : cell.orthogonalNeighbors()) {
-                BiomeId neighborBiome = assignment.get(neighbor);
-                if (neighborBiome != null && !component.contains(neighbor)) {
-                    neighborBiomes.add(neighborBiome);
-                }
+    private static Set<MacroCellPos> findCorridorCells(Map<MacroCellPos, BiomeId> assignment, Set<MacroCellPos> regionCellSet, BiomeGraph graph) {
+        Set<MacroCellPos> corridorCells = new HashSet<>();
+        for (MacroCellPos cell : regionCellSet) {
+            BiomeId biome = assignment.get(cell);
+            if (biome == null) {
+                continue;
+            }
+            if (isLocallyCorridorShaped(cell, biome, true, assignment, graph) || isLocallyCorridorShaped(cell, biome, false, assignment, graph)) {
+                corridorCells.add(cell);
             }
         }
-        for (BiomeId a : neighborBiomes) {
-            for (BiomeId b : neighborBiomes) {
-                if (!a.equals(b) && !graph.isAllowed(a, b)) {
-                    return true;
-                }
-            }
-        }
-        return false;
+        return corridorCells;
     }
 
-    private static boolean isElongated(Set<MacroCellPos> component) {
-        int minX = component.stream().mapToInt(MacroCellPos::x).min().orElseThrow();
-        int maxX = component.stream().mapToInt(MacroCellPos::x).max().orElseThrow();
-        int minZ = component.stream().mapToInt(MacroCellPos::z).min().orElseThrow();
-        int maxZ = component.stream().mapToInt(MacroCellPos::z).max().orElseThrow();
-        int longSide = Math.max(maxX - minX + 1, maxZ - minZ + 1);
-        int shortSide = Math.min(maxX - minX + 1, maxZ - minZ + 1);
-        return (double) longSide / shortSide >= ASPECT_RATIO_THRESHOLD;
+    private static boolean isLocallyCorridorShaped(MacroCellPos cell, BiomeId biome, boolean alongX, Map<MacroCellPos, BiomeId> assignment, BiomeGraph graph) {
+        MacroCellPos low = AxisRunFinder.boundaryJustPast(cell, alongX, -1, biome, assignment);
+        MacroCellPos high = AxisRunFinder.boundaryJustPast(cell, alongX, 1, biome, assignment);
+        BiomeId lowBiome = assignment.get(low);
+        BiomeId highBiome = assignment.get(high);
+        if (lowBiome == null || highBiome == null || graph.isAllowed(lowBiome, highBiome)) {
+            return false; // open-ended (edge of known data), or not actually bridging an incompatible pair
+        }
+        return AxisRunFinder.runLengthBetween(low, high, alongX) <= CORRIDOR_WIDTH_THRESHOLD;
     }
 
     private static void bulge(

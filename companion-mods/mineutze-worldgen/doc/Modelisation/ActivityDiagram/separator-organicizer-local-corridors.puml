@@ -1,0 +1,51 @@
+@startuml
+title SeparatorOrganicizer (revised) - find LOCAL corridor segments instead of gating on a whole component's global shape
+
+start
+:Scan every cell in the region;
+
+if (bounded run on SOME axis (contiguous\nsame biome, capped on BOTH ends by a real,\ndifferent, MUTUALLY-INCOMPATIBLE-WITH-\nEACH-OTHER biome pair) is\n<= CORRIDOR_WIDTH_THRESHOLD?) then (no)
+  :Not locally corridor-shaped - skip;
+else (yes)
+  :Mark this cell as a "corridor cell";
+endif
+
+:Cluster all corridor cells\n(4-connected, same biome only -\nConnectedComponents.find restricted\nto just this subset, same pattern\nSeamWidener already uses for pinch\nclusters);
+
+while (clusters left to process?) is (yes)
+  :Bulge this cluster - unchanged logic,\njust now applied to a small LOCAL\ncluster instead of the whole\nconnected component;
+endwhile (no)
+
+stop
+
+note right
+  The bug this replaces: the OLD version measured
+  isElongated()/isRequiredSeparator() on the cell's WHOLE
+  connected component. Fine for a small, genuinely
+  wall-shaped separator patch - wrong for a biome like
+  plains, which can sprawl into one 800+-cell component
+  spanning nearly the entire map by connecting through
+  many regions. That component's overall bounding-box
+  aspect ratio reads as roughly square (blobby elsewhere),
+  so isElongated() returned false and bulge() never ran
+  AT ALL - even though a specific middle-region stretch of
+  it measured a perfectly uniform 3-4 cells wide across 16
+  sampled rows: a straight corridor, zero organic variation,
+  hiding inside a component that looked "fine" in aggregate.
+
+  This version measures shape LOCALLY per cell instead of
+  globally per component - a corridor segment gets found
+  and organicized regardless of what the rest of that
+  biome's sprawling territory looks like elsewhere.
+
+  Runs after SeparatorWidthEnforcer (so corridors are
+  already >= 3 wide going in - this pass only affects
+  organic variation, not the hard minimum) using the same
+  AxisRunFinder bounded-run measurement SeparatorWidthEnforcer
+  already uses, and the same bulge() steal mechanism this
+  class already had (legality/connectivity/min-size
+  checked per steal, same as everywhere else in this
+  pipeline) - only the CLUSTER SELECTION changed, not how
+  a cluster gets bulged once found.
+end note
+@enduml
