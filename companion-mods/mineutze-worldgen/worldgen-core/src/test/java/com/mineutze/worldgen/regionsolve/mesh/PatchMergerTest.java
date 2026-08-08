@@ -42,7 +42,7 @@ class PatchMergerTest {
         Map<Integer, BiomeId> assignedIdentities = Map.of(0, solo);
         FineMesh mesh = buildMesh(input, seedGraph, assignedIdentities);
 
-        Map<Integer, BiomeId> faceIdentity = PatchMerger.merge(mesh, input, seedGraph, assignedIdentities);
+        Map<Integer, BiomeId> faceIdentity = PatchMerger.merge(mesh, input, seedGraph, assignedIdentities).faceIdentity();
 
         assertFalse(faceIdentity.isEmpty(), "the seed must have claimed at least its own starting face");
         assertTrue(faceIdentity.values().stream().allMatch(solo::equals));
@@ -68,7 +68,7 @@ class PatchMergerTest {
         Map<Integer, BiomeId> assignedIdentities = Map.of(0, biomeA, 1, biomeB);
         FineMesh mesh = buildMesh(input, seedGraph, assignedIdentities);
 
-        Map<Integer, BiomeId> faceIdentity = PatchMerger.merge(mesh, input, seedGraph, assignedIdentities);
+        Map<Integer, BiomeId> faceIdentity = PatchMerger.merge(mesh, input, seedGraph, assignedIdentities).faceIdentity();
 
         assertTrue(faceIdentity.containsValue(biomeA) && faceIdentity.containsValue(biomeB), "both patches must have grown at least their seed face");
         assertNoIllegalTouchAnywhere(mesh, faceIdentity, graph);
@@ -101,11 +101,13 @@ class PatchMergerTest {
             new ScatteredPoint(new Point2D(0.5, 1), Optional.empty())
         ));
 
-        Map<Integer, BiomeId> faceIdentity = PatchMerger.merge(mesh, input, seedGraph, assignedIdentities);
+        MeshAssignment assignment = PatchMerger.merge(mesh, input, seedGraph, assignedIdentities);
 
-        assertFalse(faceIdentity.containsValue(friend), "friend's only seed face was already claimed by the fixed stranger germ");
-        assertEquals(1, faceIdentity.size());
-        assertTrue(faceIdentity.containsValue(stranger));
+        assertFalse(assignment.faceIdentity().containsValue(friend), "friend's only seed face was already claimed by the fixed stranger germ");
+        assertEquals(1, assignment.faceIdentity().size());
+        assertTrue(assignment.faceIdentity().containsValue(stranger));
+        assertEquals(Set.of(assignment.faceIdentity().keySet().iterator().next()), assignment.fixedFaceIds(),
+            "the one claimed face is the fixed stranger germ's, and must be tracked as fixed");
     }
 
     private static void assertNoIllegalTouchAnywhere(FineMesh mesh, Map<Integer, BiomeId> faceIdentity, BiomeGraph graph) {

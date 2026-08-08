@@ -14,10 +14,12 @@ import com.mineutze.worldgen.regionsolve.topology.SeedGraphNode;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Random;
+import java.util.Set;
 import java.util.TreeSet;
 
 /**
@@ -51,15 +53,15 @@ public final class PatchMerger {
     private PatchMerger() {
     }
 
-    public static Map<Integer, BiomeId> merge(FineMesh mesh, RegionSolveInput input, SeedGraph seedGraph, Map<Integer, BiomeId> assignedIdentities) {
+    public static MeshAssignment merge(FineMesh mesh, RegionSolveInput input, SeedGraph seedGraph, Map<Integer, BiomeId> assignedIdentities) {
         Map<Integer, BiomeId> faceIdentity = new LinkedHashMap<>();
         Map<Point2D, Integer> vertexIdByPosition = vertexIdByPosition(mesh);
 
-        seedFixedGerms(mesh, seedGraph, vertexIdByPosition, faceIdentity);
+        Set<Integer> fixedFaceIds = seedFixedGerms(mesh, seedGraph, vertexIdByPosition, faceIdentity);
         List<PatchGrowthState> patches = seedFreePatches(mesh, seedGraph, assignedIdentities, input, faceIdentity, vertexIdByPosition);
         growPatchesToTarget(mesh, patches, faceIdentity, input.graph());
 
-        return faceIdentity;
+        return new MeshAssignment(faceIdentity, fixedFaceIds);
     }
 
     private static Map<Point2D, Integer> vertexIdByPosition(FineMesh mesh) {
@@ -71,7 +73,8 @@ public final class PatchMerger {
         return byPosition;
     }
 
-    private static void seedFixedGerms(FineMesh mesh, SeedGraph seedGraph, Map<Point2D, Integer> vertexIdByPosition, Map<Integer, BiomeId> faceIdentity) {
+    private static Set<Integer> seedFixedGerms(FineMesh mesh, SeedGraph seedGraph, Map<Point2D, Integer> vertexIdByPosition, Map<Integer, BiomeId> faceIdentity) {
+        Set<Integer> fixedFaceIds = new LinkedHashSet<>();
         for (SeedGraphNode node : seedGraph.nodes()) {
             if (!node.fixed()) {
                 continue;
@@ -80,10 +83,12 @@ public final class PatchMerger {
             for (int faceId : mesh.incidentFaces(vertexId)) {
                 if (!faceIdentity.containsKey(faceId)) {
                     faceIdentity.put(faceId, node.fixedBiome());
+                    fixedFaceIds.add(faceId);
                     break;
                 }
             }
         }
+        return fixedFaceIds;
     }
 
     private static List<PatchGrowthState> seedFreePatches(

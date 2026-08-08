@@ -10,14 +10,14 @@ package com.mineutze.worldgen.regionsolve;
  * stripped after use — cheap to keep, next shape investigation won't need to
  * re-add it from scratch.
  */
-final class WorldgenTrace {
+public final class WorldgenTrace {
 
     private static final boolean ENABLED = System.getenv("MINEUTZE_WORLDGEN_TRACE") != null;
 
     private WorldgenTrace() {
     }
 
-    static void log(String message) {
+    public static void log(String message) {
         if (ENABLED) {
             System.out.println("[trace] " + message);
         }
