@@ -42,11 +42,20 @@ import java.util.Random;
  */
 public final class FineMeshPointScatter {
 
-    // Finer than SeedPlacer's ~400-block default coarse spacing, coarser than
-    // one point per macro-cell (which the design review flagged as needlessly
-    // dense — ~2000+ faces per region for no benefit). Placeholder, tune from
-    // real exported output like every other spacing constant in this codebase.
-    public static final int FINE_MESH_SPACING_BLOCKS = 128;
+    // Tuned from real exported output (seed 42), not guessed: 128 (2x macro-cell
+    // size) let MeshRasterizer's point-sampling lose thin mesh-level connecting
+    // bridges between two parts of the same patch entirely — a patch measurably
+    // CONNECTED at the mesh level (e.g. 5 components after MeshGapFiller) came out
+    // MORE fragmented after rasterization (10 components), because no macro-cell
+    // center ever landed closer to a thin bridge's tiny triangles than to the
+    // bigger flanking patches next to it — a genuine sub-macro-cell mesh feature,
+    // not a rasterizer bug. Doubling to 256 (4x macro-cell size) measurably fixed
+    // most of that (the same test case: forest 5->3, plains 10->3, desert 3->3,
+    // unchanged) by keeping individual triangles closer to macro-cell scale, so
+    // point-sampling can actually resolve them. Still coarser increases risk
+    // losing thin REAL separator geometry EdgeDisplacement needs to work with —
+    // re-tune if separator width/organic-read regresses.
+    public static final int FINE_MESH_SPACING_BLOCKS = 256;
 
     private static final long RING_JITTER_SALT = 0x8113_2F17L;
     private static final long FILLER_JITTER_SALT = 0xF177_3E29L;
