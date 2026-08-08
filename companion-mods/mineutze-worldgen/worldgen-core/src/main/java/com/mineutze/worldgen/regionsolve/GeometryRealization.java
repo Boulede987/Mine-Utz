@@ -36,8 +36,16 @@ import java.util.stream.Collectors;
  * minimum-size patch {@code ARCHITECTURE.md} requires a forced separator to
  * be. GapFiller only guarantees every cell gets SOME legal value — it was
  * never the thing responsible for widening a separator or trimming a thin
- * tendril, in either pipeline. See
- * doc/Modelisation/ActivityDiagram/geometry-realization.puml.
+ * tendril, in either pipeline. 3 more passes run after those 4 — new to
+ * this pipeline, not part of {@link RegionSolver#cleanUp}: {@link
+ * SeparatorWidthEnforcer} (guarantees a required separator is >= 3 cells
+ * wide at every row/column, not just in {@link SeamWidener}'s own aggregate
+ * cell-count sense), {@link PinchResolver} (a directional blind spot in
+ * {@link PatchOpener}'s own erosion test), and {@link
+ * DiagonalCornerResolver} (two mutually-incompatible biomes touching only
+ * at a corner — nothing else in this pipeline ever checks diagonals). See
+ * doc/Modelisation/ActivityDiagram/geometry-realization.puml and each
+ * pass's own doc/Modelisation/ActivityDiagram/*.puml.
  */
 public final class GeometryRealization {
 
@@ -55,8 +63,11 @@ public final class GeometryRealization {
         if (System.getenv("MINEUTZE_SKIP_CLEANUP") == null) {
             PatchOpener.openThinProtrusions(workingAssignment, regionCells, input.gridConfig(), input.graph(), input.worldSeed());
             SeamWidener.widenNarrowSeams(workingAssignment, regionCells, input.graph());
+            SeparatorWidthEnforcer.enforceMinimumSeparatorWidth(workingAssignment, regionCells, input.gridConfig(), input.graph());
             PatchSizeEnforcer.enforceMinimumPatchSize(workingAssignment, regionCells, input.gridConfig(), input.graph());
             SeparatorOrganicizer.organicizeThinSeparators(workingAssignment, regionCells, input.gridConfig(), input.graph(), input.worldSeed());
+            PinchResolver.resolvePinchPoints(workingAssignment, regionCells, input.gridConfig(), input.graph());
+            DiagonalCornerResolver.resolveDiagonalCollisions(workingAssignment, regionCells, input.gridConfig(), input.graph());
         }
 
         return workingAssignment.entrySet().stream()

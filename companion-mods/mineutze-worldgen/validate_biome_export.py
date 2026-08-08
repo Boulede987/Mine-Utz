@@ -13,8 +13,11 @@ of guessing). Cell coordinates come straight from JSON, so no need to reparse th
 Checks:
   1. Illegal adjacency: two orthogonally-adjacent cells with no AdjacencyRule between
      them (same biome is always legal next to itself).
-  2. Isolated cells: a cell whose 4-connected same-biome component has size 1.
-  3. One-cell-wide pinch points: a cell where both opposite neighbors on an axis
+  2. Diagonal illegal adjacency: two corner-touching (not orthogonal) cells with no
+     AdjacencyRule between them and no orthogonal contact either (e.g. d./.f) -
+     nothing in the generator pipeline checks diagonals, only orthogonal neighbors.
+  3. Isolated cells: a cell whose 4-connected same-biome component has size 1.
+  4. One-cell-wide pinch points: a cell where both opposite neighbors on an axis
      (north+south, or east+west) are a different biome (or missing) while the cell
      itself has same-biome neighbors on the other axis - the sliver/tendril shape
      PatchOpener/SeamWidener/PatchSizeEnforcer/SeparatorOrganicizer exist to prevent.
@@ -70,6 +73,30 @@ def find_illegal_adjacencies(cells, allowed):
                 if key not in seen_pairs:
                     seen_pairs.add(key)
                     violations.append((x, z, biome, x + dx, z + dz, neighbor))
+    return violations
+
+
+def find_diagonal_illegal_adjacencies(cells, allowed):
+    """Two mutually-incompatible biomes touching only at a corner (d./.f) - not caught by
+    find_illegal_adjacencies (orthogonal only) or by anything in the generator pipeline
+    either, since GrowthEngine.isLegal/GapFiller only ever check the 4 orthogonal
+    neighbors. Excludes pairs that ALSO touch orthogonally (already reported there)."""
+    violations = []
+    seen_pairs = set()
+    for (x, z), biome in cells.items():
+        for dx, dz in ((1, 1), (1, -1)):  # each undirected diagonal pair checked once
+            nx, nz = x + dx, z + dz
+            neighbor = cells.get((nx, nz))
+            if neighbor is None or is_allowed(allowed, biome, neighbor):
+                continue
+            off1 = cells.get((x + dx, z))
+            off2 = cells.get((x, z + dz))
+            if biome == off1 or neighbor == off1 or biome == off2 or neighbor == off2:
+                continue  # also touches orthogonally somewhere - already reported there
+            key = ((x, z), (nx, nz))
+            if key not in seen_pairs:
+                seen_pairs.add(key)
+                violations.append((x, z, biome, nx, nz, neighbor))
     return violations
 
 
@@ -135,7 +162,7 @@ def find_pinch_points(cells, components):
     return pinches
 
 
-def build_report(source_path, cells, components, illegal_adjacencies, isolated_cells, pinch_points):
+def build_report(source_path, cells, components, illegal_adjacencies, diagonal_illegal_adjacencies, isolated_cells, pinch_points):
     lines = []
     lines.append(f"Source: {source_path}")
     lines.append(f"Cells: {len(cells)}, patches: {len(components)}")
@@ -146,6 +173,14 @@ def build_report(source_path, cells, components, illegal_adjacencies, isolated_c
     lines.append("pair not explicitly allowed is illegal, same biome is always legal next to itself).")
     for x, z, biome, nx, nz, neighbor in illegal_adjacencies:
         lines.append(f"  ({x},{z}) {biome}  <->  ({nx},{nz}) {neighbor}  [no rule for {biome} / {neighbor}]")
+
+    lines.append("")
+    lines.append(f"=== Diagonal illegal adjacencies: {len(diagonal_illegal_adjacencies)} ===")
+    lines.append("Why: no AdjacencyRule exists between these two biomes, and they touch only at a")
+    lines.append("corner (e.g. d./.f) - not an orthogonal adjacency, but still a discontinuity")
+    lines.append("nothing in the generator currently checks for.")
+    for x, z, biome, nx, nz, neighbor in diagonal_illegal_adjacencies:
+        lines.append(f"  ({x},{z}) {biome}  <->  ({nx},{nz}) {neighbor}  [corner touch, no rule for {biome} / {neighbor}]")
 
     lines.append("")
     lines.append(f"=== Isolated cells: {len(isolated_cells)} ===")
@@ -163,7 +198,7 @@ def build_report(source_path, cells, components, illegal_adjacencies, isolated_c
     for x, z, biome, axis, (ax, az, abiome), (bx, bz, bbiome) in pinch_points:
         lines.append(f"  ({x},{z}) {biome}  pinched along {axis}: ({ax},{az}) {abiome}  /  ({bx},{bz}) {bbiome}")
 
-    ok = not (illegal_adjacencies or isolated_cells or pinch_points)
+    ok = not (illegal_adjacencies or diagonal_illegal_adjacencies or isolated_cells or pinch_points)
     lines.append("")
     lines.append("PASS" if ok else "FAIL")
     return "\n".join(lines), ok
@@ -184,11 +219,12 @@ def main():
         sys.exit(1)
 
     illegal_adjacencies = find_illegal_adjacencies(cells, allowed)
+    diagonal_illegal_adjacencies = find_diagonal_illegal_adjacencies(cells, allowed)
     components = find_components(cells)
     isolated_cells = find_isolated_cells(cells, components)
     pinch_points = find_pinch_points(cells, components)
 
-    report, ok = build_report(source_path, cells, components, illegal_adjacencies, isolated_cells, pinch_points)
+    report, ok = build_report(source_path, cells, components, illegal_adjacencies, diagonal_illegal_adjacencies, isolated_cells, pinch_points)
     print(report)
 
     if len(sys.argv) == 3:

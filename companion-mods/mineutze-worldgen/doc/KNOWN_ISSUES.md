@@ -34,36 +34,7 @@ top of the `minSameBiomeNeighbors` check, which stays a hard gate and keeps
 blocking thin necks regardless. That gets genuinely elongated emergent shapes
 without a hard requirement that can never be satisfied by construction.
 
-### 1. `PatchOpener` trims short tendrils but not long seams between two patches
-`PatchOpener.openThinProtrusions` (erode any cell not part of a full 2x2
-same-biome square, then re-dilate via `GapFiller`, looped to a fixed point —
-see "Fixed" below) measurably works on a short spur sticking off one solid
-blob: proven both by unit test (a 4-cell protrusion trims to 0-2 cells) and
-by the reported in-game case that motivated it. It does much less for a
-*long* winding seam that runs between two roughly-equidistant patches —
-measured on a real 9-region export (seed 42): total spur-cell count barely
-moved with looping (114 → 113 out of 9216 cells), and the two longest spur
-*runs* went 16→14 and 11→11 (unchanged).
-
-Root cause is different from the tendril case: along a long seam, boundary
-cells often get enough Moore-neighborhood support from BOTH flanking patches
-at once to immediately qualify for re-dilation from either side the moment
-they're eroded — erosion removes it, `GapFiller` regrows it right back from
-whichever side reaches it first, and the fixed-point loop correctly detects
-that as "no progress" and stops (verified: this is intentional, not a bug in
-the loop itself — an actual infinite oscillation would be worse). The
-technique that works for tendrils (a 2x2-completion requirement) isn't
-strong enough to un-stick a seam that's mutually reinforced from both sides.
-
-Two structurally different problems were sharing the "corridor" label. Short
-tendril off one blob: solved (re-dilation tightened further since — see
-"Fixed" below). Long seam between two roughly-equidistant patches specifically
-(as opposed to a locally-pinched spot inside one large patch, which
-`SeamWidener` now handles — also "Fixed" below): still open. May turn out to
-need the same kind of fix, or may not — not yet investigated with the same
-rigor `SeamWidener` got.
-
-### 2. Hard straight-line seam at every region boundary
+### 1. Hard straight-line seam at every region boundary
 Patches stop dead at the 2048-block region edge instead of curving across
 it. `GrowthEngine` only ever grows a patch within its own region's cells
 (`GrowthEngine.attemptGrowth`, `regionCells` is `grid.cellsInRegion(region)`
@@ -81,7 +52,7 @@ post-hoc boundary-blend pass on the macro-cell grid itself (separate from
 `BorderBlend`, which only blends the terrain-shape *value*, not the
 macro-cell biome-id grid the patches are drawn from).
 
-### 3. `PatchSizeEnforcer`/`ConnectedComponents` are border-blind
+### 2. `PatchSizeEnforcer`/`ConnectedComponents` are border-blind
 `ConnectedComponents.find` (`ConnectedComponents.java:21`) only traverses
 `regionCellSet` — never crosses into `fixedBoundaryCells`, even though
 `RegionSolver.cleanUp` merges those in as context. A patch that continues
@@ -94,7 +65,7 @@ they're not the trigger). Related to #1 — both are "region edges don't know
 about their neighbor's actual shape" bugs, but this one is a correctness
 bug (wrong biome assigned), not just a cosmetic seam.
 
-### 4. Cross-region solve is order-dependent, and spawn sits on the worst point for it
+### 3. Cross-region solve is order-dependent, and spawn sits on the worst point for it
 `fixedBoundaryCells` feeds directly into every legality check
 (`GrowthEngine.isLegal`, `GapFiller`, `PatchSizeEnforcer`,
 `SeparatorOrganicizer`), so whichever of a region's neighbors solves *first*
@@ -109,7 +80,7 @@ its output near that corner won't necessarily match what a live world
 produces there, even for the same seed. Not a bug to fix, but a caveat
 anyone comparing exported output to in-game output needs to know.
 
-### 5. `BudgetPlanner` is adjacency-blind
+### 4. `BudgetPlanner` is adjacency-blind
 `BudgetPlanner.plan` (`BudgetPlanner.java`) draws random `(biome, size)`
 demands with no regard for `AdjacencyRule`s. A graph with sparse legal-
 partner counts can get budgeted demands that can never legally coexist,
@@ -118,7 +89,7 @@ intended biome. Doc explicitly accepts drops as fine ("dropped, not forced
 or shrunk"), but the budget itself could be adjacency-aware to reduce how
 often that happens.
 
-### 6. No per-biome rarity/weight
+### 5. No per-biome rarity/weight
 `BiomeNode` has no weight field; `BudgetPlanner` draws uniformly among all
 node ids. Every biome (mushroom fields, badlands, plains) is equally likely
 to be *drawn* — actual placement frequency is purely a side effect of each
@@ -126,6 +97,118 @@ biome's size-range math, not a designed rarity. Only matters if rarity
 control becomes a design goal.
 
 ## Fixed
+
+### Nothing checked diagonals - two mutually-incompatible biomes could touch at a bare corner (`d./.f`); `DiagonalCornerResolver` gives one of the two cells away
+`GrowthEngine.isLegal`/`GapFiller` only ever check the 4 orthogonal
+neighbors — nothing anywhere checked the 4 diagonals, so two biomes with no
+`AdjacencyRule` (desert/forest, same class as badlands/forest) could end up
+touching at a single corner completely undetected. Reported directly by a
+user reading the exported ASCII grid, then confirmed programmatically: 6
+real corner collisions on the same seed-42 9-region export used throughout
+this file's other measurements.
+
+Added a matching check to `validate_biome_export.py` (excludes any pair that
+already touches orthogonally too — that's the existing illegal-adjacency
+check's job) and a new pass, `DiagonalCornerResolver`
+(`doc/Modelisation/ActivityDiagram/diagonal-corner-resolver.puml`): a
+corner-only touch can't be fixed by changing the OTHER two corners (the two
+colliding cells are still diagonally adjacent no matter what's between
+them), so it tries giving one of the two colliding cells itself away to one
+of its own orthogonal neighbors' biomes — same bounded-reassignment safety
+primitives `PinchResolver` already uses (`GrowthEngine.isLegal`,
+`SeparatorWidener.stealingPreservesDonorConnectivity`,
+`SeparatorOrganicizer.donorComponentSizeWithout`/`minCellsFor`), plus an
+extra check that the replacement biome is actually compatible with the
+diagonal neighbor too (otherwise it would just recreate the same collision
+under a different name). Falls through to trying the other cell
+symmetrically; never forces a resolution.
+
+Measured on the same seed-42 export: 6 → 1 diagonal collisions. The
+remaining one is blocked by the same legality/connectivity/min-size
+guarantees as everywhere else in this pipeline — never a forced fix.
+
+### Blobs could be exactly 2 cells wide even after `SeamWidener` ran, because its target is an aggregate cell count, not a guaranteed width at every row; `SeparatorWidthEnforcer` targets the specific thin rows/columns directly
+Reported directly: a required separator (a patch bridging two
+mutually-incompatible biomes, e.g. plains between savanna and ocean) could
+run 3-wide for most of its length but narrow to exactly 2 cells at a few
+specific rows, even after `SeamWidener` already ran there. Root cause:
+`SeamWidener`'s target (`MIN_SEAM_WIDTH_CELLS=9`) is an aggregate cell count
+for the whole pinch cluster — hitting that total doesn't guarantee every
+individual row/column meets it, so a cluster could satisfy its own target
+while still leaving a couple of rows thin. Confirmed on the same seed-42
+export used throughout this file: 121 real width-≤2 spots existed on
+required-separator patches.
+
+Deliberately scoped narrower than "every patch >= 3 wide everywhere":
+ordinary round blobs naturally taper to 1-2 cells wide at their own tips,
+and widening there would fight normal organic shape rather than fix a
+defect — confirmed with the user before building this (their explicit
+call: separators only, not a global invariant). `SeparatorWidthEnforcer`
+(`doc/Modelisation/ActivityDiagram/separator-width-enforcer.puml`) only
+targets a cell whose bounded run on an axis is under 3 AND the two capping
+biomes are mutually incompatible with each other (same "actually bridging
+two incompatible neighbors" test `SeparatorOrganicizer` already uses) —
+widens by stealing the boundary cell on whichever side is legal and safe,
+same primitives as everywhere else in this pipeline. Also covers the
+width-1 separator case `PinchResolver` structurally cannot fix: giving a
+1-wide separator cell away to either flanking biome would put the two
+incompatible flanks directly next to each other, so `GrowthEngine.isLegal`
+already blocks that candidate and `PinchResolver` correctly leaves it alone
+— widening is the only valid fix for that shape.
+
+Measured on the same seed-42 export, run after the diagonal-collision fix
+above: one-cell-wide pinch points 48 → 5, and the 121 real width-≤2
+required-separator spots found before this fix → 0 after. Visual blobs
+confirmed still solid/organic in the export PNG, not boxier — this pass
+never touches ordinary blob boundaries between mutually-legal biomes.
+
+### `PatchOpener` erosion is directionally blind - a cell can be part of a 2x2 square on ONE axis while still 1-wide on the OTHER; `PinchResolver` gives those cells away instead of eroding them forever
+Traced a specific still-open pinch point (seed 42, macro-cell (-24,-24) — a
+savanna cell pinched east/west between plains and desert) all the way
+through the pipeline with `WorldgenTrace` and hand-inspection of the actual
+exported grid, per the standing next-step this item's own diagnosis left
+open. The real mechanism wasn't the "mutually-reinforced from both sides"
+theory this item originally guessed at — measured directly instead:
+`PatchOpener.isCore` (must belong to at least one full 2x2 same-biome
+square) correctly flagged this exact cell as non-core on *every* pass — no
+2x2 square touches it, confirmed by hand against the exported grid — but
+its re-dilation step (`GapFiller.fillGaps` against the stricter-cohesion
+graph) reclaimed it right back every time anyway. Why: the cell sits
+directly below a solid 2x2 block of its own biome, so it scores 3
+Moore-neighbors on re-dilation — comfortably past even the stricter +1
+threshold — entirely from that ONE block, with zero awareness that the cell
+remains exactly 1-wide on the perpendicular axis (a "tab" sticking sideways
+off a solid block, not the "reinforced from both flanking patches" shape
+originally guessed). Erode and reclaim repeat identically forever; the
+fixed-point loop's "no progress" stop condition can't tell that apart from
+"actually resolved," so it just gives up with the pinch still there.
+
+Fixed with a new 5th cleanup pass, `PinchResolver`, run once after the
+existing 4 settle (`doc/Modelisation/ActivityDiagram/pinch-resolver.puml`):
+for every cell 1-wide on an axis (mirroring `validate_biome_export.py`'s own
+pinch definition exactly — both neighbors on one axis differ, cell isn't
+isolated), try giving it directly to whichever flanking biome is legal
+there, as long as doing so doesn't disconnect or undersize its current
+patch. Reuses already-proven safety primitives rather than inventing new
+ones: `GrowthEngine.isLegal` for full-neighborhood legality,
+`SeparatorWidener.stealingPreservesDonorConnectivity` and
+`SeparatorOrganicizer.donorComponentSizeWithout`/`minCellsFor` for the same
+donor-safety guarantees `GapFiller.makeLegalHere` already trusts for a
+bounded single-cell reassignment. Looped to a fixed point like `PatchOpener`
+(a reassignment can turn up a new pinch on the cell's other axis), capped at
+`MAX_PASSES=20`. Never forces anything — a pinch neither flank can legally
+absorb is left alone, same rule as everywhere else in this pipeline.
+
+Measured on the same seed-42 9-region export this item's diagnosis used:
+132 → 50 pinch points (~62% reduction), 0 illegal adjacencies, 0 isolated
+cells, both before and after — verified via `validate_biome_export.py`, not
+eyeballed. Patch count dropped 26 → 19 as a side effect (expected, not a
+regression): giving a shared pinch cell away can reconnect two previously-
+separate same-biome components into one). Remaining 50 are pinches neither
+flanking biome can legally/safely absorb without violating some other
+guarantee (adjacency legality, donor connectivity, or donor minimum size) —
+a smaller, better-characterized remainder than the original ~130-170, not a
+new open item on its own.
 
 ### Universal-filler removal broke dead-end resolution; three-tier resolver + eager graph validation fixes it, guaranteed never to crash in a real game
 Every `BiomeNode` used to carry a `universalFiller` flag — one designated
@@ -365,8 +448,10 @@ regrowth. Measured on the same seed-42 export: spur count 113 → 91 (a real
 own). `PatchOpenerTest`'s protrusion case now asserts the exact two cells
 that regrew in the live-game report stay gone.
 
-Measured effect is real but narrower than hoped — see open item #1 above:
-solves short tendrils, does much less for long seams between two patches.
+Measured effect is real but narrower than hoped: solves short tendrils, does
+much less for a cell backed by a solid block on one axis but pinched on the
+other — see the `PinchResolver` "Fixed" entry above for that specific
+mechanism and its fix.
 
 ### `SeparatorWidener` produced snake/corridor shapes instead of blobs
 Frontier was a plain `TreeSet` ordered by raw `(x, z)` coordinate
