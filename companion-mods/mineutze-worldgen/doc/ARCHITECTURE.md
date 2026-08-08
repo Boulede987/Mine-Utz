@@ -135,7 +135,7 @@ it's the standard mechanism for "extra world data that isn't a chunk"
 (vanilla uses the equivalent for maps, raid state, etc.). No need to
 hand-roll the Anvil region-file format ourselves.
 
-## Mesh-based geometry realization (branch `worldgen/mesh-geometry-realization`, not live)
+## Mesh-based geometry realization (branch `worldgen/mesh-geometry-realization`, LIVE as of 2026-08-08)
 
 **Note**: most of this document (macro-cell flood-fill growth, universal-filler,
 plain CSP backtracking) describes the ORIGINAL v2 design and is known-stale —
@@ -160,9 +160,14 @@ blobs, they are lines. It is cheating and goes against our principles."*
 
 This branch builds a real alternative to `GeometryRealization` (the
 macro-cell-grid growth stage), swappable via
-`TopologyFirstRegionSolver.GeometryRealizer` (currently only wired for the
-export CLI's `MINEUTZE_WORLDGEN_MESH_GEOMETRY` env var, NOT the live game
-path): instead of growing directly on the macro-cell grid, build a real
+`TopologyFirstRegionSolver.GeometryRealizer` — `SeedRegionCache`'s default
+`geometryRealizer` now calls `MeshGeometryRealization::realize`, so this is
+the live path for real world generation (`RegionCacheHolder` uses that
+default constructor). The export CLI's `MINEUTZE_WORLDGEN_MESH_GEOMETRY` env
+var still exists for side-by-side comparison runs, and `GeometryRealization`
+stays in the codebase as the rollback path (pass
+`GeometryRealization::realize` explicitly to `SeedRegionCache`'s 5-arg
+constructor to revert): instead of growing directly on the macro-cell grid, build a real
 triangulated planar mesh over the region, merge triangle faces into patches,
 displace the shared boundary between two different patches with noise, then
 rasterize back to the macro-cell grid only as the final step. Six new stages
@@ -181,25 +186,22 @@ safety net — see its own doc for two real gaps found and fixed via direct
 measurement, not anticipated up front).
 
 **Status as of 2026-08-08**: built, unit-tested (every class has its own
-JUnit suite), and compared directly against the live pixel pipeline on the
-project's standing reference seed (42, 3×3 regions from `RegionPos(-1,-1)`).
-User's own visual review: prefers the mesh pipeline specifically because it
-eliminates the separator-reads-as-a-line problem (no more single-biome-wide
-"border" patch) — the actual goal this whole effort exists for. Real
-residuals remain, not yet resolved, tracked as harness tasks at the time of
-writing (search this repo's task history or ask for current status, task
-numbers aren't stable across sessions): total patch count is still notably
-higher than the pixel baseline (fragmentation), one biome's competitive
-share of territory can come out worse than another's depending on how
-restrictive its own adjacency rules are (a genuine multi-biome fair-
-allocation question in `MeshGapFiller`'s fill priority, not a bug), and
-neither pipeline (pixel or mesh) currently enforces every biome's own
-declared minimum patch size — small legal-but-undersized fragments can
-appear, more visibly on the mesh side purely because of the higher patch
-count. **Do not flip `TopologyFirstRegionSolver`'s live call site
-(`GeometryRealization::realize` → `MeshGeometryRealization::realize`) until
-these are resolved or explicitly accepted** — that swap is a deliberate
-one-line change, not accidental.
+JUnit suite), compared directly against the live pixel pipeline on the
+project's standing reference seed (42, 3×3 regions from `RegionPos(-1,-1)`),
+and **flipped live** — `SeedRegionCache`'s default `geometryRealizer` now
+calls `MeshGeometryRealization::realize`. User's own visual review: prefers
+the mesh pipeline specifically because it eliminates the
+separator-reads-as-a-line problem (no more single-biome-wide "border" patch)
+— the actual goal this whole effort exists for. Minimum-patch-size
+enforcement (`MeshPatchSizeEnforcer`) and target-aware fill priority
+(`MeshGapFiller`'s per-biome frontier queues) were added to close the two
+biggest residuals found during review. Two known, accepted residuals remain:
+patch count still runs somewhat higher than the pixel baseline (24 vs. 13 on
+the reference seed), and pinch points run much higher (143 vs. 4) but were
+investigated and judged a benign consequence of the organic wavy-boundary
+design, not a defect. `GeometryRealization` stays in the codebase as the
+rollback path — pass `GeometryRealization::realize` explicitly to
+`SeedRegionCache`'s 5-arg constructor to revert.
 
 ## Decided
 

@@ -96,6 +96,8 @@ to be *drawn* — actual placement frequency is purely a side effect of each
 biome's size-range math, not a designed rarity. Only matters if rarity
 control becomes a design goal.
 
+## Fixed
+
 ### 6. Required separators read as straight-edged lines, not organic blobs — geometric, not fixable by more pixel-grid cleanup passes
 A required separator (a buffer patch forced between two mutually-
 incompatible biomes, e.g. plains between forest and badlands, because
@@ -111,18 +113,17 @@ against our principles."* Rounding a shape's corners can't fix a shape
 that's inherently elongated by construction — this needed a different
 geometry substrate, not another cleanup pass.
 
-**Real fix built, not yet live**: branch `worldgen/mesh-geometry-realization`
-replaces `GeometryRealization`'s pixel-grid growth with a real triangulated
-mesh (merge, then displace the shared boundary with noise) — see
-`doc/ARCHITECTURE.md`'s own section on it for the full pipeline and current
-status. Directly confirmed via user review on the seed-42 reference export:
-the mesh pipeline eliminates the single-biome-wide "border" read entirely.
-Not yet wired into the live call site — real residuals (patch-count
-fragmentation, fair multi-biome territory allocation, minimum patch size
-enforcement) remain open on that branch, tracked as harness tasks at time of
-writing.
-
-## Fixed
+**Fixed, live as of 2026-08-08**: `MeshGeometryRealization` (branch
+`worldgen/mesh-geometry-realization`) replaces `GeometryRealization`'s
+pixel-grid growth with a real triangulated mesh (merge, then displace the
+shared boundary with noise) — see `doc/ARCHITECTURE.md`'s own section on it
+for the full pipeline. `SeedRegionCache`'s default `geometryRealizer` now
+calls it, so this is live for real world generation, not just the export
+CLI. Confirmed via user review on the seed-42 reference export: the mesh
+pipeline eliminates the single-biome-wide "border" read entirely.
+Minimum-patch-size enforcement and target-aware fill priority were added to
+close the two biggest residuals found during review; `GeometryRealization`
+stays in the codebase as the rollback path.
 
 ### `SeparatorOrganicizer` gated on a whole connected component's shape, so a biome that sprawls into one huge component (plains, spanning 800+ cells across many regions) never got organicized anywhere, even where a specific stretch was a perfectly straight corridor
 User feedback after the pinch/diagonal/width-3 fixes above: "plains still

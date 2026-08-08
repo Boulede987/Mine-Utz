@@ -57,10 +57,21 @@ public final class SeedRegionCache {
      *                       dropped for lack of a legal spot
      */
     public SeedRegionCache(BiomeGraph graph, MacroGridConfig gridConfig, long worldSeed, RegionSolveListener onRegionSolved) {
-        this(graph, gridConfig, worldSeed, onRegionSolved, GeometryRealization::realize);
+        this(graph, gridConfig, worldSeed, onRegionSolved, MeshGeometryRealization::realize);
     }
 
-    /** @param geometryRealizer defaults to {@link GeometryRealization#realize} everywhere else — only a standalone comparison run selects {@code MeshGeometryRealization} here instead. */
+    /**
+     * @param geometryRealizer defaults to {@link MeshGeometryRealization#realize} —
+     *                         the mesh-based geometry stage, live as of
+     *                         2026-08-08 after extensive seed-42 comparison
+     *                         review against the pixel-grid {@link
+     *                         GeometryRealization} it replaces (see
+     *                         doc/ARCHITECTURE.md and doc/KNOWN_ISSUES.md
+     *                         item #6). {@link GeometryRealization} stays
+     *                         in the codebase as the rollback path — pass
+     *                         {@code GeometryRealization::realize} here
+     *                         explicitly to revert to it.
+     */
     public SeedRegionCache(BiomeGraph graph, MacroGridConfig gridConfig, long worldSeed, RegionSolveListener onRegionSolved, TopologyFirstRegionSolver.GeometryRealizer geometryRealizer) {
         this.graph = graph;
         this.gridConfig = gridConfig;

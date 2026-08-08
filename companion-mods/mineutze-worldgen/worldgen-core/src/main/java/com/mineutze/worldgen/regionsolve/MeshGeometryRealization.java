@@ -47,8 +47,11 @@ import java.util.stream.Collectors;
  *
  * <p>{@link GeometryRealization} itself is untouched and stays in the
  * codebase as the rollback path, exactly like {@link RegionSolver} was kept
- * after the topology-first redesign — {@code TopologyFirstRegionSolver}
- * still calls {@link GeometryRealization#realize} until that swap is made.
+ * after the topology-first redesign. Live as of 2026-08-08: {@link
+ * SeedRegionCache}'s default {@code geometryRealizer} calls this class, not
+ * {@link GeometryRealization}, after seed-42 comparison review — pass
+ * {@code GeometryRealization::realize} explicitly to
+ * {@code SeedRegionCache}'s 5-arg constructor to roll back.
  *
  * <p>Six stages, each its own class under {@code regionsolve.mesh}:
  * {@link FineMeshPointScatter} (fine point scatter: fixed/CSP-colored germ
