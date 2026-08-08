@@ -9,11 +9,11 @@ import java.util.List;
  */
 public record IndexedTriangle(int a, int b, int c) {
 
-    List<NodeEdge> edges() {
+    public List<NodeEdge> edges() {
         return List.of(NodeEdge.of(a, b), NodeEdge.of(b, c), NodeEdge.of(c, a));
     }
 
-    boolean hasVertex(int vertexIndex) {
+    public boolean hasVertex(int vertexIndex) {
         return a == vertexIndex || b == vertexIndex || c == vertexIndex;
     }
 }
