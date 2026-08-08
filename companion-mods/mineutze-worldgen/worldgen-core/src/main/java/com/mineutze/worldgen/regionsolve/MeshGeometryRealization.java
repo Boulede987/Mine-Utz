@@ -14,13 +14,17 @@ import com.mineutze.worldgen.regionsolve.mesh.ScatteredPoint;
 import com.mineutze.worldgen.regionsolve.topology.Point2D;
 import com.mineutze.worldgen.regionsolve.topology.SeedGraph;
 
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.Deque;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
@@ -53,22 +57,30 @@ import java.util.stream.Collectors;
  * same 3-tier dead-end resolver {@link GapFiller} already proved) →
  * {@link EdgeDisplacement} (the actual visual payoff) →
  * {@link MeshRasterizer} (back to {@code Map<MacroCellPos,BiomeId>}) →
- * {@link #repairPixelLevelIllegalAdjacencies} (see its own doc — a real gap
- * found via the seed-42 comparison this rewrite's plan calls for, not
- * something anticipated up front).
+ * {@link #repairRasterizationArtifacts} (see its own doc — real gaps found
+ * via the seed-42 comparison this rewrite's plan calls for, not anticipated
+ * up front).
  *
- * <p><b>{@code MeshLegality} guarantees legality between faces that are
- * actually adjacent IN THE MESH — it says nothing about two faces that
- * become pixel-adjacent only after rasterization despite never sharing an
- * edge or vertex.</b> Confirmed via direct trace on the seed-42 comparison:
- * a savanna face and a desert face, neither edge-adjacent nor diagonal
- * partners anywhere in the mesh, rasterized to two orthogonally-touching
- * macro-cells — {@code MeshLegality} never had a reason to check that pair
- * at all. {@link #repairPixelLevelIllegalAdjacencies} is the safety net for
- * exactly that discretization gap, applied once, after rasterization —
- * see its own doc for why a bounded local repair here is safe and why it
- * doesn't reopen the shape-quality problem this whole rewrite exists to
- * fix.
+ * <p><b>{@code MeshLegality}/{@code MeshCohesion} guarantee legality and
+ * shape at the MESH level — neither says anything about what a face's
+ * winning macro-cells look like once discretized.</b> Two distinct gaps
+ * confirmed via direct trace on the seed-42 comparison, both closed by
+ * {@link #repairRasterizationArtifacts}:
+ * <ul>
+ *   <li>Two faces neither edge-adjacent nor diagonal partners anywhere in
+ *   the mesh (so {@code MeshLegality} never checked them against each
+ *   other) rasterized to two orthogonally-touching macro-cells — an
+ *   illegal adjacency invisible at the mesh level.
+ *   <li>A face that was legitimately part of a large, properly-connected
+ *   26-face mesh patch (~91 macro-cells' worth) still rasterized to one
+ *   macro-cell spatially stranded from every other cell of its own
+ *   patch — nearest-centroid point-sampling doesn't guarantee
+ *   mesh-adjacency implies PIXEL-adjacency in the output, especially
+ *   near a patch's own turns/corners. A true single-pixel outlier, the
+ *   discretization analog of the pixel pipeline's own spurs/tendrils
+ *   ({@code PatchOpener}/{@code PinchResolver} exist for exactly this
+ *   reason on that side).
+ * </ul>
  */
 public final class MeshGeometryRealization {
 
@@ -91,37 +103,40 @@ public final class MeshGeometryRealization {
         Map<Integer, Point2D> displaced = EdgeDisplacement.displace(mesh, assignment, input.graph(), input.gridConfig(), input.worldSeed());
         Map<MacroCellPos, BiomeId> rasterized = MeshRasterizer.rasterize(mesh, assignment, displaced, input);
 
-        return repairPixelLevelIllegalAdjacencies(rasterized, input.graph());
+        return repairRasterizationArtifacts(rasterized, input.graph());
     }
 
     /**
-     * A cell whose rasterized biome is illegal against one of its own
-     * orthogonal pixel-neighbors gets reassigned to whichever biome IS
-     * legal against every current neighbor and has the most matching
-     * neighbors among those — same tie-break {@code GapFiller.bestLegalChoice}
-     * already uses. Iterates to a fixed point (a repair can itself become
-     * illegal against a neighbor that hasn't been visited yet this pass),
-     * capped at {@link #MAX_PIXEL_REPAIR_PASSES}. Reuses {@link GrowthEngine#isLegal}
+     * A cell that's either illegal against an orthogonal/diagonal neighbor,
+     * OR a single-pixel island (its own 4-connected same-biome component has
+     * size 1), gets reassigned to whichever biome IS legal against every
+     * current neighbor and has the most matching neighbors among those —
+     * same tie-break {@code GapFiller.bestLegalChoice} already uses. For an
+     * isolated cell this naturally picks the surrounding majority biome
+     * (already legal there by definition, since same-biome-adjacent is
+     * always legal). Iterates to a fixed point (a repair can itself create
+     * or expose a new violation nearby), capped at
+     * {@link #MAX_PIXEL_REPAIR_PASSES}. Reuses {@link GrowthEngine#isLegal}
      * directly rather than re-deriving the same check — this class lives in
      * the same package on purpose.
      *
      * <p>Scoped narrowly on purpose: only ever reassigns a cell that's
-     * already illegal, using the graph's own real bridge paths (every
-     * non-adjacent pair is guaranteed bridgeable within {@code BiomeGraph}'s
-     * own hop budget, checked eagerly at construction) — never touches a
-     * cell that's already legal, so it can't introduce a NEW violation
-     * while fixing another, and it can't degrade the shape-quality work
-     * {@code EdgeDisplacement} just did (a 14-cell, ~0.15%-of-region repair
-     * is far too small to visibly affect a patch's read as organic).
+     * already illegal or already isolated, using the graph's own real
+     * bridge paths (every non-adjacent pair is guaranteed bridgeable within
+     * {@code BiomeGraph}'s own hop budget, checked eagerly at construction)
+     * — never touches a cell that's already legal and non-isolated, so it
+     * can't introduce a NEW violation while fixing another, and a
+     * double-digit-cell repair out of thousands is far too small to
+     * visibly affect a patch's read as organic.
      */
-    private static Map<MacroCellPos, BiomeId> repairPixelLevelIllegalAdjacencies(Map<MacroCellPos, BiomeId> rasterized, BiomeGraph graph) {
+    private static Map<MacroCellPos, BiomeId> repairRasterizationArtifacts(Map<MacroCellPos, BiomeId> rasterized, BiomeGraph graph) {
         Map<MacroCellPos, BiomeId> repaired = new LinkedHashMap<>(rasterized);
         for (int pass = 0; pass < MAX_PIXEL_REPAIR_PASSES; pass++) {
-            List<MacroCellPos> violating = findIllegalCells(repaired, graph);
-            if (violating.isEmpty()) {
+            List<MacroCellPos> needingRepair = findCellsNeedingRepair(repaired, graph);
+            if (needingRepair.isEmpty()) {
                 break;
             }
-            for (MacroCellPos cell : violating) {
+            for (MacroCellPos cell : needingRepair) {
                 bestLegalReplacement(cell, repaired, graph).ifPresent(replacement -> {
                     repaired.put(cell, replacement);
                     WorldgenTrace.log("MESH PIXELREPAIR reassign " + cell + " = " + replacement);
@@ -131,14 +146,48 @@ public final class MeshGeometryRealization {
         return repaired;
     }
 
-    private static List<MacroCellPos> findIllegalCells(Map<MacroCellPos, BiomeId> assignment, BiomeGraph graph) {
-        List<MacroCellPos> violating = new ArrayList<>();
+    private static List<MacroCellPos> findCellsNeedingRepair(Map<MacroCellPos, BiomeId> assignment, BiomeGraph graph) {
+        List<MacroCellPos> needingRepair = new ArrayList<>();
         for (Map.Entry<MacroCellPos, BiomeId> entry : assignment.entrySet()) {
             if (!isLegalIncludingDiagonals(entry.getKey(), entry.getValue(), assignment, graph)) {
-                violating.add(entry.getKey());
+                needingRepair.add(entry.getKey());
             }
         }
-        return violating;
+        needingRepair.addAll(findIsolatedCells(assignment));
+        return needingRepair;
+    }
+
+    /** A cell whose 4-connected same-biome component is size 1 — see class doc for why this is reachable even for a face that's legitimately part of a large, properly-connected mesh patch. */
+    private static List<MacroCellPos> findIsolatedCells(Map<MacroCellPos, BiomeId> assignment) {
+        List<MacroCellPos> isolated = new ArrayList<>();
+        Set<MacroCellPos> visited = new HashSet<>();
+        for (MacroCellPos start : assignment.keySet()) {
+            if (visited.contains(start)) {
+                continue;
+            }
+            Set<MacroCellPos> component = sameBiomeComponent(start, assignment);
+            visited.addAll(component);
+            if (component.size() == 1) {
+                isolated.add(start);
+            }
+        }
+        return isolated;
+    }
+
+    private static Set<MacroCellPos> sameBiomeComponent(MacroCellPos start, Map<MacroCellPos, BiomeId> assignment) {
+        BiomeId biome = assignment.get(start);
+        Set<MacroCellPos> visited = new HashSet<>();
+        Deque<MacroCellPos> stack = new ArrayDeque<>(List.of(start));
+        visited.add(start);
+        while (!stack.isEmpty()) {
+            MacroCellPos current = stack.pop();
+            for (MacroCellPos neighbor : current.orthogonalNeighbors()) {
+                if (biome.equals(assignment.get(neighbor)) && visited.add(neighbor)) {
+                    stack.push(neighbor);
+                }
+            }
+        }
+        return visited;
     }
 
     private static Optional<BiomeId> bestLegalReplacement(MacroCellPos cell, Map<MacroCellPos, BiomeId> assignment, BiomeGraph graph) {
