@@ -2,8 +2,11 @@ package com.mineutze.worldgen.export;
 
 import com.mineutze.worldgen.biomegraph.BiomeGraph;
 import com.mineutze.worldgen.biomegraph.ModBiomeGraph;
+import com.mineutze.worldgen.regionsolve.GeometryRealization;
 import com.mineutze.worldgen.regionsolve.MacroGridConfig;
+import com.mineutze.worldgen.regionsolve.MeshGeometryRealization;
 import com.mineutze.worldgen.regionsolve.RegionPos;
+import com.mineutze.worldgen.regionsolve.TopologyFirstRegionSolver;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -41,19 +44,33 @@ public final class ExportCli {
         MacroGridConfig gridConfig = MacroGridConfig.DEFAULT;
         RegionPos minRegion = new RegionPos(-regionSpan / 2, -regionSpan / 2);
 
+        // Comparison-only switch for the mesh-based geometry rewrite (doc/fix_dieas.md)
+        // — same env-var-toggle precedent as MINEUTZE_SKIP_CLEANUP on GeometryRealization
+        // itself. Never affects the live game/SeedRegionCache path, which always calls
+        // GeometryRealization::realize directly.
+        boolean useMeshGeometry = System.getenv("MINEUTZE_WORLDGEN_MESH_GEOMETRY") != null;
+        TopologyFirstRegionSolver.GeometryRealizer geometryRealizer = useMeshGeometry
+            ? MeshGeometryRealization::realize
+            : GeometryRealization::realize;
+
         System.out.printf(
-            "Solving %dx%d regions from %s (worldSeed=%d, macroCellSizeBlocks=%d, regionSizeCellsPerSide=%d)%n",
-            regionSpan, regionSpan, minRegion, worldSeed, gridConfig.macroCellSizeBlocks(), gridConfig.regionSizeCellsPerSide()
+            "Solving %dx%d regions from %s (worldSeed=%d, macroCellSizeBlocks=%d, regionSizeCellsPerSide=%d, geometry=%s)%n",
+            regionSpan, regionSpan, minRegion, worldSeed, gridConfig.macroCellSizeBlocks(), gridConfig.regionSizeCellsPerSide(),
+            useMeshGeometry ? "mesh" : "pixel"
         );
 
+        long solveStartNanos = System.nanoTime();
         ExportSnapshot snapshot = RegionGridSolver.solve(
             graph, gridConfig, worldSeed, minRegion, regionSpan,
             (region, result) -> System.out.printf(
                 "  solved region %s: %d cells, %d dropped demand(s)%s%n",
                 region, result.assignment().size(), result.droppedDemandCount(),
                 result.warnings().isEmpty() ? "" : " — " + result.warnings().size() + " warning(s)"
-            )
+            ),
+            geometryRealizer
         );
+        long solveDurationMillis = (System.nanoTime() - solveStartNanos) / 1_000_000;
+        System.out.printf("Total solve time: %d ms%n", solveDurationMillis);
 
         createOutputDir(outputDir);
         BiomeLegend legend = new BiomeLegend(graph);

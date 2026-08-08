@@ -53,11 +53,34 @@ public final class TopologyFirstRegionSolver {
     private TopologyFirstRegionSolver() {
     }
 
+    /**
+     * The geometry stage is pluggable purely so a standalone comparison run
+     * (see {@code ExportCli}'s {@code MINEUTZE_WORLDGEN_MESH_GEOMETRY} env
+     * var) can select {@code MeshGeometryRealization} instead of the default
+     * {@link GeometryRealization} without touching this class's live call
+     * sites ({@link com.mineutze.worldgen.regionsolve.SeedRegionCache},
+     * which every real game/{@code SeedRegionCache}-backed caller goes
+     * through) — every overload without an explicit realizer keeps calling
+     * {@link GeometryRealization#realize} exactly as before.
+     */
+    @FunctionalInterface
+    public interface GeometryRealizer {
+        Map<MacroCellPos, BiomeId> realize(SeedGraph seedGraph, Map<Integer, BiomeId> assignedIdentities, RegionSolveInput input);
+    }
+
     public static RegionSolveResult solve(RegionSolveInput input) {
-        return solve(input, DEFAULT_SEED_SPACING_BLOCKS);
+        return solve(input, DEFAULT_SEED_SPACING_BLOCKS, GeometryRealization::realize);
     }
 
     public static RegionSolveResult solve(RegionSolveInput input, int seedSpacingBlocks) {
+        return solve(input, seedSpacingBlocks, GeometryRealization::realize);
+    }
+
+    public static RegionSolveResult solve(RegionSolveInput input, GeometryRealizer geometryRealizer) {
+        return solve(input, DEFAULT_SEED_SPACING_BLOCKS, geometryRealizer);
+    }
+
+    public static RegionSolveResult solve(RegionSolveInput input, int seedSpacingBlocks, GeometryRealizer geometryRealizer) {
         Set<MacroCellPos> excludedSeedPositions = new HashSet<>();
         List<String> warnings = new ArrayList<>();
         int reseedAttempt = 0;
@@ -68,7 +91,7 @@ public final class TopologyFirstRegionSolver {
             if (!seedGraph.reseedRecommended()) {
                 Optional<Map<Integer, BiomeId>> assignment = CspIdentityAssignment.solve(seedGraph, input.graph(), input.worldSeed());
                 if (assignment.isPresent()) {
-                    Map<MacroCellPos, BiomeId> realized = GeometryRealization.realize(seedGraph, assignment.get(), input);
+                    Map<MacroCellPos, BiomeId> realized = geometryRealizer.realize(seedGraph, assignment.get(), input);
                     return new RegionSolveResult(realized, List.copyOf(warnings), excludedSeedPositions.size());
                 }
             }

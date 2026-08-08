@@ -37,6 +37,7 @@ public final class SeedRegionCache {
     private final MacroGridConfig gridConfig;
     private final long worldSeed;
     private final RegionSolveListener onRegionSolved;
+    private final TopologyFirstRegionSolver.GeometryRealizer geometryRealizer;
     private final Map<RegionPos, RegionSolveResult> solved = new ConcurrentHashMap<>();
     private final Object solveLock = new Object();
 
@@ -56,10 +57,16 @@ public final class SeedRegionCache {
      *                       dropped for lack of a legal spot
      */
     public SeedRegionCache(BiomeGraph graph, MacroGridConfig gridConfig, long worldSeed, RegionSolveListener onRegionSolved) {
+        this(graph, gridConfig, worldSeed, onRegionSolved, GeometryRealization::realize);
+    }
+
+    /** @param geometryRealizer defaults to {@link GeometryRealization#realize} everywhere else — only a standalone comparison run selects {@code MeshGeometryRealization} here instead. */
+    public SeedRegionCache(BiomeGraph graph, MacroGridConfig gridConfig, long worldSeed, RegionSolveListener onRegionSolved, TopologyFirstRegionSolver.GeometryRealizer geometryRealizer) {
         this.graph = graph;
         this.gridConfig = gridConfig;
         this.worldSeed = worldSeed;
         this.onRegionSolved = onRegionSolved;
+        this.geometryRealizer = geometryRealizer;
     }
 
     /**
@@ -106,7 +113,7 @@ public final class SeedRegionCache {
         RegionSolveInput input = new RegionSolveInput(graph, gridConfig, region, fixedBoundary, worldSeed);
 
         long startNanos = System.nanoTime();
-        RegionSolveResult result = TopologyFirstRegionSolver.solve(input);
+        RegionSolveResult result = TopologyFirstRegionSolver.solve(input, geometryRealizer);
         long durationMillis = (System.nanoTime() - startNanos) / 1_000_000;
 
         onRegionSolved.onSolved(region, result, durationMillis);

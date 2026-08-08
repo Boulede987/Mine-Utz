@@ -5,8 +5,10 @@ import com.mineutze.worldgen.biomegraph.BiomeId;
 import com.mineutze.worldgen.regionsolve.MacroCellPos;
 import com.mineutze.worldgen.regionsolve.MacroGridConfig;
 import com.mineutze.worldgen.regionsolve.RegionPos;
+import com.mineutze.worldgen.regionsolve.GeometryRealization;
 import com.mineutze.worldgen.regionsolve.RegionSolveResult;
 import com.mineutze.worldgen.regionsolve.SeedRegionCache;
+import com.mineutze.worldgen.regionsolve.TopologyFirstRegionSolver;
 
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -28,9 +30,19 @@ public final class RegionGridSolver {
         BiomeGraph graph, MacroGridConfig gridConfig, long worldSeed,
         RegionPos minRegion, int regionSpan, BiConsumer<RegionPos, RegionSolveResult> onRegionSolved
     ) {
+        return solve(graph, gridConfig, worldSeed, minRegion, regionSpan, onRegionSolved, GeometryRealization::realize);
+    }
+
+    /** @param geometryRealizer defaults to {@link GeometryRealization#realize} — a standalone comparison run passes {@code MeshGeometryRealization::realize} instead, see {@code ExportCli}'s {@code MINEUTZE_WORLDGEN_MESH_GEOMETRY} env var. */
+    public static ExportSnapshot solve(
+        BiomeGraph graph, MacroGridConfig gridConfig, long worldSeed,
+        RegionPos minRegion, int regionSpan, BiConsumer<RegionPos, RegionSolveResult> onRegionSolved,
+        TopologyFirstRegionSolver.GeometryRealizer geometryRealizer
+    ) {
         SeedRegionCache cache = new SeedRegionCache(
             graph, gridConfig, worldSeed,
-            (region, result, durationMillis) -> onRegionSolved.accept(region, result)
+            (region, result, durationMillis) -> onRegionSolved.accept(region, result),
+            geometryRealizer
         );
 
         Map<MacroCellPos, BiomeId> cells = new LinkedHashMap<>();
