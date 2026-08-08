@@ -70,14 +70,51 @@ public final class MeshRasterizer {
         return fallback;
     }
 
+    /**
+     * Picks the containing face whose CENTROID is nearest the point, not
+     * just the first one found by ascending id. This matters a lot more
+     * than it looks: {@code FineMeshPointScatter}'s germ and filler points
+     * are deliberately placed at exact integer macro-cell coordinates (so
+     * a biome's identity/growth target lines up cleanly with the grid this
+     * eventually rasterizes back to) — which means a macro-cell's own
+     * query point very often sits EXACTLY on a mesh vertex where several
+     * triangles fan together. The same-side containment test correctly
+     * reports every one of those fan triangles as "containing" a point
+     * exactly on their shared vertex (zero cross product is neither
+     * negative nor positive); picking "first by id" in that case is
+     * arbitrary and unrelated to which face actually owns that area,
+     * which fragmented output into a salt-and-pepper mess across entire
+     * regions before this fix — every filler/germ-coincident cell
+     * effectively got a near-random face. Nearest-centroid resolves the
+     * ambiguity the same principled way every ordinary fallback in this
+     * pipeline already does.
+     */
     private static Optional<Integer> locateInUndisplacedMesh(FineMesh mesh, Point2D point) {
+        int bestFaceId = -1;
+        double bestDistanceSquared = Double.MAX_VALUE;
         for (int faceId = 0; faceId < mesh.faces().size(); faceId++) {
             IndexedTriangle face = mesh.face(faceId);
-            if (containsPoint(mesh.position(face.a()), mesh.position(face.b()), mesh.position(face.c()), point)) {
-                return Optional.of(faceId);
+            Point2D a = mesh.position(face.a());
+            Point2D b = mesh.position(face.b());
+            Point2D c = mesh.position(face.c());
+            if (!containsPoint(a, b, c, point)) {
+                continue;
+            }
+            double distanceSquared = distanceSquaredToCentroid(a, b, c, point);
+            if (distanceSquared < bestDistanceSquared) {
+                bestDistanceSquared = distanceSquared;
+                bestFaceId = faceId;
             }
         }
-        return Optional.empty();
+        return bestFaceId < 0 ? Optional.empty() : Optional.of(bestFaceId);
+    }
+
+    private static double distanceSquaredToCentroid(Point2D a, Point2D b, Point2D c, Point2D point) {
+        double centroidX = (a.x() + b.x() + c.x()) / 3.0;
+        double centroidZ = (a.z() + b.z() + c.z()) / 3.0;
+        double dx = centroidX - point.x();
+        double dz = centroidZ - point.z();
+        return dx * dx + dz * dz;
     }
 
     private static boolean touchesAnyDisplacedVertex(IndexedTriangle face, Map<Integer, Point2D> displaced) {
