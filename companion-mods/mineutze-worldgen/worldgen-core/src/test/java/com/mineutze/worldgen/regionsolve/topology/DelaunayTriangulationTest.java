@@ -77,6 +77,61 @@ class DelaunayTriangulationTest {
             "edge count " + edges.size() + " exceeds planar bound " + maxPossibleEdges);
     }
 
+    @Test
+    void fewerThanThreePointsProduceNoFaces() {
+        assertEquals(List.of(), DelaunayTriangulation.triangulateFaces(List.of()));
+        assertEquals(List.of(), DelaunayTriangulation.triangulateFaces(List.of(new Point2D(0, 0))));
+        assertEquals(List.of(), DelaunayTriangulation.triangulateFaces(List.of(new Point2D(0, 0), new Point2D(10, 0))));
+    }
+
+    @Test
+    void threePointsProduceExactlyOneFace() {
+        List<Point2D> points = List.of(new Point2D(0, 0), new Point2D(10, 0), new Point2D(5, 10));
+
+        List<IndexedTriangle> faces = DelaunayTriangulation.triangulateFaces(points);
+
+        assertEquals(1, faces.size());
+        assertTrue(faces.get(0).hasVertex(0) && faces.get(0).hasVertex(1) && faces.get(0).hasVertex(2));
+    }
+
+    @Test
+    void quadrilateralFacesSumToItsExactArea() {
+        // A square: shoelace area is exactly 100 regardless of which diagonal gets picked.
+        List<Point2D> points = List.of(
+            new Point2D(0, 0),
+            new Point2D(10, 0),
+            new Point2D(10, 10),
+            new Point2D(0, 10)
+        );
+
+        List<IndexedTriangle> faces = DelaunayTriangulation.triangulateFaces(points);
+
+        assertEquals(2, faces.size());
+        double totalArea = faces.stream().mapToDouble(triangle -> triangleArea(triangle, points)).sum();
+        assertEquals(100.0, totalArea, 1e-9);
+    }
+
+    @Test
+    void everyTriangulateEdgeAppearsInOneOrTwoTriangulateFacesFaces() {
+        List<Point2D> points = jitteredGridScatter(6, 6, 42);
+
+        Set<NodeEdge> edges = DelaunayTriangulation.triangulate(points);
+        List<IndexedTriangle> faces = DelaunayTriangulation.triangulateFaces(points);
+
+        for (NodeEdge edge : edges) {
+            long owningFaces = faces.stream().filter(triangle -> triangle.edges().contains(edge)).count();
+            assertTrue(owningFaces == 1 || owningFaces == 2,
+                "edge " + edge + " owned by " + owningFaces + " faces, expected 1 or 2");
+        }
+    }
+
+    private static double triangleArea(IndexedTriangle triangle, List<Point2D> points) {
+        Point2D a = points.get(triangle.a());
+        Point2D b = points.get(triangle.b());
+        Point2D c = points.get(triangle.c());
+        return Math.abs((b.x() - a.x()) * (c.z() - a.z()) - (c.x() - a.x()) * (b.z() - a.z())) / 2.0;
+    }
+
     private static List<Point2D> jitteredGridScatter(int columns, int rows, long seed) {
         Random random = new Random(seed);
         return java.util.stream.IntStream.range(0, columns * rows)

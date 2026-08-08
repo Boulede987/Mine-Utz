@@ -41,6 +41,31 @@ public final class DelaunayTriangulation {
             return Set.of(NodeEdge.of(0, 1));
         }
 
+        BuiltTriangulation built = buildTriangulation(points);
+        return extractEdges(built.faces(), built.superTriangleStart());
+    }
+
+    /**
+     * Same triangulation as {@link #triangulate}, but returns the actual
+     * faces instead of collapsing them into an adjacency edge set — needed
+     * by anything treating the mesh as real geometry (merge/displacement),
+     * not just an abstract graph. Fewer than 3 real points can't form a
+     * face at all, so this returns an empty list in that case (unlike
+     * {@code triangulate}, which still reports a degenerate single edge
+     * for exactly 2 points).
+     */
+    public static List<IndexedTriangle> triangulateFaces(List<Point2D> points) {
+        if (points.size() < 3) {
+            return List.of();
+        }
+
+        BuiltTriangulation built = buildTriangulation(points);
+        return built.faces().stream()
+            .filter(triangle -> !touchesSuperTriangle(triangle, built.superTriangleStart()))
+            .toList();
+    }
+
+    private static BuiltTriangulation buildTriangulation(List<Point2D> points) {
         List<Point2D> workingPoints = new ArrayList<>(points);
         int superTriangleStart = workingPoints.size();
         workingPoints.addAll(buildSuperTriangleVertices(points));
@@ -52,7 +77,14 @@ public final class DelaunayTriangulation {
             triangulation = insertPoint(triangulation, workingPoints, pointIndex);
         }
 
-        return extractEdges(triangulation, superTriangleStart);
+        return new BuiltTriangulation(triangulation, superTriangleStart);
+    }
+
+    private record BuiltTriangulation(List<IndexedTriangle> faces, int superTriangleStart) {
+    }
+
+    private static boolean touchesSuperTriangle(IndexedTriangle triangle, int superTriangleStart) {
+        return triangle.a() >= superTriangleStart || triangle.b() >= superTriangleStart || triangle.c() >= superTriangleStart;
     }
 
     private static List<IndexedTriangle> insertPoint(List<IndexedTriangle> triangulation, List<Point2D> workingPoints, int pointIndex) {
@@ -96,7 +128,7 @@ public final class DelaunayTriangulation {
     private static Set<NodeEdge> extractEdges(List<IndexedTriangle> triangulation, int superTriangleStart) {
         Set<NodeEdge> edges = new LinkedHashSet<>();
         for (IndexedTriangle triangle : triangulation) {
-            if (triangle.a() >= superTriangleStart || triangle.b() >= superTriangleStart || triangle.c() >= superTriangleStart) {
+            if (touchesSuperTriangle(triangle, superTriangleStart)) {
                 continue;
             }
             edges.addAll(triangle.edges());
