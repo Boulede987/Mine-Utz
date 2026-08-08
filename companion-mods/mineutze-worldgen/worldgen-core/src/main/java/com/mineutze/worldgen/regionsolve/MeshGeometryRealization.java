@@ -68,7 +68,8 @@ import java.util.stream.Collectors;
  * {@link MeshRasterizer} (back to {@code Map<MacroCellPos,BiomeId>}) →
  * {@link #repairRasterizationArtifacts} (see its own doc — real gaps found
  * via the seed-42 comparison this rewrite's plan calls for, not anticipated
- * up front).
+ * up front) → {@link #enforceFinalPixelPatchSize} (mesh-level size
+ * enforcement doesn't survive rasterization/repair intact — see its own doc).
  *
  * <p><b>{@code MeshLegality}/{@code MeshCohesion} guarantee legality and
  * shape at the MESH level — neither says anything about what a face's
@@ -113,8 +114,40 @@ public final class MeshGeometryRealization {
         MeshPatchSizeEnforcer.enforceMinimumPatchSize(mesh, assignment, input.graph(), input.gridConfig());
         Map<Integer, Point2D> displaced = EdgeDisplacement.displace(mesh, assignment, input.graph(), input.gridConfig(), input.worldSeed());
         Map<MacroCellPos, BiomeId> rasterized = MeshRasterizer.rasterize(mesh, assignment, displaced, input);
+        Map<MacroCellPos, BiomeId> repaired = repairRasterizationArtifacts(rasterized, input.graph());
 
-        return repairRasterizationArtifacts(rasterized, input.graph());
+        return enforceFinalPixelPatchSize(repaired, input);
+    }
+
+    /**
+     * {@link MeshPatchSizeEnforcer} only sees MESH-face area, before {@link
+     * EdgeDisplacement}/{@link MeshRasterizer}/{@link
+     * #repairRasterizationArtifacts} run — none of those guarantee the final
+     * PIXEL component stays at or above that same size, and the last of them
+     * can actively shrink one (reassigning a cell to fix an illegal
+     * adjacency or isolated-cell violation pulls it out of whatever
+     * component it belonged to). Confirmed via direct user report: seed 42's
+     * plains patch at macro cell (10,-14) rasterized to an 18-cell, 3-cell-
+     * wide (192 blocks) component against a declared 300-block minimum
+     * width (~22-cell minimum) — legal-adjacency-wise fine, but genuinely
+     * undersized by the same standard {@link MeshPatchSizeEnforcer} already
+     * enforces at the mesh level. Reuses the pixel pipeline's own {@link
+     * PatchSizeEnforcer} (already proven live in {@link GeometryRealization})
+     * rather than re-deriving the same merge-or-widen logic a third time;
+     * same fixed-boundary-context assembly {@link GeometryRealization#realize}
+     * itself uses, since a component's true bordering neighbors can include
+     * already-solved territory outside this region.
+     */
+    private static Map<MacroCellPos, BiomeId> enforceFinalPixelPatchSize(Map<MacroCellPos, BiomeId> repaired, RegionSolveInput input) {
+        Set<MacroCellPos> regionCells = Set.copyOf(input.gridConfig().cellsInRegion(input.region()));
+        Map<MacroCellPos, BiomeId> withBoundaryContext = new LinkedHashMap<>(input.fixedBoundaryCells());
+        withBoundaryContext.putAll(repaired);
+
+        PatchSizeEnforcer.enforceMinimumPatchSize(withBoundaryContext, regionCells, input.gridConfig(), input.graph());
+
+        return withBoundaryContext.entrySet().stream()
+            .filter(entry -> regionCells.contains(entry.getKey()))
+            .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
     }
 
     /**
