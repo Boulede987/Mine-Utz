@@ -37,9 +37,10 @@ class MacroGridConfigTest {
 
         // Interior cells, far from any warp-affected boundary, land in the same region the
         // unwarped floor-division would predict - the warp amplitude (a few cells) can't
-        // reach this far from a boundary.
+        // reach this far from a boundary. -16 sits exactly ON the region-16 boundary
+        // itself (not interior at all), so it's excluded here - use -8 on both axes instead.
         assertEquals(new RegionPos(-1, -1), grid.regionOf(new MacroCellPos(-8, -8), WORLD_SEED));
-        assertEquals(new RegionPos(-1, 0), grid.regionOf(new MacroCellPos(-16, 8), WORLD_SEED));
+        assertEquals(new RegionPos(-1, 0), grid.regionOf(new MacroCellPos(-8, 8), WORLD_SEED));
     }
 
     /**

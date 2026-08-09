@@ -133,7 +133,10 @@ class MeshGeometryRealizationTest {
 
             Map<MacroCellPos, BiomeId> result = MeshGeometryRealization.realize(seedGraph, assignment.get(), input);
 
-            assertEquals(grid.regionSizeCellsPerSide() * grid.regionSizeCellsPerSide(), result.size(), "seed " + worldSeed + ": full coverage");
+            // Region-grid warp (MacroGridConfig's own doc) means a region's true cell count
+            // isn't always the nominal square - compare against the grid's own true
+            // membership for this seed, not the nominal side^2.
+            assertEquals(grid.cellsInRegion(REGION, worldSeed).size(), result.size(), "seed " + worldSeed + ": full coverage");
             assertEquals(List.of(), findIllegalAdjacencies(result, graph), "seed " + worldSeed + ": illegal adjacency");
             assertEquals(List.of(), findDiagonalIllegalAdjacencies(result, graph), "seed " + worldSeed + ": diagonal illegal adjacency");
             List<String> isolatedCells = findIsolatedCells(result);
