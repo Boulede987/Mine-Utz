@@ -29,13 +29,22 @@ public record MacroGridConfig(int macroCellSizeBlocks, int regionSizeCellsPerSid
     // AMPLITUDE_CELLS must stay well under half of regionSizeCellsPerSide (32) - the whole
     // rest of this codebase (RegionBoundaryCollector.neighborsOf, SeedRegionCache's
     // concurrent-race locking) assumes a region's true geometric neighbors are only its
-    // immediate 8 (Moore) neighbors, never 2 regions away. WAVELENGTH_CELLS >> 32 keeps
-    // the warp a slow, smooth bow along a region edge's own length rather than a jittery
-    // zigzag - the max per-cell slope is AMPLITUDE*(2*PI/WAVELENGTH) ~= 0.2, far below 1,
-    // so warpX/warpZ can never fold or skip a cell.
-    private static final double WARP_AMPLITUDE_CELLS_CAP = 3.0;
-    private static final double WARP_AMPLITUDE_FRACTION = 0.1;
-    private static final double WARP_WAVELENGTH_CELLS = 96.0;
+    // immediate 8 (Moore) neighbors, never 2 regions away. Capped at region/4 (8 cells for
+    // DEFAULT), comfortably under that region/2 hard ceiling even with two axes' warps
+    // compounding at a corner.
+    //
+    // AMPLITUDE and WAVELENGTH are coupled, not independent dials - the max per-cell slope
+    // is AMPLITUDE*(2*PI/WAVELENGTH), and it must stay well below 1 or warpX/warpZ folds
+    // (adjacent rows/columns jump by more than a cell, creating gaps/overlaps in the
+    // partition, or a jagged/aliased-looking seam instead of a smooth curve). At this
+    // amplitude, WAVELENGTH_CELLS keeps slope ~=0.35 - deep enough to read as a real bow,
+    // still far below the fold threshold. Tuned up from an earlier 3-cell/96-cell pair
+    // (slope ~=0.2) that read as too subtle - "I can still see it was a square" - real
+    // ceiling is the region/2 bound above, not this slope number, so amplitude could still
+    // go somewhat higher with a proportionally longer wavelength if 8 still isn't enough.
+    private static final double WARP_AMPLITUDE_CELLS_CAP = 8.0;
+    private static final double WARP_AMPLITUDE_FRACTION = 0.25;
+    private static final double WARP_WAVELENGTH_CELLS = 144.0;
     private static final long WARP_SALT_X = 0x9E37_79B9_7F4A_7C15L;
     private static final long WARP_SALT_Z = 0xC2B2_AE3D_27D4_EB4FL;
     // Below this, regionSizeCellsPerSide is so small (only ever synthetic test grids -

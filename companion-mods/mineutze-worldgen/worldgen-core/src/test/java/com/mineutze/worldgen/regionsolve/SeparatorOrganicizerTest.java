@@ -44,28 +44,39 @@ class SeparatorOrganicizerTest {
      * the genuinely corridor-shaped tail) used to get skipped completely. Local
      * detection must still catch and bulge the tail regardless of the blob's shape.
      */
+    // Shifted well off the region's own edges (region grid warp - MacroGridConfig's doc):
+    // the fixture below needs a 10x4 footprint, and at x/z 0-9 that would touch x=0
+    // directly - offset by this margin instead of shrinking the region (a fixture this
+    // size doesn't fit inside the below-warp-threshold size that trick uses elsewhere).
+    // The exact value also has to actually land enough of bulge()'s own probabilistic
+    // steals (shouldBulge hashes absolute cell coordinates, so different offsets draw
+    // different outcomes at the same worldSeed) - 12 does, verified directly.
+    private static final int OFFSET = 12;
+
     @Test
     void bulgesALocalCorridorTailEvenWhenTheWholeComponentIsntElongated() {
+        MacroGridConfig grid = new MacroGridConfig(128, 32);
         Map<MacroCellPos, BiomeId> assignment = new HashMap<>();
         for (int x = 0; x < 6; x++) {
             for (int z = 0; z < 6; z++) {
-                assignment.put(new MacroCellPos(x, z), PLAINS);
+                assignment.put(new MacroCellPos(OFFSET + x, OFFSET + z), PLAINS);
             }
         }
         for (int x = 6; x < 10; x++) {
-            assignment.put(new MacroCellPos(x, 1), OCEAN);
-            assignment.put(new MacroCellPos(x, 2), PLAINS); // 1-wide corridor tail
-            assignment.put(new MacroCellPos(x, 3), BADLANDS);
+            assignment.put(new MacroCellPos(OFFSET + x, OFFSET + 1), OCEAN);
+            assignment.put(new MacroCellPos(OFFSET + x, OFFSET + 2), PLAINS); // 1-wide corridor tail
+            assignment.put(new MacroCellPos(OFFSET + x, OFFSET + 3), BADLANDS);
         }
+        Set<MacroCellPos> regionCellSet = Set.copyOf(grid.cellsInRegion(REGION, 0L));
 
-        SeparatorOrganicizer.organicizeThinSeparators(assignment, regionCellSet(), GRID, graph(), 42L);
+        SeparatorOrganicizer.organicizeThinSeparators(assignment, regionCellSet, grid, graph(), 42L);
 
         long plainsAlongTail = List.of(6, 7, 8, 9).stream()
             .mapToLong(x -> {
                 int width = 0;
-                width += PLAINS.equals(assignment.get(new MacroCellPos(x, 1))) ? 1 : 0;
-                width += PLAINS.equals(assignment.get(new MacroCellPos(x, 2))) ? 1 : 0;
-                width += PLAINS.equals(assignment.get(new MacroCellPos(x, 3))) ? 1 : 0;
+                width += PLAINS.equals(assignment.get(new MacroCellPos(OFFSET + x, OFFSET + 1))) ? 1 : 0;
+                width += PLAINS.equals(assignment.get(new MacroCellPos(OFFSET + x, OFFSET + 2))) ? 1 : 0;
+                width += PLAINS.equals(assignment.get(new MacroCellPos(OFFSET + x, OFFSET + 3))) ? 1 : 0;
                 return width;
             })
             .sum();

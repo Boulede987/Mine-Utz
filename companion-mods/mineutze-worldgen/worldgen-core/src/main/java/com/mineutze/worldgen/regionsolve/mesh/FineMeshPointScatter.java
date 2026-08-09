@@ -94,30 +94,39 @@ public final class FineMeshPointScatter {
     }
 
     /**
-     * One macro-cell-wide ring strictly outside the region square, jittered
-     * only along its outward axis (never inward, so the coverage guarantee
-     * always holds regardless of jitter) — jittering only that axis is
-     * still enough to break the exact collinearity a plain unjittered ring
-     * side would otherwise have, since {@code DelaunayTriangulation} can't
-     * handle 3+ exactly collinear points.
+     * A ring strictly outside the region square, jittered only along its
+     * outward axis (never inward, so the coverage guarantee always holds
+     * regardless of jitter) — jittering only that axis is still enough to
+     * break the exact collinearity a plain unjittered ring side would
+     * otherwise have, since {@code DelaunayTriangulation} can't handle 3+
+     * exactly collinear points.
+     *
+     * <p>Offset by {@link MacroGridConfig#warpMarginCells()}, not a fixed 1
+     * cell — the region grid's own warp (that class's doc) can push a
+     * cell's TRUE membership (per {@code cellsInRegion}) further from the
+     * nominal square than a single cell, and the mesh has to actually
+     * contain every real cell of the region or {@code MeshRasterizer} falls
+     * back to its degraded nearest-centroid path for whatever's left
+     * uncovered.
      */
     private static void addBoundaryRing(RegionSolveInput input, int fineSpacingBlocks, Map<Point2D, ScatteredPoint> byPosition) {
         MacroGridConfig grid = input.gridConfig();
         RegionPos region = input.region();
         int spacingCells = Math.max(1, fineSpacingBlocks / grid.macroCellSizeBlocks());
+        int margin = grid.warpMarginCells();
         int minX = region.x() * grid.regionSizeCellsPerSide();
         int minZ = region.z() * grid.regionSizeCellsPerSide();
         int maxX = minX + grid.regionSizeCellsPerSide() - 1;
         int maxZ = minZ + grid.regionSizeCellsPerSide() - 1;
         long worldSeed = input.worldSeed();
 
-        for (int along : ringSteps(minX - 1, maxX + 1, spacingCells)) {
-            addRingPoint(along, minZ - 1, true, -1, spacingCells, worldSeed, byPosition);
-            addRingPoint(along, maxZ + 1, true, 1, spacingCells, worldSeed, byPosition);
+        for (int along : ringSteps(minX - margin, maxX + margin, spacingCells)) {
+            addRingPoint(along, minZ - margin, true, -1, spacingCells, worldSeed, byPosition);
+            addRingPoint(along, maxZ + margin, true, 1, spacingCells, worldSeed, byPosition);
         }
-        for (int along : ringSteps(minZ - 1, maxZ + 1, spacingCells)) {
-            addRingPoint(minX - 1, along, false, -1, spacingCells, worldSeed, byPosition);
-            addRingPoint(maxX + 1, along, false, 1, spacingCells, worldSeed, byPosition);
+        for (int along : ringSteps(minZ - margin, maxZ + margin, spacingCells)) {
+            addRingPoint(minX - margin, along, false, -1, spacingCells, worldSeed, byPosition);
+            addRingPoint(maxX + margin, along, false, 1, spacingCells, worldSeed, byPosition);
         }
     }
 

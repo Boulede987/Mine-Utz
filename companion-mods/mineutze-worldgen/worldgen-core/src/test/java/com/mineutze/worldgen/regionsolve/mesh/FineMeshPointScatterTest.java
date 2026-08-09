@@ -30,7 +30,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class FineMeshPointScatterTest {
 
     private static final String NAMESPACE = "test";
-    private static final MacroGridConfig SMALL_REGION = new MacroGridConfig(64, 8);
+    // Below MacroGridConfig's own warp threshold (region grid domain warp - see that
+    // class's doc) so this file's fixtures see an exact, unwarped square - none of them
+    // are testing grid/warp semantics, just fine-mesh scatter mechanics.
+    private static final MacroGridConfig SMALL_REGION = new MacroGridConfig(64, 7);
     private static final int WIDE_COARSE_SEED_SPACING_BLOCKS = 1000; // exactly one coarse seed per region
     private static final int FINE_SPACING_BLOCKS = 128; // spacingCells = 2 against SMALL_REGION
 

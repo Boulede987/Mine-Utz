@@ -110,9 +110,13 @@ class SeedRegionCacheTest {
         );
         RegionPos region = new RegionPos(1, 1);
 
+        // Region CENTER, not its nominal corner - the region grid's own warp
+        // (MacroGridConfig's doc) can push a cell exactly at the nominal boundary into a
+        // different region than the one this test means to probe.
+        int regionSize = MacroGridConfig.DEFAULT.regionSizeCellsPerSide();
         cache.resultFor(region);
         cache.resultFor(region);
-        cache.biomeAt(new MacroCellPos(1 * MacroGridConfig.DEFAULT.regionSizeCellsPerSide(), 1 * MacroGridConfig.DEFAULT.regionSizeCellsPerSide()));
+        cache.biomeAt(new MacroCellPos(region.x() * regionSize + regionSize / 2, region.z() * regionSize + regionSize / 2));
 
         assertEquals(List.of(region), solvedRegions, "callback must fire exactly once, only for the actual solve");
     }

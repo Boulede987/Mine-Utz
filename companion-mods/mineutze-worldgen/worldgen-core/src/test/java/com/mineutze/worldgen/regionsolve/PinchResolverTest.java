@@ -17,7 +17,7 @@ import static org.junit.jupiter.api.Assertions.assertNotEquals;
 
 class PinchResolverTest {
 
-    private static final MacroGridConfig GRID = new MacroGridConfig(128, 10);
+    private static final MacroGridConfig GRID = new MacroGridConfig(128, 6);
     private static final RegionPos REGION = new RegionPos(0, 0);
     private static final BiomeId CORE = id("core");
     private static final BiomeId WEST_FLANK = id("west_flank");
@@ -123,7 +123,7 @@ class PinchResolverTest {
      */
     @Test
     void leavesAPinchAloneWhenGivingItAwayWouldDropTheDonorBelowItsMinimumSize() {
-        MacroGridConfig grid = new MacroGridConfig(100, 10);
+        MacroGridConfig grid = new MacroGridConfig(100, 6);
         Map<MacroCellPos, BiomeId> assignment = new HashMap<>();
         assignment.put(new MacroCellPos(2, 0), CORE);
         assignment.put(new MacroCellPos(3, 0), CORE);
