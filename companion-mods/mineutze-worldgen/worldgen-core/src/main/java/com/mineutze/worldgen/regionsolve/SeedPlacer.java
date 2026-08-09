@@ -30,7 +30,14 @@ public final class SeedPlacer {
                 int jitteredX = gridX + jitterRandom.nextInt(spacingCells);
                 int jitteredZ = gridZ + jitterRandom.nextInt(spacingCells);
                 MacroCellPos candidate = clampToRegion(jitteredX, jitteredZ, minX, minZ, sideLength);
-                seeds.add(candidate);
+                // The region grid's own warp (see MacroGridConfig's doc) can push a nominal-square
+                // corner into a neighboring region - drop rather than force a seed germ into
+                // territory that doesn't actually belong to this region's own solve, same
+                // "drop, don't force" precedent as GapFiller's own bounded tiers. Amplitude is
+                // small relative to spacing, so this only ever costs a handful of edge seeds.
+                if (grid.regionOf(candidate, worldSeed).equals(region)) {
+                    seeds.add(candidate);
+                }
             }
         }
 

@@ -49,18 +49,19 @@ final class WorldBiomeExporter {
 
     static Result exportAroundPosition(ServerLevel level, Vec3 position, int regionSpan) {
         MacroGridConfig grid = MacroGridConfig.DEFAULT;
+        long worldSeed = level.getSeed();
         MacroCellPos centerCell = new MacroCellPos(
             Math.floorDiv((int) position.x, grid.macroCellSizeBlocks()),
             Math.floorDiv((int) position.z, grid.macroCellSizeBlocks())
         );
-        RegionPos centerRegion = grid.regionOf(centerCell);
+        RegionPos centerRegion = grid.regionOf(centerCell, worldSeed);
         RegionPos minRegion = new RegionPos(centerRegion.x() - regionSpan / 2, centerRegion.z() - regionSpan / 2);
 
         Map<MacroCellPos, BiomeId> cells = new LinkedHashMap<>();
         for (int dx = 0; dx < regionSpan; dx++) {
             for (int dz = 0; dz < regionSpan; dz++) {
                 RegionPos region = new RegionPos(minRegion.x() + dx, minRegion.z() + dz);
-                for (MacroCellPos cell : grid.cellsInRegion(region)) {
+                for (MacroCellPos cell : grid.cellsInRegion(region, worldSeed)) {
                     cells.put(cell, sampleBiomeAt(level, grid, cell));
                 }
             }

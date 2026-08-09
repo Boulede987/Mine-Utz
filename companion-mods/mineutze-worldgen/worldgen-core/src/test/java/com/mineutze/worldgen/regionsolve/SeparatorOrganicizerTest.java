@@ -24,7 +24,7 @@ class SeparatorOrganicizerTest {
     private static final BiomeId BADLANDS = id("badlands");
 
     private static Set<MacroCellPos> regionCellSet() {
-        return Set.copyOf(GRID.cellsInRegion(REGION));
+        return Set.copyOf(GRID.cellsInRegion(REGION, 0L));
     }
 
     private static BiomeGraph graph() {

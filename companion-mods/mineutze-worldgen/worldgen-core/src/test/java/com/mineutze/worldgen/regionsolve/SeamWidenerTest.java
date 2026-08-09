@@ -43,20 +43,24 @@ class SeamWidenerTest {
      */
     @Test
     void widensALocallyPinchedSeamBetweenIncompatibleBiomes() {
+        // Padded well beyond the nominal [0,10) square on every side - the region grid's own
+        // warp (MacroGridConfig's doc) can pull in cells just outside that square, and every
+        // cell in regionCellSet needs a defined biome or ConnectedComponents/assertion loops
+        // NPE on a null lookup.
         Map<MacroCellPos, BiomeId> assignment = new HashMap<>();
-        for (int z = 0; z < 10; z++) {
+        for (int z = -5; z < 15; z++) {
             int oceanEnd = (z == 5) ? 4 : 3; // encroach one extra column only at the pinch row
-            for (int x = 0; x <= oceanEnd; x++) {
+            for (int x = -5; x <= oceanEnd; x++) {
                 assignment.put(new MacroCellPos(x, z), OCEAN);
             }
             for (int x = oceanEnd + 1; x <= 5; x++) {
                 assignment.put(new MacroCellPos(x, z), PLAINS);
             }
-            for (int x = 6; x < 10; x++) {
+            for (int x = 6; x < 15; x++) {
                 assignment.put(new MacroCellPos(x, z), BADLANDS);
             }
         }
-        Set<MacroCellPos> regionCellSet = Set.copyOf(GRID.cellsInRegion(REGION));
+        Set<MacroCellPos> regionCellSet = Set.copyOf(GRID.cellsInRegion(REGION, 0L));
         BiomeGraph graph = graph();
 
         SeamWidener.widenNarrowSeams(assignment, regionCellSet, graph);
@@ -87,7 +91,7 @@ class SeamWidenerTest {
             }
         }
         Map<MacroCellPos, BiomeId> before = Map.copyOf(assignment);
-        Set<MacroCellPos> regionCellSet = Set.copyOf(GRID.cellsInRegion(REGION));
+        Set<MacroCellPos> regionCellSet = Set.copyOf(GRID.cellsInRegion(REGION, 0L));
 
         SeamWidener.widenNarrowSeams(assignment, regionCellSet, graph());
 
@@ -96,20 +100,22 @@ class SeamWidenerTest {
 
     @Test
     void neverAssignsTwoMutuallyDisallowedBiomesNextToEachOther() {
+        // Padded well beyond the nominal [0,10) square on every side - see the sibling
+        // test above for why.
         Map<MacroCellPos, BiomeId> assignment = new HashMap<>();
-        for (int z = 0; z < 10; z++) {
+        for (int z = -5; z < 15; z++) {
             int oceanEnd = (z == 5) ? 4 : 3;
-            for (int x = 0; x <= oceanEnd; x++) {
+            for (int x = -5; x <= oceanEnd; x++) {
                 assignment.put(new MacroCellPos(x, z), OCEAN);
             }
             for (int x = oceanEnd + 1; x <= 5; x++) {
                 assignment.put(new MacroCellPos(x, z), PLAINS);
             }
-            for (int x = 6; x < 10; x++) {
+            for (int x = 6; x < 15; x++) {
                 assignment.put(new MacroCellPos(x, z), BADLANDS);
             }
         }
-        Set<MacroCellPos> regionCellSet = Set.copyOf(GRID.cellsInRegion(REGION));
+        Set<MacroCellPos> regionCellSet = Set.copyOf(GRID.cellsInRegion(REGION, 0L));
         BiomeGraph graph = graph();
 
         SeamWidener.widenNarrowSeams(assignment, regionCellSet, graph);

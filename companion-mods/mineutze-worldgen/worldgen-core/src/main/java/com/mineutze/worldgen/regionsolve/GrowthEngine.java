@@ -53,7 +53,7 @@ public final class GrowthEngine {
         Map<MacroCellPos, BiomeId> externallyAssigned,
         long worldSeed
     ) {
-        Set<MacroCellPos> regionCells = Set.copyOf(grid.cellsInRegion(region));
+        Set<MacroCellPos> regionCells = Set.copyOf(grid.cellsInRegion(region, worldSeed));
 
         if (externallyAssigned.containsKey(seedCell) || !isLegal(seedCell, candidate, externallyAssigned, graph)) {
             return new GrowthAttempt(false, Map.of());

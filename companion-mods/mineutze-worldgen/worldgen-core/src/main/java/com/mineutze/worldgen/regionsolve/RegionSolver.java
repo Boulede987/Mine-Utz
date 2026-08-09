@@ -155,7 +155,7 @@ public final class RegionSolver {
      * region, not this one).
      */
     private static Map<MacroCellPos, BiomeId> cleanUp(Map<MacroCellPos, BiomeId> solvedAssignment, RegionSolveInput input) {
-        Set<MacroCellPos> regionCellSet = Set.copyOf(input.gridConfig().cellsInRegion(input.region()));
+        Set<MacroCellPos> regionCellSet = Set.copyOf(input.gridConfig().cellsInRegion(input.region(), input.worldSeed()));
         Map<MacroCellPos, BiomeId> workingAssignment = mergeExternalContext(solvedAssignment, input.fixedBoundaryCells());
 
         GapFiller.fillGaps(workingAssignment, regionCellSet, input.gridConfig(), input.graph(), input.worldSeed());

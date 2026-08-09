@@ -24,7 +24,7 @@ class SeparatorWidthEnforcerTest {
     private static final BiomeId PLAINS = id("plains");
 
     private static Set<MacroCellPos> regionCellSet() {
-        return Set.copyOf(GRID.cellsInRegion(REGION));
+        return Set.copyOf(GRID.cellsInRegion(REGION, 0L));
     }
 
     private static BiomeGraph graph() {

@@ -58,13 +58,14 @@ public final class RegionDebugCommand {
     private static int solveRegionAtSource(CommandContext<CommandSourceStack> context) {
         CommandSourceStack source = context.getSource();
         Vec3 position = source.getPosition();
+        long worldSeed = source.getLevel().getSeed();
 
         MacroGridConfig grid = MacroGridConfig.DEFAULT;
         MacroCellPos cell = new MacroCellPos(
             Math.floorDiv((int) position.x, grid.macroCellSizeBlocks()),
             Math.floorDiv((int) position.z, grid.macroCellSizeBlocks())
         );
-        RegionPos region = grid.regionOf(cell);
+        RegionPos region = grid.regionOf(cell, worldSeed);
 
         RegionSolveResult result = RegionCacheHolder.get().resultFor(region);
         Map<MacroCellPos, BiomeId> assignment = result.assignment();

@@ -90,7 +90,11 @@ class RegionSolverTest {
     void everyRegionCellGetsAssigned() {
         RegionSolveResult result = RegionSolver.solve(inputFor(richGraph(), 7L));
 
-        assertEquals(MacroGridConfig.DEFAULT.regionSizeCellsPerSide() * MacroGridConfig.DEFAULT.regionSizeCellsPerSide(), result.assignment().size());
+        // The region grid's own warp (MacroGridConfig's doc) means a region is no longer a
+        // perfect square, so size is only asserted "close" to the nominal count, not exact.
+        int nominal = MacroGridConfig.DEFAULT.regionSizeCellsPerSide() * MacroGridConfig.DEFAULT.regionSizeCellsPerSide();
+        int size = result.assignment().size();
+        assertTrue(Math.abs(size - nominal) < nominal / 4, "warped region size should stay close to the nominal " + nominal + ", got " + size);
     }
 
     /**
@@ -178,20 +182,36 @@ class RegionSolverTest {
         BiomeGraph graph = richGraph();
         MacroGridConfig grid = MacroGridConfig.DEFAULT;
         RegionPos region = new RegionPos(0, 0);
+        long worldSeed = 3L;
 
-        // Whole west edge fixed to ocean, forcing gap-fill (not just growth) to
-        // reckon with the boundary somewhere along that column.
+        // Every real west-neighbor cell that actually touches this region under the SAME
+        // warped regionOf this region's own solve uses (RegionBoundaryCollector's own
+        // technique) - forces gap-fill to reckon with a fixed boundary regardless of
+        // exactly which z values the warp happens to put there, instead of assuming a
+        // straight column at x=-1.
+        RegionPos westNeighbor = new RegionPos(region.x() - 1, region.z());
         Map<MacroCellPos, BiomeId> fixedBoundary = new HashMap<>();
-        for (int z = 0; z < grid.regionSizeCellsPerSide(); z++) {
-            fixedBoundary.put(new MacroCellPos(-1, z), OCEAN);
+        for (MacroCellPos cell : grid.cellsInRegion(westNeighbor, worldSeed)) {
+            boolean touchesRegion = cell.orthogonalNeighbors().stream().anyMatch(n -> grid.regionOf(n, worldSeed).equals(region));
+            if (touchesRegion) {
+                fixedBoundary.put(cell, OCEAN);
+            }
         }
+        assertFalse(fixedBoundary.isEmpty(), "test setup sanity check - the west neighbor must actually border this region somewhere");
 
-        RegionSolveInput input = new RegionSolveInput(graph, grid, region, Map.copyOf(fixedBoundary), 3L);
+        RegionSolveInput input = new RegionSolveInput(graph, grid, region, Map.copyOf(fixedBoundary), worldSeed);
         RegionSolveResult result = RegionSolver.solve(input);
 
-        for (int z = 0; z < grid.regionSizeCellsPerSide(); z++) {
-            BiomeId edgeBiome = result.assignment().get(new MacroCellPos(0, z));
-            assertTrue(graph.isAllowed(edgeBiome, OCEAN), "cell (0," + z + ") = " + edgeBiome + " is not allowed next to the fixed ocean boundary");
+        for (Map.Entry<MacroCellPos, BiomeId> entry : result.assignment().entrySet()) {
+            for (MacroCellPos neighbor : entry.getKey().orthogonalNeighbors()) {
+                BiomeId fixedNeighborBiome = fixedBoundary.get(neighbor);
+                if (fixedNeighborBiome != null) {
+                    assertTrue(
+                        graph.isAllowed(entry.getValue(), fixedNeighborBiome),
+                        entry.getValue() + " at " + entry.getKey() + " is not allowed next to the fixed " + fixedNeighborBiome + " at " + neighbor
+                    );
+                }
+            }
         }
     }
 }

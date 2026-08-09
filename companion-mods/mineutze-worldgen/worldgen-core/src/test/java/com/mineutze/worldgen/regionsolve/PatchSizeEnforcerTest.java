@@ -55,7 +55,7 @@ class PatchSizeEnforcerTest {
         BiomeGraph graph = richGraph();
         MacroGridConfig grid = new MacroGridConfig(128, 7);
         RegionPos region = new RegionPos(0, 0);
-        Set<MacroCellPos> regionCellSet = Set.copyOf(grid.cellsInRegion(region));
+        Set<MacroCellPos> regionCellSet = Set.copyOf(grid.cellsInRegion(region, 0L));
 
         // Desert's minWidthBlocks (200) maps to a 2-cell minimum at this grid's
         // cell size; a lone 1-cell desert patch is undersized.
@@ -76,7 +76,7 @@ class PatchSizeEnforcerTest {
         BiomeGraph graph = richGraph();
         MacroGridConfig grid = new MacroGridConfig(128, 7);
         RegionPos region = new RegionPos(0, 0);
-        Set<MacroCellPos> regionCellSet = Set.copyOf(grid.cellsInRegion(region));
+        Set<MacroCellPos> regionCellSet = Set.copyOf(grid.cellsInRegion(region, 0L));
 
         // 1-cell desert patch bordering both savanna and a properly-sized (2-cell,
         // meeting its own minimum so it isn't itself merged away first) ocean patch.
@@ -106,7 +106,7 @@ class PatchSizeEnforcerTest {
         BiomeGraph graph = richGraph();
         MacroGridConfig grid = new MacroGridConfig(128, 7);
         RegionPos region = new RegionPos(0, 0);
-        Set<MacroCellPos> regionCellSet = Set.copyOf(grid.cellsInRegion(region));
+        Set<MacroCellPos> regionCellSet = Set.copyOf(grid.cellsInRegion(region, 0L));
 
         // 1-cell desert patch entirely surrounded by ocean except one badlands cell,
         // which is itself also boxed in by ocean - no legal merge target, and no
@@ -141,7 +141,7 @@ class PatchSizeEnforcerTest {
         );
         MacroGridConfig grid = new MacroGridConfig(128, 7);
         RegionPos region = new RegionPos(0, 0);
-        Set<MacroCellPos> regionCellSet = Set.copyOf(grid.cellsInRegion(region));
+        Set<MacroCellPos> regionCellSet = Set.copyOf(grid.cellsInRegion(region, 0L));
 
         // savanna-ocean has no rule (default-deny), so a filler cell bridging them
         // can't legally merge into either - it should widen into the savanna sea.

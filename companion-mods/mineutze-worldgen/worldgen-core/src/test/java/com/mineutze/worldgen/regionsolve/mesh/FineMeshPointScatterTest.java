@@ -97,7 +97,7 @@ class FineMeshPointScatterTest {
         double maxScatterZ = scatter.stream().mapToDouble(point -> point.position().z()).max().orElseThrow();
 
         int regionSide = SMALL_REGION.regionSizeCellsPerSide();
-        for (MacroCellPos cell : SMALL_REGION.cellsInRegion(new RegionPos(0, 0))) {
+        for (MacroCellPos cell : SMALL_REGION.cellsInRegion(new RegionPos(0, 0), 42L)) {
             assertTrue(cell.x() > minScatterX && cell.x() < maxScatterX, "cell " + cell + " not strictly inside scatter x-bounds");
             assertTrue(cell.z() > minScatterZ && cell.z() < maxScatterZ, "cell " + cell + " not strictly inside scatter z-bounds");
         }

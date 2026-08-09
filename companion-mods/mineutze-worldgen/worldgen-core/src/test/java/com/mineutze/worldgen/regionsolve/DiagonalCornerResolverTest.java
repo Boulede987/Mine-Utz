@@ -17,7 +17,7 @@ import static org.junit.jupiter.api.Assertions.assertNotEquals;
 
 class DiagonalCornerResolverTest {
 
-    private static final MacroGridConfig GRID = new MacroGridConfig(128, 10);
+    private static final MacroGridConfig GRID = new MacroGridConfig(128, 6);
     private static final RegionPos REGION = new RegionPos(0, 0);
     private static final BiomeId DESERT = id("desert");
     private static final BiomeId FOREST = id("forest");
@@ -25,7 +25,7 @@ class DiagonalCornerResolverTest {
     private static final BiomeId SAVANNA = id("savanna");
 
     private static Set<MacroCellPos> regionCellSet() {
-        return Set.copyOf(GRID.cellsInRegion(REGION));
+        return Set.copyOf(GRID.cellsInRegion(REGION, 0L));
     }
 
     /**
@@ -130,7 +130,7 @@ class DiagonalCornerResolverTest {
      */
     @Test
     void leavesACollisionAloneWhenGivingItAwayWouldDropTheDonorBelowItsMinimumSize() {
-        MacroGridConfig grid = new MacroGridConfig(100, 10);
+        MacroGridConfig grid = new MacroGridConfig(100, 6);
         Map<MacroCellPos, BiomeId> assignment = new HashMap<>();
         // 6-cell DESERT block (2 wide x 3 tall), cellA = (1,2) is the corner cell.
         assignment.put(new MacroCellPos(0, 0), DESERT);
@@ -151,7 +151,7 @@ class DiagonalCornerResolverTest {
         );
         assertEquals(6, grid.cellCountForWidthBlocks(245), "test setup sanity check - DESERT's component must equal its own minCells exactly");
 
-        DiagonalCornerResolver.resolveDiagonalCollisions(assignment, Set.copyOf(grid.cellsInRegion(REGION)), grid, graph);
+        DiagonalCornerResolver.resolveDiagonalCollisions(assignment, Set.copyOf(grid.cellsInRegion(REGION, 0L)), grid, graph);
 
         assertEquals(DESERT, assignment.get(new MacroCellPos(1, 2)), "giving cellA away would drop DESERT's component below its declared minimum size - must stay DESERT");
         assertEquals(FOREST, assignment.get(new MacroCellPos(2, 3)), "FOREST is a lone cell already at its own floor - giving it away would drop it to 0 - must stay FOREST");

@@ -92,7 +92,7 @@ public final class SeedRegionCache {
     }
 
     public BiomeId biomeAt(MacroCellPos cell) {
-        return resultFor(gridConfig.regionOf(cell)).assignment().get(cell);
+        return resultFor(gridConfig.regionOf(cell, worldSeed)).assignment().get(cell);
     }
 
     public RegionSolveResult resultFor(RegionPos region) {
@@ -116,7 +116,7 @@ public final class SeedRegionCache {
 
     private RegionSolveResult solve(RegionPos region) {
         Map<MacroCellPos, BiomeId> fixedBoundary = RegionBoundaryCollector.collect(
-            region, gridConfig, neighbor -> {
+            region, gridConfig, worldSeed, neighbor -> {
                 RegionSolveResult neighborResult = solved.get(neighbor);
                 return neighborResult == null ? null : neighborResult.assignment();
             }

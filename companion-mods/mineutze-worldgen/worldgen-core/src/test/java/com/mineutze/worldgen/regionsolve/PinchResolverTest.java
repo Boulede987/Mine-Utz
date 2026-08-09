@@ -24,7 +24,7 @@ class PinchResolverTest {
     private static final BiomeId EAST_FLANK = id("east_flank");
 
     private static Set<MacroCellPos> regionCellSet() {
-        return Set.copyOf(GRID.cellsInRegion(REGION));
+        return Set.copyOf(GRID.cellsInRegion(REGION, 0L));
     }
 
     /**
@@ -145,7 +145,7 @@ class PinchResolverTest {
         );
         assertEquals(6, grid.cellCountForWidthBlocks(245), "test setup sanity check - CORE's component must equal its own minCells exactly");
 
-        PinchResolver.resolvePinchPoints(assignment, Set.copyOf(grid.cellsInRegion(REGION)), grid, graph);
+        PinchResolver.resolvePinchPoints(assignment, Set.copyOf(grid.cellsInRegion(REGION, 0L)), grid, graph);
 
         assertEquals(CORE, assignment.get(new MacroCellPos(2, 2)), "giving away the tab would drop CORE's component below its declared minimum size - must stay CORE");
     }

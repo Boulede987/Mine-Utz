@@ -27,7 +27,7 @@ class SeedPlacerTest {
     @Test
     void seedsStayWithinRegionBounds() {
         RegionPos region = new RegionPos(1, 1);
-        Set<MacroCellPos> regionCells = Set.copyOf(GRID.cellsInRegion(region));
+        Set<MacroCellPos> regionCells = Set.copyOf(GRID.cellsInRegion(region, WORLD_SEED));
 
         List<MacroCellPos> seeds = SeedPlacer.placeSeeds(region, GRID, WORLD_SEED, 300);
 

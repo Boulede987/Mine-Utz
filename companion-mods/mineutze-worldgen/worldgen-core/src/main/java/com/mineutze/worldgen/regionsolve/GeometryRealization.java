@@ -53,7 +53,7 @@ public final class GeometryRealization {
     }
 
     public static Map<MacroCellPos, BiomeId> realize(SeedGraph seedGraph, Map<Integer, BiomeId> assignedIdentities, RegionSolveInput input) {
-        Set<MacroCellPos> regionCells = Set.copyOf(input.gridConfig().cellsInRegion(input.region()));
+        Set<MacroCellPos> regionCells = Set.copyOf(input.gridConfig().cellsInRegion(input.region(), input.worldSeed()));
         Map<MacroCellPos, BiomeId> workingAssignment = new LinkedHashMap<>(input.fixedBoundaryCells());
 
         List<PatchGrowthState> patches = seedPatches(seedGraph, assignedIdentities, input, workingAssignment, regionCells);

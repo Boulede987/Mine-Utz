@@ -120,7 +120,7 @@ public final class JsonExporter {
 
     /** Only cells the snapshot actually has a biome for - a real-world scan can have gaps (e.g. an ungenerated chunk) a solved region never does. */
     private static void writeCells(StringBuilder out, ExportSnapshot snapshot, RegionPos region) {
-        List<Map.Entry<MacroCellPos, BiomeId>> present = snapshot.gridConfig().cellsInRegion(region).stream()
+        List<Map.Entry<MacroCellPos, BiomeId>> present = snapshot.gridConfig().cellsInRegion(region, snapshot.worldSeed()).stream()
             .sorted(java.util.Comparator.comparingInt(MacroCellPos::x).thenComparingInt(MacroCellPos::z))
             .filter(cell -> snapshot.cells().containsKey(cell))
             .map(cell -> Map.entry(cell, snapshot.cells().get(cell)))

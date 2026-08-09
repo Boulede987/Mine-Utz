@@ -34,24 +34,6 @@ top of the `minSameBiomeNeighbors` check, which stays a hard gate and keeps
 blocking thin necks regardless. That gets genuinely elongated emergent shapes
 without a hard requirement that can never be satisfied by construction.
 
-### 1. Hard straight-line seam at every region boundary
-Patches stop dead at the 2048-block region edge instead of curving across
-it. `GrowthEngine` only ever grows a patch within its own region's cells
-(`GrowthEngine.attemptGrowth`, `regionCells` is `grid.cellsInRegion(region)`
-— never crosses into a neighbor). `fixedBoundaryCells` only stops an
-*illegal* adjacency from forming across the seam; it does nothing to make a
-patch's outline continue its own curve into the next region, because by the
-time the neighbor region solves, the first region's patch shapes are already
-finalized and cached. Net effect: legal, but visually a straight cut wherever
-a patch happens to reach the region edge. Confirmed visually via the export
-PNG's region-boundary grid lines.
-
-Needs a real fix, not a placeholder tune — likely means either growing a
-margin of "provisional" cells across the boundary before committing, or some
-post-hoc boundary-blend pass on the macro-cell grid itself (separate from
-`BorderBlend`, which only blends the terrain-shape *value*, not the
-macro-cell biome-id grid the patches are drawn from).
-
 ### 2. `PatchSizeEnforcer`/`ConnectedComponents` are border-blind
 `ConnectedComponents.find` (`ConnectedComponents.java:21`) only traverses
 `regionCellSet` — never crosses into `fixedBoundaryCells`, even though
@@ -97,6 +79,34 @@ biome's size-range math, not a designed rarity. Only matters if rarity
 control becomes a design goal.
 
 ## Fixed
+
+### 1. Hard straight-line seam at every region boundary
+Patches stop dead at the 2048-block region edge instead of curving across
+it — legal, but visually a straight cut wherever a patch happened to reach
+the region edge (confirmed via measurement: seam boundary runs averaged
+23.60 cells, max 53, versus 1.69 average for ordinary interior boundaries).
+Three pixel-level attempts to organicize the SEAM (growing the seam-hugging
+patch outward, flipping single cells to their inward neighbor, bounded
+wedge-pathfinding from an interior patch) were tried and measured — none
+worked, because the straight line was the REGION PARTITION itself, not a
+patch shape; no amount of patch-level cleanup can fix a boundary the
+partition itself draws dead straight.
+
+**Real fix**: domain-warp the region grid itself (`MacroGridConfig.regionOf`/
+`cellsInRegion`), same "displace with noise instead of forcing straight"
+philosophy `EdgeDisplacement` already uses for patch edges — the vertical
+boundary lines wave as a smooth function of z, horizontal lines wave as a
+smooth function of x, amplitude capped well under half a region's own size
+so a region's true geometric neighbors always stay within its immediate 8
+(`RegionBoundaryCollector.neighborsOf` widened from 4 cardinal to the full
+Moore set to match). `SeedPlacer` also needed to become warp-aware (it
+clamped to the nominal square directly) — a real bug, not just a test
+artifact, since a seed placed at a nominal-square corner could otherwise
+land outside the region it was meant to seed. Confirmed via measurement on
+seed 42: seam runs dropped to avg 4.36 / max 6 (vertical), avg 2.85 / max 5
+(horizontal) — no longer even the worst offender; interior boundaries now
+run higher (max 25) than seams do. Illegal adjacencies/isolated cells stay
+at 0 (verified via `validate_biome_export.py`).
 
 ### 6. Required separators read as straight-edged lines, not organic blobs — geometric, not fixable by more pixel-grid cleanup passes
 A required separator (a buffer patch forced between two mutually-

@@ -95,7 +95,7 @@ class SeedRegionCacheTest {
         MacroCellPos cell = new MacroCellPos(3, 3);
 
         BiomeId viaBiomeAt = cache.biomeAt(cell);
-        BiomeId viaResultFor = cache.resultFor(MacroGridConfig.DEFAULT.regionOf(cell)).assignment().get(cell);
+        BiomeId viaResultFor = cache.resultFor(MacroGridConfig.DEFAULT.regionOf(cell, 7L)).assignment().get(cell);
 
         assertEquals(viaResultFor, viaBiomeAt);
         assertNotNull(viaBiomeAt);

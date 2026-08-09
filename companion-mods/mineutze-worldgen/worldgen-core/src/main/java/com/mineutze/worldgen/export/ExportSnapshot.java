@@ -48,7 +48,7 @@ public record ExportSnapshot(
         List<MacroCellPos> result = new ArrayList<>(spanCells() * spanCells());
         for (int dx = 0; dx < regionSpan; dx++) {
             for (int dz = 0; dz < regionSpan; dz++) {
-                result.addAll(gridConfig.cellsInRegion(new RegionPos(minRegion.x() + dx, minRegion.z() + dz)));
+                result.addAll(gridConfig.cellsInRegion(new RegionPos(minRegion.x() + dx, minRegion.z() + dz), worldSeed));
             }
         }
         result.sort(java.util.Comparator.comparingInt(MacroCellPos::x).thenComparingInt(MacroCellPos::z));

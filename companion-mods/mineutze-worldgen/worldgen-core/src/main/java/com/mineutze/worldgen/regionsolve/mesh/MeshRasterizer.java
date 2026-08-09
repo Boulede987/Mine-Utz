@@ -41,7 +41,7 @@ public final class MeshRasterizer {
 
     public static Map<MacroCellPos, BiomeId> rasterize(FineMesh mesh, MeshAssignment assignment, Map<Integer, Point2D> displaced, RegionSolveInput input) {
         Map<MacroCellPos, BiomeId> result = new LinkedHashMap<>();
-        for (MacroCellPos cell : input.gridConfig().cellsInRegion(input.region())) {
+        for (MacroCellPos cell : input.gridConfig().cellsInRegion(input.region(), input.worldSeed())) {
             Point2D cellPoint = new Point2D(cell.x(), cell.z());
             result.put(cell, resolveCellBiome(mesh, assignment, displaced, cellPoint));
         }

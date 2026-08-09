@@ -51,10 +51,10 @@ class PatchOpenerTest {
             new MacroCellPos(1, 3),
             new MacroCellPos(1, 4), new MacroCellPos(2, 4)
         );
-        for (MacroCellPos cell : grid.cellsInRegion(REGION)) {
+        for (MacroCellPos cell : grid.cellsInRegion(REGION, WORLD_SEED)) {
             assignment.put(cell, forestCells.contains(cell) ? F : P);
         }
-        Set<MacroCellPos> regionCellSet = Set.copyOf(grid.cellsInRegion(REGION));
+        Set<MacroCellPos> regionCellSet = Set.copyOf(grid.cellsInRegion(REGION, WORLD_SEED));
 
         PatchOpener.openThinProtrusions(assignment, regionCellSet, grid, graph, WORLD_SEED);
 
@@ -79,11 +79,11 @@ class PatchOpenerTest {
             new MacroCellPos(1, 4), new MacroCellPos(2, 4), new MacroCellPos(3, 4), new MacroCellPos(4, 4)
         );
         Map<MacroCellPos, BiomeId> assignment = new HashMap<>();
-        for (MacroCellPos cell : grid.cellsInRegion(REGION)) {
+        for (MacroCellPos cell : grid.cellsInRegion(REGION, WORLD_SEED)) {
             assignment.put(cell, forestBlock.contains(cell) ? F : P);
         }
         Map<MacroCellPos, BiomeId> before = Map.copyOf(assignment);
-        Set<MacroCellPos> regionCellSet = Set.copyOf(grid.cellsInRegion(REGION));
+        Set<MacroCellPos> regionCellSet = Set.copyOf(grid.cellsInRegion(REGION, WORLD_SEED));
 
         PatchOpener.openThinProtrusions(assignment, regionCellSet, grid, graph, WORLD_SEED);
 
@@ -107,7 +107,7 @@ class PatchOpenerTest {
             assignment.put(new MacroCellPos(6, z), b);
             assignment.put(new MacroCellPos(7, z), b);
         }
-        Set<MacroCellPos> regionCellSet = Set.copyOf(grid.cellsInRegion(REGION));
+        Set<MacroCellPos> regionCellSet = Set.copyOf(grid.cellsInRegion(REGION, WORLD_SEED));
         // PatchOpener's only real caller (RegionSolver.cleanUp) always runs GapFiller
         // immediately before it, so every regionCellSet cell is already assigned by the
         // time PatchOpener sees it - mirror that here rather than leaving the middle
@@ -145,10 +145,10 @@ class PatchOpenerTest {
         // entire patch erodes to nothing.
         Set<MacroCellPos> line = Set.of(new MacroCellPos(2, 1), new MacroCellPos(2, 2), new MacroCellPos(2, 3), new MacroCellPos(1, 2), new MacroCellPos(3, 2));
         Map<MacroCellPos, BiomeId> assignment = new HashMap<>();
-        for (MacroCellPos cell : grid.cellsInRegion(REGION)) {
+        for (MacroCellPos cell : grid.cellsInRegion(REGION, WORLD_SEED)) {
             assignment.put(cell, line.contains(cell) ? F : P);
         }
-        Set<MacroCellPos> regionCellSet = Set.copyOf(grid.cellsInRegion(REGION));
+        Set<MacroCellPos> regionCellSet = Set.copyOf(grid.cellsInRegion(REGION, WORLD_SEED));
 
         PatchOpener.openThinProtrusions(assignment, regionCellSet, grid, graph, WORLD_SEED);
 
@@ -164,11 +164,11 @@ class PatchOpenerTest {
         );
         Set<MacroCellPos> line = Set.of(new MacroCellPos(2, 1), new MacroCellPos(2, 2), new MacroCellPos(2, 3), new MacroCellPos(1, 2), new MacroCellPos(3, 2));
         Map<MacroCellPos, BiomeId> assignment = new HashMap<>();
-        for (MacroCellPos cell : grid.cellsInRegion(REGION)) {
+        for (MacroCellPos cell : grid.cellsInRegion(REGION, WORLD_SEED)) {
             assignment.put(cell, line.contains(cell) ? F : P);
         }
         Map<MacroCellPos, BiomeId> before = Map.copyOf(assignment);
-        Set<MacroCellPos> regionCellSet = Set.copyOf(grid.cellsInRegion(REGION));
+        Set<MacroCellPos> regionCellSet = Set.copyOf(grid.cellsInRegion(REGION, WORLD_SEED));
 
         PatchOpener.openThinProtrusions(assignment, regionCellSet, grid, graph, WORLD_SEED);
 

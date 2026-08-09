@@ -139,7 +139,7 @@ public final class MeshGeometryRealization {
      * already-solved territory outside this region.
      */
     private static Map<MacroCellPos, BiomeId> enforceFinalPixelPatchSize(Map<MacroCellPos, BiomeId> repaired, RegionSolveInput input) {
-        Set<MacroCellPos> regionCells = Set.copyOf(input.gridConfig().cellsInRegion(input.region()));
+        Set<MacroCellPos> regionCells = Set.copyOf(input.gridConfig().cellsInRegion(input.region(), input.worldSeed()));
         Map<MacroCellPos, BiomeId> withBoundaryContext = new LinkedHashMap<>(input.fixedBoundaryCells());
         withBoundaryContext.putAll(repaired);
 
