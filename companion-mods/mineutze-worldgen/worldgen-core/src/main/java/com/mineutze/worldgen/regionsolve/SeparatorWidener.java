@@ -57,13 +57,30 @@ final class SeparatorWidener {
         Map<MacroCellPos, BiomeId> assignment, Set<MacroCellPos> regionCellSet, BiomeGraph graph,
         Set<MacroCellPos> repelFrom
     ) {
-        if (component.size() >= targetMinCells) {
+        // A caller that widens several components in one pass (SeamWidener, one call per
+        // pinch cluster, all sharing one mutating assignment) can hand in a component
+        // that's gone stale: an EARLIER call already legally stole one of these cells for
+        // a different, now-incompatible biome. Re-verifying against the LIVE assignment
+        // here, rather than trusting the caller's snapshot, is the only thing that stops
+        // this call from blindly reasserting a cell straight back to ownBiome with NO
+        // legality check at all (the final commit loop below only checks NEWLY claimed
+        // cells, never the caller-supplied component itself) - confirmed as a real,
+        // pre-existing bug via a genuine repro, not theoretical: two adjacent pinch
+        // clusters (desert, forest) round-tripped a shared boundary cell back and forth,
+        // leaving a live illegal adjacency in the final result.
+        Set<MacroCellPos> currentComponent = new LinkedHashSet<>();
+        for (MacroCellPos cell : component) {
+            if (ownBiome.equals(assignment.get(cell))) {
+                currentComponent.add(cell);
+            }
+        }
+        if (currentComponent.isEmpty() || currentComponent.size() >= targetMinCells) {
             return;
         }
 
-        Set<MacroCellPos> claimed = new LinkedHashSet<>(component);
-        TreeSet<MacroCellPos> frontier = new TreeSet<>(frontierOrder(centroidOf(component), repelFrom));
-        addUnclaimedNeighbors(component, claimed, regionCellSet, frontier);
+        Set<MacroCellPos> claimed = new LinkedHashSet<>(currentComponent);
+        TreeSet<MacroCellPos> frontier = new TreeSet<>(frontierOrder(centroidOf(currentComponent), repelFrom));
+        addUnclaimedNeighbors(currentComponent, claimed, regionCellSet, frontier);
 
         while (claimed.size() < targetMinCells && !frontier.isEmpty()) {
             MacroCellPos next = frontier.pollFirst();
