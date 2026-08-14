@@ -4,6 +4,8 @@ import com.mineutze.worldgen.biomegraph.BiomeGraph;
 import com.mineutze.worldgen.biomegraph.BiomeId;
 import com.mineutze.worldgen.regionsolve.MacroCellPos;
 import com.mineutze.worldgen.regionsolve.MacroGridConfig;
+import com.mineutze.worldgen.regionsolve.PatchSizeEnforcer;
+import com.mineutze.worldgen.regionsolve.PixelFragmentRepair;
 import com.mineutze.worldgen.regionsolve.RegionPos;
 import com.mineutze.worldgen.regionsolve.GeometryRealization;
 import com.mineutze.worldgen.regionsolve.RegionSolveResult;
@@ -13,6 +15,7 @@ import com.mineutze.worldgen.regionsolve.TopologyFirstRegionSolver;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.BiConsumer;
 
 /**
@@ -20,6 +23,31 @@ import java.util.function.BiConsumer;
  * solve path density-function evaluation uses in-game — over an NxN swath
  * of regions, so a standalone run actually exercises cross-region
  * fixedBoundaryCells stitching instead of solving regions in isolation.
+ *
+ * <p>Then runs {@link PatchSizeEnforcer} and {@link PixelFragmentRepair} over
+ * the WHOLE combined swath, no region-ownership restriction (every cell is
+ * fair game) — something only a finite, one-shot export can do. Each
+ * individual region's own per-region passes can only see neighbors that had
+ * ALREADY solved by the time IT solved; a region solved FIRST has zero
+ * knowledge of what a not-yet-solved neighbor will place right next to it,
+ * and once solved a region's output is permanent — see {@link
+ * PixelFragmentRepair}'s own doc. That's a real, order-dependent gap, found
+ * via two separate direct user reports on the SAME root cause: a 5x5 export
+ * showed 4 illegal adjacencies and several small same-biome fragments a 3x3
+ * export of the same seed didn't even have the DATA to detect, and — for
+ * {@link PatchSizeEnforcer} specifically — an 8-cell ocean patch entirely
+ * surrounded by 3 different not-yet-solved-at-the-time neighbor regions,
+ * nowhere near ocean's real ~88-cell minimum. All of that is exactly what a
+ * whole-swath pass over the FULLY assembled export can still clean up, even
+ * though the live game's per-region cache can't (revisiting an already-
+ * committed region there would break the "solve once, cache forever"
+ * property infinite lazy world generation depends on). Size enforcement
+ * runs FIRST since it's the coarser, more fundamental fix (an undersized
+ * patch not meeting its biome's own design range); fragment repair runs
+ * after to mop up anything left over, including whatever a merge/widen
+ * might itself have touched. This changes ONLY exported output for visual/
+ * data review — {@link SeedRegionCache} itself, and therefore the live
+ * game, is completely untouched by this class.
  */
 public final class RegionGridSolver {
 
@@ -56,6 +84,9 @@ public final class RegionGridSolver {
             }
         }
 
-        return new ExportSnapshot(graph, gridConfig, worldSeed, minRegion, regionSpan, Map.copyOf(cells), Map.copyOf(warningsByRegion));
+        PatchSizeEnforcer.enforceMinimumPatchSize(cells, Set.copyOf(cells.keySet()), gridConfig, graph);
+        Map<MacroCellPos, BiomeId> cleaned = PixelFragmentRepair.repair(cells, Map.of(), graph);
+
+        return new ExportSnapshot(graph, gridConfig, worldSeed, minRegion, regionSpan, Map.copyOf(cleaned), Map.copyOf(warningsByRegion));
     }
 }

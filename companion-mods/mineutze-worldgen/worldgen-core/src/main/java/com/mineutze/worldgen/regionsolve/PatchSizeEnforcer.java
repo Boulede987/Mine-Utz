@@ -30,13 +30,24 @@ import java.util.Set;
  * normal, legitimately-placeable biome with its own size range, and an
  * undersized filler separator is exactly as visible a workaround as an
  * undersized anything-else separator.
+ *
+ * <p>Public so the export CLI's own whole-swath cleanup ({@code
+ * RegionGridSolver}) can also call this directly, over the FULL combined
+ * export rather than one region's own cells — a per-region call can miss an
+ * undersized patch entirely if its true bordering neighbors belong to
+ * regions that hadn't solved yet (found via direct user report: an 8-cell
+ * ocean patch, entirely surrounded by 3 different not-yet-solved neighbor
+ * regions at solve time, against ocean's real 600-1000 block/~88-cell
+ * minimum — the exact same order-dependent blind spot {@link
+ * PixelFragmentRepair}'s own doc describes for illegal adjacency and small
+ * fragments, just for patch SIZE instead).
  */
-final class PatchSizeEnforcer {
+public final class PatchSizeEnforcer {
 
     private PatchSizeEnforcer() {
     }
 
-    static void enforceMinimumPatchSize(
+    public static void enforceMinimumPatchSize(
         Map<MacroCellPos, BiomeId> assignment, Set<MacroCellPos> regionCellSet, MacroGridConfig grid, BiomeGraph graph
     ) {
         List<Set<MacroCellPos>> components = ConnectedComponents.find(assignment, regionCellSet);
