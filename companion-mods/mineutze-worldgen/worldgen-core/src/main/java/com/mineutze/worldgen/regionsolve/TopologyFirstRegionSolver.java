@@ -18,9 +18,9 @@ import java.util.Set;
  * Orchestrates the topology-first region solve: build an abstract seed
  * graph, color it via CSP, only then realize geometry. See
  * doc/Modelisation/ActivityDiagram/topology-first-region-solve.puml. Wired in
- * as {@link SeedRegionCache}'s solve path, replacing {@link RegionSolver}
- * (kept in the codebase, unused by the live path, as a rollback option until
- * this pipeline has real in-game verification behind it).
+ * as {@link SeedRegionCache}'s solve path, replacing the old CSP-backed
+ * region solver (removed once this pipeline had real in-game verification
+ * behind it).
  *
  * <p>The failure ladder is a genuine termination PROOF, not a tuned cap: a
  * graph that fails to color gets a bounded number of reseed attempts (cheap —
@@ -35,7 +35,7 @@ import java.util.Set;
  * still be pinned between two already-fixed neighbors whose legal sets don't
  * overlap, and dropping OTHER nodes never fixes that. Correct fix was to drop
  * that node too, not to crash — its territory doesn't vanish, {@link
- * GeometryRealization} plus {@link GapFiller}'s own already-proven,
+ * MeshGeometryRealization} plus {@link GapFiller}'s own already-proven,
  * always-terminating pixel-level guarantee covers whatever's left, exactly
  * like the pre-redesign pipeline already does. No fail-loud branch belongs
  * here; there was never a real case this ladder couldn't resolve.
@@ -54,14 +54,12 @@ public final class TopologyFirstRegionSolver {
     }
 
     /**
-     * The geometry stage is pluggable purely so a standalone comparison run
-     * (see {@code ExportCli}'s {@code MINEUTZE_WORLDGEN_MESH_GEOMETRY} env
-     * var) can select {@code MeshGeometryRealization} instead of the default
-     * {@link GeometryRealization} without touching this class's live call
-     * sites ({@link com.mineutze.worldgen.regionsolve.SeedRegionCache},
+     * The geometry stage is pluggable so callers (see {@code RegionGridSolver})
+     * can swap in a different realizer without touching this class's live
+     * call sites ({@link com.mineutze.worldgen.regionsolve.SeedRegionCache},
      * which every real game/{@code SeedRegionCache}-backed caller goes
-     * through) — every overload without an explicit realizer keeps calling
-     * {@link GeometryRealization#realize} exactly as before.
+     * through) — every overload without an explicit realizer defaults to
+     * {@link MeshGeometryRealization#realize}, same as the live game.
      */
     @FunctionalInterface
     public interface GeometryRealizer {
@@ -69,11 +67,11 @@ public final class TopologyFirstRegionSolver {
     }
 
     public static RegionSolveResult solve(RegionSolveInput input) {
-        return solve(input, DEFAULT_SEED_SPACING_BLOCKS, GeometryRealization::realize);
+        return solve(input, DEFAULT_SEED_SPACING_BLOCKS, MeshGeometryRealization::realize);
     }
 
     public static RegionSolveResult solve(RegionSolveInput input, int seedSpacingBlocks) {
-        return solve(input, seedSpacingBlocks, GeometryRealization::realize);
+        return solve(input, seedSpacingBlocks, MeshGeometryRealization::realize);
     }
 
     public static RegionSolveResult solve(RegionSolveInput input, GeometryRealizer geometryRealizer) {

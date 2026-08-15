@@ -7,7 +7,7 @@ import com.mineutze.worldgen.regionsolve.MacroGridConfig;
 import com.mineutze.worldgen.regionsolve.PatchSizeEnforcer;
 import com.mineutze.worldgen.regionsolve.PixelFragmentRepair;
 import com.mineutze.worldgen.regionsolve.RegionPos;
-import com.mineutze.worldgen.regionsolve.GeometryRealization;
+import com.mineutze.worldgen.regionsolve.MeshGeometryRealization;
 import com.mineutze.worldgen.regionsolve.RegionSolveResult;
 import com.mineutze.worldgen.regionsolve.SeedRegionCache;
 import com.mineutze.worldgen.regionsolve.TopologyFirstRegionSolver;
@@ -58,10 +58,10 @@ public final class RegionGridSolver {
         BiomeGraph graph, MacroGridConfig gridConfig, long worldSeed,
         RegionPos minRegion, int regionSpan, BiConsumer<RegionPos, RegionSolveResult> onRegionSolved
     ) {
-        return solve(graph, gridConfig, worldSeed, minRegion, regionSpan, onRegionSolved, GeometryRealization::realize);
+        return solve(graph, gridConfig, worldSeed, minRegion, regionSpan, onRegionSolved, MeshGeometryRealization::realize);
     }
 
-    /** @param geometryRealizer defaults to {@link GeometryRealization#realize} — a standalone comparison run passes {@code MeshGeometryRealization::realize} instead, see {@code ExportCli}'s {@code MINEUTZE_WORLDGEN_MESH_GEOMETRY} env var. */
+    /** @param geometryRealizer defaults to {@link MeshGeometryRealization#realize} — same realizer the live game uses via {@link SeedRegionCache}. */
     public static ExportSnapshot solve(
         BiomeGraph graph, MacroGridConfig gridConfig, long worldSeed,
         RegionPos minRegion, int regionSpan, BiConsumer<RegionPos, RegionSolveResult> onRegionSolved,
