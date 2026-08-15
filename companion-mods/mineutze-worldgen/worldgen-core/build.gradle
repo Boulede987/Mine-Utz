@@ -18,6 +18,13 @@ application {
     mainClass = 'com.mineutze.worldgen.export.ExportCli'
 }
 
+tasks.register('visualizeSteps', JavaExec) {
+    group = 'application'
+    description = 'Step-by-step mesh-pipeline visualizer - dumps a numbered PNG per pipeline stage, per region, into a subfolder. Run with: ./gradlew :worldgen-core:visualizeSteps --args="<worldSeed> <regionSpan> <outputDir>"'
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'com.mineutze.worldgen.export.StepVisualizerCli'
+}
+
 repositories {
     mavenCentral()
 }

@@ -71,22 +71,77 @@ import java.util.stream.Collectors;
  */
 public final class MeshGeometryRealization {
 
+    /**
+     * Optional hook fired after each pipeline stage, purely for external
+     * inspection (e.g. the step-by-step visualizer under {@code export}) —
+     * every method is a no-op default so a caller only overrides what it
+     * actually wants to see, and the live path ({@link #realize(SeedGraph,
+     * Map, RegionSolveInput)}) uses {@link #NO_OP} so this costs nothing in
+     * production. Deliberately threaded through the ACTUAL pipeline method
+     * rather than a separate copy — same "one implementation, not a second
+     * one that quietly drifts" reasoning as everything else consolidated
+     * this session.
+     */
+    public interface StageListener {
+        StageListener NO_OP = new StageListener() {
+        };
+
+        /** {@code seedGraph}/{@code assignedIdentities} are already fully CSP-colored by the time {@code realize} is called — this is the topology-first solve's own output, not a stage this class computes. */
+        default void afterSeedGraph(SeedGraph seedGraph, Map<Integer, BiomeId> assignedIdentities, RegionSolveInput input) {
+        }
+
+        default void afterScatter(List<ScatteredPoint> scatter, RegionSolveInput input) {
+        }
+
+        default void afterMeshBuild(FineMesh mesh, RegionSolveInput input) {
+        }
+
+        /** Fired after {@code patch-merge}, {@code gap-fill}, and {@code mesh-patch-size} — same (mesh, assignment) shape, only the biome coloring changes between calls. */
+        default void afterMeshStage(String stageName, FineMesh mesh, MeshAssignment assignment, RegionSolveInput input) {
+        }
+
+        default void afterDisplacement(FineMesh mesh, MeshAssignment assignment, Map<Integer, Point2D> displaced, RegionSolveInput input) {
+        }
+
+        /** Fired after {@code rasterize}, {@code pixel-repair}, and {@code final} — same {@code Map<MacroCellPos,BiomeId>} shape throughout. */
+        default void afterPixelStage(String stageName, Map<MacroCellPos, BiomeId> cells, RegionSolveInput input) {
+        }
+    }
+
     private MeshGeometryRealization() {
     }
 
     public static Map<MacroCellPos, BiomeId> realize(SeedGraph seedGraph, Map<Integer, BiomeId> assignedIdentities, RegionSolveInput input) {
+        return realize(seedGraph, assignedIdentities, input, StageListener.NO_OP);
+    }
+
+    public static Map<MacroCellPos, BiomeId> realize(
+        SeedGraph seedGraph, Map<Integer, BiomeId> assignedIdentities, RegionSolveInput input, StageListener listener
+    ) {
+        listener.afterSeedGraph(seedGraph, assignedIdentities, input);
+
         List<ScatteredPoint> scatter = FineMeshPointScatter.scatter(input, seedGraph, assignedIdentities);
+        listener.afterScatter(scatter, input);
         FineMesh mesh = FineMesh.build(scatter);
+        listener.afterMeshBuild(mesh, input);
 
         MeshAssignment assignment = PatchMerger.merge(mesh, input, seedGraph, assignedIdentities);
+        listener.afterMeshStage("patch-merge", mesh, assignment, input);
         Map<BiomeId, Double> targetAreaByBiome = aggregateTargetAreaByBiome(seedGraph, assignedIdentities, input);
         MeshGapFiller.fillGaps(mesh, assignment, input.graph(), input.gridConfig(), input.worldSeed(), targetAreaByBiome);
+        listener.afterMeshStage("gap-fill", mesh, assignment, input);
         MeshPatchSizeEnforcer.enforceMinimumPatchSize(mesh, assignment, input.graph(), input.gridConfig());
+        listener.afterMeshStage("mesh-patch-size", mesh, assignment, input);
         Map<Integer, Point2D> displaced = EdgeDisplacement.displace(mesh, assignment, input.graph(), input.gridConfig(), input.worldSeed());
+        listener.afterDisplacement(mesh, assignment, displaced, input);
         Map<MacroCellPos, BiomeId> rasterized = MeshRasterizer.rasterize(mesh, assignment, displaced, input);
+        listener.afterPixelStage("rasterize", rasterized, input);
         Map<MacroCellPos, BiomeId> repaired = PixelFragmentRepair.repair(rasterized, Map.of(), input.graph());
+        listener.afterPixelStage("pixel-repair", repaired, input);
 
-        return enforceFinalPixelPatchSize(repaired, input);
+        Map<MacroCellPos, BiomeId> result = enforceFinalPixelPatchSize(repaired, input);
+        listener.afterPixelStage("final", result, input);
+        return result;
     }
 
     /**
