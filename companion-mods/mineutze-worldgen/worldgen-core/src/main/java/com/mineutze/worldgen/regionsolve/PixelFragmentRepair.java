@@ -25,28 +25,33 @@ import java.util.stream.Collectors;
  * or a same-biome component at or under {@link #SMALL_FRAGMENT_MAX_SIZE}
  * cells — a stray speck, not a real patch.
  *
- * <p>Export-CLI-only tooling, deliberately never wired into {@link
- * MeshGeometryRealization}/{@link SeedRegionCache} (the live game path) — a
- * region-scoped version of this same idea was tried there and reverted: it
- * can only ever see whatever neighbors had ALREADY solved by the time ITS
- * OWN region solved, so it structurally cannot catch a violation against a
- * neighbor that hadn't solved yet (a real, order-dependent gap, inherent to
- * "regions solve once, commit forever, never get force-solved"). Measured
- * directly on a 5x5 export: that region-
- * scoped version left 12 of 12 stray small fragments untouched and reduced
- * illegal adjacencies without addressing the actual defect rate — not
- * worth the added complexity on the live path for that little payoff.
+ * <p>Two live callers, same method, different {@code fixedContext} — the
+ * parameter is what makes both safe:
+ * <ul>
+ *   <li>{@link MeshGeometryRealization} calls this once per region, with an
+ *   EMPTY {@code fixedContext} — purely an interior discretization cleanup
+ *   over that region's own just-rasterized cells (see its own doc: a
+ *   rasterization-stranded speck is a property of THIS region's own mesh,
+ *   unrelated to neighbor solve order). This is NOT the region-scoped,
+ *   boundary-aware repair that was tried and reverted earlier — that one
+ *   passed real {@code fixedBoundaryCells} in and still couldn't catch a
+ *   violation against a neighbor that hadn't solved yet (a real,
+ *   order-dependent gap, inherent to "regions solve once, commit forever,
+ *   never get force-solved") — measured directly on a 5x5 export: left 12
+ *   of 12 stray small fragments untouched. That specific use case (boundary
+ *   context feeding a per-region call) is still correctly not attempted.
+ *   <li>The export CLI's {@code RegionGridSolver} calls this once over an
+ *   entire already-combined multi-region swath, also with an EMPTY {@code
+ *   fixedContext} (every cell is "ownable" from a whole-swath view) —
+ *   something only a finite, one-shot export can do, catching cross-region
+ *   defects no single region's own solve could see.
+ * </ul>
  *
  * <p>{@code ownCells} are the only cells ever reassigned; {@code fixedContext}
- * (which may be empty) is read-only ground truth a caller is never allowed
- * to revise — same "own the boundary, never touch a fixed neighbor cell"
- * discipline the rest of this pipeline follows, even though the export
- * CLI's own swath-wide cleanup always calls this with an EMPTY
- * {@code fixedContext} (every cell is "ownable" from a whole-swath view) —
- * something only a finite, one-shot export can do; the live game can't revisit
- * an already-committed region without breaking the cache-forever property
- * infinite lazy generation depends on. That's why this pass is export-only,
- * never wired into {@link SeedRegionCache}.
+ * (nonempty only if a future caller ever has real neighbor context worth
+ * reading without owning) is read-only ground truth a caller is never
+ * allowed to revise — same "own the boundary, never touch a fixed neighbor
+ * cell" discipline the rest of this pipeline follows.
  */
 public final class PixelFragmentRepair {
 
