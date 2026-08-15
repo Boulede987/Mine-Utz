@@ -1,13 +1,19 @@
 package com.mineutze.worldgen.export;
 
 import com.mineutze.worldgen.biomegraph.BiomeGraph;
+import com.mineutze.worldgen.biomegraph.BiomeId;
+import com.mineutze.worldgen.biomegraph.BiomeNode;
 import com.mineutze.worldgen.biomegraph.ModBiomeGraph;
 import com.mineutze.worldgen.regionsolve.MacroGridConfig;
 import com.mineutze.worldgen.regionsolve.MeshGeometryRealization;
 import com.mineutze.worldgen.regionsolve.RegionPos;
 import com.mineutze.worldgen.regionsolve.TopologyFirstRegionSolver;
 
+import java.io.IOException;
+import java.io.UncheckedIOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Comparator;
 
 /**
  * Same solve as {@link ExportCli}, but instead of writing the finished
@@ -49,6 +55,7 @@ public final class StepVisualizerCli {
         MacroGridConfig gridConfig = MacroGridConfig.DEFAULT;
         RegionPos minRegion = new RegionPos(-regionSpan / 2, -regionSpan / 2);
         BiomeLegend legend = new BiomeLegend(graph);
+        writeLegend(outputDir, graph, legend);
 
         System.out.printf(
             "Visualizing %dx%d regions from %s (worldSeed=%d) into %s%n",
@@ -73,5 +80,26 @@ public final class StepVisualizerCli {
         long solveDurationMillis = (System.nanoTime() - solveStartNanos) / 1_000_000;
 
         System.out.printf("%nDone in %d ms. Stage PNGs written under %s, one subfolder per region.%n", solveDurationMillis, outputDir.toAbsolutePath());
+    }
+
+    /** One legend.txt at the output root (not per-region — the color/glyph mapping is the same for every region in one run) so a PNG's colors can actually be read back into biome names. */
+    private static void writeLegend(Path outputDir, BiomeGraph graph, BiomeLegend legend) {
+        try {
+            Files.createDirectories(outputDir);
+        } catch (IOException e) {
+            throw new UncheckedIOException("Failed to create output directory " + outputDir, e);
+        }
+
+        StringBuilder out = new StringBuilder("Legend (biome -> color):\n");
+        for (BiomeNode node : graph.nodes().stream().sorted(Comparator.comparing(BiomeNode::id)).toList()) {
+            BiomeId id = node.id();
+            out.append(String.format("  %-2s %-24s #%06X%n", legend.glyphOf(id), id, legend.rgbOf(id)));
+        }
+
+        try {
+            Files.writeString(outputDir.resolve("legend.txt"), out);
+        } catch (IOException e) {
+            throw new UncheckedIOException("Failed writing legend.txt to " + outputDir, e);
+        }
     }
 }
