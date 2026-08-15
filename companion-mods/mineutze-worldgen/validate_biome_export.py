@@ -16,12 +16,18 @@ Checks:
   2. Diagonal illegal adjacency: two corner-touching (not orthogonal) cells with no
      AdjacencyRule between them and no orthogonal contact either (e.g. d./.f) -
      nothing in the generator pipeline checks diagonals, only orthogonal neighbors.
-  3. Isolated cells: a cell whose 4-connected same-biome component has size 1.
+  3. Small fragments: a 4-connected same-biome component at or under
+     SMALL_FRAGMENT_MAX_SIZE cells - discretization debris (specks, slivers), the
+     same size class the generator's own PixelFragmentRepair.SMALL_FRAGMENT_MAX_SIZE
+     targets. Generalized from an earlier strict "isolated == exactly 1 cell" check,
+     which passed a 2-4 cell speck clean even though the actual pipeline treats it as
+     exactly the same kind of defect - keep this constant in sync by hand with
+     PixelFragmentRepair.SMALL_FRAGMENT_MAX_SIZE if that ever changes.
   4. One-cell-wide pinch points: a cell where both opposite neighbors on an axis
      (north+south, or east+west) are a different biome (or missing) while the cell
      itself has same-biome neighbors on the other axis - the sliver/tendril shape
      PatchOpener/SeamWidener/PatchSizeEnforcer/SeparatorOrganicizer exist to prevent.
-     Isolated cells are excluded (reported separately, not as a pinch).
+     Cells already part of a small fragment are excluded (reported once, not twice).
 
 Usage: python validate_biome_export.py <path-to-regions.json>
 Exit code: 0 if clean, 1 if any violation found.
@@ -128,26 +134,33 @@ def find_components(cells):
 
 DIRECTION_OFFSETS = {"north": (0, -1), "south": (0, 1), "east": (1, 0), "west": (-1, 0)}
 
+# Matches PixelFragmentRepair.SMALL_FRAGMENT_MAX_SIZE - a component this size or smaller
+# is discretization debris, not a legitimate small patch. Sync by hand if that changes.
+SMALL_FRAGMENT_MAX_SIZE = 4
 
-def find_isolated_cells(cells, components):
-    isolated = []
+
+def find_small_fragments(cells, components):
+    fragments = []
     for biome, coords in components:
-        if len(coords) != 1:
+        if len(coords) > SMALL_FRAGMENT_MAX_SIZE:
             continue
-        x, z = next(iter(coords))
-        neighbors = {}
-        for direction, (dx, dz) in DIRECTION_OFFSETS.items():
-            nx, nz = x + dx, z + dz
-            neighbors[direction] = (nx, nz, cells.get((nx, nz), "(no data)"))
-        isolated.append((x, z, biome, neighbors))
-    return isolated
+        sorted_coords = sorted(coords)
+        neighbors = None
+        if len(coords) == 1:
+            x, z = sorted_coords[0]
+            neighbors = {}
+            for direction, (dx, dz) in DIRECTION_OFFSETS.items():
+                nx, nz = x + dx, z + dz
+                neighbors[direction] = (nx, nz, cells.get((nx, nz), "(no data)"))
+        fragments.append((biome, sorted_coords, neighbors))
+    return fragments
 
 
 def find_pinch_points(cells, components):
-    isolated_coords = {next(iter(coords)) for biome, coords in components if len(coords) == 1}
+    fragment_coords = {coord for biome, coords in components if len(coords) <= SMALL_FRAGMENT_MAX_SIZE for coord in coords}
     pinches = []
     for (x, z), biome in cells.items():
-        if (x, z) in isolated_coords:
+        if (x, z) in fragment_coords:
             continue
         north = cells.get((x, z - 1), "(no data)")
         south = cells.get((x, z + 1), "(no data)")
@@ -162,7 +175,7 @@ def find_pinch_points(cells, components):
     return pinches
 
 
-def build_report(source_path, cells, components, illegal_adjacencies, diagonal_illegal_adjacencies, isolated_cells, pinch_points):
+def build_report(source_path, cells, components, illegal_adjacencies, diagonal_illegal_adjacencies, small_fragments, pinch_points):
     lines = []
     lines.append(f"Source: {source_path}")
     lines.append(f"Cells: {len(cells)}, patches: {len(components)}")
@@ -183,12 +196,16 @@ def build_report(source_path, cells, components, illegal_adjacencies, diagonal_i
         lines.append(f"  ({x},{z}) {biome}  <->  ({nx},{nz}) {neighbor}  [corner touch, no rule for {biome} / {neighbor}]")
 
     lines.append("")
-    lines.append(f"=== Isolated cells: {len(isolated_cells)} ===")
-    lines.append("Why: all 4 orthogonal neighbors are a different biome (or outside the export) -")
-    lines.append("this cell is a 1-cell island of its biome, not part of any larger patch.")
-    for x, z, biome, neighbors in isolated_cells:
-        neighbor_desc = ", ".join(f"{direction}=({nx},{nz}) {nbiome}" for direction, (nx, nz, nbiome) in neighbors.items())
-        lines.append(f"  ({x},{z}) {biome}  neighbors: {neighbor_desc}")
+    lines.append(f"=== Small fragments (<= {SMALL_FRAGMENT_MAX_SIZE} cells): {len(small_fragments)} ===")
+    lines.append("Why: a same-biome component this size is discretization debris (speck/sliver),")
+    lines.append("not a legitimate small patch - same size class PixelFragmentRepair targets.")
+    for biome, coords, neighbors in small_fragments:
+        cell_desc = ", ".join(f"({x},{z})" for x, z in coords)
+        if neighbors is not None:
+            neighbor_desc = ", ".join(f"{direction}=({nx},{nz}) {nbiome}" for direction, (nx, nz, nbiome) in neighbors.items())
+            lines.append(f"  {biome}  size={len(coords)}  cells: {cell_desc}  neighbors: {neighbor_desc}")
+        else:
+            lines.append(f"  {biome}  size={len(coords)}  cells: {cell_desc}")
 
     lines.append("")
     lines.append(f"=== One-cell-wide pinch points: {len(pinch_points)} ===")
@@ -198,7 +215,7 @@ def build_report(source_path, cells, components, illegal_adjacencies, diagonal_i
     for x, z, biome, axis, (ax, az, abiome), (bx, bz, bbiome) in pinch_points:
         lines.append(f"  ({x},{z}) {biome}  pinched along {axis}: ({ax},{az}) {abiome}  /  ({bx},{bz}) {bbiome}")
 
-    ok = not (illegal_adjacencies or diagonal_illegal_adjacencies or isolated_cells or pinch_points)
+    ok = not (illegal_adjacencies or diagonal_illegal_adjacencies or small_fragments or pinch_points)
     lines.append("")
     lines.append("PASS" if ok else "FAIL")
     return "\n".join(lines), ok
@@ -221,10 +238,10 @@ def main():
     illegal_adjacencies = find_illegal_adjacencies(cells, allowed)
     diagonal_illegal_adjacencies = find_diagonal_illegal_adjacencies(cells, allowed)
     components = find_components(cells)
-    isolated_cells = find_isolated_cells(cells, components)
+    small_fragments = find_small_fragments(cells, components)
     pinch_points = find_pinch_points(cells, components)
 
-    report, ok = build_report(source_path, cells, components, illegal_adjacencies, diagonal_illegal_adjacencies, isolated_cells, pinch_points)
+    report, ok = build_report(source_path, cells, components, illegal_adjacencies, diagonal_illegal_adjacencies, small_fragments, pinch_points)
     print(report)
 
     if len(sys.argv) == 3:

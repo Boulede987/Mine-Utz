@@ -7,45 +7,78 @@ Ordered roughly by visual/structural impact, not urgency.
 
 ## Open
 
-### 0. `GrowthCohesionProfile.directionalRunMajor/Minor` deadlocks whenever minor >= 2
-Per-biome shape identity (`GrowthCohesionProfile`, `BiomeNode.cohesionProfile()`):
-lets a biome require a minimum count of already-claimed same-biome neighbors to
-grow (blocks 1-cell-wide necks — see the "Fixed" entry below) and, separately,
-a directional run requirement meant to encourage elongated growth (rivers,
-coastlines) along one axis while still requiring some cross-section thickness
-on the other.
+### 0. Ocean has no working elongation mechanism — the old deadlock is now dead code, but the underlying feature gap is still real and bigger than originally scoped
+Re-investigated 2026-08-15 after the pixel-growth cleanup (`GapFiller`,
+`RegionSolver`, `GeometryRealization` deleted — see "Fixed" #6 below and the
+dead-cluster removal commit). Original diagnosis below is kept for history;
+the situation has changed structurally, not just been patched.
 
-The `minSameBiomeNeighbors` half works (Moore-neighborhood count, see below).
-The directional-run half does not: `satisfiesDirectionalRun` requires a
-perpendicular run of `directionalRunMinor` cells to already exist through the
-candidate before it can join, but growth claims one cell at a time — the very
-first cell extending into a new row/column can never have that thickness
-pre-satisfied, no matter how large the patch already is elsewhere. Confirmed
-via the export CLI: `ocean` (the only biome configured with a directional
-profile, major=4/minor=2) got dropped in *every* region, every time — 100%
-failure rate, not a tuning issue. `ModBiomeGraph.ELONGATED` currently falls
-back to `COMPACT` (no directional requirement) until this is redesigned.
+**The literally-described deadlock is now unreachable.** `GrowthEngine.satisfiesCohesion`/
+`satisfiesDirectionalRun`/`contiguousRun` have zero callers anywhere in the
+codebase — their sole caller was `GapFiller`, deleted this session. The
+per-cell perpendicular-run gate this item originally diagnosed cannot fire
+regardless of any biome's profile, because nothing calls it.
 
-Likely fix: stop treating the directional requirement as a hard per-cell
-gate. Turn it into a frontier-ordering *preference* instead — cells that
-extend an existing run get tried first (lower sort key), same mechanism
-`GrowthEngine`'s seed-distance-plus-jitter ordering already uses — layered on
-top of the `minSameBiomeNeighbors` check, which stays a hard gate and keeps
-blocking thin necks regardless. That gets genuinely elongated emergent shapes
-without a hard requirement that can never be satisfied by construction.
+**Moot either way**: `ModBiomeGraph.ELONGATED = COMPACT` (a direct alias, same
+object) — ocean never gets a real directional profile assigned in the first
+place.
 
-### 2. `PatchSizeEnforcer`/`ConnectedComponents` are border-blind
-`ConnectedComponents.find` (`ConnectedComponents.java:21`) only traverses
-`regionCellSet` — never crosses into `fixedBoundaryCells`, even though
-`RegionSolver.cleanUp` merges those in as context. A patch that continues
-into an already-solved neighbor gets its size measured using only this
-region's slice, which can read as "undersized" when it's actually fine.
-`PatchSizeEnforcer` then spuriously merges or `SeparatorWidener`-steals cells
-right at the seam. Mainly hits `GapFiller`-born patches near region edges
-(grown patches already self-satisfy their min size before commit, so
-they're not the trigger). Related to #1 — both are "region edges don't know
-about their neighbor's actual shape" bugs, but this one is a correctness
-bug (wrong biome assigned), not just a cosmetic seam.
+**The real, still-open problem**: even a correctly-configured directional
+profile would do nothing useful on the live mesh path. `MeshCohesion.satisfies`
+(the mesh-native neck-prevention check `PatchMerger`'s live growth actually
+uses) has no geometric handling of directionality at all — "no x/z axis on a
+triangle," per its own doc. A directional profile only loosens the
+neck-prevention threshold from 2 to 1 (`MeshCohesion.java`'s `meshThreshold`);
+it doesn't bias growth toward any axis. So ocean grows shaped identically to
+any `COMPACT` biome today — no coastline/river elongation happens anywhere in
+the live pipeline, deadlock or not.
+
+This item's original "likely fix" (frontier-ordering preference, layered on
+`GrowthEngine`'s seed-distance-plus-jitter ordering) targeted
+`GrowthEngine.attemptGrowth`'s pixel flood-fill — that class is deleted, and
+the live pipeline doesn't grow via a single ordered frontier over macro-cells
+anymore, it grows via `PatchMerger`'s face-based frontier over mesh triangles.
+The old fix doesn't transfer. A real fix needs a fresh design against
+`PatchMerger`/`MeshCohesion` specifically — e.g. biasing a face's frontier
+priority by how well it extends an existing run direction through the
+patch's already-claimed faces, mesh-native rather than ported from the pixel
+version. Unscoped; not attempted.
+
+### 2. `PatchSizeEnforcer`/`ConnectedComponents` are border-blind — confirmed live in-game, not just export-only
+Re-confirmed 2026-08-15 against the current mesh pipeline (the original
+diagnosis below predates the mesh rewrite and named a since-deleted class).
+`ConnectedComponents.find` (`ConnectedComponents.java:21-24,40`) both starts
+*and* extends its BFS only through the `regionCellSet` argument — it never
+crosses into a neighbor's cells even when the caller's `assignment` map
+already contains them.
+
+Live call site: `MeshGeometryRealization.enforceFinalPixelPatchSize`
+(`MeshGeometryRealization.java`) builds `withBoundaryContext` — region cells
+plus `fixedBoundaryCells` merged in — but still passes the region-only
+`regionCells` set as `ConnectedComponents`' traversal bound. So even though
+the neighbor's biome data *is* present in the map passed to
+`PatchSizeEnforcer`, component-size measurement never grows past the region
+edge: a patch that's genuinely large because it continues into an
+already-solved neighbor region gets measured as only this region's slice,
+reads as spuriously undersized, and `PatchSizeEnforcer` then either merges
+that whole regional slice into a different (wrong) biome or has
+`SeparatorWidener` steal cells it didn't actually need. This runs on every
+real region solve during actual gameplay — not export-only, contrary to what
+this item originally implied by naming `RegionSolver.cleanUp` (that class no
+longer exists; the same bug now reproduces through
+`MeshGeometryRealization.enforceFinalPixelPatchSize`, the current live path).
+Mainly hits patches born from gap-fill/repair near region edges (grown
+patches already self-satisfy their min size before commit, so they're not
+the trigger). Related to #1 — both are "region edges don't know about their
+neighbor's actual shape" bugs, but this one is a correctness bug (wrong
+biome assigned), not just a cosmetic seam.
+
+Not a one-line fix: `ConnectedComponents` would need to *measure* size across
+the region/boundary union, but `PatchSizeEnforcer` must still only ever
+*write* to cells actually inside `regionCellSet` — never mutate a neighbor's
+already-solved ground truth. Same read-across/write-own split
+`PixelFragmentRepair` already uses elsewhere in this pipeline (its
+`ownCells`/`fixedContext` parameters). Unscoped; not attempted.
 
 ### 3. Cross-region solve is order-dependent, and spawn sits on the worst point for it
 `fixedBoundaryCells` feeds directly into every legality check
