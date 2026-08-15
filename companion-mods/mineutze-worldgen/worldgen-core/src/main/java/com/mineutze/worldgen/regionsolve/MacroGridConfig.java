@@ -5,17 +5,19 @@ import java.util.List;
 
 /**
  * The macro-cell/solve-region grid the constraint solver operates on.
- * 64-block (4x4 chunk) cells are a placeholder tuned from live testing
- * (128-block cells read as far too coarse in-game), not derived here.
- * Region is 32x32 cells (2048 blocks):
- * at 16x16 (1024 blocks), a single max-size biome patch (desert's 1000
- * block width needs 244 of a region's cells) could eat 95% of a region,
- * leaving nothing but the region's own square boundary to shape it —
- * patches need real room to breathe for organic growth to matter at all.
+ * 4-block cells match vanilla's own biome resolution (Minecraft samples one
+ * biome per 4x4x4-block quart volume — {@code getNoiseBiome} already
+ * receives quart coordinates) — 2026-08-15, replacing the earlier 64-block
+ * (4x4 chunk) placeholder. {@code regionSizeCellsPerSide} scaled up 16x
+ * alongside it (32 → 512) to hold the real-world region footprint at the
+ * same 2048 blocks: a single max-size biome patch (desert's 1000 block
+ * width) needs real room to breathe relative to the region regardless of
+ * how fine the cell grid measuring it is — that reasoning was always about
+ * block width, not cell count, so it transfers unchanged.
  */
 public record MacroGridConfig(int macroCellSizeBlocks, int regionSizeCellsPerSide) {
 
-    public static final MacroGridConfig DEFAULT = new MacroGridConfig(64, 32);
+    public static final MacroGridConfig DEFAULT = new MacroGridConfig(4, 512);
 
     // Region-grid domain warp (doc/KNOWN_ISSUES.md #1's real fix): straight region-solve
     // boundaries read as a hard ruler-straight cut wherever a patch happens to reach one,

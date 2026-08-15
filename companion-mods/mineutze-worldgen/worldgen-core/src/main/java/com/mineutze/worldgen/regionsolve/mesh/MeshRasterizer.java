@@ -33,6 +33,12 @@ import java.util.Optional;
  * every other last-resort tier in this pipeline logs its forced picks the
  * same way, and a high fire rate here would mean the boundary ring itself
  * needs widening, not something to silently paper over.
+ *
+ * <p>{@link #locateInUndisplacedMesh} — the query run once per macro-cell,
+ * so the hottest path in this whole class — uses {@link MeshFaceIndex}
+ * rather than scanning every face directly; see that class's own doc for
+ * why (measured: 196s for one region before the index existed, at
+ * macroCellSizeBlocks=4/regionSizeCellsPerSide=512).
  */
 public final class MeshRasterizer {
 
@@ -40,16 +46,17 @@ public final class MeshRasterizer {
     }
 
     public static Map<MacroCellPos, BiomeId> rasterize(FineMesh mesh, MeshAssignment assignment, Map<Integer, Point2D> displaced, RegionSolveInput input) {
+        MeshFaceIndex faceIndex = MeshFaceIndex.build(mesh);
         Map<MacroCellPos, BiomeId> result = new LinkedHashMap<>();
         for (MacroCellPos cell : input.gridConfig().cellsInRegion(input.region(), input.worldSeed())) {
             Point2D cellPoint = new Point2D(cell.x(), cell.z());
-            result.put(cell, resolveCellBiome(mesh, assignment, displaced, cellPoint));
+            result.put(cell, resolveCellBiome(mesh, faceIndex, assignment, displaced, cellPoint));
         }
         return result;
     }
 
-    private static BiomeId resolveCellBiome(FineMesh mesh, MeshAssignment assignment, Map<Integer, Point2D> displaced, Point2D cellPoint) {
-        Optional<Integer> undisplacedContainer = locateInUndisplacedMesh(mesh, cellPoint);
+    private static BiomeId resolveCellBiome(FineMesh mesh, MeshFaceIndex faceIndex, MeshAssignment assignment, Map<Integer, Point2D> displaced, Point2D cellPoint) {
+        Optional<Integer> undisplacedContainer = locateInUndisplacedMesh(mesh, faceIndex, cellPoint);
         if (undisplacedContainer.isPresent()) {
             int faceId = undisplacedContainer.get();
             if (!touchesAnyDisplacedVertex(mesh.face(faceId), displaced)) {
@@ -89,10 +96,10 @@ public final class MeshRasterizer {
      * ambiguity the same principled way every ordinary fallback in this
      * pipeline already does.
      */
-    private static Optional<Integer> locateInUndisplacedMesh(FineMesh mesh, Point2D point) {
+    private static Optional<Integer> locateInUndisplacedMesh(FineMesh mesh, MeshFaceIndex faceIndex, Point2D point) {
         int bestFaceId = -1;
         double bestDistanceSquared = Double.MAX_VALUE;
-        for (int faceId = 0; faceId < mesh.faces().size(); faceId++) {
+        for (int faceId : faceIndex.candidatesNear(point)) {
             IndexedTriangle face = mesh.face(faceId);
             Point2D a = mesh.position(face.a());
             Point2D b = mesh.position(face.b());

@@ -12,10 +12,10 @@ import com.mineutze.worldgen.regionsolve.RegionSolveResult;
 import com.mineutze.worldgen.regionsolve.SeedRegionCache;
 import com.mineutze.worldgen.regionsolve.TopologyFirstRegionSolver;
 
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.function.BiConsumer;
 
 /**
@@ -84,9 +84,21 @@ public final class RegionGridSolver {
             }
         }
 
-        PatchSizeEnforcer.enforceMinimumPatchSize(cells, Set.copyOf(cells.keySet()), gridConfig, graph);
+        // cells.keySet() directly, not Set.copyOf(cells.keySet()) - no copy needed at all:
+        // PatchSizeEnforcer only ever overwrites an EXISTING key's value here, never adds
+        // or removes one, so the live key-set view stays valid and correct throughout.
+        // Also sidesteps a real, measured pitfall: Set.copyOf's immutable-set
+        // implementation is catastrophically slow for a large MacroCellPos collection
+        // (~500x a plain HashSet at ~280k elements) - moot at small export spans, real
+        // once macroCellSizeBlocks gets fine enough to push a swath into six figures.
+        PatchSizeEnforcer.enforceMinimumPatchSize(cells, cells.keySet(), gridConfig, graph);
         Map<MacroCellPos, BiomeId> cleaned = PixelFragmentRepair.repair(cells, Map.of(), graph);
 
-        return new ExportSnapshot(graph, gridConfig, worldSeed, minRegion, regionSpan, Map.copyOf(cleaned), Map.copyOf(warningsByRegion));
+        // Collections.unmodifiableMap, not Map.copyOf - same pathological cost as
+        // Set.copyOf (see above) for a large map, and unnecessary here regardless: cleaned
+        // is a fresh local never aliased elsewhere, so a zero-copy read-only VIEW gives the
+        // exact same practical immutability as a real copy would, at O(1) instead of
+        // O(n)-with-a-bad-constant.
+        return new ExportSnapshot(graph, gridConfig, worldSeed, minRegion, regionSpan, Collections.unmodifiableMap(cleaned), Map.copyOf(warningsByRegion));
     }
 }

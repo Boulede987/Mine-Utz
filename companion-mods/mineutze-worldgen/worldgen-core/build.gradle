@@ -36,4 +36,11 @@ dependencies {
 
 test {
     useJUnitPlatform()
+    // Default test-worker heap isn't the Gradle daemon's own -Xmx3G (gradle.properties) -
+    // it's a separate forked JVM with its own, much smaller default. Needed explicitly
+    // once MacroGridConfig.DEFAULT's region size grew enough that a single solved
+    // region's assignment map is ~23MB (measured directly) and several tests retain
+    // multiple regions in one SeedRegionCache at once - a real OutOfMemoryError at the
+    // old default, not a hypothetical.
+    maxHeapSize = '3g'
 }

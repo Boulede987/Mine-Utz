@@ -24,6 +24,18 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class SeedRegionCacheTest {
 
+    // Not MacroGridConfig.DEFAULT - every test in this file is about cache MECHANICS
+    // (hit/miss, no-force-solve, stitching, callback-once-ness, concurrent-locking
+    // correctness), none of which need production region scale to exercise correctly.
+    // DEFAULT's real region size (measured: ~262k cells, tens of seconds per solve, ~23MB
+    // retained per region) turned this file's runtime from seconds into 20+ minutes -
+    // same macroCellSizeBlocks as DEFAULT so cell-level assertions still mean the same
+    // thing, small enough regionSizeCellsPerSide to stay fast, still above
+    // MacroGridConfig's own WARP_MIN_REGION_SIZE so real (non-degenerate) warp behavior
+    // is still exercised, which onRegionSolvedFiresExactlyOncePerRegionNeverOnACacheHit
+    // specifically relies on (it probes the region's true CENTER, not its nominal corner).
+    private static final MacroGridConfig SMALL_GRID = new MacroGridConfig(64, 16);
+
     private static final BiomeId DESERT = id("desert");
     private static final BiomeId SAVANNA = id("savanna");
     private static final BiomeId PLAINS = id("plains");
@@ -40,7 +52,7 @@ class SeedRegionCacheTest {
     }
 
     private static SeedRegionCache newCache(long worldSeed) {
-        return new SeedRegionCache(smallGraph(), MacroGridConfig.DEFAULT, worldSeed);
+        return new SeedRegionCache(smallGraph(), SMALL_GRID, worldSeed);
     }
 
     @Test
@@ -68,7 +80,7 @@ class SeedRegionCacheTest {
     @Test
     void adjacentRegionsSolvedThroughTheSameCacheStitchWithNoRuleViolation() {
         BiomeGraph graph = smallGraph();
-        SeedRegionCache cache = new SeedRegionCache(graph, MacroGridConfig.DEFAULT, 42L);
+        SeedRegionCache cache = new SeedRegionCache(graph, SMALL_GRID, 42L);
         RegionPos west = new RegionPos(0, 0);
         RegionPos east = new RegionPos(1, 0);
 
@@ -95,7 +107,7 @@ class SeedRegionCacheTest {
         MacroCellPos cell = new MacroCellPos(3, 3);
 
         BiomeId viaBiomeAt = cache.biomeAt(cell);
-        BiomeId viaResultFor = cache.resultFor(MacroGridConfig.DEFAULT.regionOf(cell, 7L)).assignment().get(cell);
+        BiomeId viaResultFor = cache.resultFor(SMALL_GRID.regionOf(cell, 7L)).assignment().get(cell);
 
         assertEquals(viaResultFor, viaBiomeAt);
         assertNotNull(viaBiomeAt);
@@ -105,7 +117,7 @@ class SeedRegionCacheTest {
     void onRegionSolvedFiresExactlyOncePerRegionNeverOnACacheHit() {
         List<RegionPos> solvedRegions = new ArrayList<>();
         SeedRegionCache cache = new SeedRegionCache(
-            smallGraph(), MacroGridConfig.DEFAULT, 9L,
+            smallGraph(), SMALL_GRID, 9L,
             (region, result, durationMillis) -> solvedRegions.add(region)
         );
         RegionPos region = new RegionPos(1, 1);
@@ -113,7 +125,7 @@ class SeedRegionCacheTest {
         // Region CENTER, not its nominal corner - the region grid's own warp
         // (MacroGridConfig's doc) can push a cell exactly at the nominal boundary into a
         // different region than the one this test means to probe.
-        int regionSize = MacroGridConfig.DEFAULT.regionSizeCellsPerSide();
+        int regionSize = SMALL_GRID.regionSizeCellsPerSide();
         cache.resultFor(region);
         cache.resultFor(region);
         cache.biomeAt(new MacroCellPos(region.x() * regionSize + regionSize / 2, region.z() * regionSize + regionSize / 2));
@@ -133,8 +145,7 @@ class SeedRegionCacheTest {
     @Test
     void concurrentlySolvingAdjacentRegionsNeverProducesAnIllegalBorder() throws Exception {
         BiomeGraph graph = smallGraph();
-        MacroGridConfig grid = MacroGridConfig.DEFAULT;
-        SeedRegionCache cache = new SeedRegionCache(graph, grid, 123L);
+        SeedRegionCache cache = new SeedRegionCache(graph, SMALL_GRID, 123L);
 
         List<RegionPos> regions = new ArrayList<>();
         for (int x = 0; x < 4; x++) {

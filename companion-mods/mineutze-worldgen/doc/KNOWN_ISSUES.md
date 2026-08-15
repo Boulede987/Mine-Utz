@@ -7,6 +7,32 @@ Ordered roughly by visual/structural impact, not urgency.
 
 ## Open
 
+### 8. `SeedRegionCache` has no eviction — unbounded memory growth at `macroCellSizeBlocks=4`
+2026-08-15: `MacroGridConfig.DEFAULT` moved from 64-block cells (1,024 cells/region) to
+vanilla's own 4-block quart resolution (262,144 cells/region, `regionSizeCellsPerSide`
+scaled 32→512 to hold the same real-world 2048-block region footprint). Measured
+directly (not estimated): a solved region's retained `RegionSolveResult` (dominated by
+its `Map<MacroCellPos,BiomeId>` assignment) costs **~23MB**, remarkably consistent
+across samples (22-23MB every time). At the old 1,024-cell scale the same map was
+~90KB — negligible, which is why this was never a concern before; the 256x cell-count
+increase scales memory linearly right along with it.
+
+`SeedRegionCache` (the real live-game entry point, via `RegionCacheHolder`) never
+evicts a solved region — its own class doc frames `SavedData` persistence as "purely a
+performance/restart-cache concern," not a live-memory eviction strategy, because none
+exists. For a short-lived or small world this is fine. For the "infinite lazy world
+generation" this system is explicitly designed for, unbounded growth at ~23MB/region
+is a real problem on any long-running server: ~50 regions (moderate exploration) is
+already ~1.15GB; ~500 regions (realistic for a persistent multiplayer server over
+weeks/months) is ~11.5GB, just for this one cache, on top of everything else a
+Minecraft server holds.
+
+Deliberately deferred, not fixed: shipping the cell-size change now was judged more
+valuable than blocking on a real eviction/persistence design (LRU eviction with
+on-demand re-solve, or genuinely writing solved regions to `SavedData` and evicting
+the in-memory copy, are both real options, unscoped). Worth designing properly before
+this ships to a long-running server, not bolted on under time pressure.
+
 ### 0. Ocean has no working elongation mechanism — the old deadlock is now dead code, but the underlying feature gap is still real and bigger than originally scoped
 Re-investigated 2026-08-15 after the pixel-growth cleanup (`GapFiller`,
 `RegionSolver`, `GeometryRealization` deleted — see "Fixed" #6 below and the
@@ -76,6 +102,26 @@ biome's size-range math, not a designed rarity. Only matters if rarity
 control becomes a design goal.
 
 ## Fixed
+
+### 9. Java's `Set.copyOf`/`Map.copyOf` are catastrophically slow at large collection sizes — a real, general JDK pitfall, not specific to this codebase
+Found while investigating why a single region solve took 196s at the new
+`macroCellSizeBlocks=4` scale (262,157 cells). Measured directly, isolated from all
+pipeline logic: `new HashSet<>(list)` on a 280,900-element `MacroCellPos` list took
+125ms; `Set.copyOf(list)` on the exact same data took **69,450ms** — ~555x slower.
+Root cause is `java.util.ImmutableCollections`' internal implementation, not anything
+about `MacroCellPos`'s hashCode (verified plain/unremarkable). Fixed in every call site
+this codebase had at cell-scale: `MeshGeometryRealization.enforceFinalPixelPatchSize`
+(`Set.copyOf` → `HashSet`), `RegionGridSolver.solve` (`Set.copyOf(cells.keySet())` →
+`cells.keySet()` directly — no copy needed at all, since nothing there adds/removes
+keys; separately, `Map.copyOf(cleaned)` on the same 262k-entry map →
+`Collections.unmodifiableMap(cleaned)`, a zero-copy view — this second one alone
+accounted for an extra ~263s in `ExportCli`'s total runtime, on top of the first fix).
+
+Worth remembering generally: never reach for `Set.copyOf`/`Map.copyOf`/`List.copyOf`
+on a large (thousands+) collection without measuring first — a plain mutable
+collection wrapped in `Collections.unmodifiable*` (or just left mutable, if nothing
+downstream needs the immutability guarantee) is not just "fine," it can be orders of
+magnitude faster for the exact same practical effect.
 
 ### 2. `PatchSizeEnforcer`/`ConnectedComponents` were border-blind — confirmed live in-game, then fixed
 Re-confirmed 2026-08-15 against the current mesh pipeline (the original

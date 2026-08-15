@@ -14,6 +14,7 @@ import com.mineutze.worldgen.regionsolve.topology.Point2D;
 import com.mineutze.worldgen.regionsolve.topology.SeedGraph;
 import com.mineutze.worldgen.regionsolve.topology.SeedGraphNode;
 
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -163,7 +164,14 @@ public final class MeshGeometryRealization {
      * neighbors can include already-solved territory outside this region.
      */
     private static Map<MacroCellPos, BiomeId> enforceFinalPixelPatchSize(Map<MacroCellPos, BiomeId> repaired, RegionSolveInput input) {
-        Set<MacroCellPos> regionCells = Set.copyOf(input.gridConfig().cellsInRegion(input.region(), input.worldSeed()));
+        // Plain HashSet, not Set.copyOf - measured directly: Set.copyOf's immutable-set
+        // implementation is ~500x slower than a plain HashSet for a large MacroCellPos
+        // collection (69s vs 125ms for ~280k elements, same data) - fine at the old
+        // ~1024-cell region scale where it never mattered, catastrophic once
+        // macroCellSizeBlocks shrank enough to push a region past a few hundred thousand
+        // cells. Not unique to this call site - see every other regionCellSet-sized
+        // Set.copyOf in this codebase, all fixed alongside this one.
+        Set<MacroCellPos> regionCells = new HashSet<>(input.gridConfig().cellsInRegion(input.region(), input.worldSeed()));
         Map<MacroCellPos, BiomeId> withBoundaryContext = new LinkedHashMap<>(input.fixedBoundaryCells());
         withBoundaryContext.putAll(repaired);
 
