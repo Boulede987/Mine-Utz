@@ -12,14 +12,29 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-/** Same-biome flood-fill grouping, shared by every pass that reasons about whole patches rather than individual cells. */
+/**
+ * Same-biome flood-fill grouping, shared by every pass that reasons about
+ * whole patches rather than individual cells.
+ *
+ * <p>{@code ownCellSet} bounds only which cells can SEED a component search
+ * — every returned component includes at least one cell from it. Traversal
+ * itself follows same-biome connectivity through the WHOLE {@code
+ * assignment} map, including any read-only context cells beyond {@code
+ * ownCellSet} (e.g. {@code fixedBoundaryCells}) — a patch that continues
+ * into already-solved neighbor territory must be measured at its true size,
+ * not truncated at the region edge, or it reads as spuriously undersized to
+ * a caller like {@link PatchSizeEnforcer}. Callers that mutate a component
+ * afterward are responsible for only ever writing back to cells actually in
+ * {@code ownCellSet} — this class only measures, it never assumes what's
+ * safe to change.
+ */
 final class ConnectedComponents {
 
     private ConnectedComponents() {
     }
 
-    static List<Set<MacroCellPos>> find(Map<MacroCellPos, BiomeId> assignment, Set<MacroCellPos> regionCellSet) {
-        List<MacroCellPos> orderedCells = regionCellSet.stream()
+    static List<Set<MacroCellPos>> find(Map<MacroCellPos, BiomeId> assignment, Set<MacroCellPos> ownCellSet) {
+        List<MacroCellPos> orderedCells = ownCellSet.stream()
             .sorted(Comparator.comparingInt(MacroCellPos::x).thenComparingInt(MacroCellPos::z))
             .toList();
         Set<MacroCellPos> visited = new HashSet<>();
@@ -37,7 +52,7 @@ final class ConnectedComponents {
                 MacroCellPos cell = frontier.pop();
                 component.add(cell);
                 for (MacroCellPos neighbor : cell.orthogonalNeighbors()) {
-                    if (regionCellSet.contains(neighbor) && !visited.contains(neighbor) && biome.equals(assignment.get(neighbor))) {
+                    if (assignment.containsKey(neighbor) && !visited.contains(neighbor) && biome.equals(assignment.get(neighbor))) {
                         visited.add(neighbor);
                         frontier.push(neighbor);
                     }

@@ -41,6 +41,20 @@ import java.util.Set;
  * minimum — the exact same order-dependent blind spot {@link
  * PixelFragmentRepair}'s own doc describes for illegal adjacency and small
  * fragments, just for patch SIZE instead).
+ *
+ * <p>{@code assignment} may carry read-only context cells beyond {@code
+ * regionCellSet} (e.g. {@code fixedBoundaryCells}, already merged in by the
+ * caller) — {@link ConnectedComponents#find} measures a component's TRUE
+ * size across all of it, so a patch that continues into an already-solved
+ * neighbor doesn't read as spuriously undersized. Only cells actually in
+ * {@code regionCellSet} are ever written back to; a merge into a different
+ * biome filters to that set before mutating, and {@link SeparatorWidener}
+ * already only ever claims cells within it. Previously this measured size
+ * using ONLY {@code regionCellSet} (both to seed AND bound the traversal),
+ * which could spuriously merge or steal cells from a patch that was
+ * actually fine once its neighbor-side portion was counted — confirmed live
+ * (not export-only), fixed by widening what {@code ConnectedComponents}
+ * measures without widening what this class writes to.
  */
 public final class PatchSizeEnforcer {
 
@@ -66,7 +80,7 @@ public final class PatchSizeEnforcer {
 
             Optional<BiomeId> mergeTarget = bestMergeTarget(component, biome, assignment, patchSizeByCell, graph);
             if (mergeTarget.isPresent()) {
-                component.forEach(cell -> assignment.put(cell, mergeTarget.get()));
+                component.stream().filter(regionCellSet::contains).forEach(cell -> assignment.put(cell, mergeTarget.get()));
             } else {
                 SeparatorWidener.widen(component, biome, minCells, assignment, regionCellSet, graph, Set.of());
             }

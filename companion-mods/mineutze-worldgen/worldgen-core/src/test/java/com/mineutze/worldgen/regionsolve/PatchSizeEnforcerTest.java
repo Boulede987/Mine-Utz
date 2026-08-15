@@ -5,6 +5,7 @@ import com.mineutze.worldgen.biomegraph.BiomeGraph;
 import com.mineutze.worldgen.biomegraph.BiomeId;
 import org.junit.jupiter.api.Test;
 
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -158,5 +159,40 @@ class PatchSizeEnforcerTest {
 
         long fillerCells = regionCellSet.stream().filter(cell -> filler.equals(assignment.get(cell))).count();
         assertEquals(15, fillerCells, "filler's minWidthBlocks (500) is a 15-cell minimum at this grid's cell size - it should widen to it, not stay at 1 cell");
+    }
+
+    @Test
+    void measuresComponentSizeAcrossBoundaryContextWithoutMutatingIt() {
+        // KNOWN_ISSUES.md #2: a patch continuing into an already-solved neighbor
+        // region must be measured at its TRUE size (region + boundary), not
+        // truncated at the region edge - and the boundary portion must never be
+        // written to, since it's another region's already-committed ground truth.
+        BiomeGraph graph = richGraph();
+        MacroGridConfig grid = new MacroGridConfig(128, 7);
+        RegionPos region = new RegionPos(0, 0);
+        Set<MacroCellPos> regionCellSet = Set.copyOf(grid.cellsInRegion(region, 0L));
+
+        // An edge cell (minimum x) has a real neighbor just outside the region.
+        MacroCellPos edgeCell = regionCellSet.stream()
+            .min(Comparator.comparingInt(MacroCellPos::x).thenComparingInt(MacroCellPos::z))
+            .orElseThrow();
+        MacroCellPos boundaryNeighbor = new MacroCellPos(edgeCell.x() - 1, edgeCell.z());
+
+        Map<MacroCellPos, BiomeId> assignment = new HashMap<>();
+        for (MacroCellPos cell : regionCellSet) {
+            assignment.put(cell, SAVANNA);
+        }
+        // Only 1 cell of desert is this region's own - under desert's 2-cell minimum
+        // measured region-only, but the neighbor's already-solved desert cell brings
+        // the TRUE component to exactly 2, which meets it.
+        assignment.put(edgeCell, DESERT);
+        assignment.put(boundaryNeighbor, DESERT);
+
+        PatchSizeEnforcer.enforceMinimumPatchSize(assignment, regionCellSet, grid, graph);
+
+        assertEquals(DESERT, assignment.get(edgeCell),
+            "true 2-cell component (region + boundary) meets desert's own 2-cell minimum - must not get merged into savanna");
+        assertEquals(DESERT, assignment.get(boundaryNeighbor),
+            "a cell outside regionCellSet is another region's already-solved ground truth - must never be mutated");
     }
 }

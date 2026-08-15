@@ -44,42 +44,6 @@ priority by how well it extends an existing run direction through the
 patch's already-claimed faces, mesh-native rather than ported from the pixel
 version. Unscoped; not attempted.
 
-### 2. `PatchSizeEnforcer`/`ConnectedComponents` are border-blind — confirmed live in-game, not just export-only
-Re-confirmed 2026-08-15 against the current mesh pipeline (the original
-diagnosis below predates the mesh rewrite and named a since-deleted class).
-`ConnectedComponents.find` (`ConnectedComponents.java:21-24,40`) both starts
-*and* extends its BFS only through the `regionCellSet` argument — it never
-crosses into a neighbor's cells even when the caller's `assignment` map
-already contains them.
-
-Live call site: `MeshGeometryRealization.enforceFinalPixelPatchSize`
-(`MeshGeometryRealization.java`) builds `withBoundaryContext` — region cells
-plus `fixedBoundaryCells` merged in — but still passes the region-only
-`regionCells` set as `ConnectedComponents`' traversal bound. So even though
-the neighbor's biome data *is* present in the map passed to
-`PatchSizeEnforcer`, component-size measurement never grows past the region
-edge: a patch that's genuinely large because it continues into an
-already-solved neighbor region gets measured as only this region's slice,
-reads as spuriously undersized, and `PatchSizeEnforcer` then either merges
-that whole regional slice into a different (wrong) biome or has
-`SeparatorWidener` steal cells it didn't actually need. This runs on every
-real region solve during actual gameplay — not export-only, contrary to what
-this item originally implied by naming `RegionSolver.cleanUp` (that class no
-longer exists; the same bug now reproduces through
-`MeshGeometryRealization.enforceFinalPixelPatchSize`, the current live path).
-Mainly hits patches born from gap-fill/repair near region edges (grown
-patches already self-satisfy their min size before commit, so they're not
-the trigger). Related to #1 — both are "region edges don't know about their
-neighbor's actual shape" bugs, but this one is a correctness bug (wrong
-biome assigned), not just a cosmetic seam.
-
-Not a one-line fix: `ConnectedComponents` would need to *measure* size across
-the region/boundary union, but `PatchSizeEnforcer` must still only ever
-*write* to cells actually inside `regionCellSet` — never mutate a neighbor's
-already-solved ground truth. Same read-across/write-own split
-`PixelFragmentRepair` already uses elsewhere in this pipeline (its
-`ownCells`/`fixedContext` parameters). Unscoped; not attempted.
-
 ### 3. Cross-region solve is order-dependent, and spawn sits on the worst point for it
 `fixedBoundaryCells` feeds directly into every legality check
 (`GrowthEngine.isLegal`, `MeshGapFiller`, `PatchSizeEnforcer`), so whichever
@@ -112,6 +76,47 @@ biome's size-range math, not a designed rarity. Only matters if rarity
 control becomes a design goal.
 
 ## Fixed
+
+### 2. `PatchSizeEnforcer`/`ConnectedComponents` were border-blind — confirmed live in-game, then fixed
+Re-confirmed 2026-08-15 against the current mesh pipeline (the original
+diagnosis predated the mesh rewrite and named a since-deleted class).
+`ConnectedComponents.find` both started *and* extended its BFS only through
+the `regionCellSet` argument — it never crossed into a neighbor's cells even
+when the caller's `assignment` map already contained them.
+
+Live call site: `MeshGeometryRealization.enforceFinalPixelPatchSize` builds
+`withBoundaryContext` — region cells plus `fixedBoundaryCells` merged in —
+but was still passing the region-only `regionCells` set as
+`ConnectedComponents`' traversal bound. So even though the neighbor's biome
+data *was* present in the map passed to `PatchSizeEnforcer`, component-size
+measurement never grew past the region edge: a patch that's genuinely large
+because it continues into an already-solved neighbor region measured as
+only this region's slice, read as spuriously undersized, and
+`PatchSizeEnforcer` then either merged that whole regional slice into a
+different (wrong) biome or had `SeparatorWidener` steal cells it didn't
+actually need. This ran on every real region solve during actual
+gameplay — not export-only, contrary to what the original diagnosis implied
+by naming `RegionSolver.cleanUp` (that class no longer exists; the same bug
+reproduced through `MeshGeometryRealization.enforceFinalPixelPatchSize`, the
+live path). Related to #1 — both are "region edges don't know about their
+neighbor's actual shape" bugs, but this one was a correctness bug (wrong
+biome assigned), not just a cosmetic seam.
+
+**Fixed**: `ConnectedComponents.find` now measures a component's size across
+the WHOLE `assignment` map (region cells plus any boundary context the
+caller merged in), not just `ownCellSet` — its neighbor-traversal check
+changed from `regionCellSet.contains(neighbor)` to
+`assignment.containsKey(neighbor)`. `ownCellSet`/`regionCellSet` still bounds
+which cells can *seed* a component search (unchanged), and still bounds what
+`PatchSizeEnforcer` is ever allowed to *write* back to — its merge branch now
+filters `component.stream().filter(regionCellSet::contains)` before writing,
+never touching a neighbor's already-solved ground truth (`SeparatorWidener`
+already only ever claimed cells within `regionCellSet`, so it needed no
+change). Same read-across/write-own split `PixelFragmentRepair` already used
+elsewhere in this pipeline. Verified via a new test
+(`PatchSizeEnforcerTest.measuresComponentSizeAcrossBoundaryContextWithoutMutatingIt`)
+and a 5x5 export: 0 illegal adjacencies, no regression in fragment/pinch
+counts.
 
 ### 1. Hard straight-line seam at every region boundary
 Patches stop dead at the 2048-block region edge instead of curving across
