@@ -7,32 +7,6 @@ Ordered roughly by visual/structural impact, not urgency.
 
 ## Open
 
-### 8. `SeedRegionCache` has no eviction — unbounded memory growth at `macroCellSizeBlocks=4`
-2026-08-15: `MacroGridConfig.DEFAULT` moved from 64-block cells (1,024 cells/region) to
-vanilla's own 4-block quart resolution (262,144 cells/region, `regionSizeCellsPerSide`
-scaled 32→512 to hold the same real-world 2048-block region footprint). Measured
-directly (not estimated): a solved region's retained `RegionSolveResult` (dominated by
-its `Map<MacroCellPos,BiomeId>` assignment) costs **~23MB**, remarkably consistent
-across samples (22-23MB every time). At the old 1,024-cell scale the same map was
-~90KB — negligible, which is why this was never a concern before; the 256x cell-count
-increase scales memory linearly right along with it.
-
-`SeedRegionCache` (the real live-game entry point, via `RegionCacheHolder`) never
-evicts a solved region — its own class doc frames `SavedData` persistence as "purely a
-performance/restart-cache concern," not a live-memory eviction strategy, because none
-exists. For a short-lived or small world this is fine. For the "infinite lazy world
-generation" this system is explicitly designed for, unbounded growth at ~23MB/region
-is a real problem on any long-running server: ~50 regions (moderate exploration) is
-already ~1.15GB; ~500 regions (realistic for a persistent multiplayer server over
-weeks/months) is ~11.5GB, just for this one cache, on top of everything else a
-Minecraft server holds.
-
-Deliberately deferred, not fixed: shipping the cell-size change now was judged more
-valuable than blocking on a real eviction/persistence design (LRU eviction with
-on-demand re-solve, or genuinely writing solved regions to `SavedData` and evicting
-the in-memory copy, are both real options, unscoped). Worth designing properly before
-this ships to a long-running server, not bolted on under time pressure.
-
 ### 0. Ocean has no working elongation mechanism — the old deadlock is now dead code, but the underlying feature gap is still real and bigger than originally scoped
 Re-investigated 2026-08-15 after the pixel-growth cleanup (`GapFiller`,
 `RegionSolver`, `GeometryRealization` deleted — see "Fixed" #6 below and the
@@ -102,6 +76,74 @@ biome's size-range math, not a designed rarity. Only matters if rarity
 control becomes a design goal.
 
 ## Fixed
+
+### 8. `SeedRegionCache` had no eviction — unbounded memory growth at `macroCellSizeBlocks=4`
+2026-08-15: `MacroGridConfig.DEFAULT` moved from 64-block cells (1,024 cells/region) to
+vanilla's own 4-block quart resolution (262,144 cells/region, `regionSizeCellsPerSide`
+scaled 32→512 to hold the same real-world 2048-block region footprint). Measured
+directly: a solved region's retained `RegionSolveResult` costs **~23MB**, consistent
+across samples — was ~90KB at the old scale, negligible, which is why this was never a
+concern before. `SeedRegionCache` (the real live-game entry point, via
+`RegionCacheHolder`) never evicted a solved region, so unbounded growth on a
+long-running server was real: ~50 regions ≈ 1.15GB, ~500 regions (realistic over
+weeks/months of real play) ≈ 11.5GB, just for this cache. Deliberately shipped
+deferred alongside the cell-size change rather than bolted on under time pressure —
+this entry is that follow-up.
+
+**Critical prior art, driving the whole design**: an earlier `SavedData`-backed cache
+(`RegionCacheManager`/`RegionCacheData`, deleted in commit `21d82eeb`) was already
+tried and removed for a real, observed bug — it tracked "is this neighbor region
+already solved" via its own independent `SavedData` lookup, completely separate from
+the in-memory `SeedRegionCache` real generation used, so a region the player had
+already walked through (solved in-memory) could read as unsolved to the disk-side
+check and vice versa, producing a genuinely different boundary-stitch result than what
+had actually generated. A second, related bug in that same old code: `getOrSolve` used
+`computeIfAbsent` with a factory whose supplier itself re-solved on a miss — a bare
+disk-check could silently trigger an independent solve, conflating "load if present"
+with "solve if missing" in one call.
+
+**Fixed**: added `RegionPersistenceStore` (`worldgen-core/regionsolve`), a plain
+interface (`NONE` no-op default — every existing constructor/caller, `ExportCli`
+included, is completely unaffected). `SeedRegionCache` gained a bounded LRU cap
+(`maxCachedRegions`, a fixed region count) and a new constructor overload accepting
+the store + cap. The one rule the whole design exists to enforce: there is exactly ONE
+notion of "is this region solved," checked through the *same* code path everywhere —
+memory first, then the store — including the neighbor-boundary lookup mid-solve (the
+exact thing the old design got wrong). A region evicted from memory gets **rehydrated**
+back into it the moment a neighbor's solve needs its boundary, so it behaves
+identically to one still in memory; every fresh solve writes through to the store
+immediately (not deferred to eventual eviction), so a crash between solve and eviction
+never loses work. The fast, lock-free `resultFor` read path is unchanged — recency is
+tracked in a separate `ConcurrentHashMap<RegionPos,Long>` stamped with a plain,
+non-atomic `put()` on every access, cheap enough to not matter, with an occasional
+bounded eviction sweep (only when over cap) doing the real work under the existing
+`solveLock`.
+
+Real implementation (`SavedDataRegionPersistenceStore`, mod `integration` module —
+`worldgen-core` stays Minecraft-free by design) uses NeoForge `SavedData`, one file per
+region (`"mineutze_worldgen_region_" + x + "_" + z`, same granularity the deleted
+design chose deliberately) — `load()` uses `DimensionDataStorage.get(factory, name)`
+(a pure lookup, never invokes the factory's supplier) rather than `computeIfAbsent`,
+so a disk-check can never trigger an independent solve like the old bug did. Reuses
+the existing `BiomeIdAdapter` for the `BiomeId`/`ResourceLocation` round trip. Adds a
+schema-version field the deleted design didn't have. `RegionCacheHolder.onLevelLoad`
+wires it in with `MAX_CACHED_REGIONS = 64` (~1.5GB at ~23MB/region — a real but bounded
+slice of a typical modded server's heap, tune from real deployment once one exists).
+
+Verified: `worldgen-core:compileJava` and the mod's own `:compileJava` both green
+against the real NeoForge API (confirms every `DimensionDataStorage`/`SavedData`/NBT
+call is correct, not guessed). Full `worldgen-core` test suite green, including three
+new tests: eviction actually happens past cap and reloads with an identical
+assignment; `onRegionSolved` never fires again on a reload; and the one regression
+test that matters most — solve a region, force it out of memory, then solve its
+*adjacent* neighbor, and confirm the boundary stitch is exactly as legal as if the
+first region had never been evicted, with the evicted region rehydrated back into
+memory as a side effect (not silently re-solved). Automated end-to-end verification
+against a real running server (`:runServer`) hit an unrelated, pre-existing classpath
+conflict in this dev environment (ASM 9.5 vs 9.8 on the module path) — not something
+this change caused, and not worth destabilizing the build to chase; final in-game
+confirmation deferred to a manual `DEV_TEST` play-test (jar deployed via the existing
+`deployToDevTest` task).
 
 ### 9. Java's `Set.copyOf`/`Map.copyOf` are catastrophically slow at large collection sizes — a real, general JDK pitfall, not specific to this codebase
 Found while investigating why a single region solve took 196s at the new

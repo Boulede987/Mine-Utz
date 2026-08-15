@@ -6,8 +6,10 @@ import com.mineutze.worldgen.biomegraph.BiomeId;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -53,6 +55,25 @@ class SeedRegionCacheTest {
 
     private static SeedRegionCache newCache(long worldSeed) {
         return new SeedRegionCache(smallGraph(), SMALL_GRID, worldSeed);
+    }
+
+    /** Plain in-memory test double - real persistence (NeoForge SavedData) lives in the mod's integration module and isn't exercised here; this only needs to prove the CACHE's own eviction/reload/rehydration logic is correct. */
+    private static final class InMemoryPersistenceStore implements RegionPersistenceStore {
+        private final Map<RegionPos, RegionSolveResult> saved = new HashMap<>();
+
+        @Override
+        public Optional<RegionSolveResult> load(RegionPos region) {
+            return Optional.ofNullable(saved.get(region));
+        }
+
+        @Override
+        public void save(RegionPos region, RegionSolveResult result) {
+            saved.put(region, result);
+        }
+
+        boolean hasSaved(RegionPos region) {
+            return saved.containsKey(region);
+        }
     }
 
     @Test
@@ -177,6 +198,95 @@ class SeedRegionCacheTest {
                     assertTrue(
                         graph.isAllowed(entry.getValue(), neighborBiome),
                         entry.getValue() + " at " + entry.getKey() + " not allowed next to " + neighborBiome + " at " + neighbor
+                    );
+                }
+            }
+        }
+    }
+
+    @Test
+    void evictsLeastRecentlyUsedRegionOnceOverCapacityAndReloadsItIdenticallyFromTheStore() {
+        InMemoryPersistenceStore store = new InMemoryPersistenceStore();
+        SeedRegionCache cache = new SeedRegionCache(
+            smallGraph(), SMALL_GRID, 1L, (region, result, durationMillis) -> { },
+            MeshGeometryRealization::realize, store, 2
+        );
+        RegionPos first = new RegionPos(0, 0);
+        RegionPos second = new RegionPos(50, 50);
+        RegionPos third = new RegionPos(51, 50);
+
+        RegionSolveResult firstResult = cache.resultFor(first);
+        cache.resultFor(second);
+        cache.resultFor(third); // pushes the cache (cap=2) past capacity - `first` is the least recently touched
+
+        assertFalse(cache.isAlreadySolved(first), "least-recently-used region must have been evicted from memory");
+        assertTrue(store.hasSaved(first), "evicted region must already be durably persisted, not lost");
+
+        RegionSolveResult reloaded = cache.resultFor(first);
+        assertEquals(firstResult.assignment(), reloaded.assignment(), "reloading an evicted region must reproduce its exact original assignment");
+    }
+
+    @Test
+    void onRegionSolvedNeverFiresAgainWhenAnEvictedRegionIsReloadedFromTheStore() {
+        List<RegionPos> solvedRegions = new ArrayList<>();
+        InMemoryPersistenceStore store = new InMemoryPersistenceStore();
+        SeedRegionCache cache = new SeedRegionCache(
+            smallGraph(), SMALL_GRID, 1L, (region, result, durationMillis) -> solvedRegions.add(region),
+            MeshGeometryRealization::realize, store, 2
+        );
+        RegionPos first = new RegionPos(0, 0);
+        RegionPos second = new RegionPos(50, 50);
+        RegionPos third = new RegionPos(51, 50);
+
+        cache.resultFor(first);
+        cache.resultFor(second);
+        cache.resultFor(third); // evicts `first`
+        assertFalse(cache.isAlreadySolved(first), "sanity: first must actually be evicted before reloading it");
+
+        cache.resultFor(first); // reload from the store, not a fresh solve
+
+        assertEquals(List.of(first, second, third), solvedRegions, "reloading an evicted region must never re-fire onRegionSolved");
+    }
+
+    /**
+     * The one regression test that matters most for this feature: an earlier
+     * SavedData-backed cache design (deleted) tracked "is this neighbor solved" via
+     * its own independent disk lookup, separate from the in-memory cache real
+     * generation used - so an evicted-but-solved neighbor could read as unsolved
+     * during a later region's boundary stitch, producing a different result than
+     * what had actually generated. Solve a region, force it out of memory, then
+     * solve its EAST neighbor - the west neighbor must still correctly constrain
+     * the stitch (not read as an open boundary), and must be rehydrated back into
+     * memory as a side effect, not silently re-solved from scratch.
+     */
+    @Test
+    void solvingAnAdjacentRegionRehydratesAnEvictedNeighborInsteadOfTreatingItAsUnsolved() {
+        BiomeGraph graph = smallGraph();
+        InMemoryPersistenceStore store = new InMemoryPersistenceStore();
+        SeedRegionCache cache = new SeedRegionCache(
+            graph, SMALL_GRID, 42L, (region, result, durationMillis) -> { },
+            MeshGeometryRealization::realize, store, 2
+        );
+        RegionPos west = new RegionPos(0, 0);
+        RegionPos filler1 = new RegionPos(50, 50);
+        RegionPos filler2 = new RegionPos(51, 50);
+        RegionPos east = new RegionPos(1, 0);
+
+        Map<MacroCellPos, BiomeId> westAssignment = cache.resultFor(west).assignment();
+        cache.resultFor(filler1);
+        cache.resultFor(filler2); // evicts `west` (cap=2, least recently touched)
+        assertFalse(cache.isAlreadySolved(west), "sanity: west must actually be evicted before solving east");
+
+        Map<MacroCellPos, BiomeId> eastAssignment = cache.resultFor(east).assignment();
+
+        assertTrue(cache.isAlreadySolved(west), "solving east must rehydrate its evicted west neighbor back into memory");
+        for (Map.Entry<MacroCellPos, BiomeId> entry : eastAssignment.entrySet()) {
+            for (MacroCellPos neighbor : entry.getKey().orthogonalNeighbors()) {
+                BiomeId neighborBiome = westAssignment.get(neighbor);
+                if (neighborBiome != null) {
+                    assertTrue(
+                        graph.isAllowed(entry.getValue(), neighborBiome),
+                        entry.getValue() + " at " + entry.getKey() + " (region east) not allowed next to " + neighborBiome + " at " + neighbor + " (region west, evicted then rehydrated)"
                     );
                 }
             }
