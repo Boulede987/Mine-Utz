@@ -9,11 +9,18 @@ import com.mineutze.worldgen.regionsolve.MeshGeometryRealization;
 import com.mineutze.worldgen.regionsolve.RegionPos;
 import com.mineutze.worldgen.regionsolve.TopologyFirstRegionSolver;
 
+import javax.imageio.ImageIO;
+import java.awt.Color;
+import java.awt.Font;
+import java.awt.FontMetrics;
+import java.awt.Graphics2D;
+import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Comparator;
+import java.util.List;
 
 /**
  * Same solve as {@link ExportCli}, but instead of writing the finished
@@ -56,6 +63,7 @@ public final class StepVisualizerCli {
         RegionPos minRegion = new RegionPos(-regionSpan / 2, -regionSpan / 2);
         BiomeLegend legend = new BiomeLegend(graph);
         writeLegend(outputDir, graph, legend);
+        writeLegendImage(outputDir, graph, legend);
 
         System.out.printf(
             "Visualizing %dx%d regions from %s (worldSeed=%d) into %s%n",
@@ -100,6 +108,48 @@ public final class StepVisualizerCli {
             Files.writeString(outputDir.resolve("legend.txt"), out);
         } catch (IOException e) {
             throw new UncheckedIOException("Failed writing legend.txt to " + outputDir, e);
+        }
+    }
+
+    /** Same data as {@link #writeLegend}, as an actual color swatch per biome — reading a hex code back into a color isn't something most people can do by eye. */
+    private static void writeLegendImage(Path outputDir, BiomeGraph graph, BiomeLegend legend) {
+        List<BiomeNode> nodes = graph.nodes().stream().sorted(Comparator.comparing(BiomeNode::id)).toList();
+
+        int swatchSize = 32;
+        int rowHeight = 44;
+        int padding = 14;
+        Font font = new Font(Font.SANS_SERIF, Font.PLAIN, 18);
+
+        BufferedImage measuring = new BufferedImage(1, 1, BufferedImage.TYPE_INT_RGB);
+        FontMetrics metrics = measuring.createGraphics().getFontMetrics(font);
+        int maxLabelWidth = nodes.stream().mapToInt(node -> metrics.stringWidth(node.id().toString())).max().orElse(0);
+
+        int width = padding * 3 + swatchSize + maxLabelWidth;
+        int height = padding * 2 + nodes.size() * rowHeight;
+
+        BufferedImage image = new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);
+        Graphics2D g = image.createGraphics();
+        g.setColor(Color.WHITE);
+        g.fillRect(0, 0, width, height);
+        g.setFont(font);
+
+        int y = padding;
+        for (BiomeNode node : nodes) {
+            BiomeId id = node.id();
+            g.setColor(new Color(legend.rgbOf(id)));
+            g.fillRect(padding, y, swatchSize, swatchSize);
+            g.setColor(Color.BLACK);
+            g.drawRect(padding, y, swatchSize, swatchSize);
+            g.drawString(id.toString(), padding * 2 + swatchSize, y + swatchSize - metrics.getDescent());
+            y += rowHeight;
+        }
+        g.dispose();
+
+        Path file = outputDir.resolve("legend.png");
+        try {
+            ImageIO.write(image, "png", file.toFile());
+        } catch (IOException e) {
+            throw new UncheckedIOException("Failed writing legend.png to " + file, e);
         }
     }
 }
