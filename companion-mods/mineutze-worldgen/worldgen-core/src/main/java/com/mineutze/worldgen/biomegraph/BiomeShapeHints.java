@@ -2,7 +2,7 @@ package com.mineutze.worldgen.biomegraph;
 
 /**
  * Terrain-shape parameters the Density Router selects per-column from the
- * resolved biome-id. See doc/ARCHITECTURE.md layer 3.
+ * resolved biome-id.
  */
 public record BiomeShapeHints(double roughness, double depthBias, double flatness) {
 

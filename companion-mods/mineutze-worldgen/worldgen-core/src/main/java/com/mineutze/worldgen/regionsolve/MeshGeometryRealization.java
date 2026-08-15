@@ -30,41 +30,25 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
- * The mesh-based replacement for {@link GeometryRealization}, same public
- * contract ({@code realize(SeedGraph, Map<Integer,BiomeId>, RegionSolveInput)
- * : Map<MacroCellPos,BiomeId>}) so {@link TopologyFirstRegionSolver}'s call
- * site is a one-line swap once this pipeline is reviewed and accepted — see
- * doc/fix_dieas.md and this rewrite's own design plan for why: a required
- * separator between two mutually-incompatible biomes reads as a
- * straight-edged corridor even after every pixel-grid cleanup pass
- * {@link GeometryRealization} runs, because tracing the full shared border
- * between two biomes is inherently elongated — geometry, not a bug any of
- * those passes could fix. Building a real triangulated mesh, merging
- * triangle faces into patches, and displacing the shared boundary with
- * noise doesn't make that border circular (still geometrically impossible
- * for something that must trace a long shared contact), but it stops it
- * reading as a ruler-straight "cheat."
+ * Builds region geometry as a real triangulated mesh, merges triangle faces
+ * into patches, and displaces shared boundaries with noise, so a required
+ * separator between two mutually-incompatible biomes doesn't read as a
+ * ruler-straight corridor — tracing the full shared border between two
+ * biomes is inherently elongated (geometry, not something displacement can
+ * fully undo), but the noise stops it reading as a "cheat."
  *
- * <p>{@link GeometryRealization} itself is untouched and stays in the
- * codebase as the rollback path, exactly like {@link RegionSolver} was kept
- * after the topology-first redesign. Live as of 2026-08-08: {@link
- * SeedRegionCache}'s default {@code geometryRealizer} calls this class, not
- * {@link GeometryRealization}, after seed-42 comparison review — pass
- * {@code GeometryRealization::realize} explicitly to
- * {@code SeedRegionCache}'s 5-arg constructor to roll back.
+ * <p>Live path: {@link SeedRegionCache}'s default {@code geometryRealizer}
+ * calls this class directly.
  *
  * <p>Six stages, each its own class under {@code regionsolve.mesh}:
  * {@link FineMeshPointScatter} (fine point scatter: fixed/CSP-colored germ
  * points, a boundary ring, uncolored filler) → {@link FineMesh} (Delaunay
  * triangulation + adjacency structures) → {@link PatchMerger} (area-based
- * priority growth, reusing the same legality/cohesion discipline
- * {@code GeometryRealization} itself uses) → {@link MeshGapFiller} (the
- * same 3-tier dead-end resolver {@link GapFiller} already proved, plus a
- * target-aware fill priority — see its own doc) →
- * {@link MeshPatchSizeEnforcer} (absorbs any component that's still under
- * its biome's own declared minimum size — a real, pre-existing gap on
- * BOTH pipelines, found via user review, not something the mesh rewrite
- * introduced) → {@link EdgeDisplacement} (the actual visual payoff) →
+ * priority growth, reusing {@link GrowthEngine}'s legality/cohesion checks) →
+ * {@link MeshGapFiller} (3-tier dead-end resolver, plus a target-aware fill
+ * priority — see its own doc) → {@link MeshPatchSizeEnforcer} (absorbs any
+ * component that's still under its biome's own declared minimum size) →
+ * {@link EdgeDisplacement} (the actual visual payoff) →
  * {@link MeshRasterizer} (back to {@code Map<MacroCellPos,BiomeId>}) →
  * {@link #repairRasterizationArtifacts} (see its own doc — real gaps found
  * via the seed-42 comparison this rewrite's plan calls for, not anticipated
@@ -86,19 +70,14 @@ import java.util.stream.Collectors;
  *   macro-cell spatially stranded from every other cell of its own
  *   patch — nearest-centroid point-sampling doesn't guarantee
  *   mesh-adjacency implies PIXEL-adjacency in the output, especially
- *   near a patch's own turns/corners. A true single-pixel outlier, the
- *   discretization analog of the pixel pipeline's own spurs/tendrils
- *   ({@code PatchOpener}/{@code PinchResolver} exist for exactly this
- *   reason on that side).
+ *   near a patch's own turns/corners. A true single-pixel outlier.
  * </ul>
  */
 public final class MeshGeometryRealization {
 
-    // Sanity cap on repair passes, same role as PatchOpener/PinchResolver's own
-    // fixed-point loop caps in the pixel pipeline - bounds the search, not a
-    // correctness mechanism. A cell left illegal after this many passes is logged
-    // and accepted, same "small residual, log it" precedent GapFiller's own force
-    // tier already established (0-58/9216 cells historically, never silently hidden).
+    // Sanity cap on repair passes - bounds the search, not a correctness mechanism.
+    // A cell left illegal after this many passes is logged and accepted rather than
+    // forced (0-58/9216 cells historically, never silently hidden).
     private static final int MAX_PIXEL_REPAIR_PASSES = 20;
 
     private MeshGeometryRealization() {
@@ -131,12 +110,11 @@ public final class MeshGeometryRealization {
      * wide (192 blocks) component against a declared 300-block minimum
      * width (~22-cell minimum) — legal-adjacency-wise fine, but genuinely
      * undersized by the same standard {@link MeshPatchSizeEnforcer} already
-     * enforces at the mesh level. Reuses the pixel pipeline's own {@link
-     * PatchSizeEnforcer} (already proven live in {@link GeometryRealization})
-     * rather than re-deriving the same merge-or-widen logic a third time;
-     * same fixed-boundary-context assembly {@link GeometryRealization#realize}
-     * itself uses, since a component's true bordering neighbors can include
-     * already-solved territory outside this region.
+     * enforces at the mesh level. Reuses the pixel-level {@link
+     * PatchSizeEnforcer} rather than re-deriving the same merge-or-widen
+     * logic a second time; assembles the same fixed-boundary context as
+     * every other pixel-level pass here, since a component's true bordering
+     * neighbors can include already-solved territory outside this region.
      */
     private static Map<MacroCellPos, BiomeId> enforceFinalPixelPatchSize(Map<MacroCellPos, BiomeId> repaired, RegionSolveInput input) {
         Set<MacroCellPos> regionCells = Set.copyOf(input.gridConfig().cellsInRegion(input.region(), input.worldSeed()));
@@ -177,9 +155,8 @@ public final class MeshGeometryRealization {
      * A cell that's either illegal against an orthogonal/diagonal neighbor,
      * OR a single-pixel island (its own 4-connected same-biome component has
      * size 1), gets reassigned to whichever biome IS legal against every
-     * current neighbor and has the most matching neighbors among those —
-     * same tie-break {@code GapFiller.bestLegalChoice} already uses. For an
-     * isolated cell this naturally picks the surrounding majority biome
+     * current neighbor and has the most matching neighbors among those. For
+     * an isolated cell this naturally picks the surrounding majority biome
      * (already legal there by definition, since same-biome-adjacent is
      * always legal). Iterates to a fixed point (a repair can itself create
      * or expose a new violation nearby), capped at

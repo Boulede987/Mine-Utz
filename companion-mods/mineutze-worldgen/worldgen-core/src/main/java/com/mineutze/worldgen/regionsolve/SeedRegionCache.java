@@ -8,8 +8,8 @@ import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * In-memory, seed-only region cache. Density function evaluation only gets
- * block coordinates (doc/ARCHITECTURE.md layer 3) — no ServerLevel, so no
- * SavedData access is possible there. Region solving is a pure function of
+ * block coordinates — no ServerLevel, so no SavedData access is possible
+ * there. Region solving is a pure function of
  * (worldSeed, region), same as all of vanilla's noise-based generation, so
  * an in-memory cache is all correctness requires; SavedData persistence
  * (used by the mod's debug command) is purely a performance/restart-cache
@@ -64,13 +64,11 @@ public final class SeedRegionCache {
      * @param geometryRealizer defaults to {@link MeshGeometryRealization#realize} —
      *                         the mesh-based geometry stage, live as of
      *                         2026-08-08 after extensive seed-42 comparison
-     *                         review against the pixel-grid {@link
-     *                         GeometryRealization} it replaces (see
-     *                         doc/ARCHITECTURE.md and doc/KNOWN_ISSUES.md
-     *                         item #6). {@link GeometryRealization} stays
-     *                         in the codebase as the rollback path — pass
-     *                         {@code GeometryRealization::realize} here
-     *                         explicitly to revert to it.
+     *                         review against the pixel-grid predecessor it
+     *                         replaced. Pluggable purely so the export CLI's
+     *                         own standalone comparison runs can swap it out
+     *                         without touching this constructor's live call
+     *                         sites.
      */
     public SeedRegionCache(BiomeGraph graph, MacroGridConfig gridConfig, long worldSeed, RegionSolveListener onRegionSolved, TopologyFirstRegionSolver.GeometryRealizer geometryRealizer) {
         this.graph = graph;

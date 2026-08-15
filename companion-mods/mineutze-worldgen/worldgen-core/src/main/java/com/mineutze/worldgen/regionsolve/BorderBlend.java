@@ -9,9 +9,9 @@ import java.util.function.ToDoubleFunction;
 /**
  * Smoothly blends a per-biome scalar value near macro-cell borders, using
  * each specific adjacent pair's own {@code AdjacencyRule.blendWidthBlocks}
- * (doc/ARCHITECTURE.md: "mountains-plains gets a wide blend... desert-
- * savanna can be narrow" — a property of the relation, not a global
- * constant). Bilinear across the up to 4 cells touching a point (center,
+ * (e.g. mountains-plains gets a wide blend, desert-savanna can be narrow —
+ * a property of the relation, not a global constant). Bilinear across the
+ * up to 4 cells touching a point (center,
  * horizontal neighbor, vertical neighbor, diagonal) so corners blend too,
  * not just straight edges.
  *

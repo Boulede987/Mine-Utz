@@ -8,8 +8,8 @@ import java.util.Map;
 import java.util.function.Function;
 
 /**
- * Shared "never force-solve a neighbor" boundary logic (doc/ARCHITECTURE.md
- * "never force-solve a neighbor") — storage-agnostic, so both the in-memory
+ * Shared "never force-solve a neighbor" boundary logic — storage-agnostic,
+ * so both the in-memory
  * {@link SeedRegionCache} (used during density evaluation, no ServerLevel
  * available) and the mod's SavedData-backed cache (used by the debug
  * command) can share it instead of duplicating the neighbor-scan.

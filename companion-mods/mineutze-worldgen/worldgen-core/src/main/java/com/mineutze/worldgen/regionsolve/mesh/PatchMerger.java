@@ -23,10 +23,10 @@ import java.util.Set;
 import java.util.TreeSet;
 
 /**
- * Mesh analog of {@code GeometryRealization}'s priority-interleaved
- * flood-fill, atomic unit = triangle face instead of macro-cell, sizing
- * target = cumulative area instead of cell count (see {@link MeshAreas}'s
- * doc for why no unit conversion is needed between the two).
+ * Priority-interleaved flood-fill over the mesh: atomic unit = triangle
+ * face instead of macro-cell, sizing target = cumulative area instead of
+ * cell count (see {@link MeshAreas}'s doc for why no unit conversion is
+ * needed between the two).
  *
  * <p>Every {@link SeedGraphNode} — fixed boundary context and CSP-assigned
  * free seeds alike — has a matching pre-colored germ vertex in the mesh
@@ -39,11 +39,10 @@ import java.util.TreeSet;
  * other or {@link MeshDiagonalPairs} partners of each other, and
  * {@link MeshLegality} checks both. A free germ instead nominates one
  * incident face as its patch's starting point (first legal, unclaimed
- * candidate touching it — mirrors {@code GeometryRealization.seedPatches}'
- * exact "skip if unusable, GapFiller reclaims it" fallback) and grows from
- * there via the same interleaved-by-furthest-below-target discipline
- * {@code GeometryRealization} already uses, reusing {@link MeshLegality}
- * and {@link MeshCohesion} at every claim instead of inventing new checks.
+ * candidate touching it — {@link MeshGapFiller} reclaims it if none is
+ * found) and grows from there via an interleaved-by-furthest-below-target
+ * discipline, reusing {@link MeshLegality} and {@link MeshCohesion} at
+ * every claim instead of inventing new checks.
  */
 public final class PatchMerger {
 

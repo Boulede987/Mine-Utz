@@ -2,8 +2,7 @@ package com.mineutze.worldgen.biomegraph;
 
 /**
  * One adjacency relation between two distinct biomes. Absence of a rule for
- * a pair means forbidden by default (whitelist model — see
- * doc/ARCHITECTURE.md layer 1).
+ * a pair means forbidden by default (whitelist model).
  */
 public record AdjacencyRule(
     BiomeId biomeA,

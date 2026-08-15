@@ -49,11 +49,11 @@ bug (wrong biome assigned), not just a cosmetic seam.
 
 ### 3. Cross-region solve is order-dependent, and spawn sits on the worst point for it
 `fixedBoundaryCells` feeds directly into every legality check
-(`GrowthEngine.isLegal`, `GapFiller`, `PatchSizeEnforcer`,
-`SeparatorOrganicizer`), so whichever of a region's neighbors solves *first*
-is unconstrained, and the rest stitch against it — solve order changes the
-result. Not fixable in general (infinite lazy world, see
-doc/ARCHITECTURE.md's "never force-solve a neighbor"), but worth documenting
+(`GrowthEngine.isLegal`, `MeshGapFiller`, `PatchSizeEnforcer`), so whichever
+of a region's neighbors solves *first* is unconstrained, and the rest
+stitch against it — solve order changes the result. Not fixable in general
+(infinite lazy world — "never force-solve a neighbor" is load-bearing),
+but worth documenting
 because world origin (0,0) sits exactly on a region-grid corner (regions are
 2048 blocks, aligned to multiples of 2048) — spawn is the meeting point of
 4 regions, the single worst-case spot for this. The standalone export CLI
@@ -124,10 +124,10 @@ that's inherently elongated by construction — this needed a different
 geometry substrate, not another cleanup pass.
 
 **Fixed, live as of 2026-08-08**: `MeshGeometryRealization` (branch
-`worldgen/mesh-geometry-realization`) replaces `GeometryRealization`'s
-pixel-grid growth with a real triangulated mesh (merge, then displace the
-shared boundary with noise) — see `doc/ARCHITECTURE.md`'s own section on it
-for the full pipeline. `SeedRegionCache`'s default `geometryRealizer` now
+`worldgen/mesh-geometry-realization`) replaces the old pixel-grid growth
+realizer with a real triangulated mesh (merge, then displace the shared
+boundary with noise) — see that class's own doc for the full pipeline.
+`SeedRegionCache`'s default `geometryRealizer` now
 calls it, so this is live for real world generation, not just the export
 CLI. Confirmed via user review on the seed-42 reference export: the mesh
 pipeline eliminates the single-biome-wide "border" read entirely.

@@ -31,8 +31,8 @@ import java.util.stream.Collectors;
  * can only ever see whatever neighbors had ALREADY solved by the time ITS
  * OWN region solved, so it structurally cannot catch a violation against a
  * neighbor that hadn't solved yet (a real, order-dependent gap, inherent to
- * "regions solve once, commit forever, never get force-solved" — see
- * doc/ARCHITECTURE.md). Measured directly on a 5x5 export: that region-
+ * "regions solve once, commit forever, never get force-solved"). Measured
+ * directly on a 5x5 export: that region-
  * scoped version left 12 of 12 stray small fragments untouched and reduced
  * illegal adjacencies without addressing the actual defect rate — not
  * worth the added complexity on the live path for that little payoff.
@@ -50,11 +50,9 @@ import java.util.stream.Collectors;
  */
 public final class PixelFragmentRepair {
 
-    // Sanity cap on repair passes, same role as PatchOpener/PinchResolver's own
-    // fixed-point loop caps in the pixel pipeline - bounds the search, not a
-    // correctness mechanism. A cell left illegal after this many passes is logged
-    // and accepted, same "small residual, log it" precedent GapFiller's own force
-    // tier already established (0-58/9216 cells historically, never silently hidden).
+    // Sanity cap on repair passes - bounds the search, not a correctness mechanism.
+    // A cell left illegal after this many passes is logged and accepted rather than
+    // forced (0-58/9216 cells historically, never silently hidden).
     private static final int MAX_REPAIR_PASSES = 20;
 
     // Small enough that merging a whole fragment into its majority neighbor is never
@@ -70,10 +68,9 @@ public final class PixelFragmentRepair {
      * A cell that's either illegal against an orthogonal/diagonal neighbor, or
      * part of a same-biome component at or under {@link #SMALL_FRAGMENT_MAX_SIZE}
      * cells, gets reassigned to whichever biome IS legal against every current
-     * neighbor and has the most matching neighbors among those — same tie-break
-     * {@code GapFiller.bestLegalChoice} already uses. Iterates to a fixed point
-     * (a repair can itself create or expose a new violation nearby), capped at
-     * {@link #MAX_REPAIR_PASSES}.
+     * neighbor and has the most matching neighbors among those. Iterates to a
+     * fixed point (a repair can itself create or expose a new violation nearby),
+     * capped at {@link #MAX_REPAIR_PASSES}.
      *
      * <p>Scoped narrowly on purpose: only ever reassigns a cell that's already
      * illegal, or part of a too-small component, using the graph's own real

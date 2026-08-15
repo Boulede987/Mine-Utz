@@ -28,7 +28,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * Deliberately exaggerated for now: the +-0.05 version was too subtle to
  * confirm visually against vanilla's own continentalness/erosion noise,
  * which still independently shapes terrain everywhere right now (full
- * biome-driven shape is later doc/ARCHITECTURE.md layer 3 work). This
+ * biome-driven shape is later Density Router work). This
  * amplitude is a "prove the wiring, make it unmistakable" value, not a
  * tuned one — dial it back down once confirmed.
  *

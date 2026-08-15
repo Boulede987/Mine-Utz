@@ -4,10 +4,10 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * The macro-cell/solve-region grid the constraint solver operates on. See
- * doc/ARCHITECTURE.md "Decided" — 64-block (4x4 chunk) cells are a
- * placeholder tuned from live testing (128-block cells read as far too
- * coarse in-game), not derived here. Region is 32x32 cells (2048 blocks):
+ * The macro-cell/solve-region grid the constraint solver operates on.
+ * 64-block (4x4 chunk) cells are a placeholder tuned from live testing
+ * (128-block cells read as far too coarse in-game), not derived here.
+ * Region is 32x32 cells (2048 blocks):
  * at 16x16 (1024 blocks), a single max-size biome patch (desert's 1000
  * block width needs 244 of a region's cells) could eat 95% of a region,
  * leaving nothing but the region's own square boundary to shape it —

@@ -20,12 +20,13 @@ import java.util.Set;
  * of its own biome's declared minimum (see {@code BiomeSizeRange}) into
  * whichever legal neighboring identity borders it most — a genuinely
  * undersized patch shouldn't stand in as a real instance of that biome, the
- * same principle the pixel pipeline's (unused, rollback-only)
- * {@code PatchSizeEnforcer} was built for. Neither the live pixel path
- * ({@code GeometryRealization}) nor this mesh pipeline enforced this before
- * — a real, pre-existing gap, not something the mesh rewrite introduced;
- * user feedback on the seed-42 comparison ("patches that seem illegally
- * small... like only 5 cells") is what surfaced it.
+ * same principle the pixel-level {@code PatchSizeEnforcer} was built for
+ * (still live today — {@code MeshGeometryRealization} calls it directly as
+ * a post-rasterization safety net, since this class only sees MESH-face
+ * area, before displacement/rasterization/repair can shrink a component).
+ * This mesh-level check didn't exist before the mesh rewrite — a real,
+ * pre-existing gap; user feedback on the seed-42 comparison ("patches that
+ * seem illegally small... like only 5 cells") is what surfaced it.
  *
  * <p>Runs once, right after {@link MeshGapFiller} and before {@link
  * EdgeDisplacement} — after fill so every face is already assigned (a
@@ -36,9 +37,8 @@ import java.util.Set;
  */
 public final class MeshPatchSizeEnforcer {
 
-    // Sanity cap on merge passes, same fixed-point-loop-cap role as every other pass
-    // in this pipeline (PatchOpener/PinchResolver on the pixel side, the repair passes
-    // on this one) - merging one undersized patch can itself leave a neighbor
+    // Sanity cap on merge passes, same fixed-point-loop-cap role as this pipeline's
+    // other repair passes - merging one undersized patch can itself leave a neighbor
     // undersized (rare, but a small patch stealing area could shrink another below its
     // own minimum), so this needs to iterate to a real fixed point, not just run once.
     private static final int MAX_PASSES = 20;

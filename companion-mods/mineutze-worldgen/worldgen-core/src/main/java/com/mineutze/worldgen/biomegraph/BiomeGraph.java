@@ -9,7 +9,6 @@ import java.util.Map;
 
 /**
  * Static config: biome families (nodes) and their adjacency rules (edges).
- * See doc/ARCHITECTURE.md layer 1.
  *
  * Validated eagerly at construction (fail loud on a bad config, not lazily
  * during world gen): every rule must reference known nodes, no duplicate
@@ -22,11 +21,11 @@ import java.util.Map;
  * permanently unrestrictable — every other biome could get real adjacency
  * rules, plains couldn't. Every biome, including plains, can now be
  * restricted like any other. The termination guarantee it used to provide
- * moves to {@link com.mineutze.worldgen.regionsolve.GapFiller}: a cell that
- * genuinely has no legal biome given its neighbors is a graph
- * misconfiguration (e.g. three mutually-incompatible biomes meeting at a
- * point with nothing compatible with all three) and fails loud there,
- * rather than this class silently guaranteeing one can never happen.
+ * moves to {@code MeshGapFiller}: a cell that genuinely has no legal biome
+ * given its neighbors is a graph misconfiguration (e.g. three mutually-
+ * incompatible biomes meeting at a point with nothing compatible with all
+ * three) and fails loud there, rather than this class silently guaranteeing
+ * one can never happen.
  */
 public final class BiomeGraph {
 
@@ -34,8 +33,8 @@ public final class BiomeGraph {
     private final Map<UnorderedBiomePair, AdjacencyRule> rulesByPair;
 
     // A cell touching two biomes with no direct rule between them can only be resolved
-    // by GapFiller.makeLegalHere reassigning a chain of neighbors, capped at
-    // GapFiller.MAX_REASSIGN_DEPTH (2) - which, worked through by hand, can bridge two
+    // by MeshGapFiller reassigning a chain of neighbors, capped at its own
+    // MAX_REASSIGN_DEPTH (2) - which, worked through by hand, can bridge two
     // biomes at most MAX_BRIDGE_HOPS edges apart in this allow-graph (A-X-Y-B: edge
     // A-X to start the chain, edge X-Y to extend it one hop further, edge Y-B for the
     // final link to actually become legal). Duplicated here rather than referenced
@@ -87,21 +86,21 @@ public final class BiomeGraph {
     /**
      * Global connectivity (every node reachable from every other) is necessary but not
      * sufficient - two biomes can be technically connected through a long detour and
-     * still be impossible for {@code GapFiller} to actually bridge at a real point of
-     * contact, because its neighbor-reassignment search is bounded (see {@link
+     * still be impossible for {@code MeshGapFiller} to actually bridge at a real point
+     * of contact, because its neighbor-reassignment search is bounded (see {@link
      * #MAX_BRIDGE_HOPS}'s doc). Catches that at graph-construction time instead of a
      * runtime crash mid-world-gen: for every pair of biomes with no direct rule,
      * requires a path of at most {@link #MAX_BRIDGE_HOPS} edges through other allowed
      * pairs.
      *
-     * This is necessary, not sufficient, for {@code GapFiller} to always resolve a
+     * This is necessary, not sufficient, for {@code MeshGapFiller} to always resolve a
      * dead end - it only rules out the "impossible in principle" case (the graph
      * itself is too sparse). It says nothing about whether enough LOCAL donor
      * capacity (nearby patches large enough to spare a cell without dropping below
      * their own minimum size) exists at any specific point two such biomes actually
      * meet - that depends on runtime placement and patch sizes, not the graph alone,
-     * and is exactly what {@code GapFiller}'s own patch-drop retry exists to absorb
-     * when it happens (see doc/KNOWN_ISSUES.md).
+     * and is exactly what {@code MeshGapFiller}'s own patch-drop retry exists to
+     * absorb when it happens (see doc/KNOWN_ISSUES.md).
      */
     private void requireEveryPairBridgeableWithinReassignBudget() {
         List<BiomeId> ids = nodesById.keySet().stream().sorted().toList();

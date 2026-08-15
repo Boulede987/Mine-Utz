@@ -1,8 +1,7 @@
 package com.mineutze.worldgen.biomegraph;
 
 /**
- * Per-biome overrides for vanilla worldgen features. See doc/ARCHITECTURE.md
- * layer 4 (Feature Gate).
+ * Per-biome overrides for vanilla worldgen features (Feature Gate layer).
  */
 public record BiomeFeatureToggles(boolean riversEnabled, boolean lakesEnabled) {
 }

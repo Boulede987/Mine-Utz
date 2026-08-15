@@ -17,11 +17,11 @@ import java.util.Map;
  * bounds/config independently.
  *
  * Deliberately just a flat cell map, not solver-specific — {@link
- * RegionGridSolver} builds one from {@code RegionSolver}, but the exporters
- * themselves have no idea (or need to know) whether a cell's biome came
- * from solving or from reading a real generated world, which is exactly
- * what lets the same three writer classes serve both the standalone CLI and
- * the in-game "export what actually generated" command.
+ * RegionGridSolver} builds one by driving {@code SeedRegionCache}, but the
+ * exporters themselves have no idea (or need to know) whether a cell's
+ * biome came from solving or from reading a real generated world, which is
+ * exactly what lets the same three writer classes serve both the
+ * standalone CLI and the in-game "export what actually generated" command.
  *
  * @param warningsByRegion solver diagnostics, empty for any region with
  *                          none to report (e.g. every region, always, for a

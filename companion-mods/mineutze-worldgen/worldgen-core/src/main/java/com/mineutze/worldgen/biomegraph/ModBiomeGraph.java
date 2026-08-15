@@ -4,10 +4,10 @@ import java.util.List;
 
 /**
  * First real BiomeGraph, matching DESIGN.md's worked example. Shape hints
- * are inert until the Density Router (doc/ARCHITECTURE.md layer 3) exists —
- * placeholder values, not yet consumed by anything. Everything here
- * (widths, blend width) is a placeholder to tune from logged solve output,
- * same as the grid constants in doc/ARCHITECTURE.md.
+ * are inert until the Density Router exists — placeholder values, not yet
+ * consumed by anything. Everything here (widths, blend width) is a
+ * placeholder to tune from logged solve output, same as the grid constants
+ * in {@link com.mineutze.worldgen.regionsolve.MacroGridConfig}.
  *
  * Lives in worldgen-core (not the mod module) despite the "Mod" name —
  * {@link BiomeId} is deliberately not Minecraft's ResourceLocation, so this
@@ -62,8 +62,8 @@ public final class ModBiomeGraph {
             // filler, it's a normal biome with real restrictions like everything else.
             // Badlands' only legal neighbors now: desert, and itself. Narrower than any
             // other node in this graph on purpose (a "harsh, isolated" identity) - but
-            // worth knowing this makes GapFiller.resolveRemaining's fail-loud path much
-            // easier to hit for badlands specifically than for anything else here.
+            // worth knowing this makes MeshGapFiller.resolveRemaining's fail-loud path
+            // much easier to hit for badlands specifically than for anything else here.
             AdjacencyRule.allow(PLAINS, OCEAN, DEFAULT_BLEND_WIDTH_BLOCKS),
             AdjacencyRule.allow(PLAINS, FOREST, DEFAULT_BLEND_WIDTH_BLOCKS)
         )
