@@ -55,13 +55,44 @@ import java.util.Set;
  * actually fine once its neighbor-side portion was counted — confirmed live
  * (not export-only), fixed by widening what {@code ConnectedComponents}
  * measures without widening what this class writes to.
+ *
+ * <p>Loops to a fixed point ({@link #MAX_PASSES} sanity cap) rather than a
+ * single pass — merging one undersized component into a neighbor can itself
+ * leave a FRESH undersized, disconnected remnant behind (e.g. two small
+ * components of different biomes both merge into the same third biome on
+ * the same pass; the result isn't necessarily one connected patch). A
+ * single pass never re-examines what its own merges just produced.
+ * Confirmed live (not export-only, not a synthetic case): the step-by-step
+ * visualizer's per-region output — the same result {@code SeedRegionCache}
+ * actually serves, queried directly and confirmed by that exact class, not
+ * inferred — showed a 5-cell savanna component stranded under savanna's own
+ * 61-cell minimum. It read as fine in every export CLI run only because
+ * {@code RegionGridSolver}'s own whole-swath cleanup happened to run this
+ * same merge logic a second time afterward — coincidental double coverage
+ * for an intra-region defect that needed no cross-region context to fix,
+ * not evidence the live path was actually clean.
  */
 public final class PatchSizeEnforcer {
+
+    // Sanity cap on merge/widen passes, same fixed-point-loop-cap role as this
+    // pipeline's other repair passes - bounds the search, not a correctness
+    // mechanism.
+    private static final int MAX_PASSES = 20;
 
     private PatchSizeEnforcer() {
     }
 
     public static void enforceMinimumPatchSize(
+        Map<MacroCellPos, BiomeId> assignment, Set<MacroCellPos> regionCellSet, MacroGridConfig grid, BiomeGraph graph
+    ) {
+        for (int pass = 0; pass < MAX_PASSES; pass++) {
+            if (!absorbUndersizedComponentsOnce(assignment, regionCellSet, grid, graph)) {
+                return;
+            }
+        }
+    }
+
+    private static boolean absorbUndersizedComponentsOnce(
         Map<MacroCellPos, BiomeId> assignment, Set<MacroCellPos> regionCellSet, MacroGridConfig grid, BiomeGraph graph
     ) {
         List<Set<MacroCellPos>> components = ConnectedComponents.find(assignment, regionCellSet);
@@ -70,6 +101,7 @@ public final class PatchSizeEnforcer {
             component.forEach(cell -> patchSizeByCell.put(cell, component.size()));
         }
 
+        boolean changedAny = false;
         for (Set<MacroCellPos> component : components) {
             BiomeId biome = assignment.get(component.iterator().next());
             BiomeNode node = graph.node(biome);
@@ -84,7 +116,9 @@ public final class PatchSizeEnforcer {
             } else {
                 SeparatorWidener.widen(component, biome, minCells, assignment, regionCellSet, graph, Set.of());
             }
+            changedAny = true;
         }
+        return changedAny;
     }
 
     /** Largest (by existing patch size) neighboring biome that stays legal across every cell in the component if adopted. */

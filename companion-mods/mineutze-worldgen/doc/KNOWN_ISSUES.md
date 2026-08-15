@@ -118,6 +118,45 @@ elsewhere in this pipeline. Verified via a new test
 and a 5x5 export: 0 illegal adjacencies, no regression in fragment/pinch
 counts.
 
+### 7. `PatchSizeEnforcer` ran only a single pass, so its own merge could leave a fresh undersized orphan unexamined — masked by export tooling's coincidental double coverage
+Found 2026-08-15 via the step-by-step mesh-pipeline visualizer, which
+renders `MeshGeometryRealization`'s actual per-region output directly — the
+same result `SeedRegionCache` serves, not something export tooling has
+touched yet. A 5-cell savanna component showed up stranded well under
+savanna's own 61-cell minimum in that raw per-region render, but the same
+region's regular `ExportCli` export showed it correctly merged into plains.
+
+Confirmed directly (not inferred) that the raw, un-cleaned-up render was
+the one telling the truth: queried `SeedRegionCache.biomeAt` — the exact
+method `ModOverworldBiomeSource` calls for real world generation — for the
+same cells, and it agreed with the visualizer (savanna), not the export
+(plains). Root cause: `enforceMinimumPatchSize` ran its merge/widen sweep
+exactly once. A merge decision (something else absorbed into savanna) can
+itself leave behind a fresh, disconnected, undersized savanna remnant that
+the same pass never re-examines, since `ConnectedComponents` was only
+recomputed once at the top of the call. `RegionGridSolver`'s whole-swath
+export cleanup happened to run this exact same merge logic a SECOND time
+afterward, for an unrelated reason (catching genuinely cross-region-context
+defects), and that coincidentally fixed this one too — but only in export
+output. The live path (`SeedRegionCache`, real world generation) only ever
+gets one pass through `MeshGeometryRealization.enforceFinalPixelPatchSize`
+and never got the export layer's second look, so it shipped the orphan.
+
+Unlike #1/#2/#3 above, this one needed no cross-region context to fix — the
+whole defect was self-contained within one region, so keeping the fix
+export-only (the right call for genuinely cross-region-dependent defects)
+was never justified here; it was simply missing the same "loop to a fixed
+point" discipline every other repair pass in this pipeline already has.
+
+**Fixed**: `enforceMinimumPatchSize` now loops (`MAX_PASSES=20`, same
+sanity-cap pattern as `MeshPatchSizeEnforcer`/`PixelFragmentRepair`) until a
+full pass makes no further merges/widens, recomputing `ConnectedComponents`
+fresh each pass so a merge-created remnant gets caught on the very next
+pass instead of surviving unexamined. Verified by re-querying
+`SeedRegionCache.biomeAt` directly post-fix (now agrees with the polished
+export, both give plains) and a 5x5 export (0 illegal adjacencies, no
+regression).
+
 ### 1. Hard straight-line seam at every region boundary
 Patches stop dead at the 2048-block region edge instead of curving across
 it — legal, but visually a straight cut wherever a patch happened to reach
