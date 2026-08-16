@@ -77,6 +77,49 @@ control becomes a design goal.
 
 ## Fixed
 
+### 10. `SeparatorWidener.widen` could peg a core for 20+ minutes widening a single separator at `macroCellSizeBlocks=4` scale
+Found chasing a real hang: a 3-region-span export never finished — jstack showed it
+stuck inside `SeparatorWidener.stealingPreservesDonorConnectivity`'s flood-fill,
+`cpu≈elapsed` (genuinely burning CPU, not deadlocked). Two stacked causes, both real:
+
+1. **`MacroCellPos`'s default record `hashCode`** (`31*x+z`-shaped) spans only a few
+   tens of thousands of distinct values — fine for the old ~1k-cell regions, but a
+   262k+-entry `HashMap`/`LinkedHashMap` keyed on it at the real region scale collides
+   on nearly every bucket and treeifies almost everywhere, turning every `get()` into a
+   red-black-tree lookup instead of O(1) (`HashMap$TreeNode.find` was the hottest
+   frame). This refines #9 below, not contradicts it — #9's "verified
+   plain/unremarkable" check was a `HashSet` build/iterate benchmark, which doesn't
+   surface bucket-collision cost the way millions of repeated `get()` calls into one
+   long-lived map does. Fixed with a golden-ratio multiply-xor `hashCode` override
+   (`x * 0x9E3779B1 ^ z`) that spreads across the full 32-bit range.
+2. **The bigger one**: `stealingPreservesDonorConnectivity` flood-fills the *entire*
+   remaining donor patch before checking whether the candidate cell's neighbors were
+   all reached, even once the answer was already decided. At the old scale a donor
+   patch topped out around ~1k cells, so this was never worth noticing; at the real
+   scale a donor patch can be ~200k+ cells (biome patches are legitimately meant to be
+   near-region-scale — `BiomeSizeRange` is block-width-based, converted via
+   `cellCountForWidthBlocks`, so a biome's minimum size in *cells* now scales with the
+   *square* of the cell-size ratio: badlands' old ~61-cell minimum at 64-block cells is
+   ~15,625 cells at 4-block cells). A single `widen()` call stealing thousands of cells
+   one at a time out of one dominant donor paid the full flood-fill cost on every
+   single steal. Fixed by exiting the flood-fill the instant every target neighbor has
+   been reached, rather than exhaustively exploring the rest of the (possibly huge)
+   patch first — an ordinary edge-of-patch steal is reachable again within a handful of
+   steps going around the removed cell, so this turns the common case from O(donor
+   size) into O(local neighborhood); only a genuine near-cut-vertex still pays close to
+   the full cost, which is correct, since that's exactly the case this check exists to
+   get right. (A first attempt replaced the whole method with a cached-articulation-
+   point/Tarjan's-algorithm rewrite — technically sound and test-passing, but it only
+   moved the cost to "one full recompute per accepted steal" instead of "one per
+   candidate," which didn't fix the actual pathological case above where *most*
+   candidates get accepted, not rejected. Reverted in favor of the simpler, more
+   surgical early-exit fix, which attacks the real mechanism directly.)
+
+Verified: full `worldgen-core` test suite green (including `SeparatorWidenerTest`,
+unchanged, still the correctness oracle for `stealingPreservesDonorConnectivity`) after
+each change. A 3x3-region export that previously hung 20+ minutes on a single region's
+whole-swath cleanup pass now completes all 9 regions plus cleanup in **4m49s** total.
+
 ### 8. `SeedRegionCache` had no eviction — unbounded memory growth at `macroCellSizeBlocks=4`
 2026-08-15: `MacroGridConfig.DEFAULT` moved from 64-block cells (1,024 cells/region) to
 vanilla's own 4-block quart resolution (262,144 cells/region, `regionSizeCellsPerSide`

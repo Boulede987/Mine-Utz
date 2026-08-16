@@ -167,6 +167,22 @@ final class SeparatorWidener {
      * of the patch. Checked by flood-filling from one such neighbor, through
      * donor-biome cells only, without ever stepping on {@code cell} itself,
      * and confirming that reaches every other same-biome neighbor too.
+     *
+     * <p>Exits the flood-fill the moment every {@code donorNeighbors} cell has
+     * been reached, rather than exhaustively exploring the rest of the (possibly
+     * enormous) donor patch first — at production region scale a donor patch can
+     * be hundreds of thousands of cells, and {@code widen} calls this once per
+     * candidate steal, so an ordinary edge-of-patch steal (reachable again within
+     * a handful of steps, going around the removed cell) must not pay for
+     * flooding the whole remaining patch just to confirm what's already known.
+     * Confirmed via jstack: without this, a single {@code widen} call stealing
+     * thousands of cells one at a time out of one dominant donor (an undersized
+     * patch whose real minimum, in cells, is now huge post cell-size-4 - see
+     * {@code MacroGridConfig#cellCountForWidthBlocks}) pegged one core for 20+
+     * minutes. Only a genuine near-cut-vertex - where reaching the other
+     * neighbors really does require searching most of the patch - still pays
+     * close to the full cost, which is correct: that's exactly the case this
+     * check exists to get right.
      */
     static boolean stealingPreservesDonorConnectivity(MacroCellPos cell, Map<MacroCellPos, BiomeId> assignment, Set<MacroCellPos> regionCellSet, Set<MacroCellPos> claimed) {
         BiomeId donorBiome = assignment.get(cell);
@@ -185,6 +201,9 @@ final class SeparatorWidener {
         Deque<MacroCellPos> stack = new ArrayDeque<>(List.of(donorNeighbors.get(0)));
         reached.add(donorNeighbors.get(0));
         while (!stack.isEmpty()) {
+            if (reached.containsAll(donorNeighbors)) {
+                return true;
+            }
             MacroCellPos current = stack.pop();
             for (MacroCellPos neighbor : current.orthogonalNeighbors()) {
                 if (regionCellSet.contains(neighbor) && !neighbor.equals(cell) && !claimed.contains(neighbor)
