@@ -80,10 +80,14 @@ import java.util.stream.Collectors;
  * still far below its own target and the dominant one was already near or
  * past its own. Each biome now gets its OWN frontier queue; every claim
  * step picks whichever biome (with a non-empty frontier) has the largest
- * remaining gap to its own aggregate target area, then claims its single
- * best (distance+jitter) candidate — the exact same "furthest below target
- * goes first" discipline {@link PatchMerger#merge} already uses one
- * layer up, just extended into gap-fill instead of stopping at growth.
+ * remaining gap to its own aggregate target area, PROPORTIONAL to that
+ * target rather than an absolute area difference (a later, separate fix —
+ * see {@link #remainingGapFraction} — an absolute-gap version of this exact
+ * discipline still let a big-target biome starve a small-target one once
+ * face counts got large enough), then claims its single best
+ * (distance+jitter) candidate — the exact same "furthest below target goes
+ * first" discipline {@link PatchMerger#merge} already uses one layer up,
+ * just extended into gap-fill instead of stopping at growth.
  */
 public final class MeshGapFiller {
 
@@ -180,18 +184,36 @@ public final class MeshGapFiller {
         return frontierByBiome.computeIfAbsent(biome, key -> new PriorityQueue<>(candidateOrder(worldSeed)));
     }
 
-    /** Whichever biome (with at least one still-claimable frontier candidate) has the largest gap to its own target — same "furthest below target" tie-break idea PatchMerger uses, natural BiomeId order as the deterministic fallback for an exact tie. */
+    /**
+     * Whichever biome (with at least one still-claimable frontier candidate) has the
+     * largest gap to its own target AS A FRACTION OF THAT TARGET — not absolute area.
+     * Natural BiomeId order as the deterministic fallback for an exact tie.
+     *
+     * <p>Proportional, not absolute, for the same reason {@link PatchMerger}'s own
+     * "furthest below target" comparator is: biomes have genuinely different target
+     * areas, and an absolute-gap comparator lets a biome with a bigger target win
+     * essentially every contested pick until its own gap decays down near a smaller
+     * biome's target — by which point the smaller biome's frontier is typically boxed
+     * in and empty, permanently excluding it from this very competition (the
+     * {@code !isEmpty()} filter above). Confirmed as the real driver of a production
+     * regression at cell-size-4's much denser mesh — see doc/KNOWN_ISSUES.md.
+     */
     private static Optional<BiomeId> mostBehindTarget(Map<BiomeId, PriorityQueue<FillCandidate>> frontierByBiome, Map<BiomeId, Double> claimedAreaByBiome, Map<BiomeId, Double> targetAreaByBiome) {
         return frontierByBiome.entrySet().stream()
             .filter(entry -> !entry.getValue().isEmpty())
             .max(Comparator.<Map.Entry<BiomeId, PriorityQueue<FillCandidate>>>comparingDouble(
-                    entry -> remainingGap(entry.getKey(), claimedAreaByBiome, targetAreaByBiome))
+                    entry -> remainingGapFraction(entry.getKey(), claimedAreaByBiome, targetAreaByBiome))
                 .thenComparing(entry -> entry.getKey().toString()))
             .map(Map.Entry::getKey);
     }
 
-    private static double remainingGap(BiomeId biome, Map<BiomeId, Double> claimedAreaByBiome, Map<BiomeId, Double> targetAreaByBiome) {
-        return targetAreaByBiome.getOrDefault(biome, 0.0) - claimedAreaByBiome.getOrDefault(biome, 0.0);
+    /** 0.0 (or negative) target means no further demand — guarded explicitly rather than left to fall out of an unguarded division, since an unguarded 0.0/0.0 is NaN, which Comparator.comparingDouble treats as the LARGEST possible value (the opposite of "never preferred"). */
+    private static double remainingGapFraction(BiomeId biome, Map<BiomeId, Double> claimedAreaByBiome, Map<BiomeId, Double> targetAreaByBiome) {
+        double target = targetAreaByBiome.getOrDefault(biome, 0.0);
+        if (target <= 0.0) {
+            return Double.NEGATIVE_INFINITY;
+        }
+        return (target - claimedAreaByBiome.getOrDefault(biome, 0.0)) / target;
     }
 
     /**

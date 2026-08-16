@@ -154,9 +154,20 @@ public final class PatchMerger {
         }
     }
 
-    /** Furthest below target goes first; ties break on germ vertex id for determinism. */
+    /**
+     * Furthest below target, AS A FRACTION OF ITS OWN TARGET, goes first; ties break on
+     * germ vertex id for determinism. Proportional, not absolute area - biomes have
+     * genuinely different target sizes (e.g. desert's max width dwarfs plains'), and an
+     * absolute-gap comparator lets the biggest-target patches win essentially every
+     * contested pick until their own gap decays down near a smaller patch's, starving
+     * smaller-target patches of turns entirely at high face counts. Confirmed as the
+     * real driver of a production regression: unaffected at the old, coarse mesh scale
+     * (few enough total claim-decisions that the bias never got the chance to run away),
+     * but a ~256x denser mesh gave the exact same bias enough iterations to produce
+     * total desert/savanna dominance over a whole region. See doc/KNOWN_ISSUES.md.
+     */
     private static Comparator<PatchGrowthState> patchPriorityOrder() {
-        return Comparator.<PatchGrowthState>comparingDouble(PatchGrowthState::remainingGap)
+        return Comparator.<PatchGrowthState>comparingDouble(PatchGrowthState::remainingGapFraction)
             .thenComparingInt(patch -> patch.germVertexId);
     }
 
@@ -215,8 +226,8 @@ public final class PatchMerger {
             return !frontier.isEmpty();
         }
 
-        double remainingGap() {
-            return targetArea - claimedArea;
+        double remainingGapFraction() {
+            return (targetArea - claimedArea) / targetArea;
         }
     }
 

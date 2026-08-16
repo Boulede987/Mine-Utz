@@ -3,6 +3,7 @@ package com.mineutze.worldgen.regionsolve;
 import com.mineutze.worldgen.biomegraph.AdjacencyRule;
 import com.mineutze.worldgen.biomegraph.BiomeGraph;
 import com.mineutze.worldgen.biomegraph.BiomeId;
+import com.mineutze.worldgen.biomegraph.GrowthCohesionProfile;
 import com.mineutze.worldgen.regionsolve.topology.CspIdentityAssignment;
 import com.mineutze.worldgen.regionsolve.topology.SeedGraph;
 import com.mineutze.worldgen.regionsolve.topology.SeedGraphBuilder;
@@ -143,6 +144,119 @@ class MeshGeometryRealizationTest {
             assertTrue(isolatedCells.size() <= MAX_ACCEPTABLE_ISOLATED_CELLS,
                 "seed " + worldSeed + ": " + isolatedCells.size() + " isolated cells, expected at most " + MAX_ACCEPTABLE_ISOLATED_CELLS + ": " + isolatedCells);
         }
+    }
+
+    /**
+     * Regression gate for a real production bug: {@code PatchMerger}/{@code
+     * MeshGapFiller} picked which biome gets the next contested mesh face by
+     * ABSOLUTE remaining area gap ({@code target - claimed}), not proportional
+     * gap. Biomes have genuinely different target areas, so a big-target biome
+     * won essentially every contested pick until its own gap decayed down near
+     * a small-target biome's — starving the small-target biome's frontier
+     * before it ever got a meaningful turn. Harmless at the old, coarse mesh
+     * (too few sequential claim-decisions for the bias to run away) but a real,
+     * confirmed regression at {@code macroCellSizeBlocks=4}'s much denser mesh:
+     * a live export showed one biome (25% of the seed-graph's free nodes)
+     * reduced to 5 final cells out of 262,144, and another (7% of nodes) never
+     * grew past its own starting seed cells. See doc/KNOWN_ISSUES.md.
+     *
+     * <p>Deliberately uses {@code macroCellSizeBlocks=4} (production's real
+     * value, not this file's other tests' coarse {@code SMALL_GRID}) and
+     * production's own {@code COMPACT}-shaped cohesion profile (2 same-biome
+     * neighbors, matching {@code ModBiomeGraph}) — the bias exists at any
+     * cell size, but only becomes visually catastrophic once the mesh is
+     * dense enough to give it room to compound, so a coarse grid or an
+     * unrestricted cohesion profile (tried first — growth alone consumed the
+     * entire mesh before gap-fill ever got a turn, which doesn't match
+     * production's actual behavior at all) would not exercise the regression
+     * this test exists to catch. Region is physically small (256 blocks/side)
+     * purely to keep the test fast; {@code seedSpacingBlocks} is tightened to
+     * match so a small region still places enough germs (dozens, several per
+     * biome) for the priority competition to be meaningful. Biome sizes are 4
+     * genuinely distinct values (not two equal ones) — two biomes with an
+     * identical target let a separate, pre-existing, out-of-scope tie-break
+     * quirk ({@code MeshGapFiller.mostBehindTarget}'s alphabetical fallback
+     * on an exact tie) dominate the outcome instead of the mechanism this
+     * test targets.
+     *
+     * <p>All 4 biomes are mutually legal with each other (a complete
+     * adjacency graph) so CSP coloring always succeeds regardless of jitter,
+     * and so legality-driven starvation (a real, separate, intentional effect
+     * in production — see {@code MeshGapFiller}'s own doc) can't be blamed for
+     * a failure here — isolating the ABSOLUTE-vs-proportional gap comparator
+     * as the explanation.
+     *
+     * <p>Asserts starvation-to-near-zero specifically, not tight proportional
+     * shares — the competitive growth/fill process has real, legitimate
+     * emergent variance (confirmed empirically: even with the fix applied,
+     * per-biome realized-vs-target ratios ranged roughly 0.35x-4x across 8
+     * sample seeds) that a tight tolerance band would flag as false failures.
+     * What the diagnosed bug actually does, and what the fix actually
+     * changes, is categorical: unfixed, 3 of 4 biomes get EXACTLY 0% of the
+     * region, every single seed; fixed, every biome with a meaningful target
+     * share consistently gets a real, comfortably-nonzero share. That
+     * categorical difference is what this test checks.
+     */
+    @Test
+    void noBiomeWithAMeaningfulTargetGetsStarvedToNearZeroAtProductionCellSizeAcrossSeveralSeeds() {
+        BiomeId big = id("big");
+        BiomeId mediumA = id("mediumA");
+        BiomeId mediumB = id("mediumB");
+        BiomeId small = id("small");
+        List<BiomeId> allBiomes = List.of(big, mediumA, mediumB, small);
+        GrowthCohesionProfile compact = new GrowthCohesionProfile(2, 0, 0);
+        BiomeGraph graph = new BiomeGraph(
+            List.of(
+                node("big", 20, 1000, compact), node("mediumA", 20, 700, compact),
+                node("mediumB", 20, 450, compact), node("small", 20, 250, compact)
+            ),
+            List.of(
+                AdjacencyRule.allow(big, mediumA, 10), AdjacencyRule.allow(big, mediumB, 10), AdjacencyRule.allow(big, small, 10),
+                AdjacencyRule.allow(mediumA, mediumB, 10), AdjacencyRule.allow(mediumA, small, 10), AdjacencyRule.allow(mediumB, small, 10)
+            )
+        );
+        MacroGridConfig grid = new MacroGridConfig(4, 64);
+        int seedSpacingBlocks = 20; // dense enough that every biome gets several dozen germs, not just 1-2 - avoids the unrelated edge case of a lone germ failing to find any legal starting face at all
+        double minTargetShareToCareAbout = 0.02; // a biome with under 2% target share this seed didn't get enough germs to meaningfully judge - not what this test is about
+        double minAcceptableRealizedShare = 0.01; // unfixed code gives EXACTLY 0.0 for a starved biome, every seed - 1% is a comfortable, non-flaky margin above that, confirmed against 8 sample seeds of real fixed-code output
+
+        for (long worldSeed = 1L; worldSeed <= 5L; worldSeed++) {
+            RegionSolveInput input = new RegionSolveInput(graph, grid, REGION, Map.of(), worldSeed);
+            SeedGraph seedGraph = SeedGraphBuilder.build(input, seedSpacingBlocks);
+            Optional<Map<Integer, BiomeId>> assignment = CspIdentityAssignment.solve(seedGraph, graph, worldSeed);
+            assertTrue(assignment.isPresent(), "seed " + worldSeed + ": CSP must find a valid coloring on a fully-connected graph");
+
+            Map<MacroCellPos, BiomeId> result = MeshGeometryRealization.realize(seedGraph, assignment.get(), input);
+            Map<BiomeId, Double> targetAreaByBiome = aggregateTargetAreaByBiome(seedGraph, assignment.get(), grid, graph);
+            double totalTargetArea = targetAreaByBiome.values().stream().mapToDouble(Double::doubleValue).sum();
+            Map<BiomeId, Long> realizedCountByBiome = new java.util.HashMap<>();
+            result.values().forEach(biome -> realizedCountByBiome.merge(biome, 1L, Long::sum));
+
+            for (BiomeId biome : allBiomes) {
+                double targetShare = targetAreaByBiome.getOrDefault(biome, 0.0) / totalTargetArea;
+                if (targetShare < minTargetShareToCareAbout) {
+                    continue;
+                }
+                double realizedShare = realizedCountByBiome.getOrDefault(biome, 0L) / (double) result.size();
+                assertTrue(realizedShare >= minAcceptableRealizedShare,
+                    "seed " + worldSeed + ": " + biome + " (target share " + targetShare + ") realized only " + realizedShare
+                        + " of the region - starved to near-zero (fair-share regression)");
+            }
+        }
+    }
+
+    /** Same formula as MeshGeometryRealization's own (private) aggregateTargetAreaByBiome - reimplemented here since that method isn't visible from this test, not because the logic differs. */
+    private static Map<BiomeId, Double> aggregateTargetAreaByBiome(SeedGraph seedGraph, Map<Integer, BiomeId> assignedIdentities, MacroGridConfig grid, BiomeGraph graph) {
+        Map<BiomeId, Double> targets = new java.util.LinkedHashMap<>();
+        for (SeedGraphNode node : seedGraph.nodes()) {
+            if (node.fixed()) {
+                continue;
+            }
+            BiomeId biome = assignedIdentities.get(node.id());
+            double sideInCells = (double) graph.node(biome).sizeRange().maxWidthBlocks() / grid.macroCellSizeBlocks();
+            targets.merge(biome, sideInCells * sideInCells, Double::sum);
+        }
+        return targets;
     }
 
     private static List<String> findIllegalAdjacencies(Map<MacroCellPos, BiomeId> cells, BiomeGraph graph) {

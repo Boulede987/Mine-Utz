@@ -77,6 +77,72 @@ control becomes a design goal.
 
 ## Fixed
 
+### 11. `PatchMerger`/`MeshGapFiller` picked contested mesh faces by ABSOLUTE remaining-area gap, letting a big-target biome starve small-target ones once the mesh got dense enough
+Confirmed real regression, found via direct rigor (not eyeballed): a region
+that used to render as a rich, multi-biome mosaic at the pre-cell-size-4 mesh
+density rendered, at the exact same seed/region after the cell-size-4
+change, as ~83% desert + ~17% savanna, with plains (25% of the seed-graph's
+free nodes that region) reduced to 5 final cells out of 262,144, and
+badlands (2 germs) never growing past its own 2 starting cells. Ruled out
+first, with evidence, before landing on the real cause: not the
+`SeedRegionCache` rewrite (byte-identical `git worktree` A/B with/without
+it), not a units/scale mismatch anywhere in `BiomeSizeRange`/
+`cellCountForWidthBlocks`/`targetArea`/`FineMeshPointScatter`'s spacing
+rescale (all verified proportionally correct at both cell sizes), and not
+CSP identity assignment (`CspIdentityAssignment`) - a standalone harness
+confirmed seed-graph coloring stayed reasonably balanced at both cell sizes.
+
+**Root cause**: `PatchMerger.patchPriorityOrder()` and
+`MeshGapFiller.mostBehindTarget()` both picked which patch/biome gets to
+claim the next contested mesh face by ABSOLUTE remaining area gap
+(`targetArea - claimedArea`), not proportional gap. Biomes have genuinely
+different target areas (e.g. desert's aggregate target dwarfs plains'), so
+the absolute-gap comparator let the biggest-target biome win essentially
+every contested pick until its own gap decayed down near a smaller biome's -
+by which point the smaller biome's frontier was typically already boxed in
+by faster-expanding neighbors and permanently excluded from
+`MeshGapFiller`'s `!frontier.isEmpty()` competition filter. This bug existed
+at BOTH cell sizes, but the old, coarse mesh (~1,600-2,000 faces/region)
+never had enough sequential claim-decisions for the bias to run to
+completion; the new mesh's ~256x face-count increase gave the identical bias
+vastly more room to compound, turning a latent bug into a visually
+catastrophic one. Step-visualizer evidence (comparing the patch-merge stage
+right before gap-fill against the stage right after) placed the dominant
+effect specifically in `MeshGapFiller`, with `PatchMerger`'s identical latent
+bug fixed too for consistency even though it wasn't the dominant driver in
+the diagnosed case.
+
+`MeshCohesion`'s neck-prevention threshold was considered and ruled out as a
+contributor - it's a purely local, resolution-independent check, and this
+class's own doc already documents a reverted over-correction there
+("counting diagonal partners... nearly disabled neck-prevention entirely").
+Not touched.
+
+**Fixed**: both comparators changed from absolute remaining gap to
+proportional remaining gap (fraction of target still unmet:
+`(targetArea - claimedArea) / targetArea`), renamed
+`remainingGap`→`remainingGapFraction` in both `PatchMerger.PatchGrowthState`
+and `MeshGapFiller`, so biomes/germs with different-magnitude targets compete
+on equal footing regardless of absolute target size.
+`MeshGapFiller.remainingGapFraction` explicitly guards a `<= 0.0` target
+(returns `Double.NEGATIVE_INFINITY`) rather than an unguarded `0.0/0.0`,
+which would be `NaN` - `Comparator.comparingDouble` treats `NaN` as the
+*largest* possible value, the opposite of "never preferred."
+
+Verified on a synthetic 4-biome fully-connected-adjacency graph (isolates the
+priority bug from legality-driven starvation, a separate, real,
+intentional effect) at production's real `macroCellSizeBlocks=4` and
+`COMPACT`-shaped cohesion: unfixed, 3 of 4 biomes get EXACTLY 0% of the
+region, every seed tried; fixed, every biome with a meaningful target share
+consistently gets a real, comfortably-nonzero share (confirmed the fix
+actually flips this via a controlled `git stash` A/B on the same seeds, not
+assumed). This is now a permanent regression test,
+`MeshGeometryRealizationTest.noBiomeWithAMeaningfulTargetGetsStarvedToNearZeroAtProductionCellSizeAcrossSeveralSeeds`.
+On the original production seed/region (42, region 0,0): desert/savanna went
+from 83%/17% (plains at 5 cells) to 49%/39%/12% (desert/savanna/plains),
+with plains now at 30,114 cells - a real, visually confirmed return of
+mosaic richness, not just a numbers-on-paper improvement.
+
 ### 10. `SeparatorWidener.widen` could peg a core for 20+ minutes widening a single separator at `macroCellSizeBlocks=4` scale
 Found chasing a real hang: a 3-region-span export never finished — jstack showed it
 stuck inside `SeparatorWidener.stealingPreservesDonorConnectivity`'s flood-fill,
