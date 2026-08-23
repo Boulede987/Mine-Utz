@@ -205,9 +205,27 @@ final class SeamGrowthRasterizer {
                 // ANY candidate at all - a hole nothing else can ever discover. Grouped by
                 // BIOME (offering only the single best-placed face of each legal biome, not
                 // every one of its possibly-many faces) for the same reason - see
-                // facesByBiome's own doc for the measured cost this avoids. This also
-                // naturally covers "the SAME face keeps growing" - candidate's own biome is
-                // included in this same scan (self is always legal next to itself).
+                // facesByBiome's own doc for the measured cost this avoids.
+                //
+                // The claiming face itself ALWAYS gets a direct continuation candidate here,
+                // in addition to the region-wide best-of-biome scan below. Measured why this
+                // extra push is needed: instrumenting fillGaps found 318 of 362 size=1
+                // fragments were never touched by it - they were faces that claimed exactly
+                // one cell (their own seed) in THIS loop and then never grew again. Cause:
+                // quotaRatio is the PRIMARY sort key, so the instant a face claims its first
+                // cell its ratio ticks above 0.0 - and ANY other still-unstarted face of the
+                // same biome anywhere in the region (ratio still exactly 0.0) then always
+                // outranks it in bestFaceFor's own scan below, since ratio beats distance
+                // unconditionally, even when that sibling's own seed is nowhere near this
+                // cell. Tried making the claiming face's own biome bypass that scan entirely
+                // (push ONLY the originating face) - measured WORSE (455 -> 591 fragments):
+                // that scan's "wrong" sibling pick isn't pure waste, it's what lets two
+                // separately-CSP-assigned faces of the SAME biome merge into one connected
+                // component when a sibling's stolen cell lands adjacent to this one (fragment
+                // detection groups by BIOME VALUE, not by which face nominally claimed a
+                // cell - see ConnectedComponents). Keeping BOTH pushes gets the actual fix
+                // (this face never fully starves) without losing that merging effect.
+                queue.add(new CellEntry(neighbor, faceIndex, quotaRatio(faceIndex, claimedCountByFace, targetCells), neighbor.distanceSquaredTo(seedCellByFace.get(faceIndex))));
                 for (Map.Entry<BiomeId, List<Integer>> biomeFaces : facesByBiome.entrySet()) {
                     if (!graph.isAllowed(biomeFaces.getKey(), candidate)) {
                         continue;
