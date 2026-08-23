@@ -78,12 +78,12 @@ import java.util.stream.Stream;
  * other.
  *
  * <p><b>Known open gap</b> (2026-08-23, measured on real worldSeed=42 production export):
- * small fragments and one-cell pinch points are both still well above the old field
- * stage's own numbers (39/4247) — currently 623/5561 with this mechanism, real progress
- * from the first working version (636/7129) via {@link #wouldPinchAnAlreadyDecidedNeighbor}
- * alone, but not yet closed. Zero illegal adjacencies holds throughout regardless. Next
- * candidate direction, not yet tried: strengthening cohesion/pinch rejection further
- * without reintroducing distance-first ordering's flattening effect.
+ * small fragments are still above the old field stage's own number (39) — currently 199
+ * with this mechanism (down from 623 at the previous milestone via a diagonal-aware
+ * pinch metric, an own-continuation starvation fix, and the head-start reservation pass
+ * — see this class's own git history / the plan doc for each step's own measurement).
+ * One-cell pinch points (2862) are now BELOW the old field stage's own number (4247).
+ * Zero illegal adjacencies holds throughout regardless.
  */
 final class SeamGrowthRasterizer {
 
@@ -130,6 +130,51 @@ final class SeamGrowthRasterizer {
             .thenComparingInt((CellEntry e) -> e.cell().x())
             .thenComparingInt((CellEntry e) -> e.cell().z()));
 
+        // Head-start reservation pass: BEFORE any face competes for territory through the
+        // shared queue, give each face (in deterministic faceIndex order) its own seed
+        // cell PLUS enough extra cells to reach ITS OWN cohesionProfile's
+        // minSameBiomeNeighbors threshold, claimed directly from that face's own growing
+        // frontier (nearest-to-seed tie-break), same legality/cohesion/anti-pinch rules as
+        // the main loop (via isClaimable). Real root-cause fix, not a repair pass over
+        // decided output: without this, EVERY face's first cell (ratio exactly 0.0,
+        // distance exactly 0) sits in the same top priority tier as every other face's
+        // first cell, so who gets a SECOND cell is decided by whichever face's neighbor
+        // offers happen to get processed first in the shared queue - measured directly
+        // that 95% of the resulting size=1 fragments were pure geographic bad luck (all 8
+        // Moore neighbors claimed by other, perfectly LEGAL, faces before this face's own
+        // continuation was ever considered), not blocked by any real illegality. A face
+        // that reaches its own cohesion threshold this way starts real competition already
+        // holding a small legitimate clump, not a single cell one lost neighbor away from
+        // being permanently boxed in.
+        for (int faceIndex : assignments.keySet().stream().sorted().toList()) {
+            MacroCellPos seed = seedCellByFace.get(faceIndex);
+            if (!regionCellSet.contains(seed) || decided.containsKey(seed)) {
+                continue;
+            }
+            BiomeId biome = assignments.get(faceIndex).biome();
+            if (!isClaimable(seed, biome, faceIndex, decided, claimedCountByFace, graph)) {
+                continue; // leave it to the main queue below - same outcome as before this pass existed
+            }
+            decided.put(seed, biome);
+            claimedCountByFace.merge(faceIndex, 1, Integer::sum);
+            List<MacroCellPos> claimedByThisFace = new ArrayList<>(List.of(seed));
+
+            int headStartTarget = Math.max(1, graph.node(biome).cohesionProfile().minSameBiomeNeighbors());
+            while (claimedByThisFace.size() < headStartTarget) {
+                MacroCellPos next = pickHeadStartCandidate(claimedByThisFace, biome, faceIndex, decided, regionCellSet, claimedCountByFace, graph, seed);
+                if (next == null) {
+                    break; // no legal room to extend further right now - main queue still gets a shot at it later
+                }
+                decided.put(next, biome);
+                claimedCountByFace.merge(faceIndex, 1, Integer::sum);
+                claimedByThisFace.add(next);
+            }
+
+            for (MacroCellPos claimed : claimedByThisFace) {
+                offerNeighbors(claimed, biome, faceIndex, decided, regionCellSet, facesByBiome, claimedCountByFace, targetCells, seedCellByFace, graph, queue);
+            }
+        }
+
         for (int faceIndex : assignments.keySet().stream().sorted().toList()) {
             MacroCellPos seed = seedCellByFace.get(faceIndex);
             if (regionCellSet.contains(seed) && !decided.containsKey(seed)) {
@@ -148,92 +193,13 @@ final class SeamGrowthRasterizer {
             // wants it, so growth always reaches every cell in the region (soft target,
             // hard no-gaps requirement - see this class's own doc).
             BiomeId candidate = assignments.get(faceIndex).biome();
-            if (!legalAgainstAll(candidate, mooreNeighborBiomes(entry.cell(), decided), graph)) {
-                continue;
-            }
-            // Bootstrap exemption: a patch that doesn't have AT LEAST minSameBiomeNeighbors
-            // cells yet can never produce a candidate with that many same-biome Moore
-            // neighbors in the first place (pigeonhole - a candidate can't be adjacent to
-            // more already-claimed same-biome cells than exist in total), so cohesion is
-            // unsatisfiable-by-construction, not a real quality signal, until the patch
-            // reaches that size. A first version only exempted the literal first cell
-            // (count == 0) - looked right, but measured wrong: for COMPACT's threshold of
-            // 2, the SECOND cell is just as structurally impossible to pass (only 1
-            // same-biome cell exists to be adjacent to), so every genuinely-new isolated
-            // patch was still permanently stuck at exactly 1 cell - confirmed directly on a
-            // real production export: 593 of 623 small fragments were size=1, evenly spread
-            // across every biome, not concentrated anywhere - a systemic pattern, not
-            // scattered bad luck. GrowthCohesionProfile's own doc describes a bootstrap
-            // exemption existing but nothing in this codebase ever actually implemented it
-            // (GrowthEngine.satisfiesCohesion itself has no such case).
-            BiomeNode candidateNode = graph.node(candidate);
-            int minSameBiomeNeighbors = candidateNode.cohesionProfile().minSameBiomeNeighbors();
-            if (claimedCountByFace.get(faceIndex) >= minSameBiomeNeighbors
-                && !GrowthEngine.satisfiesCohesion(entry.cell(), candidate, decided, candidateNode.cohesionProfile())) {
-                continue;
-            }
-            // Anti-pinch: reject if committing HERE would retroactively turn an
-            // already-decided orthogonal neighbor into a one-cell-wide pinch (both
-            // opposite neighbors on one axis now a different biome, while still only
-            // connected on the other axis). GrowthCohesionProfile's own
-            // minSameBiomeNeighbors=2 (COMPACT) doesn't catch this - a straight 1-wide
-            // strip naturally has exactly 2 same-biome Moore neighbors (its two ends),
-            // which already clears a ">= 2" bar. A SOFT reject, not a hard block: this
-            // just skips this one candidate for this cell - another already-queued
-            // candidate for the same cell, or fillGaps as a last resort, still covers it,
-            // so this can never turn a real dead end into a worse one.
-            if (wouldPinchAnAlreadyDecidedNeighbor(entry.cell(), candidate, decided)) {
+            if (!isClaimable(entry.cell(), candidate, faceIndex, decided, claimedCountByFace, graph)) {
                 continue;
             }
 
             decided.put(entry.cell(), candidate);
             claimedCountByFace.merge(faceIndex, 1, Integer::sum);
-
-            for (MacroCellPos neighbor : mooreNeighbors(entry.cell())) {
-                if (!regionCellSet.contains(neighbor) || decided.containsKey(neighbor)) {
-                    continue;
-                }
-                // ANY assigned face whose biome is legal here inherits this shared seam
-                // directly - the actual growth-from-neighbor mechanism, not a special case:
-                // it's just what "offer my newly-claimed cell's neighbors to whoever can
-                // legally use them" naturally produces. Deliberately NOT restricted to real
-                // TriangleAdjacency mesh-neighbors of faceIndex - an earlier version was,
-                // and measured to leave real dead zones: growth doesn't respect mesh
-                // topology the way the CSP does, so two faces can end up geometrically
-                // adjacent without ever being real mesh neighbors, and if neither's
-                // TriangleAdjacency set covers the other, that patch of the map never gets
-                // ANY candidate at all - a hole nothing else can ever discover. Grouped by
-                // BIOME (offering only the single best-placed face of each legal biome, not
-                // every one of its possibly-many faces) for the same reason - see
-                // facesByBiome's own doc for the measured cost this avoids.
-                //
-                // The claiming face itself ALWAYS gets a direct continuation candidate here,
-                // in addition to the region-wide best-of-biome scan below. Measured why this
-                // extra push is needed: instrumenting fillGaps found 318 of 362 size=1
-                // fragments were never touched by it - they were faces that claimed exactly
-                // one cell (their own seed) in THIS loop and then never grew again. Cause:
-                // quotaRatio is the PRIMARY sort key, so the instant a face claims its first
-                // cell its ratio ticks above 0.0 - and ANY other still-unstarted face of the
-                // same biome anywhere in the region (ratio still exactly 0.0) then always
-                // outranks it in bestFaceFor's own scan below, since ratio beats distance
-                // unconditionally, even when that sibling's own seed is nowhere near this
-                // cell. Tried making the claiming face's own biome bypass that scan entirely
-                // (push ONLY the originating face) - measured WORSE (455 -> 591 fragments):
-                // that scan's "wrong" sibling pick isn't pure waste, it's what lets two
-                // separately-CSP-assigned faces of the SAME biome merge into one connected
-                // component when a sibling's stolen cell lands adjacent to this one (fragment
-                // detection groups by BIOME VALUE, not by which face nominally claimed a
-                // cell - see ConnectedComponents). Keeping BOTH pushes gets the actual fix
-                // (this face never fully starves) without losing that merging effect.
-                queue.add(new CellEntry(neighbor, faceIndex, quotaRatio(faceIndex, claimedCountByFace, targetCells), neighbor.distanceSquaredTo(seedCellByFace.get(faceIndex))));
-                for (Map.Entry<BiomeId, List<Integer>> biomeFaces : facesByBiome.entrySet()) {
-                    if (!graph.isAllowed(biomeFaces.getKey(), candidate)) {
-                        continue;
-                    }
-                    int bestFace = bestFaceFor(biomeFaces.getValue(), neighbor, claimedCountByFace, targetCells, seedCellByFace);
-                    queue.add(new CellEntry(neighbor, bestFace, quotaRatio(bestFace, claimedCountByFace, targetCells), neighbor.distanceSquaredTo(seedCellByFace.get(bestFace))));
-                }
-            }
+            offerNeighbors(entry.cell(), candidate, faceIndex, decided, regionCellSet, facesByBiome, claimedCountByFace, targetCells, seedCellByFace, graph, queue);
         }
 
         fillGaps(cells, decided, graph, seedCellByFace, assignments);
@@ -243,6 +209,93 @@ final class SeamGrowthRasterizer {
             result.put(cell, decided.get(cell));
         }
         return result;
+    }
+
+    /**
+     * The three commit-time rules a candidate cell must pass, shared verbatim by the
+     * head-start reservation pass and the main queue loop so both ever apply exactly the
+     * same standard: legal against every already-decided Moore neighbor; satisfies
+     * {@code candidate}'s own {@link com.mineutze.worldgen.biomegraph.GrowthCohesionProfile}
+     * once it's past that biome's own bootstrap exemption window (pigeonhole - a patch
+     * below its own {@code minSameBiomeNeighbors} count can never satisfy cohesion in the
+     * first place, so it isn't a real quality signal yet); and doesn't retroactively pinch
+     * an already-decided orthogonal neighbor.
+     */
+    private static boolean isClaimable(
+        MacroCellPos cell, BiomeId candidate, int faceIndex,
+        Map<MacroCellPos, BiomeId> decided, Map<Integer, Integer> claimedCountByFace, BiomeGraph graph
+    ) {
+        if (!legalAgainstAll(candidate, mooreNeighborBiomes(cell, decided), graph)) {
+            return false;
+        }
+        BiomeNode candidateNode = graph.node(candidate);
+        int minSameBiomeNeighbors = candidateNode.cohesionProfile().minSameBiomeNeighbors();
+        if (claimedCountByFace.get(faceIndex) >= minSameBiomeNeighbors
+            && !GrowthEngine.satisfiesCohesion(cell, candidate, decided, candidateNode.cohesionProfile())) {
+            return false;
+        }
+        return !wouldPinchAnAlreadyDecidedNeighbor(cell, candidate, decided);
+    }
+
+    /**
+     * Offers every Moore-neighbor of a just-claimed cell to whoever can legally use it -
+     * the claiming face itself (guaranteed direct continuation candidate) AND, grouped by
+     * biome, the single best-placed OTHER face of each other legal biome. See this
+     * method's call sites and the class doc for why both the direct push and the
+     * region-wide scan matter.
+     */
+    private static void offerNeighbors(
+        MacroCellPos claimedCell, BiomeId candidate, int faceIndex,
+        Map<MacroCellPos, BiomeId> decided, Set<MacroCellPos> regionCellSet, Map<BiomeId, List<Integer>> facesByBiome,
+        Map<Integer, Integer> claimedCountByFace, Map<Integer, Integer> targetCells, Map<Integer, MacroCellPos> seedCellByFace,
+        BiomeGraph graph, PriorityQueue<CellEntry> queue
+    ) {
+        for (MacroCellPos neighbor : mooreNeighbors(claimedCell)) {
+            if (!regionCellSet.contains(neighbor) || decided.containsKey(neighbor)) {
+                continue;
+            }
+            queue.add(new CellEntry(neighbor, faceIndex, quotaRatio(faceIndex, claimedCountByFace, targetCells), neighbor.distanceSquaredTo(seedCellByFace.get(faceIndex))));
+            for (Map.Entry<BiomeId, List<Integer>> biomeFaces : facesByBiome.entrySet()) {
+                if (!graph.isAllowed(biomeFaces.getKey(), candidate)) {
+                    continue;
+                }
+                int bestFace = bestFaceFor(biomeFaces.getValue(), neighbor, claimedCountByFace, targetCells, seedCellByFace);
+                queue.add(new CellEntry(neighbor, bestFace, quotaRatio(bestFace, claimedCountByFace, targetCells), neighbor.distanceSquaredTo(seedCellByFace.get(bestFace))));
+            }
+        }
+    }
+
+    /**
+     * The single best next cell for a face's own head-start reservation: a Moore-neighbor
+     * of any cell this face already owns, not already decided by anyone, passing {@link
+     * #isClaimable}, nearest to the face's own seed (then a fixed x/z tie-break) - the
+     * same "closest to home" preference {@link #bestFaceFor} uses, just scoped to one
+     * face's own frontier instead of choosing between faces.
+     */
+    private static MacroCellPos pickHeadStartCandidate(
+        List<MacroCellPos> claimedByThisFace, BiomeId biome, int faceIndex,
+        Map<MacroCellPos, BiomeId> decided, Set<MacroCellPos> regionCellSet, Map<Integer, Integer> claimedCountByFace,
+        BiomeGraph graph, MacroCellPos seed
+    ) {
+        MacroCellPos best = null;
+        long bestDistance = Long.MAX_VALUE;
+        for (MacroCellPos owned : claimedByThisFace) {
+            for (MacroCellPos neighbor : mooreNeighbors(owned)) {
+                if (!regionCellSet.contains(neighbor) || decided.containsKey(neighbor)) {
+                    continue;
+                }
+                if (!isClaimable(neighbor, biome, faceIndex, decided, claimedCountByFace, graph)) {
+                    continue;
+                }
+                long distance = neighbor.distanceSquaredTo(seed);
+                if (best == null || distance < bestDistance
+                    || (distance == bestDistance && (neighbor.x() < best.x() || (neighbor.x() == best.x() && neighbor.z() < best.z())))) {
+                    best = neighbor;
+                    bestDistance = distance;
+                }
+            }
+        }
+        return best;
     }
 
     /** Lowest quota-deficit ratio first, then nearest own-seed distance to {@code cell} as a tie-break - same priority rule the main queue itself sorts by, just narrowed to one biome's own (usually small) face list instead of a full priority-queue push per face. */
