@@ -34,6 +34,21 @@ public final class ConnectedComponents {
     }
 
     public static List<Set<MacroCellPos>> find(Map<MacroCellPos, BiomeId> assignment, Set<MacroCellPos> ownCellSet) {
+        return find(assignment, ownCellSet, MacroCellPos::orthogonalNeighbors);
+    }
+
+    /**
+     * Same as {@link #find(Map, Set)}, but connectivity follows {@code neighborFn} instead
+     * of always being orthogonal-only — {@link RegionIntegrityValidator} uses this with
+     * Moore (8-way) neighbors for its own small-fragment check, since the growth algorithm
+     * itself treats diagonal adjacency as real connectivity everywhere (legality, cohesion,
+     * the head-start reservation pass), so measuring "isolated" via orthogonal-only
+     * adjacency was splitting a real diagonally-touching pair into two false single-cell
+     * fragments.
+     */
+    public static List<Set<MacroCellPos>> find(
+        Map<MacroCellPos, BiomeId> assignment, Set<MacroCellPos> ownCellSet, java.util.function.Function<MacroCellPos, List<MacroCellPos>> neighborFn
+    ) {
         List<MacroCellPos> orderedCells = ownCellSet.stream()
             .sorted(Comparator.comparingInt(MacroCellPos::x).thenComparingInt(MacroCellPos::z))
             .toList();
@@ -51,7 +66,7 @@ public final class ConnectedComponents {
             while (!frontier.isEmpty()) {
                 MacroCellPos cell = frontier.pop();
                 component.add(cell);
-                for (MacroCellPos neighbor : cell.orthogonalNeighbors()) {
+                for (MacroCellPos neighbor : neighborFn.apply(cell)) {
                     if (assignment.containsKey(neighbor) && !visited.contains(neighbor) && biome.equals(assignment.get(neighbor))) {
                         visited.add(neighbor);
                         frontier.push(neighbor);

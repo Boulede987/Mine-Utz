@@ -15,7 +15,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.PriorityQueue;
 import java.util.Set;
-import java.util.stream.Stream;
 
 /**
  * Replaces the old distance-minus-radius Voronoi competition (plus its warp/domain-warp
@@ -78,12 +77,15 @@ import java.util.stream.Stream;
  * other.
  *
  * <p><b>Known open gap</b> (2026-08-23, measured on real worldSeed=42 production export):
- * small fragments are still above the old field stage's own number (39) — currently 199
+ * small fragments are still above the old field stage's own number (39) — currently 181
  * with this mechanism (down from 623 at the previous milestone via a diagonal-aware
- * pinch metric, an own-continuation starvation fix, and the head-start reservation pass
- * — see this class's own git history / the plan doc for each step's own measurement).
- * One-cell pinch points (2862) are now BELOW the old field stage's own number (4247).
- * Zero illegal adjacencies holds throughout regardless.
+ * pinch metric, an own-continuation starvation fix, the head-start reservation pass, and
+ * a diagonal-aware fragment metric — see this class's own git history / the plan doc for
+ * each step's own measurement). Of the remaining size=1 fragments, 61% are genuine
+ * main-queue cross-biome competitive assignments, not an identified bug — closing that
+ * further likely needs a real architecture change, not another tuning pass. One-cell
+ * pinch points (2864) are now BELOW the old field stage's own number (4247). Zero illegal
+ * adjacencies holds throughout regardless.
  */
 final class SeamGrowthRasterizer {
 
@@ -250,7 +252,7 @@ final class SeamGrowthRasterizer {
         Map<Integer, Integer> claimedCountByFace, Map<Integer, Integer> targetCells, Map<Integer, MacroCellPos> seedCellByFace,
         BiomeGraph graph, PriorityQueue<CellEntry> queue
     ) {
-        for (MacroCellPos neighbor : mooreNeighbors(claimedCell)) {
+        for (MacroCellPos neighbor : claimedCell.mooreNeighbors()) {
             if (!regionCellSet.contains(neighbor) || decided.containsKey(neighbor)) {
                 continue;
             }
@@ -280,7 +282,7 @@ final class SeamGrowthRasterizer {
         MacroCellPos best = null;
         long bestDistance = Long.MAX_VALUE;
         for (MacroCellPos owned : claimedByThisFace) {
-            for (MacroCellPos neighbor : mooreNeighbors(owned)) {
+            for (MacroCellPos neighbor : owned.mooreNeighbors()) {
                 if (!regionCellSet.contains(neighbor) || decided.containsKey(neighbor)) {
                     continue;
                 }
@@ -320,13 +322,9 @@ final class SeamGrowthRasterizer {
         return (double) claimedCountByFace.get(faceIndex) / targetCells.get(faceIndex);
     }
 
-    private static List<MacroCellPos> mooreNeighbors(MacroCellPos cell) {
-        return Stream.concat(cell.orthogonalNeighbors().stream(), cell.diagonalNeighbors().stream()).toList();
-    }
-
     private static List<BiomeId> mooreNeighborBiomes(MacroCellPos cell, Map<MacroCellPos, BiomeId> decided) {
         List<BiomeId> neighbors = new ArrayList<>(8);
-        for (MacroCellPos neighbor : mooreNeighbors(cell)) {
+        for (MacroCellPos neighbor : cell.mooreNeighbors()) {
             BiomeId biome = decided.get(neighbor);
             if (biome != null) {
                 neighbors.add(biome);

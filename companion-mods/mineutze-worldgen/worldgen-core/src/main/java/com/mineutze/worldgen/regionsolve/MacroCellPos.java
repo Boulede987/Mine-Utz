@@ -1,6 +1,7 @@
 package com.mineutze.worldgen.regionsolve;
 
 import java.util.List;
+import java.util.stream.Stream;
 
 /** Position on the macro-cell grid (not block coords, not chunk coords). */
 public record MacroCellPos(int x, int z) {
@@ -22,6 +23,11 @@ public record MacroCellPos(int x, int z) {
             new MacroCellPos(x - 1, z + 1),
             new MacroCellPos(x - 1, z - 1)
         );
+    }
+
+    /** The full 8-cell Moore neighborhood — {@link #orthogonalNeighbors()} plus {@link #diagonalNeighbors()}. */
+    public List<MacroCellPos> mooreNeighbors() {
+        return Stream.concat(orthogonalNeighbors().stream(), diagonalNeighbors().stream()).toList();
     }
 
     public long distanceSquaredTo(MacroCellPos other) {

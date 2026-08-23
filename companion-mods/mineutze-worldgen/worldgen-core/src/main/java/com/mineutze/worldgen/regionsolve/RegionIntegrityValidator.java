@@ -119,7 +119,13 @@ public final class RegionIntegrityValidator {
     public static Report validate(Map<MacroCellPos, BiomeId> assignment, BiomeGraph graph) {
         List<IllegalAdjacency> illegal = findIllegalAdjacencies(assignment, graph);
         List<IllegalAdjacency> diagonalIllegal = findDiagonalIllegalAdjacencies(assignment, graph);
-        List<Set<MacroCellPos>> components = ConnectedComponents.find(assignment, assignment.keySet());
+        // Moore (8-way), not orthogonal-only: the growth algorithm itself treats diagonal
+        // adjacency as real connectivity everywhere (legality checks, cohesion, the
+        // head-start reservation pass), so measuring "isolated" via orthogonal-only
+        // adjacency was splitting a real diagonally-touching pair into two false
+        // single-cell fragments - measured directly: 14 of 118 size=1 fragments on a real
+        // production export had a same-biome diagonal neighbor.
+        List<Set<MacroCellPos>> components = ConnectedComponents.find(assignment, assignment.keySet(), MacroCellPos::mooreNeighbors);
         List<SmallFragment> smallFragments = findSmallFragments(assignment, components);
 
         Set<MacroCellPos> fragmentCells = new LinkedHashSet<>();
