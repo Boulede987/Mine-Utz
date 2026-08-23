@@ -9,6 +9,7 @@ import com.mineutze.worldgen.regionsolve.ConnectedComponents;
 import com.mineutze.worldgen.regionsolve.MacroCellPos;
 import com.mineutze.worldgen.regionsolve.MacroGridConfig;
 import com.mineutze.worldgen.regionsolve.RegionPos;
+import com.mineutze.worldgen.regionsolve.RegionIntegrityValidator;
 import com.mineutze.worldgen.regionsolve.RegionSolveResult;
 import com.mineutze.worldgen.regionsolve.SeedRegionCache;
 import com.mineutze.worldgen.regionsolve.TriangleFieldGeometryRealization;
@@ -111,6 +112,10 @@ public final class TriangleFieldRegionExportCli {
 
         reportSizesAndComponents(combinedAssignment, graph, DEMO_GRID);
 
+        RegionIntegrityValidator.Report integrityReport = RegionIntegrityValidator.validate(combinedAssignment, graph);
+        System.out.println();
+        System.out.println(integrityReport.describe());
+
         // Evenly-spaced hues, not BiomeLegend's hash-based color (which put two of
         // ModBiomeGraph.DEFAULT's 6 real biomes close enough in hue to look identical in
         // the first render of this CLI) - at a small, known biome count, maximizing visual
@@ -124,6 +129,12 @@ public final class TriangleFieldRegionExportCli {
         Path legendImageFile = outputDir.resolve("legend.png");
         writeLegendImage(graph, palette, legendImageFile);
         System.out.println("wrote " + legendImageFile.toAbsolutePath());
+
+        // Exit nonzero on violations, same as validate_biome_export.py did - but only
+        // AFTER writing the images, so a failing run still leaves something to look at.
+        if (!integrityReport.isClean()) {
+            System.exit(1);
+        }
     }
 
     private static void reportSizesAndComponents(Map<MacroCellPos, BiomeId> assignment, BiomeGraph graph, MacroGridConfig gridConfig) {

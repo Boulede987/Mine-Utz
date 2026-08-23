@@ -123,7 +123,7 @@ class TriangleFieldGeometryRealizationTest {
      * a bare 4-cycle graph (no diagonal, unlike the real fixture) has NO biome legal against
      * all 4 of {desert, savanna, plains, badlands} at once (savanna-badlands is never
      * allowed), and this specific worldSeed/region genuinely reaches that 4-way convergence
-     * during rasterization. {@link LegalityConstrainedRasterizer} must fail loud here, never
+     * during rasterization. {@code SeamGrowthRasterizer} must fail loud here, never
      * silently place an illegal biome - matches this codebase's own established production
      * precedent (see {@code ModOverworldBiomeSource.getNoiseBiome}, which already throws
      * uncaught for a comparable "should be unreachable" case).
@@ -134,6 +134,6 @@ class TriangleFieldGeometryRealizationTest {
         IllegalStateException thrown = org.junit.jupiter.api.Assertions.assertThrows(
             IllegalStateException.class, () -> TriangleFieldGeometryRealization.realize(input)
         );
-        assertTrue(thrown.getMessage().contains("LegalityConstrainedRasterizer"), "expected a diagnostic naming the rasterizer, got: " + thrown.getMessage());
+        assertTrue(thrown.getMessage().contains("SeamGrowthRasterizer"), "expected a diagnostic naming the rasterizer, got: " + thrown.getMessage());
     }
 }
