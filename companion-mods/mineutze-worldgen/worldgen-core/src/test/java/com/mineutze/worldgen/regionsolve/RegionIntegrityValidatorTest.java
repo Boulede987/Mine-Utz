@@ -122,4 +122,36 @@ class RegionIntegrityValidatorTest {
             assertEquals("north-south", pinch.axis());
         }
     }
+
+    /**
+     * A 2-wide diagonal staircase band of A: (i,i) and (i+1,i) for i=0..5, orthogonally
+     * connected end-to-end (a real 12-cell component, not a fragment). Its own outer-edge
+     * cells (e.g. (0,0)) fail the vertical orthogonal axis check (north AND south both B/
+     * missing) despite having a same-biome DIAGONAL neighbor ((1,1)) that shows the band is
+     * genuinely 2 cells thick there, not a real 1-cell pinch. None of it should be flagged.
+     */
+    @Test
+    void diagonalBandNotFlaggedAsPinch() {
+        BiomeGraph graph = graph(AdjacencyRule.allow(A, B, 10), AdjacencyRule.allow(A, C, 10), AdjacencyRule.allow(B, C, 10));
+        Map<MacroCellPos, BiomeId> assignment = new LinkedHashMap<>();
+        for (int i = 0; i < 6; i++) {
+            assignment.put(new MacroCellPos(i, i), A);
+            assignment.put(new MacroCellPos(i + 1, i), A);
+        }
+        for (int i = -1; i <= 7; i++) {
+            for (int j = -1; j <= 6; j++) {
+                MacroCellPos pos = new MacroCellPos(i, j);
+                if (!assignment.containsKey(pos)) {
+                    assignment.put(pos, B);
+                }
+            }
+        }
+
+        RegionIntegrityValidator.Report report = RegionIntegrityValidator.validate(assignment, graph);
+
+        assertTrue(report.illegalAdjacencies().isEmpty(), report.describe());
+        for (RegionIntegrityValidator.PinchPoint pinch : report.pinchPoints()) {
+            assertTrue(!pinch.biome().equals(A), "diagonal band cell wrongly flagged: " + pinch);
+        }
+    }
 }

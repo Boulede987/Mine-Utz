@@ -187,7 +187,7 @@ public final class RegionIntegrityValidator {
         return fragments;
     }
 
-    /** A cell whose neighbors on one WHOLE axis (both north+south, or both east+west) are all a different biome (or missing), while it's still connected to same-biome neighbors on the other axis — the patch is only 1 cell thick at this point. Cells already part of a small fragment are excluded (reported once, not twice). */
+    /** A cell whose neighbors on one WHOLE axis (both north+south, or both east+west) are all a different biome (or missing), while it's still connected to same-biome neighbors on the other axis — the patch is only 1 cell thick at this point. A cell with a same-biome DIAGONAL neighbor is skipped — a diagonal boundary line trips the orthogonal axis check on every cell along it regardless of true thickness, so diagonal support means the shape is genuinely thicker than this axis-only check alone can see, not a real pinch. Cells already part of a small fragment are excluded (reported once, not twice). */
     private static List<PinchPoint> findPinchPoints(Map<MacroCellPos, BiomeId> assignment, Set<MacroCellPos> fragmentCells) {
         List<PinchPoint> pinches = new ArrayList<>();
         for (Map.Entry<MacroCellPos, BiomeId> entry : assignment.entrySet()) {
@@ -196,6 +196,9 @@ public final class RegionIntegrityValidator {
                 continue;
             }
             BiomeId biome = entry.getValue();
+            if (hasDiagonalSameBiomeNeighbor(assignment, cell, biome)) {
+                continue;
+            }
             MacroCellPos northPos = new MacroCellPos(cell.x(), cell.z() - 1);
             MacroCellPos southPos = new MacroCellPos(cell.x(), cell.z() + 1);
             MacroCellPos eastPos = new MacroCellPos(cell.x() + 1, cell.z());
@@ -213,5 +216,16 @@ public final class RegionIntegrityValidator {
             }
         }
         return pinches;
+    }
+
+    private static boolean hasDiagonalSameBiomeNeighbor(Map<MacroCellPos, BiomeId> assignment, MacroCellPos cell, BiomeId biome) {
+        for (int dx : new int[] {-1, 1}) {
+            for (int dz : new int[] {-1, 1}) {
+                if (biome.equals(assignment.get(new MacroCellPos(cell.x() + dx, cell.z() + dz)))) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 }
