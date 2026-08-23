@@ -151,15 +151,24 @@ final class SeamGrowthRasterizer {
             if (!legalAgainstAll(candidate, mooreNeighborBiomes(entry.cell(), decided), graph)) {
                 continue;
             }
-            // Bootstrap exemption: a face's OWN first cell (inherited seed or centroid
-            // fallback) trivially has zero same-biome neighbors, since nothing of that
-            // biome exists anywhere yet - GrowthCohesionProfile's own doc describes this
-            // exemption but nothing in this codebase actually implemented it (GrowthEngine
-            // itself never special-cases it; see GrowthEngine.satisfiesCohesion's plain
-            // unconditional check). Without it, even UNRESTRICTED's minSameBiomeNeighbors=1
-            // would make EVERY patch's first cell fail cohesion, unreachable no matter what.
+            // Bootstrap exemption: a patch that doesn't have AT LEAST minSameBiomeNeighbors
+            // cells yet can never produce a candidate with that many same-biome Moore
+            // neighbors in the first place (pigeonhole - a candidate can't be adjacent to
+            // more already-claimed same-biome cells than exist in total), so cohesion is
+            // unsatisfiable-by-construction, not a real quality signal, until the patch
+            // reaches that size. A first version only exempted the literal first cell
+            // (count == 0) - looked right, but measured wrong: for COMPACT's threshold of
+            // 2, the SECOND cell is just as structurally impossible to pass (only 1
+            // same-biome cell exists to be adjacent to), so every genuinely-new isolated
+            // patch was still permanently stuck at exactly 1 cell - confirmed directly on a
+            // real production export: 593 of 623 small fragments were size=1, evenly spread
+            // across every biome, not concentrated anywhere - a systemic pattern, not
+            // scattered bad luck. GrowthCohesionProfile's own doc describes a bootstrap
+            // exemption existing but nothing in this codebase ever actually implemented it
+            // (GrowthEngine.satisfiesCohesion itself has no such case).
             BiomeNode candidateNode = graph.node(candidate);
-            if (claimedCountByFace.get(faceIndex) > 0
+            int minSameBiomeNeighbors = candidateNode.cohesionProfile().minSameBiomeNeighbors();
+            if (claimedCountByFace.get(faceIndex) >= minSameBiomeNeighbors
                 && !GrowthEngine.satisfiesCohesion(entry.cell(), candidate, decided, candidateNode.cohesionProfile())) {
                 continue;
             }
