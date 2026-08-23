@@ -1,0 +1,7 @@
+namespace com.mineutze.worldgen.integration {
+class ModDensityFunctionTypes {
+  + {static} BIOME_SHAPE_OFFSET_ID : String
+  + {static} register(RegisterEvent)
+}
+
+}

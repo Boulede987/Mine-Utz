@@ -21,10 +21,10 @@ import java.util.Set;
  *
  * <p>Known limitation, not yet handled: three or more exactly collinear
  * input points have no valid circumcircle and are not supported. Not
- * defended against here — {@code SeedPlacer}'s jittered-grid scatter makes
+ * defended against here — {@link SeedGrid}'s jittered-grid scatter makes
  * exact collinearity at floating-point precision practically unreachable,
- * and even if it occurred, the result only feeds an abstract graph that the
- * caller's reseed tier already treats as retriable.
+ * and even if it occurred, the result only feeds an abstract graph that a
+ * caller's reseed tier can treat as retriable.
  */
 public final class DelaunayTriangulation {
 

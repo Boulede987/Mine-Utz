@@ -1,0 +1,12 @@
+namespace com.mineutze.worldgen.regionsolve {
+class RegionBoundaryCollector {
+  + {static} collect(RegionPos, MacroGridConfig, long, Function<RegionPos, Map<MacroCellPos, BiomeId>>) : Map<MacroCellPos, BiomeId>
+  + {static} neighborsOf(RegionPos) : List<RegionPos>
+  - {static} cellsBorderingRegion(Map<MacroCellPos, BiomeId>, RegionPos, MacroGridConfig, long) : Map<MacroCellPos, BiomeId>
+}
+
+RegionBoundaryCollector ..> BiomeId
+RegionBoundaryCollector ..> MacroCellPos
+RegionBoundaryCollector ..> MacroGridConfig
+RegionBoundaryCollector ..> RegionPos
+}

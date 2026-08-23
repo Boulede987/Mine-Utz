@@ -49,17 +49,17 @@ class BiomeFeatureToggles <<record>> {
 class BiomeGraph {
   - nodesById : Map<BiomeId, BiomeNode>
   - rulesByPair : Map<UnorderedBiomePair, AdjacencyRule>
+  - {static} MAX_BRIDGE_HOPS : int
   - {static} indexNodes(Collection<BiomeNode>) : Map<BiomeId, BiomeNode>
   - {static} indexRules(Collection<AdjacencyRule>) : Map<UnorderedBiomePair, AdjacencyRule>
   - requireAllRuleNodesKnown()
   - requireKnownNode(BiomeId)
-  - requireUniversalFillerExists()
-  - requireFillerAllowedNextToEveryOtherNode(BiomeId)
+  - requireEveryPairBridgeableWithinReassignBudget()
+  - shortestHopsFrom(BiomeId) : Map<BiomeId, Integer>
   + node(BiomeId) : BiomeNode
   + nodes() : Collection<BiomeNode>
   + isAllowed(BiomeId, BiomeId) : boolean
   + rule(BiomeId, BiomeId) : AdjacencyRule
-  + universalFillers() : Set<BiomeId>
 }
 class BiomeId <<record>> {
   + namespace : String
@@ -72,7 +72,7 @@ class BiomeNode <<record>> {
   + sizeRange : BiomeSizeRange
   + shapeHints : BiomeShapeHints
   + featureToggles : BiomeFeatureToggles
-  + universalFiller : boolean
+  + cohesionProfile : GrowthCohesionProfile
 }
 class BiomeShapeHints <<record>> {
   + roughness : double
@@ -85,6 +85,24 @@ class BiomeShapeHints <<record>> {
 class BiomeSizeRange <<record>> {
   + minWidthBlocks : int
   + maxWidthBlocks : int
+}
+class GrowthCohesionProfile <<record>> {
+  + minSameBiomeNeighbors : int
+  + directionalRunMajor : int
+  + directionalRunMinor : int
+  + {static} UNRESTRICTED : GrowthCohesionProfile
+}
+class ModBiomeGraph {
+  - {static} DEFAULT_BLEND_WIDTH_BLOCKS : int
+  - {static} COMPACT : GrowthCohesionProfile
+  - {static} ELONGATED : GrowthCohesionProfile
+  - {static} DESERT : BiomeId
+  - {static} SAVANNA : BiomeId
+  - {static} BADLANDS : BiomeId
+  - {static} OCEAN : BiomeId
+  - {static} FOREST : BiomeId
+  - {static} PLAINS : BiomeId
+  + {static} DEFAULT : BiomeGraph
 }
 class UnorderedBiomePair <<record>> {
   + first : BiomeId
@@ -103,6 +121,8 @@ BiomeNode *--> BiomeFeatureToggles
 BiomeNode *--> BiomeId
 BiomeNode *--> BiomeShapeHints
 BiomeNode *--> BiomeSizeRange
+BiomeNode *--> GrowthCohesionProfile
+ModBiomeGraph *--> GrowthCohesionProfile
 UnorderedBiomePair *--> BiomeId
 
 @enduml

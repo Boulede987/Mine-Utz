@@ -1,0 +1,27 @@
+namespace com.mineutze.worldgen.integration {
+class SavedDataRegionPersistenceStore {
+  - level : ServerLevel
+  + load(RegionPos) : Optional<RegionSolveResult>
+  + save(RegionPos, RegionSolveResult)
+  - {static} saveName(RegionPos) : String
+}
+class RegionCacheData <<static>> {
+  - {static} SCHEMA_VERSION : int
+  - {static} SCHEMA_VERSION_KEY : String
+  - {static} DROPPED_DEMAND_COUNT_KEY : String
+  - {static} WARNINGS_KEY : String
+  - {static} WARNING_KEY : String
+  - {static} CELLS_KEY : String
+  - {static} CELL_X_KEY : String
+  - {static} CELL_Z_KEY : String
+  - {static} CELL_BIOME_KEY : String
+  - result : RegionSolveResult
+  ~ {static} from(RegionSolveResult) : RegionCacheData
+  + save(CompoundTag, HolderLookup.Provider) : CompoundTag
+  ~ {static} load(CompoundTag, HolderLookup.Provider) : RegionCacheData
+}
+
+SavedDataRegionPersistenceStore ..|> RegionPersistenceStore
+RegionCacheData --|> SavedData
+RegionCacheData *--> RegionSolveResult
+}

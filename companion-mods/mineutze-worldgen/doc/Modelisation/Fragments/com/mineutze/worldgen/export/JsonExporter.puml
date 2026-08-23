@@ -1,0 +1,10 @@
+namespace com.mineutze.worldgen.export {
+class JsonExporter {
+  + {static} write(Path, ExportSnapshot, BiomeLegend)
+  - {static} writeGraph(StringBuilder, BiomeGraph, BiomeLegend)
+  - {static} writeRegions(StringBuilder, ExportSnapshot)
+  - {static} writeCells(StringBuilder, ExportSnapshot, RegionPos)
+  - {static} escape(String) : String
+}
+
+}

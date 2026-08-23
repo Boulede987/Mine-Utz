@@ -1,0 +1,8 @@
+namespace com.mineutze.worldgen.regionsolve {
+class ConnectedComponents {
+  ~ {static} find(Map<MacroCellPos, BiomeId>, Set<MacroCellPos>) : List<Set<MacroCellPos>>
+}
+
+ConnectedComponents ..> BiomeId
+ConnectedComponents ..> MacroCellPos
+}

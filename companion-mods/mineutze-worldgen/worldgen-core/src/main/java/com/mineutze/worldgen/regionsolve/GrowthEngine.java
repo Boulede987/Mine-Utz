@@ -8,12 +8,11 @@ import java.util.Map;
 import java.util.stream.Stream;
 
 /**
- * Legality and cohesion checks shared by every live geometry/repair pass —
- * {@link MeshGeometryRealization}, {@link PixelFragmentRepair}, plus their
- * mesh-native analogs {@code MeshLegality}/{@code MeshCohesion}. A candidate
- * biome is legal at a cell if it's allowed, per the BiomeGraph, next to
- * every already-assigned neighbor; cohesive if it has enough already-
- * assigned support around it per its own {@link GrowthCohesionProfile}.
+ * Legality and cohesion checks shared by every pixel-grid geometry/repair
+ * pass, e.g. {@link PixelFragmentRepair}. A candidate biome is legal at a
+ * cell if it's allowed, per the BiomeGraph, next to every already-assigned
+ * neighbor; cohesive if it has enough already-assigned support around it
+ * per its own {@link GrowthCohesionProfile}.
  */
 public final class GrowthEngine {
 

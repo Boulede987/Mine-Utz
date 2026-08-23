@@ -1,0 +1,12 @@
+namespace com.mineutze.worldgen.regionsolve {
+class BorderBlend {
+  + {static} blendedValue(int, int, MacroGridConfig, BiomeGraph, Function<MacroCellPos, BiomeId>, ToDoubleFunction<BiomeId>) : double
+  - {static} blendFactor(int, int, int, BiomeId, BiomeId, BiomeGraph) : double
+  - {static} lerp(double, double, double) : double
+}
+
+BorderBlend ..> BiomeGraph
+BorderBlend ..> BiomeId
+BorderBlend ..> MacroCellPos
+BorderBlend ..> MacroGridConfig
+}

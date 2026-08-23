@@ -1,0 +1,153 @@
+@startuml export
+
+skinparam classAttributeIconSize 0
+skinparam shadowing false
+
+skinparam class {
+  BackgroundColor<<interface>> #D6EAF8
+  BorderColor<<interface>> #2E86C1
+}
+skinparam class {
+  BackgroundColor<<abstract>> #E8DAEF
+  BorderColor<<abstract>> #8E44AD
+}
+skinparam class {
+  BackgroundColor #D5F5E3
+  BorderColor #27AE60
+}
+skinparam class {
+  BackgroundColor<<record>> #FCF3CF
+  BorderColor<<record>> #B7950B
+}
+skinparam class {
+  BackgroundColor<<static>> #a7faa0
+  BorderColor<<static>> #38d610
+}
+skinparam class {
+  BackgroundColor<<enum>> #F5B7B1
+  BorderColor<<enum>> #C0392B
+}
+
+skinparam class {
+  BackgroundColor<<external>> #EAECEE
+  BorderColor<<external>> #839192
+}
+
+class AsciiExporter {
+  + {static} write(Path, ExportSnapshot, BiomeLegend)
+  - {static} writeLegend(StringBuilder, ExportSnapshot, BiomeLegend)
+  - {static} writeGrid(StringBuilder, ExportSnapshot, BiomeLegend)
+}
+class BiomeLegend {
+  - rgbByBiome : Map<BiomeId, Integer>
+  - glyphByBiome : Map<BiomeId, Character>
+  + rgbOf(BiomeId) : int
+  + glyphOf(BiomeId) : char
+  + glyphs() : Map<BiomeId, Character>
+  - {static} colorFor(BiomeId) : int
+  - {static} glyphFor(BiomeId, java.util.Collection<Character>) : char
+}
+class ExportCli {
+  - {static} DEFAULT_WORLD_SEED : long
+  - {static} DEFAULT_REGION_SPAN : int
+  - {static} DEFAULT_OUTPUT_DIR : String
+  + {static} main(String[])
+  - {static} createOutputDir(Path)
+}
+class ExportSnapshot <<record>> {
+  + graph : BiomeGraph
+  + gridConfig : MacroGridConfig
+  + worldSeed : long
+  + minRegion : RegionPos
+  + regionSpan : int
+  + cells : Map<MacroCellPos, BiomeId>
+  + warningsByRegion : Map<RegionPos, List<String>>
+  + spanCells() : int
+  + orderedCells() : List<MacroCellPos>
+  + biomeAt(MacroCellPos) : BiomeId
+}
+class JsonExporter {
+  + {static} write(Path, ExportSnapshot, BiomeLegend)
+  - {static} writeGraph(StringBuilder, BiomeGraph, BiomeLegend)
+  - {static} writeRegions(StringBuilder, ExportSnapshot)
+  - {static} writeCells(StringBuilder, ExportSnapshot, RegionPos)
+  - {static} escape(String) : String
+}
+class PngExporter {
+  - {static} PIXELS_PER_CELL : int
+  - {static} REGION_BOUNDARY_COLOR : Color
+  - {static} GAP_COLOR : Color
+  + {static} write(Path, ExportSnapshot, BiomeLegend)
+}
+class RegionGridSolver {
+  + {static} solve(BiomeGraph, MacroGridConfig, long, RegionPos, int, BiConsumer<RegionPos, RegionSolveResult>) : ExportSnapshot
+}
+class AdjacencyRule <<external>> [[biomegraph.svg]] {
+}
+class BiomeGraph <<external>> [[biomegraph.svg]] {
+}
+class BiomeId <<external>> [[biomegraph.svg]] {
+}
+class BiomeNode <<external>> [[biomegraph.svg]] {
+}
+class MacroCellPos <<external>> [[regionsolve.svg]] {
+}
+class MacroGridConfig <<external>> [[regionsolve.svg]] {
+}
+class ModBiomeGraph <<external>> [[biomegraph.svg]] {
+}
+class PatchSizeEnforcer <<external>> [[regionsolve.svg]] {
+}
+class PixelFragmentRepair <<external>> [[regionsolve.svg]] {
+}
+class RegionPos <<external>> [[regionsolve.svg]] {
+}
+class RegionSolveResult <<external>> [[regionsolve.svg]] {
+}
+class SeedRegionCache <<external>> [[regionsolve.svg]] {
+}
+
+AsciiExporter ..> BiomeId
+AsciiExporter ..> BiomeLegend
+AsciiExporter ..> ExportSnapshot
+AsciiExporter ..> MacroCellPos
+BiomeLegend ..> BiomeId
+ExportCli ..> AsciiExporter
+ExportCli ..> BiomeGraph
+ExportCli ..> BiomeLegend
+ExportCli ..> ExportSnapshot
+ExportCli ..> JsonExporter
+ExportCli ..> MacroGridConfig
+ExportCli ..> ModBiomeGraph
+ExportCli ..> PngExporter
+ExportCli ..> RegionGridSolver
+ExportCli ..> RegionPos
+ExportSnapshot *--> BiomeGraph
+ExportSnapshot *--> BiomeId
+ExportSnapshot *--> MacroCellPos
+ExportSnapshot *--> MacroGridConfig
+ExportSnapshot *--> RegionPos
+JsonExporter ..> AdjacencyRule
+JsonExporter ..> BiomeGraph
+JsonExporter ..> BiomeId
+JsonExporter ..> BiomeLegend
+JsonExporter ..> BiomeNode
+JsonExporter ..> ExportSnapshot
+JsonExporter ..> MacroCellPos
+JsonExporter ..> MacroGridConfig
+JsonExporter ..> RegionPos
+PngExporter ..> BiomeLegend
+PngExporter ..> ExportSnapshot
+PngExporter ..> MacroCellPos
+RegionGridSolver ..> BiomeGraph
+RegionGridSolver ..> BiomeId
+RegionGridSolver ..> ExportSnapshot
+RegionGridSolver ..> MacroCellPos
+RegionGridSolver ..> MacroGridConfig
+RegionGridSolver ..> PatchSizeEnforcer
+RegionGridSolver ..> PixelFragmentRepair
+RegionGridSolver ..> RegionPos
+RegionGridSolver ..> RegionSolveResult
+RegionGridSolver ..> SeedRegionCache
+
+@enduml

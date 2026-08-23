@@ -1,0 +1,7 @@
+namespace com.mineutze.worldgen.regionsolve.topology {
+class Circumcenter {
+  + {static} of(Point2D, Point2D, Point2D) : Point2D
+}
+
+Circumcenter ..> Point2D
+}

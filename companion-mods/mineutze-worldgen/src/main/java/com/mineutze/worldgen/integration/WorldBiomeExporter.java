@@ -29,7 +29,7 @@ import java.util.Map;
  * reusing the exact same {@code com.mineutze.worldgen.export} writers
  * (PNG/ASCII/JSON) the standalone CLI uses. Exists because the standalone
  * export CLI and the live game can legitimately diverge (cross-region
- * solve is order-dependent — doc/KNOWN_ISSUES.md #4) and there was
+ * solve is order-dependent) and there was
  * previously no way to see what the game actually produced, only what the
  * solver would produce in isolation.
  *

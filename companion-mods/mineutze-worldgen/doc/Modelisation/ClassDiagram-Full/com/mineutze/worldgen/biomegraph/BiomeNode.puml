@@ -34,13 +34,14 @@ class BiomeNode <<record>> {
   + sizeRange : BiomeSizeRange
   + shapeHints : BiomeShapeHints
   + featureToggles : BiomeFeatureToggles
-  + universalFiller : boolean
+  + cohesionProfile : GrowthCohesionProfile
 }
 
 BiomeNode *--> BiomeFeatureToggles
 BiomeNode *--> BiomeId
 BiomeNode *--> BiomeShapeHints
 BiomeNode *--> BiomeSizeRange
+BiomeNode *--> GrowthCohesionProfile
 }
 
 @enduml

@@ -43,6 +43,42 @@ final class SeparatorWidener {
     }
 
     /**
+     * Ad-hoc aggregate counters for the {@code MINEUTZE_WORLDGEN_TRACE}
+     * investigation into why solving a region boxed in by real neighbor
+     * context (as opposed to isolated) can cost far more than a single
+     * region's own baseline — see {@code
+     * RegionSolveStageTimingSpikeTest}'s 3x3-grid finding. Plain static
+     * fields, not thread-local: safe because {@code SeedRegionCache} already
+     * serializes all region solving behind one global lock, so exactly one
+     * region's widen work is ever in flight at a time. Always incremented
+     * (a handful of long additions, negligible cost) regardless of whether
+     * tracing is enabled — only the eventual {@link WorldgenTrace#log} call
+     * at the summary site is gated, same as everywhere else in this class.
+     */
+    static final class Stats {
+        long widenCalls;
+        long frontierPolls;
+        long legalityRejects;
+        long connectivityRejects;
+        long connectivityChecks;
+        long connectivityNodesVisited;
+        long totalNanos;
+
+        void reset() {
+            widenCalls = frontierPolls = legalityRejects = connectivityRejects = connectivityChecks = connectivityNodesVisited = totalNanos = 0;
+        }
+
+        @Override
+        public String toString() {
+            return "widenCalls=" + widenCalls + " frontierPolls=" + frontierPolls + " legalityRejects=" + legalityRejects
+                + " connectivityRejects=" + connectivityRejects + " connectivityChecks=" + connectivityChecks
+                + " connectivityNodesVisited=" + connectivityNodesVisited + " widenWallMs=" + (totalNanos / 1_000_000.0);
+        }
+    }
+
+    static final Stats STATS = new Stats();
+
+    /**
      * @param repelFrom cells to actively grow AWAY from, not just toward the
      *                  component's own centroid — {@link SeamWidener}'s use case:
      *                  widening a locally-pinched buffer must not drift toward a
@@ -78,13 +114,21 @@ final class SeparatorWidener {
             return;
         }
 
+        long widenStart = System.nanoTime();
+        STATS.widenCalls++;
         Set<MacroCellPos> claimed = new LinkedHashSet<>(currentComponent);
         TreeSet<MacroCellPos> frontier = new TreeSet<>(frontierOrder(centroidOf(currentComponent), repelFrom));
         addUnclaimedNeighbors(currentComponent, claimed, regionCellSet, frontier);
 
         while (claimed.size() < targetMinCells && !frontier.isEmpty()) {
             MacroCellPos next = frontier.pollFirst();
-            if (!isLegalToClaim(next, ownBiome, claimed, assignment, graph) || !stealingPreservesDonorConnectivity(next, assignment, regionCellSet, claimed)) {
+            STATS.frontierPolls++;
+            if (!isLegalToClaim(next, ownBiome, claimed, assignment, graph)) {
+                STATS.legalityRejects++;
+                continue;
+            }
+            if (!stealingPreservesDonorConnectivity(next, assignment, regionCellSet, claimed)) {
+                STATS.connectivityRejects++;
                 continue;
             }
             claimed.add(next);
@@ -94,6 +138,7 @@ final class SeparatorWidener {
         for (MacroCellPos cell : claimed) {
             assignment.put(cell, ownBiome);
         }
+        STATS.totalNanos += System.nanoTime() - widenStart;
     }
 
     /**
@@ -185,6 +230,7 @@ final class SeparatorWidener {
      * check exists to get right.
      */
     static boolean stealingPreservesDonorConnectivity(MacroCellPos cell, Map<MacroCellPos, BiomeId> assignment, Set<MacroCellPos> regionCellSet, Set<MacroCellPos> claimed) {
+        STATS.connectivityChecks++;
         BiomeId donorBiome = assignment.get(cell);
         if (donorBiome == null) {
             return true;
@@ -202,6 +248,7 @@ final class SeparatorWidener {
         reached.add(donorNeighbors.get(0));
         while (!stack.isEmpty()) {
             if (reached.containsAll(donorNeighbors)) {
+                STATS.connectivityNodesVisited += reached.size();
                 return true;
             }
             MacroCellPos current = stack.pop();
@@ -212,6 +259,7 @@ final class SeparatorWidener {
                 }
             }
         }
+        STATS.connectivityNodesVisited += reached.size();
         return reached.containsAll(donorNeighbors);
     }
 }

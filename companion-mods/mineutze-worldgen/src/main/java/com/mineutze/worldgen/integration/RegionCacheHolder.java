@@ -2,7 +2,6 @@ package com.mineutze.worldgen.integration;
 
 import com.mineutze.worldgen.biomegraph.ModBiomeGraph;
 import com.mineutze.worldgen.regionsolve.MacroGridConfig;
-import com.mineutze.worldgen.regionsolve.MeshGeometryRealization;
 import com.mineutze.worldgen.regionsolve.RegionPos;
 import com.mineutze.worldgen.regionsolve.RegionSolveResult;
 import com.mineutze.worldgen.regionsolve.SeedRegionCache;
@@ -45,8 +44,8 @@ public final class RegionCacheHolder {
 
     private static final Logger LOGGER = LogUtils.getLogger();
     private static final long READY_TIMEOUT_SECONDS = 30;
-    // ~23MB/region at MacroGridConfig.DEFAULT's real cell resolution (measured directly,
-    // see doc/KNOWN_ISSUES.md #8) - 64 regions is ~1.5GB, a real but bounded slice of a
+    // ~23MB/region at MacroGridConfig.DEFAULT's real cell resolution (measured directly)
+    // - 64 regions is ~1.5GB, a real but bounded slice of a
     // typical modded server's heap, generous enough not to thrash during ordinary
     // exploration. Tune from real deployment once one exists, not guessed further here.
     private static final int MAX_CACHED_REGIONS = 64;
@@ -63,7 +62,7 @@ public final class RegionCacheHolder {
             LOGGER.info("[mineutze_worldgen] Overworld loaded, seed {} — region solving starts on first query", seed);
             current = new SeedRegionCache(
                 ModBiomeGraph.DEFAULT, MacroGridConfig.DEFAULT, seed, RegionCacheHolder::logRegionSolved,
-                MeshGeometryRealization::realize, new SavedDataRegionPersistenceStore(serverLevel), MAX_CACHED_REGIONS
+                new SavedDataRegionPersistenceStore(serverLevel), MAX_CACHED_REGIONS
             );
             READY.countDown();
         }

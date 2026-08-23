@@ -1,0 +1,42 @@
+@startuml ExportCli
+
+skinparam classAttributeIconSize 0
+skinparam shadowing false
+
+skinparam class {
+  BackgroundColor<<interface>> #D6EAF8
+  BorderColor<<interface>> #2E86C1
+}
+skinparam class {
+  BackgroundColor<<abstract>> #E8DAEF
+  BorderColor<<abstract>> #8E44AD
+}
+skinparam class {
+  BackgroundColor #D5F5E3
+  BorderColor #27AE60
+}
+skinparam class {
+  BackgroundColor<<record>> #FCF3CF
+  BorderColor<<record>> #B7950B
+}
+skinparam class {
+  BackgroundColor<<static>> #a7faa0
+  BorderColor<<static>> #38d610
+}
+skinparam class {
+  BackgroundColor<<enum>> #F5B7B1
+  BorderColor<<enum>> #C0392B
+}
+
+namespace com.mineutze.worldgen.export {
+class ExportCli {
+  - {static} DEFAULT_WORLD_SEED : long
+  - {static} DEFAULT_REGION_SPAN : int
+  - {static} DEFAULT_OUTPUT_DIR : String
+  + {static} main(String[])
+  - {static} createOutputDir(Path)
+}
+
+}
+
+@enduml

@@ -1,0 +1,9 @@
+namespace com.mineutze.worldgen.export {
+class PngExporter {
+  - {static} PIXELS_PER_CELL : int
+  - {static} REGION_BOUNDARY_COLOR : Color
+  - {static} GAP_COLOR : Color
+  + {static} write(Path, ExportSnapshot, BiomeLegend)
+}
+
+}

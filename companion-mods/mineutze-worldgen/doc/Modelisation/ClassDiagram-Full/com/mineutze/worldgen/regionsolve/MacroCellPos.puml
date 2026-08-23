@@ -33,7 +33,9 @@ class MacroCellPos <<record>> {
   + x : int
   + z : int
   + orthogonalNeighbors() : List<MacroCellPos>
+  + diagonalNeighbors() : List<MacroCellPos>
   + distanceSquaredTo(MacroCellPos) : long
+  + hashCode() : int
 }
 
 }

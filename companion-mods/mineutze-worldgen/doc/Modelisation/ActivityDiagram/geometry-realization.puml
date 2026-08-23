@@ -1,36 +1,103 @@
 @startuml
-title Realize geometry from fixed topology (priority-driven flood-fill onto macro-cells)
+title Region solve - full pipeline (current, plain-language)
 
 start
-:Each free SeedGraphNode's position becomes\na growth seed; its CSP-assigned identity's\nsize range converts to a target cell count;
-:Seed cell claimed for each patch\n(skipped if the seed spot itself turns out\nillegal - GapFiller's sweep below\nreclaims that territory from a neighbor);
 
-while (any patch still below\nits target and has claimable frontier?) is (yes)
-  :Pick the patch furthest below\nits target (priority);
-  :Pop its highest-priority frontier cell\n(nearest-to-seed + deterministic jitter -\nsame ordering GrowthEngine uses today);
-  if (still unclaimed, still legal,\nstill cohesive right now?) then (yes)
-    :Claim it for this patch;
-    :Push its legal, cohesive,\nstill-unclaimed neighbors\ninto this patch's frontier;
+partition "before ANY world gen (build time, once)" {
+  :for every possible group of up to 8 biomes,\ncheck at least one biome in the list is legal\nnext to all of them at the same time;
+  if (any group has NO such biome?) then (yes)
+    :CRASH the build on purpose -\nthe biome list itself has a real gap,\nfix it before shipping;
+    end
   else (no)
-    :Discard - gone stale since it was\npushed (a competing patch claimed it,\nor a neighbor's claim since then\nmade it illegal/incohesive);
   endif
-endwhile (no)
+  note right
+    this is what makes the final "CRASH on purpose" box
+    far below PROVEN unreachable, not just rare - a real
+    production bug (badlands + ocean shared no third
+    common neighbor) was found and fixed this way.
+  end note
+}
 
-:Run GapFiller.fillGaps over whatever's\nstill unclaimed - the same always-\nterminating multi-source-BFS-plus-three-\ntier-resolver the flood-fill-first\npipeline already relies on, unchanged;
+:place seed points across the region\n(SeedGrid, +margin so edge triangles have real neighbors);
+:connect seed points into triangles\n(Delaunay triangulation);
+:work out which triangles touch which\n(TriangleAdjacency, max 3 real neighbors each);
+
+partition "pick each triangle's biome (CSP)" {
+  :any triangle whose center already falls inside\na neighboring region's solved area gets FIXED\nto that neighbor's own decision;
+  :work out a sensible max triangle count per biome\n(how many of ITS OWN patches could fit in ITS\nfair share of this region's area - same number\nfor every biome once you're fair by area);
+  :for every other (free) triangle, pick a biome that is\nallowed next to all its already-decided neighbors;
+  note right
+    picks are ALSO fairness-biased: each biome has a
+    target share of triangles (based on its size range,
+    squared, since a patch is an area not a line) - an
+    under-represented biome is preferred whenever two
+    choices are equally legal, UNLESS that biome already
+    hit its max triangle count for this region (then it
+    sorts last, but can still be picked if truly the only
+    legal option - never blocks a solution from existing).
+  end note
+  :backtrack if a choice leads to a dead end;
+}
+
+:give each triangle a random starting radius\n(from its biome's declared width range);
+
+partition "correctRadii - fix radius, generation time only\n(runs up to 3 passes, one triangle at a time)" {
+  :FIRST, do one full test-render of the region\nand add up how many cells each BIOME won;
+  :compare that to each biome's fair share of the\nwhole region (same size-based quota as the CSP step);
+  :mark a biome "starved" if its TOTAL area (all its\ntriangles combined) is under half its fair share;
+
+  while (still passes left AND something changed last pass?) is (yes)
+    :test-render again, count this triangle's own cells;
+    if (won zero cells AND its biome is starved?) then (yes)
+      :allow a MUCH bigger radius ceiling\nand grow faster;
+      note right
+        ONLY a triangle that is currently
+        winning nothing gets this boost - a
+        triangle already contributing real
+        area is left alone even if its biome
+        is starved overall, so this can't
+        re-inflate an already-fine patch.
+      end note
+    else (no)
+      :normal radius ceiling\n(1.5x its own biome's max width);
+    endif
+    if (won zero cells?) then (yes)
+      :grow radius by the growth step, capped at the ceiling;
+    else (no)
+      if (measured size outside its own target range?) then (yes)
+        :nudge radius toward target -\nbut the STEP ITSELF is also capped\n(at most ~2x per pass, either way),\nnot just the final ceiling;
+        note right
+          without this step cap, one pass could
+          slam a radius almost straight to its
+          ceiling when measured size was tiny -
+          with several biomes doing that at once,
+          the whole region's radii would oscillate
+          forever instead of settling down.
+        end note
+      else (no)
+        :leave this triangle's radius alone;
+      endif
+    endif
+  endwhile (no more passes or nothing changed)
+}
+
+partition "final render - zero illegal touches, guaranteed" {
+  :score every cell against every nearby triangle\n(closer + bigger radius wins);
+  :grow the map out cell-by-cell,\nmost-confident cell first;
+  if (best biome for this cell is legal against\nevery already-decided neighbor around it\n(all 8 directions)?) then (yes)
+    :commit it;
+  else (no)
+    if (any OTHER biome in the graph is legal against\nall of this cell's decided neighbors?) then (yes)
+      :commit that one instead (fallback scan);
+    else (no)
+      :CRASH on purpose - the build-time check above\nalready proves this can't happen for a\nwell-formed biome list, so reaching this\nmeans that proof was skipped or the list\nchanged since;
+      end
+    endif
+  endif
+}
+
+:done - one biome per cell, zero illegal adjacencies;
 
 stop
 
-note right
-  Legality/cohesion are NOT fully pre-decided by
-  the CSP stage - Delaunay edges approximate which
-  seeds will actually end up touching in the final
-  geometry, they don't guarantee it exactly. So
-  every claim here is still checked live against
-  the CURRENT shared assignment (same "recheck
-  fresh, don't trust push-time state" principle
-  GapFiller's own fill pass already uses) - this
-  stage narrows how OFTEN a conflict can happen
-  (CSP already resolved the common case), it
-  doesn't eliminate the need for the check.
-end note
 @enduml

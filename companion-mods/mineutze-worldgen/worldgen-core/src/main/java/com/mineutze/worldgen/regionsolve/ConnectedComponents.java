@@ -28,12 +28,12 @@ import java.util.Set;
  * {@code ownCellSet} — this class only measures, it never assumes what's
  * safe to change.
  */
-final class ConnectedComponents {
+public final class ConnectedComponents {
 
     private ConnectedComponents() {
     }
 
-    static List<Set<MacroCellPos>> find(Map<MacroCellPos, BiomeId> assignment, Set<MacroCellPos> ownCellSet) {
+    public static List<Set<MacroCellPos>> find(Map<MacroCellPos, BiomeId> assignment, Set<MacroCellPos> ownCellSet) {
         List<MacroCellPos> orderedCells = ownCellSet.stream()
             .sorted(Comparator.comparingInt(MacroCellPos::x).thenComparingInt(MacroCellPos::z))
             .toList();

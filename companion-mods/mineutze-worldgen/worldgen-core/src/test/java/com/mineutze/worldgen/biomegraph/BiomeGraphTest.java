@@ -159,4 +159,60 @@ class BiomeGraphTest {
         assertEquals(10, graph.rule(DESERT, PLAINS).blendWidthBlocks());
         assertEquals(10, graph.rule(PLAINS, DESERT).blendWidthBlocks(), "rule lookup must be order-independent");
     }
+
+    /**
+     * PLAINS is a local hub (legal against all 3 others) - the 4-way combination
+     * {DESERT, SAVANNA, PLAINS, OCEAN} has PLAINS itself as a simultaneously-legal
+     * candidate, and by the monotonicity argument in this method's own doc, so does
+     * every smaller subset.
+     */
+    @Test
+    void requireEveryLocalNeighborhoodSolvablePassesWhenAHubExists() {
+        BiomeGraph graph = new BiomeGraph(
+            List.of(node(DESERT), node(SAVANNA), node(PLAINS), node(OCEAN)),
+            List.of(
+                AdjacencyRule.allow(PLAINS, DESERT, 10),
+                AdjacencyRule.allow(PLAINS, SAVANNA, 10),
+                AdjacencyRule.allow(PLAINS, OCEAN, 10)
+            )
+        );
+
+        graph.requireEveryLocalNeighborhoodSolvable(4);
+    }
+
+    /**
+     * A bare 4-cycle (no diagonal) - {DESERT, SAVANNA, PLAINS, OCEAN} converging
+     * simultaneously has no legal candidate (SAVANNA-OCEAN is never allowed, and
+     * neither is DESERT-PLAINS): this is the exact real dead end {@code
+     * LegalityConstrainedRasterizer} would otherwise only discover mid-generation.
+     */
+    @Test
+    void requireEveryLocalNeighborhoodSolvableThrowsOnAGenuineDeadEnd() {
+        BiomeGraph graph = new BiomeGraph(
+            List.of(node(DESERT), node(SAVANNA), node(PLAINS), node(OCEAN)),
+            List.of(
+                AdjacencyRule.allow(DESERT, SAVANNA, 10),
+                AdjacencyRule.allow(SAVANNA, PLAINS, 10),
+                AdjacencyRule.allow(PLAINS, OCEAN, 10),
+                AdjacencyRule.allow(OCEAN, DESERT, 10)
+            )
+        );
+
+        IllegalArgumentException thrown = assertThrows(IllegalArgumentException.class, () -> graph.requireEveryLocalNeighborhoodSolvable(4));
+        assertTrue(thrown.getMessage().contains("no biome is legal against every member"), "expected a diagnostic naming the unsolvable combination, got: " + thrown.getMessage());
+    }
+
+    /**
+     * Regression guard on the production graph itself, not just synthetic fixtures -
+     * {@code ModBiomeGraph.DEFAULT} already calls this in its own static initializer at
+     * maxNeighbors=8 (the real Moore/8-way count), proving zero unsolvable neighbor
+     * combinations exist at ANY size for this graph - not a universal-filler-style
+     * escape hatch, just one added rule (ocean-savanna) closing the one real gap a
+     * production crash found (see that graph's own doc). This test mostly documents
+     * and locks in that proof rather than discovering something new.
+     */
+    @Test
+    void modBiomeGraphDefaultPassesItsOwnValidationBound() {
+        com.mineutze.worldgen.biomegraph.ModBiomeGraph.DEFAULT.requireEveryLocalNeighborhoodSolvable(8);
+    }
 }

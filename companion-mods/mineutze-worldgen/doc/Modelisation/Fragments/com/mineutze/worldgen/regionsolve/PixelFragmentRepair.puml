@@ -1,0 +1,15 @@
+namespace com.mineutze.worldgen.regionsolve {
+class PixelFragmentRepair {
+  - {static} MAX_REPAIR_PASSES : int
+  - {static} SMALL_FRAGMENT_MAX_SIZE : int
+  + {static} repair(Map<MacroCellPos, BiomeId>, Map<MacroCellPos, BiomeId>, BiomeGraph) : Map<MacroCellPos, BiomeId>
+  - {static} findIllegalCells(Map<MacroCellPos, BiomeId>, Map<MacroCellPos, BiomeId>, BiomeGraph) : List<MacroCellPos>
+  - {static} findSmallFragmentComponents(Map<MacroCellPos, BiomeId>, Map<MacroCellPos, BiomeId>) : List<Set<MacroCellPos>>
+  - {static} sameBiomeComponent(MacroCellPos, Map<MacroCellPos, BiomeId>) : Set<MacroCellPos>
+  - {static} bestLegalReplacement(MacroCellPos, Map<MacroCellPos, BiomeId>, BiomeGraph) : Optional<BiomeId>
+  - {static} bestLegalReplacementForFragment(Set<MacroCellPos>, Map<MacroCellPos, BiomeId>, BiomeGraph) : Optional<BiomeId>
+  - {static} fragmentAcceptsCandidate(Set<MacroCellPos>, BiomeId, Map<MacroCellPos, BiomeId>, BiomeGraph) : boolean
+  - {static} isLegalIncludingDiagonals(MacroCellPos, BiomeId, Map<MacroCellPos, BiomeId>, BiomeGraph) : boolean
+}
+
+}

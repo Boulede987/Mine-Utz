@@ -18,11 +18,18 @@ application {
     mainClass = 'com.mineutze.worldgen.export.ExportCli'
 }
 
-tasks.register('visualizeSteps', JavaExec) {
+tasks.register('fieldSpike', JavaExec) {
     group = 'application'
-    description = 'Step-by-step mesh-pipeline visualizer - dumps a numbered PNG per pipeline stage, per region, into a subfolder. Run with: ./gradlew :worldgen-core:visualizeSteps --args="<worldSeed> <regionSpan> <outputDir>"'
+    description = 'Step-0 spike: does a domain-warped weighted-Voronoi field produce organic (non-straight) biome edges? No mesh, no CSP - hardcoded seeds, a warp-parameter sweep, PNG output. Run with: ./gradlew :worldgen-core:fieldSpike --args="<outputDir>"'
     classpath = sourceSets.main.runtimeClasspath
-    mainClass = 'com.mineutze.worldgen.export.StepVisualizerCli'
+    mainClass = 'com.mineutze.worldgen.export.NoiseFieldSpikeCli'
+}
+
+tasks.register('triangleFieldExport', JavaExec) {
+    group = 'application'
+    description = 'First visual of the glued-together triangle+field region-solve path (SeedGrid -> Delaunay -> TriangleAdjacency -> fused CSP -> AdaptiveDomainWarp -> raster), against the real ModBiomeGraph.DEFAULT. Run with: ./gradlew :worldgen-core:triangleFieldExport --args="<worldSeed> <outputDir>"'
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'com.mineutze.worldgen.export.TriangleFieldRegionExportCli'
 }
 
 repositories {

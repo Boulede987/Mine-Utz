@@ -25,27 +25,21 @@ import java.util.stream.Collectors;
  * or a same-biome component at or under {@link #SMALL_FRAGMENT_MAX_SIZE}
  * cells — a stray speck, not a real patch.
  *
- * <p>Two live callers, same method, different {@code fixedContext} — the
- * parameter is what makes both safe:
- * <ul>
- *   <li>{@link MeshGeometryRealization} calls this once per region, with an
- *   EMPTY {@code fixedContext} — purely an interior discretization cleanup
- *   over that region's own just-rasterized cells (see its own doc: a
- *   rasterization-stranded speck is a property of THIS region's own mesh,
- *   unrelated to neighbor solve order). This is NOT the region-scoped,
- *   boundary-aware repair that was tried and reverted earlier — that one
- *   passed real {@code fixedBoundaryCells} in and still couldn't catch a
- *   violation against a neighbor that hadn't solved yet (a real,
- *   order-dependent gap, inherent to "regions solve once, commit forever,
- *   never get force-solved") — measured directly on a 5x5 export: left 12
- *   of 12 stray small fragments untouched. That specific use case (boundary
- *   context feeding a per-region call) is still correctly not attempted.
- *   <li>The export CLI's {@code RegionGridSolver} calls this once over an
- *   entire already-combined multi-region swath, also with an EMPTY {@code
- *   fixedContext} (every cell is "ownable" from a whole-swath view) —
- *   something only a finite, one-shot export can do, catching cross-region
- *   defects no single region's own solve could see.
- * </ul>
+ * <p>Live caller today: the export CLI's {@code RegionGridSolver}, once over
+ * an entire already-combined multi-region swath, with an EMPTY {@code
+ * fixedContext} (every cell is "ownable" from a whole-swath view) —
+ * something only a finite, one-shot export can do, catching cross-region
+ * defects no single region's own solve could see. {@code SeedRegionCache}'s
+ * own per-region live solve path has no algorithm wired in right now (see
+ * its own doc) — whatever replaces it is expected to call this once per
+ * region with an EMPTY {@code fixedContext} too, purely as an interior
+ * discretization cleanup over that region's own cells (never the
+ * region-scoped, boundary-aware repair that was tried and reverted earlier:
+ * passing real {@code fixedBoundaryCells} in still couldn't catch a
+ * violation against a neighbor that hadn't solved yet — a real,
+ * order-dependent gap, inherent to "regions solve once, commit forever,
+ * never get force-solved" — measured directly on a 5x5 export: left 12 of
+ * 12 stray small fragments untouched).
  *
  * <p>{@code ownCells} are the only cells ever reassigned; {@code fixedContext}
  * (nonempty only if a future caller ever has real neighbor context worth

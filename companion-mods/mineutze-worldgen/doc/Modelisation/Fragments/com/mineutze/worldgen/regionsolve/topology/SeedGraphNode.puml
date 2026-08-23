@@ -1,0 +1,14 @@
+namespace com.mineutze.worldgen.regionsolve.topology {
+class SeedGraphNode <<record>> {
+  + id : int
+  + position : MacroCellPos
+  + fixed : boolean
+  + domain : BiomeId[*]
+  + {static} fixed(int, MacroCellPos, BiomeId) : SeedGraphNode
+  + {static} free(int, MacroCellPos, Set<BiomeId>) : SeedGraphNode
+  + fixedBiome() : BiomeId
+}
+
+SeedGraphNode *--> "0..*" BiomeId
+SeedGraphNode *--> MacroCellPos
+}

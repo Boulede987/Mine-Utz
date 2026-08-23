@@ -1,0 +1,8 @@
+namespace com.mineutze.worldgen.export {
+class AsciiExporter {
+  + {static} write(Path, ExportSnapshot, BiomeLegend)
+  - {static} writeLegend(StringBuilder, ExportSnapshot, BiomeLegend)
+  - {static} writeGrid(StringBuilder, ExportSnapshot, BiomeLegend)
+}
+
+}

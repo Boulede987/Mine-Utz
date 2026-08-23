@@ -24,3 +24,11 @@ Before computing any 3d shape, we compute the distribution. In x,y,z is a warm o
 
 deserts have no rivers, no lakes
 forests have rivers
+
+## Code Concerns
+
+No "reseeding". We don't "try until we make it". We make it work. Until it works, when we fail, we fail loud.
+
+We don't compromise on our desing. Biomes, have correct size and correct adjencies. They have natural shapes (no too thin seams, no straight edges, but weavy natural shapes)
+
+We have a performance concern. This is meant for a live game. Several minutes of solving is hardly acceptable.

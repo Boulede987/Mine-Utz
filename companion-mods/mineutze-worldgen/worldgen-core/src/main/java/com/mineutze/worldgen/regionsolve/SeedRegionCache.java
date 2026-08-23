@@ -16,7 +16,7 @@ import java.util.concurrent.ConcurrentHashMap;
  *
  * <p>{@code maxCachedRegions} bounds live memory (each solved region is a
  * real, non-trivial amount of retained state at {@link MacroGridConfig}'s
- * production cell resolution — see doc/KNOWN_ISSUES.md #8) — anything
+ * production cell resolution, measured directly) — anything
  * evicted is durably {@link RegionPersistenceStore#save saved} the moment
  * it's first solved, never only at eviction time, so a crash between solve
  * and eventual eviction never loses work. Both persistence and the cap are
@@ -61,7 +61,6 @@ public final class SeedRegionCache {
     private final MacroGridConfig gridConfig;
     private final long worldSeed;
     private final RegionSolveListener onRegionSolved;
-    private final TopologyFirstRegionSolver.GeometryRealizer geometryRealizer;
     private final RegionPersistenceStore persistenceStore;
     private final int maxCachedRegions;
     private final Map<RegionPos, RegionSolveResult> solved = new ConcurrentHashMap<>();
@@ -91,21 +90,7 @@ public final class SeedRegionCache {
      *                       a legal spot
      */
     public SeedRegionCache(BiomeGraph graph, MacroGridConfig gridConfig, long worldSeed, RegionSolveListener onRegionSolved) {
-        this(graph, gridConfig, worldSeed, onRegionSolved, MeshGeometryRealization::realize);
-    }
-
-    /**
-     * @param geometryRealizer defaults to {@link MeshGeometryRealization#realize} —
-     *                         the mesh-based geometry stage, live as of
-     *                         2026-08-08 after extensive seed-42 comparison
-     *                         review against the pixel-grid predecessor it
-     *                         replaced. Pluggable purely so the export CLI's
-     *                         own standalone comparison runs can swap it out
-     *                         without touching this constructor's live call
-     *                         sites.
-     */
-    public SeedRegionCache(BiomeGraph graph, MacroGridConfig gridConfig, long worldSeed, RegionSolveListener onRegionSolved, TopologyFirstRegionSolver.GeometryRealizer geometryRealizer) {
-        this(graph, gridConfig, worldSeed, onRegionSolved, geometryRealizer, RegionPersistenceStore.NONE, Integer.MAX_VALUE);
+        this(graph, gridConfig, worldSeed, onRegionSolved, RegionPersistenceStore.NONE, Integer.MAX_VALUE);
     }
 
     /**
@@ -118,7 +103,7 @@ public final class SeedRegionCache {
      */
     public SeedRegionCache(
         BiomeGraph graph, MacroGridConfig gridConfig, long worldSeed, RegionSolveListener onRegionSolved,
-        TopologyFirstRegionSolver.GeometryRealizer geometryRealizer, RegionPersistenceStore persistenceStore, int maxCachedRegions
+        RegionPersistenceStore persistenceStore, int maxCachedRegions
     ) {
         if (maxCachedRegions <= 0) {
             throw new IllegalArgumentException("maxCachedRegions must be positive, got " + maxCachedRegions);
@@ -127,7 +112,6 @@ public final class SeedRegionCache {
         this.gridConfig = gridConfig;
         this.worldSeed = worldSeed;
         this.onRegionSolved = onRegionSolved;
-        this.geometryRealizer = geometryRealizer;
         this.persistenceStore = persistenceStore;
         this.maxCachedRegions = maxCachedRegions;
     }
@@ -190,10 +174,18 @@ public final class SeedRegionCache {
         return solved.containsKey(region);
     }
 
+    /**
+     * {@link TriangleFieldGeometryRealization} consults {@code fixedBoundary} for IDENTITY
+     * (see its own class doc) — a region solved after its neighbors is already influenced
+     * by their decisions; a region solved before them just gets an empty map here, same as
+     * always, and remains free to be legality-checked by whichever of its own neighbors
+     * solve later (that direction of consistency is enforced when THEY collect boundary
+     * context from THIS region's already-committed result, not the other way around).
+     */
     private RegionSolveResult solve(RegionPos region) {
         Map<MacroCellPos, BiomeId> fixedBoundary = RegionBoundaryCollector.collect(region, gridConfig, worldSeed, this::alreadySolvedAssignment);
         RegionSolveInput input = new RegionSolveInput(graph, gridConfig, region, fixedBoundary, worldSeed);
-        return TopologyFirstRegionSolver.solve(input, geometryRealizer);
+        return TriangleFieldGeometryRealization.realize(input);
     }
 
     /**

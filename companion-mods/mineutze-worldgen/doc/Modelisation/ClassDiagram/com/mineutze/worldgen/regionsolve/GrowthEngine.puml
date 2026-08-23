@@ -30,18 +30,12 @@ skinparam class {
 
 namespace com.mineutze.worldgen.regionsolve {
 class GrowthEngine {
-  + {static} attemptGrowth(MacroCellPos, BiomeId, int, int, RegionPos, MacroGridConfig, BiomeGraph, Map<MacroCellPos, BiomeId>) : GrowthAttempt
-  - {static} addLegalUnclaimedNeighbors(MacroCellPos, BiomeId, Set<MacroCellPos>, Map<MacroCellPos, BiomeId>, Map<MacroCellPos, BiomeId>, TreeSet<MacroCellPos>, BiomeGraph)
+  ~ {static} satisfiesCohesion(MacroCellPos, BiomeId, Map<MacroCellPos, BiomeId>, GrowthCohesionProfile) : boolean
+  - {static} satisfiesDirectionalRun(MacroCellPos, BiomeId, Map<MacroCellPos, BiomeId>, GrowthCohesionProfile) : boolean
+  - {static} contiguousRun(MacroCellPos, BiomeId, Map<MacroCellPos, BiomeId>, int, int) : int
   ~ {static} isLegal(MacroCellPos, BiomeId, Map<MacroCellPos, BiomeId>, BiomeGraph) : boolean
-  - {static} frontierOrder(MacroCellPos) : Comparator<MacroCellPos>
-}
-class GrowthAttempt <<record>> {
-  + success : boolean
-  + claimedCells : Map<MacroCellPos, BiomeId>
 }
 
-GrowthAttempt *--> BiomeId
-GrowthAttempt *--> MacroCellPos
 }
 
 @enduml

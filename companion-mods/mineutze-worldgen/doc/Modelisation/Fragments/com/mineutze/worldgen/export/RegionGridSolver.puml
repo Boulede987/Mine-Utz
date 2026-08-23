@@ -1,0 +1,6 @@
+namespace com.mineutze.worldgen.export {
+class RegionGridSolver {
+  + {static} solve(BiomeGraph, MacroGridConfig, long, RegionPos, int, BiConsumer<RegionPos, RegionSolveResult>) : ExportSnapshot
+}
+
+}

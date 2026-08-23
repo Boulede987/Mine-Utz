@@ -1,0 +1,105 @@
+@startuml topology
+
+skinparam classAttributeIconSize 0
+skinparam shadowing false
+
+skinparam class {
+  BackgroundColor<<interface>> #D6EAF8
+  BorderColor<<interface>> #2E86C1
+}
+skinparam class {
+  BackgroundColor<<abstract>> #E8DAEF
+  BorderColor<<abstract>> #8E44AD
+}
+skinparam class {
+  BackgroundColor #D5F5E3
+  BorderColor #27AE60
+}
+skinparam class {
+  BackgroundColor<<record>> #FCF3CF
+  BorderColor<<record>> #B7950B
+}
+skinparam class {
+  BackgroundColor<<static>> #a7faa0
+  BorderColor<<static>> #38d610
+}
+skinparam class {
+  BackgroundColor<<enum>> #F5B7B1
+  BorderColor<<enum>> #C0392B
+}
+
+skinparam class {
+  BackgroundColor<<external>> #EAECEE
+  BorderColor<<external>> #839192
+}
+
+class Circumcenter {
+  + {static} of(Point2D, Point2D, Point2D) : Point2D
+}
+class DelaunayTriangulation {
+  - {static} SUPER_TRIANGLE_MARGIN_FACTOR : double
+  + {static} triangulate(List<Point2D>) : Set<NodeEdge>
+  + {static} triangulateFaces(List<Point2D>) : List<IndexedTriangle>
+  - {static} buildTriangulation(List<Point2D>) : BuiltTriangulation
+  - {static} touchesSuperTriangle(IndexedTriangle, int) : boolean
+  - {static} insertPoint(List<IndexedTriangle>, List<Point2D>, int) : List<IndexedTriangle>
+  - {static} findBoundaryPolygon(List<IndexedTriangle>) : Set<NodeEdge>
+  - {static} extractEdges(List<IndexedTriangle>, int) : Set<NodeEdge>
+  - {static} buildSuperTriangleVertices(List<Point2D>) : List<Point2D>
+  - {static} orientedTriangle(int, int, int, List<Point2D>) : IndexedTriangle
+  - {static} signedArea(Point2D, Point2D, Point2D) : double
+  - {static} isInsideCircumcircle(IndexedTriangle, List<Point2D>, Point2D) : boolean
+}
+class BuiltTriangulation <<record>> {
+  + faces : IndexedTriangle[*]
+  + superTriangleStart : int
+}
+class IndexedTriangle <<record>> {
+  + a : int
+  + b : int
+  + c : int
+  + edges() : List<NodeEdge>
+  + hasVertex(int) : boolean
+}
+class NodeEdge <<record>> {
+  + a : int
+  + b : int
+  + {static} of(int, int) : NodeEdge
+}
+class Point2D <<record>> {
+  + x : double
+  + z : double
+}
+class SeedGraph <<record>> {
+  + nodes : SeedGraphNode[*]
+  + edges : NodeEdge[*]
+  + reseedRecommended : boolean
+  + node(int) : SeedGraphNode
+}
+class SeedGraphNode <<record>> {
+  + id : int
+  + position : MacroCellPos
+  + fixed : boolean
+  + domain : BiomeId[*]
+  + {static} fixed(int, MacroCellPos, BiomeId) : SeedGraphNode
+  + {static} free(int, MacroCellPos, Set<BiomeId>) : SeedGraphNode
+  + fixedBiome() : BiomeId
+}
+class BiomeId <<external>> [[biomegraph.svg]] {
+}
+class MacroCellPos <<external>> [[regionsolve.svg]] {
+}
+
+Circumcenter ..> Point2D
+BuiltTriangulation *--> "0..*" IndexedTriangle
+DelaunayTriangulation ..> BuiltTriangulation
+DelaunayTriangulation ..> IndexedTriangle
+DelaunayTriangulation ..> NodeEdge
+DelaunayTriangulation ..> Point2D
+IndexedTriangle ..> NodeEdge
+SeedGraph *--> "0..*" NodeEdge
+SeedGraph *--> "0..*" SeedGraphNode
+SeedGraphNode *--> "0..*" BiomeId
+SeedGraphNode *--> MacroCellPos
+
+@enduml

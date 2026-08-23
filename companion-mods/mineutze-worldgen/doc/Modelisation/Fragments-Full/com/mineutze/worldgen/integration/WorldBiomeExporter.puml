@@ -1,0 +1,25 @@
+namespace com.mineutze.worldgen.integration {
+class WorldBiomeExporter {
+  - {static} OUTPUT_DIR_NAME : String
+  ~ {static} exportAroundPosition(ServerLevel, Vec3, int) : Result
+  - {static} sampleBiomeAt(ServerLevel, MacroGridConfig, MacroCellPos) : BiomeId
+  - {static} createOutputDir(Path)
+}
+class Result <<record>> {
+  + outputDir : Path
+  + cellsExported : int
+}
+
+WorldBiomeExporter ..> AsciiExporter
+WorldBiomeExporter ..> BiomeId
+WorldBiomeExporter ..> BiomeIdAdapter
+WorldBiomeExporter ..> BiomeLegend
+WorldBiomeExporter ..> ExportSnapshot
+WorldBiomeExporter ..> JsonExporter
+WorldBiomeExporter ..> MacroCellPos
+WorldBiomeExporter ..> MacroGridConfig
+WorldBiomeExporter ..> ModBiomeGraph
+WorldBiomeExporter ..> PngExporter
+WorldBiomeExporter ..> RegionPos
+WorldBiomeExporter ..> Result
+}

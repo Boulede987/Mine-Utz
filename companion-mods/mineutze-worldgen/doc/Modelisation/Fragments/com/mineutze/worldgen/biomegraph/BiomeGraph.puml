@@ -2,17 +2,17 @@ namespace com.mineutze.worldgen.biomegraph {
 class BiomeGraph {
   - nodesById : Map<BiomeId, BiomeNode>
   - rulesByPair : Map<UnorderedBiomePair, AdjacencyRule>
+  - {static} MAX_BRIDGE_HOPS : int
   - {static} indexNodes(Collection<BiomeNode>) : Map<BiomeId, BiomeNode>
   - {static} indexRules(Collection<AdjacencyRule>) : Map<UnorderedBiomePair, AdjacencyRule>
   - requireAllRuleNodesKnown()
   - requireKnownNode(BiomeId)
-  - requireUniversalFillerExists()
-  - requireFillerAllowedNextToEveryOtherNode(BiomeId)
+  - requireEveryPairBridgeableWithinReassignBudget()
+  - shortestHopsFrom(BiomeId) : Map<BiomeId, Integer>
   + node(BiomeId) : BiomeNode
   + nodes() : Collection<BiomeNode>
   + isAllowed(BiomeId, BiomeId) : boolean
   + rule(BiomeId, BiomeId) : AdjacencyRule
-  + universalFillers() : Set<BiomeId>
 }
 
 }

@@ -1,0 +1,8 @@
+namespace com.mineutze.worldgen.regionsolve.topology {
+class NodeEdge <<record>> {
+  + a : int
+  + b : int
+  + {static} of(int, int) : NodeEdge
+}
+
+}

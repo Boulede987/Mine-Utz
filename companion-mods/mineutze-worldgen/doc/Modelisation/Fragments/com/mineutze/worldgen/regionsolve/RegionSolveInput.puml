@@ -5,8 +5,6 @@ class RegionSolveInput <<record>> {
   + region : RegionPos
   + fixedBoundaryCells : Map<MacroCellPos, BiomeId>
   + worldSeed : long
-  + seedSpacingBlocks : int
-  + backtrackDepthCap : int
 }
 
 RegionSolveInput *--> BiomeGraph

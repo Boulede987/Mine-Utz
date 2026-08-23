@@ -19,13 +19,13 @@ public final class ModBiomeGraph {
 
     private static final int DEFAULT_BLEND_WIDTH_BLOCKS = 10;
 
-    // Shape identity per doc/KNOWN_ISSUES.md's cohesion-profile design: how tightly a
+    // Shape identity per the cohesion-profile design: how tightly a
     // growing patch must hold together (see GrowthCohesionProfile's own doc). Every
     // biome uses COMPACT for now, including plains — no biome gets a permanently
     // looser shape identity just because it's common, same reasoning as removing its
     // old universal-filler status below.
     private static final GrowthCohesionProfile COMPACT = new GrowthCohesionProfile(2, 0, 0);
-    // TODO(doc/KNOWN_ISSUES.md): directionalRunMajor/Minor's hard per-cell gate
+    // TODO: directionalRunMajor/Minor's hard per-cell gate
     // deadlocks whenever minor >= 2 — the perpendicular "thickness" it demands can
     // only exist once multiple cells have already joined together, but growth claims
     // one cell at a time, so the first cell extending a new row/column can never have
@@ -60,14 +60,33 @@ public final class ModBiomeGraph {
             AdjacencyRule.allow(PLAINS, SAVANNA, DEFAULT_BLEND_WIDTH_BLOCKS),
             // PLAINS-BADLANDS deliberately NOT allowed - plains is no longer a universal
             // filler, it's a normal biome with real restrictions like everything else.
-            // Badlands' only legal neighbors now: desert, and itself. Narrower than any
-            // other node in this graph on purpose (a "harsh, isolated" identity) - but
-            // worth knowing this makes MeshGapFiller.resolveRemaining's fail-loud path
-            // much easier to hit for badlands specifically than for anything else here.
             AdjacencyRule.allow(PLAINS, OCEAN, DEFAULT_BLEND_WIDTH_BLOCKS),
-            AdjacencyRule.allow(PLAINS, FOREST, DEFAULT_BLEND_WIDTH_BLOCKS)
+            AdjacencyRule.allow(PLAINS, FOREST, DEFAULT_BLEND_WIDTH_BLOCKS),
+            // BiomeGraph enforces a minimum of 3 legal neighbors per node (its own doc:
+            // fewer starves a biome under TriangleIdentitySizeAssignment's fairness-quota
+            // ordering, confirmed by badlands originally sitting at degree 1 here). These
+            // 3 rules bring badlands/savanna/ocean/forest up to the floor without touching
+            // the deliberate plains-badlands exclusion above.
+            AdjacencyRule.allow(BADLANDS, SAVANNA, DEFAULT_BLEND_WIDTH_BLOCKS),
+            AdjacencyRule.allow(BADLANDS, OCEAN, DEFAULT_BLEND_WIDTH_BLOCKS),
+            AdjacencyRule.allow(FOREST, SAVANNA, DEFAULT_BLEND_WIDTH_BLOCKS),
+            // Closes the LAST real gap in this graph, found via a real production crash
+            // (LegalityConstrainedRasterizer hit a genuine dead end on worldSeed=42): badlands
+            // and ocean are legal to EACH OTHER but, before this rule, shared no THIRD common
+            // neighbor at all (badlands' other neighbors are desert/savanna; ocean's other
+            // neighbors are forest/plains - disjoint sets), so any cell whose neighbors
+            // included both badlands and ocean plus two more biomes had NO legal placement.
+            // Verified exhaustively (not just this one pair, every combination up to 6 - the
+            // maximum possible, since this graph only has 6 biomes): with this rule added,
+            // requireEveryLocalNeighborhoodSolvable(8) below actually proves zero unsolvable
+            // combinations exist at ANY size, not just reduces how often one is hit. Savanna
+            // was chosen over the alternatives that were also checked (ocean-desert only
+            // closed 3 of 4 gaps; badlands-forest only closed 3 of 4 gaps, a DIFFERENT one
+            // left over) because it's the only single addition that closes all of them, and
+            // coastal savanna is a normal, common real-world pairing.
+            AdjacencyRule.allow(OCEAN, SAVANNA, DEFAULT_BLEND_WIDTH_BLOCKS)
         )
-    );
+    ).requireMinLegalNeighbors().requireEveryLocalNeighborhoodSolvable(8);
 
     private ModBiomeGraph() {
     }

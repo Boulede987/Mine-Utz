@@ -19,14 +19,13 @@ public record MacroGridConfig(int macroCellSizeBlocks, int regionSizeCellsPerSid
 
     public static final MacroGridConfig DEFAULT = new MacroGridConfig(4, 512);
 
-    // Region-grid domain warp (doc/KNOWN_ISSUES.md #1's real fix): straight region-solve
+    // Region-grid domain warp: straight region-solve
     // boundaries read as a hard ruler-straight cut wherever a patch happens to reach one,
     // no amount of patch-level organicizing can hide it (three different pixel-level
     // attempts tried and measured - see RegionSeamBlender's own git history / session
     // notes - none worked, because the STRAIGHT LINE is the region partition itself, not
     // a patch shape). Real fix: the region boundary was never a real geometric feature
-    // worth being straight in the first place - warp it, same "displace with noise instead
-    // of forcing straight" philosophy EdgeDisplacement already uses for patch edges.
+    // worth being straight in the first place - warp it instead of forcing it straight.
     //
     // AMPLITUDE_CELLS must stay well under half of regionSizeCellsPerSide (32) - the whole
     // rest of this codebase (RegionBoundaryCollector.neighborsOf, SeedRegionCache's
@@ -204,5 +203,32 @@ public record MacroGridConfig(int macroCellSizeBlocks, int regionSizeCellsPerSid
     public int cellCountForWidthBlocks(int widthBlocks) {
         double sideInCells = (double) widthBlocks / macroCellSizeBlocks;
         return Math.max(1, (int) Math.round(sideInCells * sideInCells));
+    }
+
+    /** The macro cell containing a continuous block-space point — one authoritative home for this floorDiv-by-cell-size math, shared by every caller that needs to go from a real coordinate (a triangle centroid, a query point) to its cell. */
+    public MacroCellPos cellContaining(double blockX, double blockZ) {
+        return new MacroCellPos(
+            Math.floorDiv((int) Math.floor(blockX), macroCellSizeBlocks),
+            Math.floorDiv((int) Math.floor(blockZ), macroCellSizeBlocks)
+        );
+    }
+
+    // Always derived, never its own stored/tunable field: FineMeshPointScatter's fine-mesh
+    // point spacing and this paint-cell size already had to be hand-resynced once
+    // (macroCellSizeBlocks 64->4, 2026-08-15) when they were two independent constants -
+    // a real drift risk if it happens again. One ratio, one authoritative home; a future
+    // macroCellSizeBlocks change now carries both along automatically.
+    private static final int PAINT_CELL_RATIO = 4;
+
+    /**
+     * Coarse "paint grid" cell size {@code CoarseToFineRasterizer} batches
+     * rasterization work by (16 blocks at the current default) — always
+     * {@link #PAINT_CELL_RATIO}x {@link #macroCellSizeBlocks}, matching the
+     * same ratio {@code FineMeshPointScatter}'s fine-mesh point spacing
+     * already uses (tuned from real exported seed-42 output, not guessed —
+     * see that class's own doc).
+     */
+    public int paintCellSizeBlocks() {
+        return macroCellSizeBlocks * PAINT_CELL_RATIO;
     }
 }

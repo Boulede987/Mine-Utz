@@ -1,11 +1,13 @@
 package com.mineutze.worldgen.biomegraph;
 
 import java.util.ArrayDeque;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Deque;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Consumer;
 
 /**
  * Static config: biome families (nodes) and their adjacency rules (edges).
@@ -42,11 +44,112 @@ public final class BiomeGraph {
     // keep this in sync by hand if MAX_REASSIGN_DEPTH ever changes.
     private static final int MAX_BRIDGE_HOPS = 3;
 
+    // A biome with too few legal neighbors gets starved by TriangleIdentitySizeAssignment's
+    // own fairness-quota candidate ordering: fairness only reorders candidates already legal
+    // for a face, it can't invent legality a narrow biome doesn't have. Confirmed empirically -
+    // badlands at degree 1 (desert only) drove the very first triangle-count skew found this
+    // session, and even a degree-3 biome (jungle: forest/swamp/beach) still landed at zero
+    // triangles in a 178-face solve because none of its 3 neighbors reach the mesh's populous
+    // regions. 3 is a floor, not a guarantee of fair representation - just the minimum needed
+    // for a biome to plausibly show up across a real mesh at all.
+    //
+    // NOT enforced in the constructor, unlike the bridgeability check above - several
+    // algorithm-focused unit tests deliberately build narrow chain/bridge graphs (degree 1-2)
+    // to isolate specific CSP behaviors (e.g. a graph with NO simultaneously-legal biome
+    // against three fixed neighbors, or a plain chain to test forward-checking propagation).
+    // This is a real-graph design constraint, not a universal law of the data structure -
+    // production graphs (see ModBiomeGraph) call requireMinLegalNeighbors() explicitly.
+    private static final int MIN_LEGAL_NEIGHBORS = 3;
+
     public BiomeGraph(Collection<BiomeNode> nodes, Collection<AdjacencyRule> rules) {
         this.nodesById = indexNodes(nodes);
         this.rulesByPair = indexRules(rules);
         requireAllRuleNodesKnown();
         requireEveryPairBridgeableWithinReassignBudget();
+    }
+
+    /** Fail loud if any node has fewer than {@link #MIN_LEGAL_NEIGHBORS} legal neighbors - see that constant's own doc for why this is opt-in rather than always-on. Call this on every real/production graph. */
+    public BiomeGraph requireMinLegalNeighbors() {
+        for (BiomeId id : nodesById.keySet()) {
+            long legalNeighbors = nodesById.keySet().stream().filter(other -> !other.equals(id) && isAllowed(id, other)).count();
+            if (legalNeighbors < MIN_LEGAL_NEIGHBORS) {
+                throw new IllegalArgumentException(
+                    "BiomeGraph: " + id + " has only " + legalNeighbors + " legal neighbor(s), fewer than the "
+                        + "required minimum of " + MIN_LEGAL_NEIGHBORS + " - add more AdjacencyRules for it."
+                );
+            }
+        }
+        return this;
+    }
+
+    /**
+     * Fail loud if any combination of up to {@code maxNeighbors} distinct biomes (bounded
+     * by how many neighbors a cell can actually have — Moore/8-way for {@code
+     * LegalityConstrainedRasterizer}'s own rasterization) has NO biome anywhere in the
+     * graph legal against all of them simultaneously — the exact structural dead end that
+     * class would otherwise only discover at runtime, mid-generation, and crash on. Proves
+     * that dead end unreachable offline instead of merely hoping a well-formed graph makes
+     * it rare — see that class's own doc for why failing loud there, rather than silently
+     * placing an illegal biome, is the only acceptable runtime behavior if this check is
+     * ever skipped or a graph slips through un-validated.
+     *
+     * <p>Only checks combinations of the FULL size {@code min(maxNeighbors, node count)},
+     * not every smaller size too — sound by a simple monotonicity argument: if a set S of
+     * that full size has a legal-against-all candidate, that SAME candidate is trivially
+     * also legal against every SUBSET of S (fewer simultaneous requirements can only be
+     * easier to satisfy), and any smaller real neighborhood can always be padded out to
+     * some full-size superset whenever the graph has at least that many biomes — so
+     * checking only the maximal size already covers every smaller one for free.
+     *
+     * <p><b>{@code maxNeighbors} is a caller-chosen bound, not hardcoded to 8 (the real
+     * Moore/8-way neighbor count {@code LegalityConstrainedRasterizer} can face)</b> —
+     * some graphs may only be provably solvable at a lower bound, and this method lets a
+     * caller find that bound rather than forcing an all-or-nothing check. It does NOT
+     * require a universal-filler-style node to prove the full 8-way case, despite that
+     * pattern being deliberately removed from this codebase (see this class's own doc) —
+     * a graph can satisfy every up-to-8 combination through ORDINARY, narrow adjacency
+     * rules alone, as long as no two biomes end up sharing zero common third neighbor.
+     * {@code ModBiomeGraph.DEFAULT} originally failed at 4+ (a real production crash
+     * traced it to exactly that: badlands and ocean were legal to each other but shared
+     * no third neighbor at all, so any cell bordering both plus two more biomes had no
+     * legal placement) — fixed with one added rule (ocean-savanna, see that graph's own
+     * doc), verified by this same method to close EVERY combination up to 6 (the max
+     * possible for a 6-biome graph), which is why {@code ModBiomeGraph} now calls this
+     * with 8 rather than settling for a lower, merely-probable bound.
+     */
+    public BiomeGraph requireEveryLocalNeighborhoodSolvable(int maxNeighbors) {
+        List<BiomeId> ids = nodesById.keySet().stream().sorted().toList();
+        int comboSize = Math.min(maxNeighbors, ids.size());
+        if (comboSize <= 0) {
+            return this;
+        }
+        forEachCombination(ids, comboSize, combo -> {
+            boolean solvable = ids.stream().anyMatch(candidate -> combo.stream().allMatch(neighbor -> isAllowed(candidate, neighbor)));
+            if (!solvable) {
+                throw new IllegalArgumentException(
+                    "BiomeGraph: no biome is legal against every member of the neighbor combination " + combo
+                        + " simultaneously - a cell surrounded by exactly these biomes would have no legal "
+                        + "placement. Add an AdjacencyRule bridging them, or a biome legal against all of them."
+                );
+            }
+        });
+        return this;
+    }
+
+    private static void forEachCombination(List<BiomeId> ids, int size, Consumer<List<BiomeId>> action) {
+        forEachCombination(ids, size, 0, new ArrayList<>(size), action);
+    }
+
+    private static void forEachCombination(List<BiomeId> ids, int size, int startIndex, List<BiomeId> current, Consumer<List<BiomeId>> action) {
+        if (current.size() == size) {
+            action.accept(List.copyOf(current));
+            return;
+        }
+        for (int i = startIndex; i < ids.size(); i++) {
+            current.add(ids.get(i));
+            forEachCombination(ids, size, i + 1, current, action);
+            current.remove(current.size() - 1);
+        }
     }
 
     private static Map<BiomeId, BiomeNode> indexNodes(Collection<BiomeNode> nodes) {
@@ -86,21 +189,21 @@ public final class BiomeGraph {
     /**
      * Global connectivity (every node reachable from every other) is necessary but not
      * sufficient - two biomes can be technically connected through a long detour and
-     * still be impossible for {@code MeshGapFiller} to actually bridge at a real point
-     * of contact, because its neighbor-reassignment search is bounded (see {@link
-     * #MAX_BRIDGE_HOPS}'s doc). Catches that at graph-construction time instead of a
-     * runtime crash mid-world-gen: for every pair of biomes with no direct rule,
-     * requires a path of at most {@link #MAX_BRIDGE_HOPS} edges through other allowed
-     * pairs.
+     * still be impossible to actually bridge at a real point of contact if whatever
+     * runtime fallback resolves dead ends only searches a bounded neighbor-reassignment
+     * radius (see {@link #MAX_BRIDGE_HOPS}'s doc). Catches that at graph-construction
+     * time instead of a runtime crash mid-world-gen: for every pair of biomes with no
+     * direct rule, requires a path of at most {@link #MAX_BRIDGE_HOPS} edges through
+     * other allowed pairs.
      *
-     * This is necessary, not sufficient, for {@code MeshGapFiller} to always resolve a
-     * dead end - it only rules out the "impossible in principle" case (the graph
-     * itself is too sparse). It says nothing about whether enough LOCAL donor
+     * This is necessary, not sufficient, for a bounded-radius fallback to always
+     * resolve a dead end - it only rules out the "impossible in principle" case (the
+     * graph itself is too sparse). It says nothing about whether enough LOCAL donor
      * capacity (nearby patches large enough to spare a cell without dropping below
      * their own minimum size) exists at any specific point two such biomes actually
      * meet - that depends on runtime placement and patch sizes, not the graph alone,
-     * and is exactly what {@code MeshGapFiller}'s own patch-drop retry exists to
-     * absorb when it happens (see doc/KNOWN_ISSUES.md).
+     * and is exactly the kind of runtime-only failure a geometry-stage fallback still
+     * needs to absorb when it happens.
      */
     private void requireEveryPairBridgeableWithinReassignBudget() {
         List<BiomeId> ids = nodesById.keySet().stream().sorted().toList();

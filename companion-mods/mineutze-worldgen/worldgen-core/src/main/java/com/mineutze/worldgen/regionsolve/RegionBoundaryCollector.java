@@ -31,7 +31,7 @@ public final class RegionBoundaryCollector {
         for (RegionPos neighbor : neighborsOf(region)) {
             Map<MacroCellPos, BiomeId> neighborAssignment = alreadySolvedLookup.apply(neighbor);
             if (neighborAssignment != null) {
-                fixedBoundary.putAll(cellsBorderingRegion(neighborAssignment, region, grid, worldSeed));
+                fixedBoundary.putAll(cellsBorderingRegion(neighborAssignment, region, grid));
             }
         }
         return fixedBoundary;
@@ -57,14 +57,37 @@ public final class RegionBoundaryCollector {
         );
     }
 
+    /**
+     * Bounding-box-distance check (same idiom {@code TriangleFieldGeometryRealization
+     * .relevantFaceIndices} already uses), not a per-cell {@code regionOf} stencil - a
+     * region's own solve can contain real triangle faces whose centroids fall up to
+     * {@code TriangleFieldGeometryRealization.TRIANGULATION_MARGIN_BLOCKS} blocks into an
+     * already-solved neighbor (that margin exists specifically so every triangle touching
+     * the region has real neighbor context), so a single-cell-wide ring at the literal seam
+     * (the old behavior here) is far too thin to ever match one of those centroids against
+     * this map. {@code TRIANGULATION_MARGIN_BLOCKS} is the exact bound past which no such
+     * centroid can exist, so this is a precise depth, not a guess - and it's cheaper per
+     * cell than before, since it no longer calls the warp-aware {@code regionOf} at all.
+     */
     private static Map<MacroCellPos, BiomeId> cellsBorderingRegion(
-        Map<MacroCellPos, BiomeId> neighborAssignment, RegionPos region, MacroGridConfig grid, long worldSeed
+        Map<MacroCellPos, BiomeId> neighborAssignment, RegionPos region, MacroGridConfig grid
     ) {
+        int cellSize = grid.macroCellSizeBlocks();
+        int sideBlocks = grid.regionSizeCellsPerSide() * cellSize;
+        int warpMarginBlocks = grid.warpMarginCells() * cellSize;
+        int depthBlocks = TriangleFieldGeometryRealization.TRIANGULATION_MARGIN_BLOCKS;
+
+        int minX = region.x() * sideBlocks - warpMarginBlocks - depthBlocks;
+        int maxX = region.x() * sideBlocks + sideBlocks + warpMarginBlocks + depthBlocks;
+        int minZ = region.z() * sideBlocks - warpMarginBlocks - depthBlocks;
+        int maxZ = region.z() * sideBlocks + sideBlocks + warpMarginBlocks + depthBlocks;
+
         Map<MacroCellPos, BiomeId> bordering = new LinkedHashMap<>();
         for (Map.Entry<MacroCellPos, BiomeId> entry : neighborAssignment.entrySet()) {
             MacroCellPos cell = entry.getKey();
-            boolean touchesRegion = cell.orthogonalNeighbors().stream().anyMatch(adjacent -> grid.regionOf(adjacent, worldSeed).equals(region));
-            if (touchesRegion) {
+            int blockX = cell.x() * cellSize;
+            int blockZ = cell.z() * cellSize;
+            if (blockX >= minX && blockX <= maxX && blockZ >= minZ && blockZ <= maxZ) {
                 bordering.put(cell, entry.getValue());
             }
         }

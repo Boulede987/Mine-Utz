@@ -82,17 +82,48 @@ public final class PatchSizeEnforcer {
     private PatchSizeEnforcer() {
     }
 
+    /**
+     * @param pass 0-indexed pass number, {@code componentCount}/{@code undersizedCount}/
+     *             {@code mergeCount}/{@code widenCount} this pass's own counts —
+     *             ad-hoc summary for the {@code MINEUTZE_WORLDGEN_TRACE}
+     *             investigation into why a region boxed in by real neighbor
+     *             context can cost far more than an isolated region's own
+     *             baseline (see {@code RegionSolveStageTimingSpikeTest}'s
+     *             3x3-grid finding) — not a permanent metrics API.
+     */
+    private record PassResult(int componentCount, int undersizedCount, int mergeCount, int widenCount, boolean changedAny) {
+    }
+
     public static void enforceMinimumPatchSize(
         Map<MacroCellPos, BiomeId> assignment, Set<MacroCellPos> regionCellSet, MacroGridConfig grid, BiomeGraph graph
     ) {
+        SeparatorWidener.STATS.reset();
+        long start = System.nanoTime();
+        int passesRun = 0;
+        int totalComponents = 0;
+        int totalUndersized = 0;
+        int totalMerges = 0;
+        int totalWidens = 0;
+
         for (int pass = 0; pass < MAX_PASSES; pass++) {
-            if (!absorbUndersizedComponentsOnce(assignment, regionCellSet, grid, graph)) {
-                return;
+            PassResult result = absorbUndersizedComponentsOnce(assignment, regionCellSet, grid, graph);
+            passesRun++;
+            totalComponents += result.componentCount();
+            totalUndersized += result.undersizedCount();
+            totalMerges += result.mergeCount();
+            totalWidens += result.widenCount();
+            if (!result.changedAny()) {
+                break;
             }
         }
+
+        WorldgenTrace.log("PatchSizeEnforcer summary: passes=" + passesRun + " totalComponentsScanned=" + totalComponents
+            + " totalUndersized=" + totalUndersized + " merges=" + totalMerges + " widens=" + totalWidens
+            + " regionCellSetSize=" + regionCellSet.size() + " assignmentSize=" + assignment.size()
+            + " wallMs=" + ((System.nanoTime() - start) / 1_000_000.0) + " " + SeparatorWidener.STATS);
     }
 
-    private static boolean absorbUndersizedComponentsOnce(
+    private static PassResult absorbUndersizedComponentsOnce(
         Map<MacroCellPos, BiomeId> assignment, Set<MacroCellPos> regionCellSet, MacroGridConfig grid, BiomeGraph graph
     ) {
         List<Set<MacroCellPos>> components = ConnectedComponents.find(assignment, regionCellSet);
@@ -102,6 +133,9 @@ public final class PatchSizeEnforcer {
         }
 
         boolean changedAny = false;
+        int undersizedCount = 0;
+        int mergeCount = 0;
+        int widenCount = 0;
         for (Set<MacroCellPos> component : components) {
             BiomeId biome = assignment.get(component.iterator().next());
             BiomeNode node = graph.node(biome);
@@ -109,16 +143,19 @@ public final class PatchSizeEnforcer {
             if (component.size() >= minCells) {
                 continue;
             }
+            undersizedCount++;
 
             Optional<BiomeId> mergeTarget = bestMergeTarget(component, biome, assignment, patchSizeByCell, graph);
             if (mergeTarget.isPresent()) {
                 component.stream().filter(regionCellSet::contains).forEach(cell -> assignment.put(cell, mergeTarget.get()));
+                mergeCount++;
             } else {
                 SeparatorWidener.widen(component, biome, minCells, assignment, regionCellSet, graph, Set.of());
+                widenCount++;
             }
             changedAny = true;
         }
-        return changedAny;
+        return new PassResult(components.size(), undersizedCount, mergeCount, widenCount, changedAny);
     }
 
     /** Largest (by existing patch size) neighboring biome that stays legal across every cell in the component if adopted. */

@@ -163,7 +163,7 @@ class PatchSizeEnforcerTest {
 
     @Test
     void measuresComponentSizeAcrossBoundaryContextWithoutMutatingIt() {
-        // KNOWN_ISSUES.md #2: a patch continuing into an already-solved neighbor
+        // A patch continuing into an already-solved neighbor
         // region must be measured at its TRUE size (region + boundary), not
         // truncated at the region edge - and the boundary portion must never be
         // written to, since it's another region's already-committed ground truth.

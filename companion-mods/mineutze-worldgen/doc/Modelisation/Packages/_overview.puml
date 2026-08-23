@@ -32,13 +32,23 @@ package "com.mineutze.worldgen" as com_mineutze_worldgen [[worldgen.svg]] {
 }
 package "com.mineutze.worldgen.biomegraph" as com_mineutze_worldgen_biomegraph [[biomegraph.svg]] {
 }
+package "com.mineutze.worldgen.export" as com_mineutze_worldgen_export [[export.svg]] {
+}
 package "com.mineutze.worldgen.integration" as com_mineutze_worldgen_integration [[integration.svg]] {
 }
 package "com.mineutze.worldgen.regionsolve" as com_mineutze_worldgen_regionsolve [[regionsolve.svg]] {
 }
+package "com.mineutze.worldgen.regionsolve.topology" as com_mineutze_worldgen_regionsolve_topology [[topology.svg]] {
+}
 
+com_mineutze_worldgen_export ..> com_mineutze_worldgen_biomegraph
+com_mineutze_worldgen_export ..> com_mineutze_worldgen_regionsolve
+com_mineutze_worldgen_integration ..> com_mineutze_worldgen
 com_mineutze_worldgen_integration ..> com_mineutze_worldgen_biomegraph
+com_mineutze_worldgen_integration ..> com_mineutze_worldgen_export
 com_mineutze_worldgen_integration ..> com_mineutze_worldgen_regionsolve
 com_mineutze_worldgen_regionsolve ..> com_mineutze_worldgen_biomegraph
+com_mineutze_worldgen_regionsolve_topology ..> com_mineutze_worldgen_biomegraph
+com_mineutze_worldgen_regionsolve_topology ..> com_mineutze_worldgen_regionsolve
 
 @enduml

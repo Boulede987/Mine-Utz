@@ -1,0 +1,52 @@
+@startuml PixelFragmentRepair
+
+skinparam classAttributeIconSize 0
+skinparam shadowing false
+
+skinparam class {
+  BackgroundColor<<interface>> #D6EAF8
+  BorderColor<<interface>> #2E86C1
+}
+skinparam class {
+  BackgroundColor<<abstract>> #E8DAEF
+  BorderColor<<abstract>> #8E44AD
+}
+skinparam class {
+  BackgroundColor #D5F5E3
+  BorderColor #27AE60
+}
+skinparam class {
+  BackgroundColor<<record>> #FCF3CF
+  BorderColor<<record>> #B7950B
+}
+skinparam class {
+  BackgroundColor<<static>> #a7faa0
+  BorderColor<<static>> #38d610
+}
+skinparam class {
+  BackgroundColor<<enum>> #F5B7B1
+  BorderColor<<enum>> #C0392B
+}
+
+namespace com.mineutze.worldgen.regionsolve {
+class PixelFragmentRepair {
+  - {static} MAX_REPAIR_PASSES : int
+  - {static} SMALL_FRAGMENT_MAX_SIZE : int
+  + {static} repair(Map<MacroCellPos, BiomeId>, Map<MacroCellPos, BiomeId>, BiomeGraph) : Map<MacroCellPos, BiomeId>
+  - {static} findIllegalCells(Map<MacroCellPos, BiomeId>, Map<MacroCellPos, BiomeId>, BiomeGraph) : List<MacroCellPos>
+  - {static} findSmallFragmentComponents(Map<MacroCellPos, BiomeId>, Map<MacroCellPos, BiomeId>) : List<Set<MacroCellPos>>
+  - {static} sameBiomeComponent(MacroCellPos, Map<MacroCellPos, BiomeId>) : Set<MacroCellPos>
+  - {static} bestLegalReplacement(MacroCellPos, Map<MacroCellPos, BiomeId>, BiomeGraph) : Optional<BiomeId>
+  - {static} bestLegalReplacementForFragment(Set<MacroCellPos>, Map<MacroCellPos, BiomeId>, BiomeGraph) : Optional<BiomeId>
+  - {static} fragmentAcceptsCandidate(Set<MacroCellPos>, BiomeId, Map<MacroCellPos, BiomeId>, BiomeGraph) : boolean
+  - {static} isLegalIncludingDiagonals(MacroCellPos, BiomeId, Map<MacroCellPos, BiomeId>, BiomeGraph) : boolean
+}
+
+PixelFragmentRepair ..> BiomeGraph
+PixelFragmentRepair ..> BiomeId
+PixelFragmentRepair ..> GrowthEngine
+PixelFragmentRepair ..> MacroCellPos
+PixelFragmentRepair ..> WorldgenTrace
+}
+
+@enduml

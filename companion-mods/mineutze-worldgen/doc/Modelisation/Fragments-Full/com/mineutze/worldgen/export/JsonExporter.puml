@@ -1,0 +1,19 @@
+namespace com.mineutze.worldgen.export {
+class JsonExporter {
+  + {static} write(Path, ExportSnapshot, BiomeLegend)
+  - {static} writeGraph(StringBuilder, BiomeGraph, BiomeLegend)
+  - {static} writeRegions(StringBuilder, ExportSnapshot)
+  - {static} writeCells(StringBuilder, ExportSnapshot, RegionPos)
+  - {static} escape(String) : String
+}
+
+JsonExporter ..> AdjacencyRule
+JsonExporter ..> BiomeGraph
+JsonExporter ..> BiomeId
+JsonExporter ..> BiomeLegend
+JsonExporter ..> BiomeNode
+JsonExporter ..> ExportSnapshot
+JsonExporter ..> MacroCellPos
+JsonExporter ..> MacroGridConfig
+JsonExporter ..> RegionPos
+}
