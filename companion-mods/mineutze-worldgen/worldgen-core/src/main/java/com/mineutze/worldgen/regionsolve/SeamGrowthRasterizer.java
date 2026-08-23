@@ -79,13 +79,17 @@ import java.util.Set;
  * <p><b>Known open gap</b> (2026-08-23, measured on real worldSeed=42 production export):
  * small fragments are still above the old field stage's own number (39) — currently 181
  * with this mechanism (down from 623 at the previous milestone via a diagonal-aware
- * pinch metric, an own-continuation starvation fix, the head-start reservation pass, and
- * a diagonal-aware fragment metric — see this class's own git history / the plan doc for
- * each step's own measurement). Of the remaining size=1 fragments, 61% are genuine
- * main-queue cross-biome competitive assignments, not an identified bug — closing that
- * further likely needs a real architecture change, not another tuning pass. One-cell
- * pinch points (2864) are now BELOW the old field stage's own number (4247). Zero illegal
- * adjacencies holds throughout regardless.
+ * pinch metric, an own-continuation starvation fix, the head-start reservation pass, a
+ * diagonal-aware fragment metric, and a {@link #fillGaps} anti-pinch preference — see
+ * this class's own git history / the plan doc for each step's own measurement). Of the
+ * remaining size=1 fragments, 61% are genuine main-queue cross-biome competitive
+ * assignments, not an identified bug — closing that further likely needs a real
+ * architecture change, not another tuning pass. One-cell pinch points (2825) are well
+ * below the old field stage's own number (4247), and what remains mostly traces to
+ * genuinely tight local-legality pockets (few biomes legal there at all), not a picking
+ * mistake — measured directly by histogramming how many legal candidates {@link
+ * #fillGaps} actually had at each remaining pinch site. Zero illegal adjacencies holds
+ * throughout regardless.
  */
 final class SeamGrowthRasterizer {
 
@@ -401,7 +405,7 @@ final class SeamGrowthRasterizer {
                     continue;
                 }
                 List<BiomeId> neighborBiomes = mooreNeighborBiomes(cell, decided);
-                BiomeId winner = neighborBiomes.isEmpty() ? nearestFaceBiome(cell, seedCellByFace, assignments) : bestLegalFill(neighborBiomes, allBiomesSorted, graph);
+                BiomeId winner = neighborBiomes.isEmpty() ? nearestFaceBiome(cell, seedCellByFace, assignments) : bestLegalFill(cell, neighborBiomes, allBiomesSorted, graph, decided);
                 if (winner != null) {
                     decided.put(cell, winner);
                     anyChanged = true;
@@ -436,22 +440,62 @@ final class SeamGrowthRasterizer {
         return best;
     }
 
-    private static BiomeId bestLegalFill(List<BiomeId> decidedNeighbors, List<BiomeId> allBiomesSorted, BiomeGraph graph) {
+    /**
+     * Prefers a candidate that avoids creating a pinch over one that doesn't, THEN by
+     * most-matching-neighbor count (the original tie-break). Real fix, not a tuning pass:
+     * measured that 2852 of 2864 remaining pinch points (99.6%) trace back to a
+     * {@code fillGaps} decision - a rare fallback (well under 1% of all cells) with
+     * previously zero pinch-awareness, unlike the main growth loop which already avoids
+     * retroactively pinching a neighbor. Soft preference, not a hard block: if EVERY legal
+     * candidate would pinch something, the original match-count winner is still picked -
+     * this can only ever reduce pinches, never turn a legal fill into an illegal one.
+     */
+    private static BiomeId bestLegalFill(
+        MacroCellPos cell, List<BiomeId> decidedNeighbors, List<BiomeId> allBiomesSorted, BiomeGraph graph, Map<MacroCellPos, BiomeId> decided
+    ) {
         if (decidedNeighbors.isEmpty()) {
             return null; // no context to fill from yet - a later pass, once a neighbor fills, will reach it
         }
         BiomeId best = null;
+        int bestPinchScore = -1;
         long bestMatchCount = -1;
         for (BiomeId candidate : allBiomesSorted) {
             if (!legalAgainstAll(candidate, decidedNeighbors, graph)) {
                 continue;
             }
+            int pinchScore = (wouldPinchAnAlreadyDecidedNeighbor(cell, candidate, decided) ? 0 : 1)
+                + (wouldBeSelfPinched(cell, candidate, decided) ? 0 : 1);
             long matchCount = decidedNeighbors.stream().filter(candidate::equals).count();
-            if (matchCount > bestMatchCount) {
+            if (pinchScore > bestPinchScore || (pinchScore == bestPinchScore && matchCount > bestMatchCount)) {
+                bestPinchScore = pinchScore;
                 bestMatchCount = matchCount;
                 best = candidate;
             }
         }
         return best;
+    }
+
+    /**
+     * Same pinch definition {@link RegionIntegrityValidator} itself measures with (missing
+     * counts as different, a same-biome diagonal neighbor rescues it) - deliberately
+     * independent of that class rather than a shared call, same precedent as {@link
+     * #wouldPinchAnAlreadyDecidedNeighbor} already documents for the retroactive case.
+     */
+    private static boolean wouldBeSelfPinched(MacroCellPos cell, BiomeId candidate, Map<MacroCellPos, BiomeId> decided) {
+        for (int dx : new int[] {-1, 1}) {
+            for (int dz : new int[] {-1, 1}) {
+                if (candidate.equals(decided.get(new MacroCellPos(cell.x() + dx, cell.z() + dz)))) {
+                    return false;
+                }
+            }
+        }
+        BiomeId north = decided.get(new MacroCellPos(cell.x(), cell.z() - 1));
+        BiomeId south = decided.get(new MacroCellPos(cell.x(), cell.z() + 1));
+        if (!candidate.equals(north) && !candidate.equals(south)) {
+            return true;
+        }
+        BiomeId east = decided.get(new MacroCellPos(cell.x() + 1, cell.z()));
+        BiomeId west = decided.get(new MacroCellPos(cell.x() - 1, cell.z()));
+        return !candidate.equals(east) && !candidate.equals(west);
     }
 }
