@@ -23,25 +23,30 @@ import java.util.function.Consumer;
  * permanently unrestrictable — every other biome could get real adjacency
  * rules, plains couldn't. Every biome, including plains, can now be
  * restricted like any other. The termination guarantee it used to provide
- * moves to {@code MeshGapFiller}: a cell that genuinely has no legal biome
- * given its neighbors is a graph misconfiguration (e.g. three mutually-
- * incompatible biomes meeting at a point with nothing compatible with all
- * three) and fails loud there, rather than this class silently guaranteeing
- * one can never happen.
+ * moves to {@code SeamGrowthRasterizer}'s own {@code fillGaps} step: a cell
+ * that genuinely has no legal biome given its neighbors is a graph
+ * misconfiguration (e.g. three mutually-incompatible biomes meeting at a
+ * point with nothing compatible with all three) and fails loud there,
+ * rather than this class silently guaranteeing one can never happen — see
+ * {@link #requireEveryLocalNeighborhoodSolvable} for how that's proven
+ * unreachable offline for a well-formed graph.
  */
 public final class BiomeGraph {
 
     private final Map<BiomeId, BiomeNode> nodesById;
     private final Map<UnorderedBiomePair, AdjacencyRule> rulesByPair;
 
-    // A cell touching two biomes with no direct rule between them can only be resolved
-    // by MeshGapFiller reassigning a chain of neighbors, capped at its own
-    // MAX_REASSIGN_DEPTH (2) - which, worked through by hand, can bridge two
-    // biomes at most MAX_BRIDGE_HOPS edges apart in this allow-graph (A-X-Y-B: edge
-    // A-X to start the chain, edge X-Y to extend it one hop further, edge Y-B for the
-    // final link to actually become legal). Duplicated here rather than referenced
-    // directly - this module has no dependency on regionsolve (see class doc) - so
-    // keep this in sync by hand if MAX_REASSIGN_DEPTH ever changes.
+    // A cheap, necessary-but-not-sufficient sanity bound checked at construction time,
+    // well before the much stronger (and actual currently-relied-upon) proof in
+    // requireEveryLocalNeighborhoodSolvable: two biomes with no direct rule between them
+    // must at least be connected through SOME chain of allowed pairs within this many
+    // hops (A-X-Y-B: edge A-X, edge X-Y, edge Y-B). A graph failing this is too sparse to
+    // work no matter what runtime fallback exists - catching that here is cheaper than
+    // waiting for requireEveryLocalNeighborhoodSolvable's own, more expensive combinatorial
+    // check to find the same sparseness. 3 is not tied to any specific runtime mechanism's
+    // own search depth (no such depth-bounded mechanism exists in this codebase currently -
+    // see requireEveryLocalNeighborhoodSolvable's own doc for what actually backs this up
+    // today) - just a reasonable, cheap-to-check floor.
     private static final int MAX_BRIDGE_HOPS = 3;
 
     // A biome with too few legal neighbors gets starved by TriangleIdentitySizeAssignment's
@@ -85,7 +90,7 @@ public final class BiomeGraph {
     /**
      * Fail loud if any combination of up to {@code maxNeighbors} distinct biomes (bounded
      * by how many neighbors a cell can actually have — Moore/8-way for {@code
-     * LegalityConstrainedRasterizer}'s own rasterization) has NO biome anywhere in the
+     * SeamGrowthRasterizer}'s own growth and gap-fill) has NO biome anywhere in the
      * graph legal against all of them simultaneously — the exact structural dead end that
      * class would otherwise only discover at runtime, mid-generation, and crash on. Proves
      * that dead end unreachable offline instead of merely hoping a well-formed graph makes
@@ -102,7 +107,7 @@ public final class BiomeGraph {
      * checking only the maximal size already covers every smaller one for free.
      *
      * <p><b>{@code maxNeighbors} is a caller-chosen bound, not hardcoded to 8 (the real
-     * Moore/8-way neighbor count {@code LegalityConstrainedRasterizer} can face)</b> —
+     * Moore/8-way neighbor count {@code SeamGrowthRasterizer} can face)</b> —
      * some graphs may only be provably solvable at a lower bound, and this method lets a
      * caller find that bound rather than forcing an all-or-nothing check. It does NOT
      * require a universal-filler-style node to prove the full 8-way case, despite that
@@ -188,13 +193,11 @@ public final class BiomeGraph {
 
     /**
      * Global connectivity (every node reachable from every other) is necessary but not
-     * sufficient - two biomes can be technically connected through a long detour and
-     * still be impossible to actually bridge at a real point of contact if whatever
-     * runtime fallback resolves dead ends only searches a bounded neighbor-reassignment
-     * radius (see {@link #MAX_BRIDGE_HOPS}'s doc). Catches that at graph-construction
-     * time instead of a runtime crash mid-world-gen: for every pair of biomes with no
-     * direct rule, requires a path of at most {@link #MAX_BRIDGE_HOPS} edges through
-     * other allowed pairs.
+     * sufficient - two biomes can be technically connected only through a long detour,
+     * which is still real evidence the graph is too sparse even before the much more
+     * expensive {@link #requireEveryLocalNeighborhoodSolvable} check would catch the
+     * same thing. For every pair of biomes with no direct rule, requires a path of at
+     * most {@link #MAX_BRIDGE_HOPS} edges through other allowed pairs.
      *
      * This is necessary, not sufficient, for a bounded-radius fallback to always
      * resolve a dead end - it only rules out the "impossible in principle" case (the
@@ -218,8 +221,7 @@ public final class BiomeGraph {
                     throw new IllegalArgumentException(
                         "BiomeGraph: " + start + " and " + other + " have no direct AdjacencyRule and "
                             + (hops == null ? "no bridging path at all through the rest of the graph"
-                                : "need " + hops + " hops to bridge, more than GapFiller's neighbor-reassignment "
-                                    + "can search (" + MAX_BRIDGE_HOPS + ")")
+                                : "need " + hops + " hops to bridge, more than the allowed maximum (" + MAX_BRIDGE_HOPS + ")")
                             + " - add a shorter path between them (a direct rule, or a rule to some third biome "
                             + "that's within " + MAX_BRIDGE_HOPS + " hops of both)."
                     );
