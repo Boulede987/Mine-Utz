@@ -1,9 +1,7 @@
 package com.mineutze.worldgen.biomegraph;
 
-import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.Deque;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -36,17 +34,10 @@ public final class BiomeGraph {
     private final Map<BiomeId, BiomeNode> nodesById;
     private final Map<UnorderedBiomePair, AdjacencyRule> rulesByPair;
 
-    // A cheap, necessary-but-not-sufficient sanity bound checked at construction time,
-    // well before the much stronger (and actual currently-relied-upon) proof in
-    // requireEveryLocalNeighborhoodSolvable: two biomes with no direct rule between them
-    // must at least be connected through SOME chain of allowed pairs within this many
-    // hops (A-X-Y-B: edge A-X, edge X-Y, edge Y-B). A graph failing this is too sparse to
-    // work no matter what runtime fallback exists - catching that here is cheaper than
-    // waiting for requireEveryLocalNeighborhoodSolvable's own, more expensive combinatorial
-    // check to find the same sparseness. 3 is not tied to any specific runtime mechanism's
-    // own search depth (no such depth-bounded mechanism exists in this codebase currently -
-    // see requireEveryLocalNeighborhoodSolvable's own doc for what actually backs this up
-    // today) - just a reasonable, cheap-to-check floor.
+    // Checked at construction time, cheaper than (and well before) the much stronger,
+    // actual currently-relied-upon proof in requireEveryLocalNeighborhoodSolvable - see
+    // BridgeHopReachability's own doc for what this bound does and doesn't prove. 3 is
+    // this graph's own choice of floor, not a universal constant.
     private static final int MAX_BRIDGE_HOPS = 3;
 
     // A biome with too few legal neighbors gets starved by TriangleIdentitySizeAssignment's
@@ -70,7 +61,7 @@ public final class BiomeGraph {
         this.nodesById = indexNodes(nodes);
         this.rulesByPair = indexRules(rules);
         requireAllRuleNodesKnown();
-        requireEveryPairBridgeableWithinReassignBudget();
+        BridgeHopReachability.requireEveryPairWithinHops(nodesById.keySet().stream().sorted().toList(), this::isAllowed, MAX_BRIDGE_HOPS);
     }
 
     /** Fail loud if any node has fewer than {@link #MIN_LEGAL_NEIGHBORS} legal neighbors - see that constant's own doc for why this is opt-in rather than always-on. Call this on every real/production graph. */
@@ -189,62 +180,6 @@ public final class BiomeGraph {
         if (!nodesById.containsKey(id)) {
             throw new IllegalArgumentException("AdjacencyRule references unknown biome node: " + id);
         }
-    }
-
-    /**
-     * Global connectivity (every node reachable from every other) is necessary but not
-     * sufficient - two biomes can be technically connected only through a long detour,
-     * which is still real evidence the graph is too sparse even before the much more
-     * expensive {@link #requireEveryLocalNeighborhoodSolvable} check would catch the
-     * same thing. For every pair of biomes with no direct rule, requires a path of at
-     * most {@link #MAX_BRIDGE_HOPS} edges through other allowed pairs.
-     *
-     * This is necessary, not sufficient, for a bounded-radius fallback to always
-     * resolve a dead end - it only rules out the "impossible in principle" case (the
-     * graph itself is too sparse). It says nothing about whether enough LOCAL donor
-     * capacity (nearby patches large enough to spare a cell without dropping below
-     * their own minimum size) exists at any specific point two such biomes actually
-     * meet - that depends on runtime placement and patch sizes, not the graph alone,
-     * and is exactly the kind of runtime-only failure a geometry-stage fallback still
-     * needs to absorb when it happens.
-     */
-    private void requireEveryPairBridgeableWithinReassignBudget() {
-        List<BiomeId> ids = nodesById.keySet().stream().sorted().toList();
-        for (BiomeId start : ids) {
-            Map<BiomeId, Integer> hopsFromStart = shortestHopsFrom(start);
-            for (BiomeId other : ids) {
-                if (start.compareTo(other) >= 0 || isAllowed(start, other)) {
-                    continue; // unordered pair already checked from the other side, or trivially fine
-                }
-                Integer hops = hopsFromStart.get(other);
-                if (hops == null || hops > MAX_BRIDGE_HOPS) {
-                    throw new IllegalArgumentException(
-                        "BiomeGraph: " + start + " and " + other + " have no direct AdjacencyRule and "
-                            + (hops == null ? "no bridging path at all through the rest of the graph"
-                                : "need " + hops + " hops to bridge, more than the allowed maximum (" + MAX_BRIDGE_HOPS + ")")
-                            + " - add a shorter path between them (a direct rule, or a rule to some third biome "
-                            + "that's within " + MAX_BRIDGE_HOPS + " hops of both)."
-                    );
-                }
-            }
-        }
-    }
-
-    private Map<BiomeId, Integer> shortestHopsFrom(BiomeId start) {
-        Map<BiomeId, Integer> hops = new HashMap<>();
-        hops.put(start, 0);
-        Deque<BiomeId> frontier = new ArrayDeque<>(List.of(start));
-        while (!frontier.isEmpty()) {
-            BiomeId current = frontier.poll();
-            int nextHops = hops.get(current) + 1;
-            for (BiomeId candidate : nodesById.keySet()) {
-                if (!candidate.equals(current) && isAllowed(current, candidate) && !hops.containsKey(candidate)) {
-                    hops.put(candidate, nextHops);
-                    frontier.add(candidate);
-                }
-            }
-        }
-        return hops;
     }
 
     public BiomeNode node(BiomeId id) {
