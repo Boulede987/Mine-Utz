@@ -43,7 +43,7 @@ public final class ModBiomeGraph {
     private static final BiomeId FOREST = new BiomeId("minecraft", "forest");
     private static final BiomeId PLAINS = new BiomeId("minecraft", "plains");
 
-    public static final BiomeGraph DEFAULT = new BiomeGraph(
+    public static final BiomeGraph DEFAULT = BiomeGraph.forProduction(
         List.of(
             new BiomeNode(DESERT, new BiomeSizeRange(700, 1000), new BiomeShapeHints(0.1, 0.5, 0.9), new BiomeFeatureToggles(false, false), COMPACT),
             new BiomeNode(SAVANNA, new BiomeSizeRange(500, 800), new BiomeShapeHints(0.4, 0.5, 0.6), new BiomeFeatureToggles(true, true), COMPACT),
@@ -87,8 +87,9 @@ public final class ModBiomeGraph {
             // left over) because it's the only single addition that closes all of them, and
             // coastal savanna is a normal, common real-world pairing.
             AdjacencyRule.allow(OCEAN, SAVANNA, DEFAULT_BLEND_WIDTH_BLOCKS)
-        )
-    ).requireMinLegalNeighbors().requireEveryLocalNeighborhoodSolvable(8);
+        ),
+        8
+    );
 
     private ModBiomeGraph() {
     }

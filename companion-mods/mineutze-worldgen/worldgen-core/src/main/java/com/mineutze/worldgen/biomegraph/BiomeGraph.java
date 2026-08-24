@@ -54,7 +54,7 @@ public final class BiomeGraph {
     // to isolate specific CSP behaviors (e.g. a graph with NO simultaneously-legal biome
     // against three fixed neighbors, or a plain chain to test forward-checking propagation).
     // This is a real-graph design constraint, not a universal law of the data structure -
-    // production graphs (see ModBiomeGraph) call requireMinLegalNeighbors() explicitly.
+    // real graphs go through the forProduction factory instead, which enforces this.
     private static final int MIN_LEGAL_NEIGHBORS = 3;
 
     public BiomeGraph(Collection<BiomeNode> nodes, Collection<AdjacencyRule> rules) {
@@ -62,6 +62,23 @@ public final class BiomeGraph {
         this.rulesByPair = indexRules(rules);
         requireAllRuleNodesKnown();
         BridgeHopReachability.requireEveryPairWithinHops(nodesById.keySet().stream().sorted().toList(), this::isAllowed, MAX_BRIDGE_HOPS);
+    }
+
+    /**
+     * The one entry point a real, shippable biome set should be built through — bundles
+     * {@link #requireMinLegalNeighbors()} and {@link #requireEveryLocalNeighborhoodSolvable}
+     * so a production graph can't accidentally skip either opt-in check by only remembering
+     * one of the two fluent calls. The bare constructor stays public (not narrowed to this
+     * package) because roughly half this codebase's own test suite deliberately builds
+     * small, narrow-degree graphs — chains, hubs, 3-node triangles — to isolate ONE specific
+     * algorithm behavior in total isolation; those fixtures exist to test something else
+     * entirely and have no interest in (and are often mathematically incapable of meeting,
+     * e.g. a 3-node graph can never reach degree 3) the fairness/coverage concern this
+     * factory's checks protect against. See {@code ModBiomeGraph} for this codebase's one
+     * actual production call site.
+     */
+    public static BiomeGraph forProduction(Collection<BiomeNode> nodes, Collection<AdjacencyRule> rules, int maxNeighbors) {
+        return new BiomeGraph(nodes, rules).requireMinLegalNeighbors().requireEveryLocalNeighborhoodSolvable(maxNeighbors);
     }
 
     /** Fail loud if any node has fewer than {@link #MIN_LEGAL_NEIGHBORS} legal neighbors - see that constant's own doc for why this is opt-in rather than always-on. Call this on every real/production graph. */
