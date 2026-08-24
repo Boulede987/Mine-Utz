@@ -71,7 +71,9 @@ public final class ModBiomeGraph {
             AdjacencyRule.allow(BADLANDS, OCEAN, DEFAULT_BLEND_WIDTH_BLOCKS),
             AdjacencyRule.allow(FOREST, SAVANNA, DEFAULT_BLEND_WIDTH_BLOCKS),
             // Closes the LAST real gap in this graph, found via a real production crash
-            // (LegalityConstrainedRasterizer hit a genuine dead end on worldSeed=42): badlands
+            // (the geometry-realization rasterizer of the time - LegalityConstrainedRasterizer,
+            // since replaced by SeamGrowthRasterizer - hit a genuine dead end on
+            // worldSeed=42): badlands
             // and ocean are legal to EACH OTHER but, before this rule, shared no THIRD common
             // neighbor at all (badlands' other neighbors are desert/savanna; ocean's other
             // neighbors are forest/plains - disjoint sets), so any cell whose neighbors

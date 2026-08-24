@@ -24,8 +24,8 @@ public final class GrowthEngine {
      * {@code biome} have enough already-assigned support around {@code candidate} to
      * grow there. Independent of adjacency legality ({@link #isLegal}), which is a
      * separate concern against OTHER biomes; this only looks at cells already equal
-     * to {@code biome} itself. Package-visible: {@link GapFiller}'s multi-source fill
-     * reuses this exact check.
+     * to {@code biome} itself. Package-visible: {@link SeamGrowthRasterizer} reuses
+     * this exact check during its own growth.
      *
      * The same-biome neighbor count is over the full 8-cell Moore neighborhood
      * (orthogonal + diagonal), not just the 4 orthogonal cells — a solid, convex

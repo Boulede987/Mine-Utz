@@ -270,8 +270,9 @@ public final class TriangleIdentitySizeAssignment {
      * that can geometrically hold only a handful of 500-800-wide patches TOTAL, across every
      * biome combined. All 20 of that biome's triangles then fought each other (as well as
      * bigger neighbors) for the same sliver of space, and none of them reliably won enough
-     * of it — the direct cause of a real {@code LegalityConstrainedRasterizer} crash (that
-     * biome collapsing to isolated 1-2-cell islands with chaotic, high-arity neighborhoods).
+     * of it — the direct cause of a real crash in the geometry-realization rasterizer of
+     * the time (that biome collapsing to isolated 1-2-cell islands with chaotic,
+     * high-arity neighborhoods).
      *
      * <p>Derivation: a biome's fair AREA share of the region is {@code regionAreaBlocks2 *
      * weight / totalWeight} (same proportional-by-weight rule the field stage's own

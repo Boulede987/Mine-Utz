@@ -49,7 +49,7 @@ class BiomeGraphTest {
      * doc) - every biome, including whichever one plays a filler-like role, can be
      * restricted like any other. OCEAN here has only ONE rule (to DESERT, not
      * SAVANNA) - far from universally legal - and the graph still builds fine,
-     * since that single rule keeps it within GapFiller's bridging reach of every
+     * since that single rule keeps it within {@code MAX_BRIDGE_HOPS} of every
      * other node (see {@code isolatedNodeWithNoBridgeFailsFast} for the case
      * where a node is restricted too far to bridge at all).
      */
@@ -65,11 +65,10 @@ class BiomeGraphTest {
     }
 
     /**
-     * A node with zero rules to anything can never legally touch another biome no
-     * matter how GapFiller's bounded neighbor-reassignment tries - if it and
-     * another biome ever end up spatially adjacent during world gen, that's an
-     * unrecoverable dead end. Catching that at graph-construction time, not a
-     * runtime crash mid-world-gen.
+     * A node with zero rules to anything can never legally touch another biome -
+     * if it and another biome ever end up spatially adjacent during world gen,
+     * that's an unrecoverable dead end. Catching that at graph-construction time,
+     * not a runtime crash mid-world-gen.
      */
     @Test
     void isolatedNodeWithNoBridgeFailsFast() {
@@ -82,10 +81,10 @@ class BiomeGraphTest {
     /**
      * The real-world case this check exists for: not a fully isolated node (that's
      * the case above), but two biomes that ARE connected through the rest of the
-     * graph - just too far apart for GapFiller's bounded neighbor-reassignment to
-     * ever actually bridge at a real point of contact (found via badlands/forest
-     * needing exactly the maximum supported 3-hop path badlands-desert-plains-
-     * forest; this chain pushes one hop past that). DESERT-SAVANNA-PLAINS-OCEAN-
+     * graph - just too many hops apart to clear {@code MAX_BRIDGE_HOPS} (found via
+     * badlands/forest needing exactly the maximum supported 3-hop path
+     * badlands-desert-plains-forest; this chain pushes one hop past that).
+     * DESERT-SAVANNA-PLAINS-OCEAN-
      * FOREST is a straight line, so DESERT to FOREST is 4 hops - one more than
      * {@code MAX_BRIDGE_HOPS} - even though every adjacent pair in the chain is
      * legal and the graph as a whole is fully connected.
@@ -183,8 +182,8 @@ class BiomeGraphTest {
     /**
      * A bare 4-cycle (no diagonal) - {DESERT, SAVANNA, PLAINS, OCEAN} converging
      * simultaneously has no legal candidate (SAVANNA-OCEAN is never allowed, and
-     * neither is DESERT-PLAINS): this is the exact real dead end {@code
-     * LegalityConstrainedRasterizer} would otherwise only discover mid-generation.
+     * neither is DESERT-PLAINS): this is the exact real dead end
+     * {@code SeamGrowthRasterizer} would otherwise only discover mid-generation.
      */
     @Test
     void requireEveryLocalNeighborhoodSolvableThrowsOnAGenuineDeadEnd() {

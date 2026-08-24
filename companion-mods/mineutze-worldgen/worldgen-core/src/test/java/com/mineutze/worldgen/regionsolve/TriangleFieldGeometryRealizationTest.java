@@ -18,19 +18,19 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class TriangleFieldGeometryRealizationTest {
 
     // 1024 blocks/side - large enough to actually fit multiple full-target-sized patches
-    // (this graph's biggest range tops out at 300) now that correctRadii pushes patches
-    // toward their real declared size. A smaller grid (256 blocks/side) genuinely can't
-    // hold more than about one correctly-sized patch, which made
-    // producesRealDiversityNotASingleBiome fail once correction started actually working -
-    // not a bug, just an unrealistic fixture size for what the algorithm now does. Still
-    // well under MacroGridConfig.DEFAULT (2048 blocks/side, ~262k cells) for test speed.
+    // (this graph's biggest range tops out at 300), since SeamGrowthRasterizer's quota-first
+    // growth pushes each patch toward its own declared target cell count. A smaller grid
+    // (256 blocks/side) genuinely can't hold more than about one correctly-sized patch,
+    // which made producesRealDiversityNotASingleBiome fail against a fixture that small -
+    // not a bug, just an unrealistic fixture size for what the algorithm actually does.
+    // Still well under MacroGridConfig.DEFAULT (2048 blocks/side, ~262k cells) for test speed.
     private static final MacroGridConfig SMALL_GRID = new MacroGridConfig(4, 256);
 
     private static BiomeGraph fourBiomeGraph() {
         // Bare 4-cycle (no diagonals) has a genuine dead end: {desert, savanna, plains,
         // badlands} converging simultaneously has no legal candidate (savanna-badlands is
-        // never allowed) - LegalityConstrainedRasterizer correctly threw on this before the
-        // desert-plains diagonal below was added, since a real Moore-neighbor convergence
+        // never allowed) - the geometry-realization rasterizer of the time correctly threw
+        // on this before the desert-plains diagonal below was added, since a real Moore-neighbor convergence
         // can plausibly reach all 4 of this graph's only 4 biomes at once. Adding ONE
         // diagonal (not both) makes plains a local hub solvable for every subset without
         // making the whole graph a trivial always-legal clique - savanna-badlands stays
@@ -90,9 +90,10 @@ class TriangleFieldGeometryRealizationTest {
     }
 
     /**
-     * Was a rate threshold ({@code < 0.05}) before {@link LegalityConstrainedRasterizer}
-     * existed - that framing itself implied tolerance for illegal pairs. Now a hard zero,
-     * Moore (8-way) neighbors included, matching that class's own actual guarantee.
+     * Was a rate threshold ({@code < 0.05}) before the geometry-realization rasterizer
+     * legality-constrained its own output - that framing itself implied tolerance for
+     * illegal pairs. Now a hard zero, Moore (8-way) neighbors included, matching
+     * {@link SeamGrowthRasterizer}'s own actual guarantee.
      */
     @Test
     void producesZeroIllegalAdjacencies() {

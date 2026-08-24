@@ -106,10 +106,11 @@ class SeedRegionCacheTest {
      * already proves within one mesh, now applied across two independently-triangulated
      * regions.
      *
-     * <p>Was rate-based ({@code < 0.05}) before {@link LegalityConstrainedRasterizer}
-     * existed - now a hard zero, Moore (8-way) neighbors included, since that class
-     * legality-constrains the FINAL rasterization against {@code fixedBoundaryCells} too
-     * (already-committed cross-region context), not just the CSP's Delaunay-adjacent faces.
+     * <p>Was rate-based ({@code < 0.05}) before the geometry-realization rasterizer
+     * legality-constrained the FINAL rasterization against {@code fixedBoundaryCells}
+     * too (already-committed cross-region context), not just the CSP's Delaunay-adjacent
+     * faces - now a hard zero, Moore (8-way) neighbors included, via {@link
+     * com.mineutze.worldgen.regionsolve.SeamGrowthRasterizer}.
      */
     @Test
     void crossRegionProducesZeroIllegalAdjacencies() {

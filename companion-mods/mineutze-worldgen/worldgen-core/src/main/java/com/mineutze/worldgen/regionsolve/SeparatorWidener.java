@@ -28,11 +28,11 @@ import java.util.TreeSet;
  * non-filler separator can't widen itself into a new illegal adjacency.
  * Also refuses to claim a cell if doing so would cut its donor patch into
  * two pieces (a "neck" cell) — stealing cells is fundamentally different
- * from {@link GrowthEngine} claiming untouched space, and a stolen cell
- * that severs its owner's connectivity creates exactly the kind of
- * disconnected island the rest of this pipeline goes out of its way to
- * avoid (see {@code GapFiller}'s doc comment — only stealing, never plain
- * claiming unclaimed cells, can actually cause this).
+ * from {@link GrowthEngine} claiming untouched space: claiming an unclaimed
+ * cell can never disconnect an already-existing patch (there's nothing
+ * there to disconnect), but stealing an already-claimed one can, if that
+ * cell happened to be the donor patch's only connection between two of its
+ * own halves.
  *
  * Stops at the target size or when no more legally-claimable cells exist,
  * whichever comes first — it's a best-effort widen, not a guarantee.

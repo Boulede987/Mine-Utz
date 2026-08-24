@@ -18,14 +18,16 @@ import java.util.Set;
  * in sync by hand with that script, same as that script was already kept in sync by
  * hand with {@code PixelFragmentRepair.SMALL_FRAGMENT_MAX_SIZE}.
  *
- * <p>{@link LegalityConstrainedRasterizer} already GUARANTEES zero illegal orthogonal OR
- * diagonal adjacencies in its own output (see that class's own doc). So on that
- * codepath, {@link #findIllegalAdjacencies} and {@link #findDiagonalIllegalAdjacencies}
- * exist here as a regression guard / second opinion, not because they're expected to
- * ever actually fire — a nonempty result there means that guarantee has broken, not
- * that this validator found a "normal" defect. Small fragments and one-cell pinch
- * points are NOT guaranteed by anything in the pipeline — real, still-open shape/size
- * concerns this validator is the only thing currently measuring.
+ * <p>{@link SeamGrowthRasterizer} already GUARANTEES zero illegal orthogonal OR
+ * diagonal adjacencies in its own output (see that class's own doc — every claim,
+ * both during growth and in its {@code fillGaps} cleanup, is legality-checked before
+ * being committed). So {@link #findIllegalAdjacencies} and
+ * {@link #findDiagonalIllegalAdjacencies} exist here as a regression guard / second
+ * opinion, not because they're expected to ever actually fire — a nonempty result
+ * there means that guarantee has broken, not that this validator found a "normal"
+ * defect. Small fragments and one-cell pinch points are NOT guaranteed by anything in
+ * the pipeline — real, still-open shape/size concerns this validator is the only thing
+ * currently measuring.
  */
 public final class RegionIntegrityValidator {
 
@@ -36,7 +38,7 @@ public final class RegionIntegrityValidator {
      */
     public static final int SMALL_FRAGMENT_MAX_SIZE = 4;
 
-    // Not a crash risk (LegalityConstrainedRasterizer already guarantees legality
+    // Not a crash risk (SeamGrowthRasterizer already guarantees legality
     // separately) - but per direct user instruction, a messy/speckled world matters
     // just as much as a legal one, so this must never read as a quiet, easy-to-miss
     // line in a wall of output. Shown ONLY when the section it precedes is nonempty.
