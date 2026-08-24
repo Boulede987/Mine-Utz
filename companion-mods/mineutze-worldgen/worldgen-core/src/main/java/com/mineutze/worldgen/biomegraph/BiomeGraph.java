@@ -122,13 +122,7 @@ public final class BiomeGraph {
      * pattern being deliberately removed from this codebase (see this class's own doc) —
      * a graph can satisfy every up-to-8 combination through ORDINARY, narrow adjacency
      * rules alone, as long as no two biomes end up sharing zero common third neighbor.
-     * {@code ModBiomeGraph.DEFAULT} originally failed at 4+ (a real production crash
-     * traced it to exactly that: badlands and ocean were legal to each other but shared
-     * no third neighbor at all, so any cell bordering both plus two more biomes had no
-     * legal placement) — fixed with one added rule (ocean-savanna, see that graph's own
-     * doc), verified by this same method to close EVERY combination up to 6 (the max
-     * possible for a 6-biome graph), which is why {@code ModBiomeGraph} now calls this
-     * with 8 rather than settling for a lower, merely-probable bound.
+     * See {@code ModBiomeGraph}'s own doc for a real graph this caught a genuine gap in.
      */
     public BiomeGraph requireEveryLocalNeighborhoodSolvable(int maxNeighbors) {
         List<BiomeId> ids = nodesById.keySet().stream().sorted().toList();
