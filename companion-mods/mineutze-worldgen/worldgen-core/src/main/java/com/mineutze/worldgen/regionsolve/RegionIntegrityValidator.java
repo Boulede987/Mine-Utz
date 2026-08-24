@@ -125,8 +125,8 @@ public final class RegionIntegrityValidator {
         // adjacency as real connectivity everywhere (legality checks, cohesion, the
         // head-start reservation pass), so measuring "isolated" via orthogonal-only
         // adjacency was splitting a real diagonally-touching pair into two false
-        // single-cell fragments - measured directly: 14 of 118 size=1 fragments on a real
-        // production export had a same-biome diagonal neighbor.
+        // single-cell fragments - confirmed directly against a real production export
+        // (see this class's own git history for that measurement).
         List<Set<MacroCellPos>> components = ConnectedComponents.find(assignment, assignment.keySet(), MacroCellPos::mooreNeighbors);
         List<SmallFragment> smallFragments = findSmallFragments(assignment, components);
 

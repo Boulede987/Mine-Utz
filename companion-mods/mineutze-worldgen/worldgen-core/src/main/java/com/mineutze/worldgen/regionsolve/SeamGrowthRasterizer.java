@@ -52,9 +52,9 @@ import java.util.Set;
  * ADVANCING FRONTIER (not a random teleport; always still a real Moore-neighbor of
  * something already decided), which can end up isolated if the surrounding area fills in
  * before that face's other territory connects to it — is handled instead by {@link
- * #wouldPinchAnAlreadyDecidedNeighbor} (measured to cut pinch points ~22% with zero
- * visual regression) and {@link #fillGaps}, not by suppressing the ordering that gives
- * this pipeline its organic character. A fixed {@link MacroCellPos} tie-break comes last
+ * #wouldPinchAnAlreadyDecidedNeighbor} (measured to meaningfully cut pinch points with
+ * zero visual regression) and {@link #fillGaps}, not by suppressing the ordering that
+ * gives this pipeline its organic character. A fixed {@link MacroCellPos} tie-break comes last
  * (never queue insertion order, matching this codebase's established determinism
  * discipline). Every face's own triangle centroid is seeded as its bootstrap candidate up
  * front; real inheritance happens automatically once ANY cell is claimed — its Moore
@@ -76,20 +76,15 @@ import java.util.Set;
  * distance-competition overlap between two faces that were never checked against each
  * other.
  *
- * <p><b>Known open gap</b> (2026-08-23, measured on real worldSeed=42 production export):
- * small fragments are still above the old field stage's own number (39) — currently 181
- * with this mechanism (down from 623 at the previous milestone via a diagonal-aware
- * pinch metric, an own-continuation starvation fix, the head-start reservation pass, a
- * diagonal-aware fragment metric, and a {@link #fillGaps} anti-pinch preference — see
- * this class's own git history / the plan doc for each step's own measurement). Of the
- * remaining size=1 fragments, 61% are genuine main-queue cross-biome competitive
- * assignments, not an identified bug — closing that further likely needs a real
- * architecture change, not another tuning pass. One-cell pinch points (2825) are well
- * below the old field stage's own number (4247), and what remains mostly traces to
- * genuinely tight local-legality pockets (few biomes legal there at all), not a picking
- * mistake — measured directly by histogramming how many legal candidates {@link
- * #fillGaps} actually had at each remaining pinch site. Zero illegal adjacencies holds
- * throughout regardless.
+ * <p><b>Known open gap</b>: small-fragment and one-cell-pinch counts don't yet match the
+ * old field stage's own numbers on every measure — pinches are now solidly ahead, small
+ * fragments not fully closed. What's left of each traces mostly to genuine local
+ * competition or tight local-legality pockets rather than an identified mechanical bug —
+ * see {@link RegionIntegrityValidator} for how these are measured on a real export, and
+ * this class's own git history for the sequence of root-cause fixes that got here (each
+ * commit message states its own before/after numbers, which is where that history
+ * belongs — not duplicated here to go stale the next time this class changes). Zero
+ * illegal adjacencies holds throughout regardless.
  */
 final class SeamGrowthRasterizer {
 
