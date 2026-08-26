@@ -45,15 +45,11 @@ public final class AsciiExporter {
 
     private static void writeGrid(StringBuilder out, ExportSnapshot snapshot, BiomeLegend legend) {
         int regionSize = snapshot.gridConfig().regionSizeCellsPerSide();
-        int minCellX = snapshot.minRegion().x() * regionSize;
-        int minCellZ = snapshot.minRegion().z() * regionSize;
         int span = snapshot.spanCells();
 
         for (int localZ = 0; localZ < span; localZ++) {
-            int z = minCellZ + localZ;
             for (int localX = 0; localX < span; localX++) {
-                int x = minCellX + localX;
-                MacroCellPos cell = new MacroCellPos(x, z);
+                MacroCellPos cell = snapshot.cellAt(localX, localZ);
                 out.append(snapshot.cells().containsKey(cell) ? legend.glyphOf(snapshot.biomeAt(cell)) : '?');
                 if (localX + 1 < span && (localX + 1) % regionSize == 0) {
                     out.append('|');

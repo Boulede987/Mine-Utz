@@ -44,22 +44,6 @@ public final class ModBiomeGraph {
             AdjacencyRule.allow(BADLANDS, SAVANNA, DEFAULT_BLEND_WIDTH_BLOCKS),
             AdjacencyRule.allow(BADLANDS, OCEAN, DEFAULT_BLEND_WIDTH_BLOCKS),
             AdjacencyRule.allow(FOREST, SAVANNA, DEFAULT_BLEND_WIDTH_BLOCKS),
-            // Closes the LAST real gap in this graph, found via a real production crash
-            // (the geometry-realization rasterizer of the time - LegalityConstrainedRasterizer,
-            // since replaced by SeamGrowthRasterizer - hit a genuine dead end on
-            // worldSeed=42): badlands
-            // and ocean are legal to EACH OTHER but, before this rule, shared no THIRD common
-            // neighbor at all (badlands' other neighbors are desert/savanna; ocean's other
-            // neighbors are forest/plains - disjoint sets), so any cell whose neighbors
-            // included both badlands and ocean plus two more biomes had NO legal placement.
-            // Verified exhaustively (not just this one pair, every combination up to 6 - the
-            // maximum possible, since this graph only has 6 biomes): with this rule added,
-            // requireEveryLocalNeighborhoodSolvable(8) below actually proves zero unsolvable
-            // combinations exist at ANY size, not just reduces how often one is hit. Savanna
-            // was chosen over the alternatives that were also checked (ocean-desert only
-            // closed 3 of 4 gaps; badlands-forest only closed 3 of 4 gaps, a DIFFERENT one
-            // left over) because it's the only single addition that closes all of them, and
-            // coastal savanna is a normal, common real-world pairing.
             AdjacencyRule.allow(OCEAN, SAVANNA, DEFAULT_BLEND_WIDTH_BLOCKS)
         ),
         8

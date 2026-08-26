@@ -30,8 +30,6 @@ public final class PngExporter {
 
     public static void write(Path file, ExportSnapshot snapshot, BiomeLegend legend) {
         int regionSize = snapshot.gridConfig().regionSizeCellsPerSide();
-        int minCellX = snapshot.minRegion().x() * regionSize;
-        int minCellZ = snapshot.minRegion().z() * regionSize;
         int span = snapshot.spanCells();
         int imageSize = span * PIXELS_PER_CELL;
 
@@ -40,7 +38,7 @@ public final class PngExporter {
 
         for (int localZ = 0; localZ < span; localZ++) {
             for (int localX = 0; localX < span; localX++) {
-                MacroCellPos cell = new MacroCellPos(minCellX + localX, minCellZ + localZ);
+                MacroCellPos cell = snapshot.cellAt(localX, localZ);
                 g.setColor(snapshot.cells().containsKey(cell) ? new Color(legend.rgbOf(snapshot.biomeAt(cell))) : GAP_COLOR);
                 g.fillRect(localX * PIXELS_PER_CELL, localZ * PIXELS_PER_CELL, PIXELS_PER_CELL, PIXELS_PER_CELL);
             }

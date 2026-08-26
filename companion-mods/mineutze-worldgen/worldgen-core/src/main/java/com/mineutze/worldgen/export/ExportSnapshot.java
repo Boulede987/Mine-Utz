@@ -55,6 +55,17 @@ public record ExportSnapshot(
         return result;
     }
 
+    /**
+     * The real macro-cell at a swath-local (x, z) offset — the one translation from
+     * {@code minRegion}/{@code gridConfig} every writer needs, so none has to re-derive
+     * {@code minCellX}/{@code minCellZ} independently (previously duplicated verbatim in
+     * both {@link AsciiExporter} and {@link PngExporter}).
+     */
+    public MacroCellPos cellAt(int localX, int localZ) {
+        int regionSize = gridConfig.regionSizeCellsPerSide();
+        return new MacroCellPos(minRegion.x() * regionSize + localX, minRegion.z() * regionSize + localZ);
+    }
+
     /** Biome at a cell within this swath — never null for a properly-built snapshot. */
     public BiomeId biomeAt(MacroCellPos cell) {
         BiomeId biome = cells.get(cell);
