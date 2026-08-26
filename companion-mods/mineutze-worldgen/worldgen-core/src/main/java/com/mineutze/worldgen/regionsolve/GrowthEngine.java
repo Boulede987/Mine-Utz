@@ -43,30 +43,7 @@ public final class GrowthEngine {
     ) {
         long sameBiomeNeighbors = Stream.concat(candidate.orthogonalNeighbors().stream(), candidate.diagonalNeighbors().stream())
             .filter(neighbor -> biome.equals(assignment.get(neighbor))).count();
-        if (sameBiomeNeighbors < cohesion.minSameBiomeNeighbors()) {
-            return false;
-        }
-        return cohesion.directionalRunMajor() == 0 || satisfiesDirectionalRun(candidate, biome, assignment, cohesion);
-    }
-
-    /** Contiguous same-biome run through the candidate, required >= major along one axis and >= minor along the other (either assignment). */
-    private static boolean satisfiesDirectionalRun(MacroCellPos candidate, BiomeId biome, Map<MacroCellPos, BiomeId> assignment, GrowthCohesionProfile cohesion) {
-        int xRun = 1 + contiguousRun(candidate, biome, assignment, 1, 0) + contiguousRun(candidate, biome, assignment, -1, 0);
-        int zRun = 1 + contiguousRun(candidate, biome, assignment, 0, 1) + contiguousRun(candidate, biome, assignment, 0, -1);
-        return (xRun >= cohesion.directionalRunMajor() && zRun >= cohesion.directionalRunMinor())
-            || (zRun >= cohesion.directionalRunMajor() && xRun >= cohesion.directionalRunMinor());
-    }
-
-    private static int contiguousRun(MacroCellPos from, BiomeId biome, Map<MacroCellPos, BiomeId> assignment, int stepX, int stepZ) {
-        int count = 0;
-        int x = from.x() + stepX;
-        int z = from.z() + stepZ;
-        while (biome.equals(assignment.get(new MacroCellPos(x, z)))) {
-            count++;
-            x += stepX;
-            z += stepZ;
-        }
-        return count;
+        return sameBiomeNeighbors >= cohesion.minSameBiomeNeighbors();
     }
 
     /**

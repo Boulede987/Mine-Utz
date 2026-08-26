@@ -19,20 +19,14 @@ public final class ModBiomeGraph {
 
     // Shape identity per the cohesion-profile design: how tightly a
     // growing patch must hold together (see GrowthCohesionProfile's own doc). Every
-    // biome uses COMPACT for now, including plains — no biome gets a permanently
-    // looser shape identity just because it's common, same reasoning as removing its
-    // old universal-filler status below.
-    private static final GrowthCohesionProfile COMPACT = new GrowthCohesionProfile(2, 0, 0);
-    // TODO: directionalRunMajor/Minor's hard per-cell gate
-    // deadlocks whenever minor >= 2 — the perpendicular "thickness" it demands can
-    // only exist once multiple cells have already joined together, but growth claims
-    // one cell at a time, so the first cell extending a new row/column can never have
-    // it pre-satisfied. Confirmed via the export CLI: every ocean demand dropped in
-    // every region with (major=4, minor=2). Falling back to COMPACT until the
-    // directional check is redesigned (likely: a soft frontier-ordering preference
-    // instead of a hard gate, layered on top of the still-hard, still-working
-    // minSameBiomeNeighbors check).
-    private static final GrowthCohesionProfile ELONGATED = COMPACT;
+    // biome uses COMPACT for now, including plains and ocean — no biome gets a
+    // permanently looser shape identity just because it's common or usually elongated
+    // in real terrain, same reasoning as removing plains' old universal-filler status
+    // below. A directional-run profile for ocean's own coastline shape was tried and
+    // removed (see GrowthCohesionProfile's own doc for why) - per explicit direction,
+    // per-biome shape complexity beyond correct size + a natural shape is deferred
+    // until a fully working proof of concept exists.
+    private static final GrowthCohesionProfile COMPACT = new GrowthCohesionProfile(2);
 
     private static final BiomeId DESERT = new BiomeId("minecraft", "desert");
     private static final BiomeId SAVANNA = new BiomeId("minecraft", "savanna");
@@ -46,7 +40,7 @@ public final class ModBiomeGraph {
             new BiomeNode(DESERT, new BiomeSizeRange(700, 1000), COMPACT),
             new BiomeNode(SAVANNA, new BiomeSizeRange(500, 800), COMPACT),
             new BiomeNode(BADLANDS, new BiomeSizeRange(500, 800), COMPACT),
-            new BiomeNode(OCEAN, new BiomeSizeRange(600, 1000), ELONGATED),
+            new BiomeNode(OCEAN, new BiomeSizeRange(600, 1000), COMPACT),
             new BiomeNode(FOREST, new BiomeSizeRange(500, 800), COMPACT),
             new BiomeNode(PLAINS, new BiomeSizeRange(300, 600), COMPACT)
         ),
