@@ -1,6 +1,5 @@
 package com.mineutze.worldgen.regionsolve;
 
-import com.mineutze.worldgen.biomegraph.BiomeFeatureToggles;
 import com.mineutze.worldgen.biomegraph.BiomeId;
 import com.mineutze.worldgen.biomegraph.BiomeNode;
 import com.mineutze.worldgen.biomegraph.BiomeShapeHints;
@@ -27,7 +26,6 @@ final class TestBiomeNodes {
             id(path),
             new BiomeSizeRange(minWidthBlocks, maxWidthBlocks),
             new BiomeShapeHints(0.5, 0.5, 0.5),
-            new BiomeFeatureToggles(true, true),
             cohesionProfile
         );
     }

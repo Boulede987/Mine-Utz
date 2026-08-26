@@ -64,8 +64,6 @@ public final class JsonExporter {
                 .append(", \"roughness\": ").append(node.shapeHints().roughness())
                 .append(", \"depthBias\": ").append(node.shapeHints().depthBias())
                 .append(", \"flatness\": ").append(node.shapeHints().flatness())
-                .append(", \"riversEnabled\": ").append(node.featureToggles().riversEnabled())
-                .append(", \"lakesEnabled\": ").append(node.featureToggles().lakesEnabled())
                 .append(", \"minSameBiomeNeighbors\": ").append(node.cohesionProfile().minSameBiomeNeighbors())
                 .append(", \"directionalRunMajor\": ").append(node.cohesionProfile().directionalRunMajor())
                 .append(", \"directionalRunMinor\": ").append(node.cohesionProfile().directionalRunMinor())

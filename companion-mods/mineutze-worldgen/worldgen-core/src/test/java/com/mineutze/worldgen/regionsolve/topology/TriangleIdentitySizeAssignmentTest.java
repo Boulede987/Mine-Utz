@@ -1,7 +1,6 @@
 package com.mineutze.worldgen.regionsolve.topology;
 
 import com.mineutze.worldgen.biomegraph.AdjacencyRule;
-import com.mineutze.worldgen.biomegraph.BiomeFeatureToggles;
 import com.mineutze.worldgen.biomegraph.BiomeGraph;
 import com.mineutze.worldgen.biomegraph.BiomeId;
 import com.mineutze.worldgen.biomegraph.BiomeNode;
@@ -29,7 +28,7 @@ class TriangleIdentitySizeAssignmentTest {
     private static BiomeNode node(String path, int minWidthBlocks, int maxWidthBlocks) {
         return new BiomeNode(
             id(path), new BiomeSizeRange(minWidthBlocks, maxWidthBlocks),
-            new BiomeShapeHints(0.5, 0.5, 0.5), new BiomeFeatureToggles(true, true), GrowthCohesionProfile.UNRESTRICTED
+            new BiomeShapeHints(0.5, 0.5, 0.5), GrowthCohesionProfile.UNRESTRICTED
         );
     }
 

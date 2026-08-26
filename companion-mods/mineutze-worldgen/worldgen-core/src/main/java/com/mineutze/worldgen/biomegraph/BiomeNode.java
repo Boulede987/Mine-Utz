@@ -10,7 +10,6 @@ public record BiomeNode(
     BiomeId id,
     BiomeSizeRange sizeRange,
     BiomeShapeHints shapeHints,
-    BiomeFeatureToggles featureToggles,
     GrowthCohesionProfile cohesionProfile
 ) {
 
@@ -18,7 +17,7 @@ public record BiomeNode(
         if (id == null) {
             throw new IllegalArgumentException("BiomeNode id must not be null");
         }
-        if (sizeRange == null || shapeHints == null || featureToggles == null || cohesionProfile == null) {
+        if (sizeRange == null || shapeHints == null || cohesionProfile == null) {
             throw new IllegalArgumentException("BiomeNode " + id + " is missing a required field");
         }
     }
