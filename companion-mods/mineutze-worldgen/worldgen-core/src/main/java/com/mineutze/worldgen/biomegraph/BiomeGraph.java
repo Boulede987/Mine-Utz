@@ -42,12 +42,16 @@ public final class BiomeGraph {
 
     // A biome with too few legal neighbors gets starved by TriangleIdentitySizeAssignment's
     // own fairness-quota candidate ordering: fairness only reorders candidates already legal
-    // for a face, it can't invent legality a narrow biome doesn't have. Confirmed empirically -
-    // badlands at degree 1 (desert only) drove the very first triangle-count skew found this
-    // session, and even a degree-3 biome (jungle: forest/swamp/beach) still landed at zero
-    // triangles in a 178-face solve because none of its 3 neighbors reach the mesh's populous
-    // regions. 3 is a floor, not a guarantee of fair representation - just the minimum needed
-    // for a biome to plausibly show up across a real mesh at all.
+    // for a face, it can't invent legality a narrow biome doesn't have (badlands at degree 1
+    // drove the very first triangle-count skew found in this graph's own history). Unlike
+    // requireEveryLocalNeighborhoodSolvable, starvation isn't a pure graph-structure property
+    // checkable offline - it depends on real mesh placement, not just the rules - so this
+    // floor is a cheap, unproven-by-itself heuristic, not a derived guarantee. The real,
+    // re-runnable proof that ModBiomeGraph.DEFAULT specifically doesn't starve any of its
+    // biomes lives in ModBiomeGraphTest.noBiomeIsStarvedOnARealProductionScaleSolve, which
+    // actually runs the CSP against a real mesh instead of reasoning about it in the
+    // abstract. 3 is a floor, not a guarantee of fair representation - just the minimum
+    // needed for a biome to plausibly show up across a real mesh at all.
     //
     // NOT enforced in the constructor, unlike the bridgeability check above - several
     // algorithm-focused unit tests deliberately build narrow chain/bridge graphs (degree 1-2)

@@ -39,15 +39,8 @@ public final class ModBiomeGraph {
             AdjacencyRule.allow(OCEAN, FOREST, DEFAULT_BLEND_WIDTH_BLOCKS),
             AdjacencyRule.allow(PLAINS, DESERT, DEFAULT_BLEND_WIDTH_BLOCKS),
             AdjacencyRule.allow(PLAINS, SAVANNA, DEFAULT_BLEND_WIDTH_BLOCKS),
-            // PLAINS-BADLANDS deliberately NOT allowed - plains is no longer a universal
-            // filler, it's a normal biome with real restrictions like everything else.
             AdjacencyRule.allow(PLAINS, OCEAN, DEFAULT_BLEND_WIDTH_BLOCKS),
             AdjacencyRule.allow(PLAINS, FOREST, DEFAULT_BLEND_WIDTH_BLOCKS),
-            // BiomeGraph enforces a minimum of 3 legal neighbors per node (its own doc:
-            // fewer starves a biome under TriangleIdentitySizeAssignment's fairness-quota
-            // ordering, confirmed by badlands originally sitting at degree 1 here). These
-            // 3 rules bring badlands/savanna/ocean/forest up to the floor without touching
-            // the deliberate plains-badlands exclusion above.
             AdjacencyRule.allow(BADLANDS, SAVANNA, DEFAULT_BLEND_WIDTH_BLOCKS),
             AdjacencyRule.allow(BADLANDS, OCEAN, DEFAULT_BLEND_WIDTH_BLOCKS),
             AdjacencyRule.allow(FOREST, SAVANNA, DEFAULT_BLEND_WIDTH_BLOCKS),
