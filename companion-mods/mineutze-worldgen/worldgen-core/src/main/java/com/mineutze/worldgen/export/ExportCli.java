@@ -27,25 +27,44 @@ public final class ExportCli {
     private static final int DEFAULT_REGION_SPAN = 3;
     private static final String DEFAULT_OUTPUT_DIR = "worldgen-export";
 
+    private record Args(long worldSeed, int regionSpan, Path outputDir) {
+    }
+
     private ExportCli() {
     }
 
     public static void main(String[] args) {
         System.setProperty("java.awt.headless", "true");
 
-        long worldSeed = args.length > 0 ? Long.parseLong(args[0]) : DEFAULT_WORLD_SEED;
-        int regionSpan = args.length > 1 ? Integer.parseInt(args[1]) : DEFAULT_REGION_SPAN;
-        Path outputDir = Path.of(args.length > 2 ? args[2] : DEFAULT_OUTPUT_DIR);
-
+        Args parsed = parseArgs(args);
         BiomeGraph graph = ModBiomeGraph.DEFAULT;
         MacroGridConfig gridConfig = MacroGridConfig.DEFAULT;
-        RegionPos minRegion = new RegionPos(-regionSpan / 2, -regionSpan / 2);
+        RegionPos minRegion = new RegionPos(-parsed.regionSpan() / 2, -parsed.regionSpan() / 2);
 
+        logSolveStart(parsed, gridConfig, minRegion);
+        ExportSnapshot snapshot = solve(graph, gridConfig, parsed.worldSeed(), minRegion, parsed.regionSpan());
+        writeAllFormats(parsed.outputDir(), snapshot, new BiomeLegend(graph));
+    }
+
+    private static Args parseArgs(String[] args) {
+        return new Args(
+            args.length > 0 ? Long.parseLong(args[0]) : DEFAULT_WORLD_SEED,
+            args.length > 1 ? Integer.parseInt(args[1]) : DEFAULT_REGION_SPAN,
+            Path.of(args.length > 2 ? args[2] : DEFAULT_OUTPUT_DIR)
+        );
+    }
+
+    private static void logSolveStart(Args args, MacroGridConfig gridConfig, RegionPos minRegion) {
         System.out.printf(
             "Solving %dx%d regions from %s (worldSeed=%d, macroCellSizeBlocks=%d, regionSizeCellsPerSide=%d)%n",
-            regionSpan, regionSpan, minRegion, worldSeed, gridConfig.macroCellSizeBlocks(), gridConfig.regionSizeCellsPerSide()
+            args.regionSpan(), args.regionSpan(), minRegion, args.worldSeed(),
+            gridConfig.macroCellSizeBlocks(), gridConfig.regionSizeCellsPerSide()
         );
+    }
 
+    private static ExportSnapshot solve(
+        BiomeGraph graph, MacroGridConfig gridConfig, long worldSeed, RegionPos minRegion, int regionSpan
+    ) {
         long solveStartNanos = System.nanoTime();
         ExportSnapshot snapshot = RegionGridSolver.solve(
             graph, gridConfig, worldSeed, minRegion, regionSpan,
@@ -55,11 +74,12 @@ public final class ExportCli {
                 result.warnings().isEmpty() ? "" : " — " + result.warnings().size() + " warning(s)"
             )
         );
-        long solveDurationMillis = (System.nanoTime() - solveStartNanos) / 1_000_000;
-        System.out.printf("Total solve time: %d ms%n", solveDurationMillis);
+        System.out.printf("Total solve time: %d ms%n", (System.nanoTime() - solveStartNanos) / 1_000_000);
+        return snapshot;
+    }
 
+    private static void writeAllFormats(Path outputDir, ExportSnapshot snapshot, BiomeLegend legend) {
         createOutputDir(outputDir);
-        BiomeLegend legend = new BiomeLegend(graph);
 
         Path pngFile = outputDir.resolve("regions.png");
         Path asciiFile = outputDir.resolve("regions.txt");
@@ -72,7 +92,8 @@ public final class ExportCli {
         int totalDropped = snapshot.warningsByRegion().values().stream().mapToInt(List::size).sum();
         System.out.printf(
             "%nDone. %d region(s) solved, %d dropped demand(s) total.%n  %s%n  %s%n  %s%n",
-            snapshot.warningsByRegion().size(), totalDropped, pngFile.toAbsolutePath(), asciiFile.toAbsolutePath(), jsonFile.toAbsolutePath()
+            snapshot.warningsByRegion().size(), totalDropped,
+            pngFile.toAbsolutePath(), asciiFile.toAbsolutePath(), jsonFile.toAbsolutePath()
         );
     }
 
