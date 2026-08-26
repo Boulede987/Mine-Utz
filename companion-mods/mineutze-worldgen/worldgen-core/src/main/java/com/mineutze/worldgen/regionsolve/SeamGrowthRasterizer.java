@@ -133,8 +133,8 @@ final class SeamGrowthRasterizer {
 
         // Head-start reservation pass: BEFORE any face competes for territory through the
         // shared queue, give each face (in deterministic faceIndex order) its own seed
-        // cell PLUS enough extra cells to reach ITS OWN cohesionProfile's
-        // minSameBiomeNeighbors threshold, claimed directly from that face's own growing
+        // cell PLUS enough extra cells to reach GrowthEngine.MIN_SAME_BIOME_NEIGHBORS,
+        // claimed directly from that face's own growing
         // frontier (nearest-to-seed tie-break), same legality/cohesion/anti-pinch rules as
         // the main loop (via isClaimable). Real root-cause fix, not a repair pass over
         // decided output: without this, EVERY face's first cell (ratio exactly 0.0,
@@ -160,7 +160,7 @@ final class SeamGrowthRasterizer {
             claimedCountByFace.merge(faceIndex, 1, Integer::sum);
             List<MacroCellPos> claimedByThisFace = new ArrayList<>(List.of(seed));
 
-            int headStartTarget = Math.max(1, graph.node(biome).cohesionProfile().minSameBiomeNeighbors());
+            int headStartTarget = Math.max(1, GrowthEngine.MIN_SAME_BIOME_NEIGHBORS);
             while (claimedByThisFace.size() < headStartTarget) {
                 MacroCellPos next = pickHeadStartCandidate(claimedByThisFace, biome, faceIndex, decided, regionCellSet, claimedCountByFace, graph, seed);
                 if (next == null) {
@@ -216,9 +216,8 @@ final class SeamGrowthRasterizer {
      * The three commit-time rules a candidate cell must pass, shared verbatim by the
      * head-start reservation pass and the main queue loop so both ever apply exactly the
      * same standard: legal against every already-decided Moore neighbor; satisfies
-     * {@code candidate}'s own {@link com.mineutze.worldgen.biomegraph.GrowthCohesionProfile}
-     * once it's past that biome's own bootstrap exemption window (pigeonhole - a patch
-     * below its own {@code minSameBiomeNeighbors} count can never satisfy cohesion in the
+     * {@link GrowthEngine#MIN_SAME_BIOME_NEIGHBORS} once past the bootstrap exemption
+     * window (pigeonhole - a patch below that count can never satisfy cohesion in the
      * first place, so it isn't a real quality signal yet); and doesn't retroactively pinch
      * an already-decided orthogonal neighbor.
      */
@@ -229,10 +228,8 @@ final class SeamGrowthRasterizer {
         if (!legalAgainstAll(candidate, mooreNeighborBiomes(cell, decided), graph)) {
             return false;
         }
-        BiomeNode candidateNode = graph.node(candidate);
-        int minSameBiomeNeighbors = candidateNode.cohesionProfile().minSameBiomeNeighbors();
-        if (claimedCountByFace.get(faceIndex) >= minSameBiomeNeighbors
-            && !GrowthEngine.satisfiesCohesion(cell, candidate, decided, candidateNode.cohesionProfile())) {
+        if (claimedCountByFace.get(faceIndex) >= GrowthEngine.MIN_SAME_BIOME_NEIGHBORS
+            && !GrowthEngine.satisfiesCohesion(cell, candidate, decided)) {
             return false;
         }
         return !wouldPinchAnAlreadyDecidedNeighbor(cell, candidate, decided);

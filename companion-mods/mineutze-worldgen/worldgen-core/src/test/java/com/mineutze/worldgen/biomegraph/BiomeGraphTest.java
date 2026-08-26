@@ -19,11 +19,7 @@ class BiomeGraphTest {
     private static final BiomeId FOREST = new BiomeId(NAMESPACE, "forest");
 
     private static BiomeNode node(BiomeId id) {
-        return new BiomeNode(
-            id,
-            new BiomeSizeRange(700, 1000),
-            GrowthCohesionProfile.UNRESTRICTED
-        );
+        return new BiomeNode(id, new BiomeSizeRange(700, 1000));
     }
 
     @Test

@@ -5,7 +5,6 @@ import com.mineutze.worldgen.biomegraph.BiomeGraph;
 import com.mineutze.worldgen.biomegraph.BiomeId;
 import com.mineutze.worldgen.biomegraph.BiomeNode;
 import com.mineutze.worldgen.biomegraph.BiomeSizeRange;
-import com.mineutze.worldgen.biomegraph.GrowthCohesionProfile;
 import org.junit.jupiter.api.Test;
 
 import java.util.HashSet;
@@ -25,10 +24,7 @@ class TriangleIdentitySizeAssignmentTest {
     }
 
     private static BiomeNode node(String path, int minWidthBlocks, int maxWidthBlocks) {
-        return new BiomeNode(
-            id(path), new BiomeSizeRange(minWidthBlocks, maxWidthBlocks),
-            GrowthCohesionProfile.UNRESTRICTED
-        );
+        return new BiomeNode(id(path), new BiomeSizeRange(minWidthBlocks, maxWidthBlocks));
     }
 
     /**

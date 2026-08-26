@@ -3,7 +3,6 @@ package com.mineutze.worldgen.regionsolve;
 import com.mineutze.worldgen.biomegraph.BiomeId;
 import com.mineutze.worldgen.biomegraph.BiomeNode;
 import com.mineutze.worldgen.biomegraph.BiomeSizeRange;
-import com.mineutze.worldgen.biomegraph.GrowthCohesionProfile;
 
 final class TestBiomeNodes {
 
@@ -17,14 +16,6 @@ final class TestBiomeNodes {
     }
 
     static BiomeNode node(String path, int minWidthBlocks, int maxWidthBlocks) {
-        return node(path, minWidthBlocks, maxWidthBlocks, GrowthCohesionProfile.UNRESTRICTED);
-    }
-
-    static BiomeNode node(String path, int minWidthBlocks, int maxWidthBlocks, GrowthCohesionProfile cohesionProfile) {
-        return new BiomeNode(
-            id(path),
-            new BiomeSizeRange(minWidthBlocks, maxWidthBlocks),
-            cohesionProfile
-        );
+        return new BiomeNode(id(path), new BiomeSizeRange(minWidthBlocks, maxWidthBlocks));
     }
 }
