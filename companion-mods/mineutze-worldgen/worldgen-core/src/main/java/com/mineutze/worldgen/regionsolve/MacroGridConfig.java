@@ -213,22 +213,4 @@ public record MacroGridConfig(int macroCellSizeBlocks, int regionSizeCellsPerSid
         );
     }
 
-    // Always derived, never its own stored/tunable field: FineMeshPointScatter's fine-mesh
-    // point spacing and this paint-cell size already had to be hand-resynced once
-    // (macroCellSizeBlocks 64->4, 2026-08-15) when they were two independent constants -
-    // a real drift risk if it happens again. One ratio, one authoritative home; a future
-    // macroCellSizeBlocks change now carries both along automatically.
-    private static final int PAINT_CELL_RATIO = 4;
-
-    /**
-     * Coarse "paint grid" cell size {@code CoarseToFineRasterizer} batches
-     * rasterization work by (16 blocks at the current default) — always
-     * {@link #PAINT_CELL_RATIO}x {@link #macroCellSizeBlocks}, matching the
-     * same ratio {@code FineMeshPointScatter}'s fine-mesh point spacing
-     * already uses (tuned from real exported seed-42 output, not guessed —
-     * see that class's own doc).
-     */
-    public int paintCellSizeBlocks() {
-        return macroCellSizeBlocks * PAINT_CELL_RATIO;
-    }
 }
