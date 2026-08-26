@@ -3,11 +3,9 @@ package com.mineutze.worldgen.biomegraph;
 import java.util.List;
 
 /**
- * First real BiomeGraph, matching DESIGN.md's worked example. Shape hints
- * are inert until the Density Router exists — placeholder values, not yet
- * consumed by anything. Everything here (widths, blend width) is a
- * placeholder to tune from logged solve output, same as the grid constants
- * in {@link com.mineutze.worldgen.regionsolve.MacroGridConfig}.
+ * First real BiomeGraph, matching DESIGN.md's worked example. Everything here
+ * (widths, blend width) is a placeholder to tune from logged solve output,
+ * same as the grid constants in {@link com.mineutze.worldgen.regionsolve.MacroGridConfig}.
  *
  * Lives in worldgen-core (not the mod module) despite the "Mod" name —
  * {@link BiomeId} is deliberately not Minecraft's ResourceLocation, so this
@@ -45,12 +43,12 @@ public final class ModBiomeGraph {
 
     public static final BiomeGraph DEFAULT = BiomeGraph.forProduction(
         List.of(
-            new BiomeNode(DESERT, new BiomeSizeRange(700, 1000), new BiomeShapeHints(0.1, 0.5, 0.9), COMPACT),
-            new BiomeNode(SAVANNA, new BiomeSizeRange(500, 800), new BiomeShapeHints(0.4, 0.5, 0.6), COMPACT),
-            new BiomeNode(BADLANDS, new BiomeSizeRange(500, 800), new BiomeShapeHints(0.8, 0.6, 0.2), COMPACT),
-            new BiomeNode(OCEAN, new BiomeSizeRange(600, 1000), new BiomeShapeHints(0.3, 0.9, 0.5), ELONGATED),
-            new BiomeNode(FOREST, new BiomeSizeRange(500, 800), new BiomeShapeHints(0.5, 0.4, 0.5), COMPACT),
-            new BiomeNode(PLAINS, new BiomeSizeRange(300, 600), new BiomeShapeHints(0.2, 0.3, 0.8), COMPACT)
+            new BiomeNode(DESERT, new BiomeSizeRange(700, 1000), COMPACT),
+            new BiomeNode(SAVANNA, new BiomeSizeRange(500, 800), COMPACT),
+            new BiomeNode(BADLANDS, new BiomeSizeRange(500, 800), COMPACT),
+            new BiomeNode(OCEAN, new BiomeSizeRange(600, 1000), ELONGATED),
+            new BiomeNode(FOREST, new BiomeSizeRange(500, 800), COMPACT),
+            new BiomeNode(PLAINS, new BiomeSizeRange(300, 600), COMPACT)
         ),
         List.of(
             AdjacencyRule.allow(DESERT, SAVANNA, DEFAULT_BLEND_WIDTH_BLOCKS),

@@ -9,7 +9,6 @@ package com.mineutze.worldgen.biomegraph;
 public record BiomeNode(
     BiomeId id,
     BiomeSizeRange sizeRange,
-    BiomeShapeHints shapeHints,
     GrowthCohesionProfile cohesionProfile
 ) {
 
@@ -17,7 +16,7 @@ public record BiomeNode(
         if (id == null) {
             throw new IllegalArgumentException("BiomeNode id must not be null");
         }
-        if (sizeRange == null || shapeHints == null || cohesionProfile == null) {
+        if (sizeRange == null || cohesionProfile == null) {
             throw new IllegalArgumentException("BiomeNode " + id + " is missing a required field");
         }
     }

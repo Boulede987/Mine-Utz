@@ -22,7 +22,6 @@ class BiomeGraphTest {
         return new BiomeNode(
             id,
             new BiomeSizeRange(700, 1000),
-            new BiomeShapeHints(0.5, 0.5, 0.5),
             GrowthCohesionProfile.UNRESTRICTED
         );
     }
