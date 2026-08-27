@@ -5,9 +5,6 @@ import com.mineutze.worldgen.biomegraph.ModBiomeGraph;
 import com.mineutze.worldgen.regionsolve.MacroGridConfig;
 import com.mineutze.worldgen.regionsolve.RegionPos;
 
-import java.io.IOException;
-import java.io.UncheckedIOException;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 
@@ -79,7 +76,7 @@ public final class ExportCli {
     }
 
     private static void writeAllFormats(Path outputDir, ExportSnapshot snapshot, BiomeLegend legend) {
-        createOutputDir(outputDir);
+        ExportDirs.createOutputDir(outputDir);
 
         Path pngFile = outputDir.resolve("regions.png");
         Path asciiFile = outputDir.resolve("regions.txt");
@@ -97,11 +94,4 @@ public final class ExportCli {
         );
     }
 
-    private static void createOutputDir(Path outputDir) {
-        try {
-            Files.createDirectories(outputDir);
-        } catch (IOException e) {
-            throw new UncheckedIOException("Failed to create output directory " + outputDir, e);
-        }
-    }
 }
