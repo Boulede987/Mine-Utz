@@ -14,8 +14,7 @@ import java.util.Set;
  * graph: the Delaunay triangulation is the dual of the Voronoi diagram, so
  * two points share a Delaunay edge exactly when their Voronoi cells touch —
  * callers never need to construct the Voronoi diagram itself to get that
- * adjacency information (see doc/Modelisation/ActivityDiagram/
- * seed-graph-generation.puml).
+ * adjacency information.
  *
  * <p>Known limitation, not yet handled: three or more exactly collinear
  * input points have no valid circumcircle and are not supported. Not
