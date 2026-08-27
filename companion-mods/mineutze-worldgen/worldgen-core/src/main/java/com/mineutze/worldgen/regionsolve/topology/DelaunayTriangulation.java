@@ -8,9 +8,7 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * Bowyer-Watson incremental Delaunay triangulation over 2D points. Pure
- * computational geometry — no world-gen domain knowledge — so it can be
- * tested and reasoned about independent of biomes, regions, or macro-cells.
+ * Bowyer-Watson incremental Delaunay triangulation over 2D points.
  *
  * <p>The triangulation's edges are returned directly as the seed adjacency
  * graph: the Delaunay triangulation is the dual of the Voronoi diagram, so
