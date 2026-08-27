@@ -35,35 +35,48 @@ public final class TriangleAdjacency {
     }
 
     public static Adjacency of(List<IndexedTriangle> faces) {
+        Map<NodeEdge, List<Integer>> facesByEdge = groupFacesByEdge(faces);
+        Map<Integer, Set<Integer>> neighbors = emptyNeighborSets(faces.size());
+        Set<Integer> hullTouching = new LinkedHashSet<>();
+
+        for (Map.Entry<NodeEdge, List<Integer>> entry : facesByEdge.entrySet()) {
+            classifyEdge(entry.getKey(), entry.getValue(), neighbors, hullTouching);
+        }
+
+        return new Adjacency(Map.copyOf(neighbors), Set.copyOf(hullTouching));
+    }
+
+    private static Map<NodeEdge, List<Integer>> groupFacesByEdge(List<IndexedTriangle> faces) {
         Map<NodeEdge, List<Integer>> facesByEdge = new LinkedHashMap<>();
         for (int faceIndex = 0; faceIndex < faces.size(); faceIndex++) {
             for (NodeEdge edge : faces.get(faceIndex).edges()) {
                 facesByEdge.computeIfAbsent(edge, key -> new ArrayList<>()).add(faceIndex);
             }
         }
+        return facesByEdge;
+    }
 
+    private static Map<Integer, Set<Integer>> emptyNeighborSets(int faceCount) {
         Map<Integer, Set<Integer>> neighbors = new LinkedHashMap<>();
-        for (int faceIndex = 0; faceIndex < faces.size(); faceIndex++) {
+        for (int faceIndex = 0; faceIndex < faceCount; faceIndex++) {
             neighbors.put(faceIndex, new LinkedHashSet<>());
         }
+        return neighbors;
+    }
 
-        Set<Integer> hullTouching = new LinkedHashSet<>();
-        for (Map.Entry<NodeEdge, List<Integer>> entry : facesByEdge.entrySet()) {
-            List<Integer> sharingFaces = entry.getValue();
-            if (sharingFaces.size() == 2) {
-                int first = sharingFaces.get(0);
-                int second = sharingFaces.get(1);
-                neighbors.get(first).add(second);
-                neighbors.get(second).add(first);
-            } else if (sharingFaces.size() == 1) {
-                hullTouching.add(sharingFaces.get(0));
-            } else {
-                throw new IllegalStateException(
-                    "edge " + entry.getKey() + " shared by " + sharingFaces.size() + " faces - not a valid triangulation"
-                );
-            }
+    /** One edge shared by 2 faces links them as neighbors; shared by exactly 1 marks that face hull-touching (see this class's own doc for why); anything else means {@code faces} isn't a valid triangulation. */
+    private static void classifyEdge(NodeEdge edge, List<Integer> sharingFaces, Map<Integer, Set<Integer>> neighbors, Set<Integer> hullTouching) {
+        if (sharingFaces.size() == 2) {
+            int first = sharingFaces.get(0);
+            int second = sharingFaces.get(1);
+            neighbors.get(first).add(second);
+            neighbors.get(second).add(first);
+        } else if (sharingFaces.size() == 1) {
+            hullTouching.add(sharingFaces.get(0));
+        } else {
+            throw new IllegalStateException(
+                "edge " + edge + " shared by " + sharingFaces.size() + " faces - not a valid triangulation"
+            );
         }
-
-        return new Adjacency(Map.copyOf(neighbors), Set.copyOf(hullTouching));
     }
 }
