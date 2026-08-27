@@ -29,10 +29,10 @@ import java.util.Set;
  * either side's size), so once a face's identity is legal, its width is a
  * free, deterministic pick from that biome's own {@link BiomeSizeRange} —
  * real geometric size consistency (does this triangle actually get enough
- * room given its neighbors' competing claims) is the {@code AdaptiveDomainWarp}/
- * weighted-field stage's job, not this one's — the field's additively-
- * weighted-Voronoi rule (bigger radius claims more area) is exactly what
- * turns this width into real territory later.
+ * room given its neighbors' competing claims) is {@code SeamGrowthRasterizer}'s
+ * job, not this one's — that class turns this width into a target CELL COUNT
+ * and grows the real territory later, cell by cell, competing against every
+ * other face for the same ground.
  *
  * <p>Each face has AT MOST 3 real neighbors ({@link TriangleAdjacency}'s own
  * guarantee) — MRV (most-constrained-face-first) + forward checking
@@ -60,9 +60,9 @@ import java.util.Set;
  * on a 6-biome graph (ocean=61 vs badlands=6 of 182 free faces) and a 12-biome
  * graph (windswept_hills=44 vs desert=2 of 178, with ocean=0 entirely absent).
  * Each biome gets a target quota — its {@link BiomeSizeRange} midpoint
- * SQUARED (final territory is an area via the field stage's weighted-Voronoi
- * competition, not a raw count, so the fair share should scale with area, not
- * width) — as a fraction of total free faces. At every choice point, legal
+ * SQUARED (final territory is an area, grown cell by cell later, not a raw
+ * count, so the fair share should scale with area, not width) — as a
+ * fraction of total free faces. At every choice point, legal
  * candidates are ranked by current deficit (quota minus how many faces
  * they've already been given) descending, so an under-represented biome is
  * preferred over an already-quota-filled one whenever both are equally legal;
@@ -242,7 +242,7 @@ public final class TriangleIdentitySizeAssignment {
         return ordered;
     }
 
-    /** Each biome's target share of total free faces, proportional to its {@link BiomeSizeRange} midpoint SQUARED — final territory is an area (field stage's weighted-Voronoi competition), so fair share must scale with area, not width. */
+    /** Each biome's target share of total free faces, proportional to its {@link BiomeSizeRange} midpoint SQUARED — final territory is an area, so fair share must scale with area, not width. */
     private static Map<BiomeId, Double> fairShareWeights(List<BiomeId> allBiomes, BiomeGraph graph) {
         Map<BiomeId, Double> weights = new LinkedHashMap<>();
         for (BiomeId biome : allBiomes) {
@@ -275,8 +275,7 @@ public final class TriangleIdentitySizeAssignment {
      * high-arity neighborhoods).
      *
      * <p>Derivation: a biome's fair AREA share of the region is {@code regionAreaBlocks2 *
-     * weight / totalWeight} (same proportional-by-weight rule the field stage's own
-     * starvation check uses). Dividing that by the biome's OWN average patch footprint
+     * weight / totalWeight}. Dividing that by the biome's OWN average patch footprint
      * ({@code weight}, since {@link #fairShareWeights} already defines weight as
      * midpoint-width SQUARED) gives "how many of my own average patches fit in my own fair
      * share" — and the {@code weight} in the numerator and denominator cancels, so this
