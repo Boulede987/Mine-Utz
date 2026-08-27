@@ -38,12 +38,7 @@ public final class SeedGrid {
      * box, whose jitter could still land inside it, is never missed.
      */
     public static List<Point2D> seedsIn(long worldSeed, int spacingBlocks, int minX, int minZ, int maxX, int maxZ) {
-        if (spacingBlocks <= 0) {
-            throw new IllegalArgumentException("spacingBlocks must be positive, got " + spacingBlocks);
-        }
-        if (maxX <= minX || maxZ <= minZ) {
-            throw new IllegalArgumentException("box must have positive area, got [" + minX + "," + maxX + ") x [" + minZ + "," + maxZ + ")");
-        }
+        requireValidBox(spacingBlocks, minX, minZ, maxX, maxZ);
 
         int scanMinX = floorToGrid(minX, spacingBlocks) - spacingBlocks;
         int scanMinZ = floorToGrid(minZ, spacingBlocks) - spacingBlocks;
@@ -51,19 +46,43 @@ public final class SeedGrid {
         List<Point2D> seeds = new ArrayList<>();
         for (int gridX = scanMinX; gridX < maxX + spacingBlocks; gridX += spacingBlocks) {
             for (int gridZ = scanMinZ; gridZ < maxZ + spacingBlocks; gridZ += spacingBlocks) {
-                Random jitterRandom = new Random(jitterSeed(worldSeed, gridX, gridZ));
-                int jitteredX = gridX + jitterRandom.nextInt(spacingBlocks);
-                int jitteredZ = gridZ + jitterRandom.nextInt(spacingBlocks);
-                if (jitteredX >= minX && jitteredX < maxX && jitteredZ >= minZ && jitteredZ < maxZ) {
-                    seeds.add(new Point2D(jitteredX, jitteredZ));
+                Point2D jittered = jitteredPointForCell(worldSeed, gridX, gridZ, spacingBlocks);
+                if (isInsideBox(jittered, minX, minZ, maxX, maxZ)) {
+                    seeds.add(jittered);
                 }
             }
         }
         return seeds;
     }
 
+    private static void requireValidBox(int spacingBlocks, int minX, int minZ, int maxX, int maxZ) {
+        if (spacingBlocks <= 0) {
+            throw new IllegalArgumentException("spacingBlocks must be positive, got " + spacingBlocks);
+        }
+        if (maxX <= minX || maxZ <= minZ) {
+            throw new IllegalArgumentException("box must have positive area, got [" + minX + "," + maxX + ") x [" + minZ + "," + maxZ + ")");
+        }
+    }
+
     private static int floorToGrid(int value, int spacingBlocks) {
         return Math.floorDiv(value, spacingBlocks) * spacingBlocks;
+    }
+
+    /**
+     * The jittered point for one grid cell — the same {@code (worldSeed, gridX, gridZ,
+     * spacingBlocks)} always produces the exact same point, regardless of which window
+     * is querying (see this class's own doc for why that determinism is the whole point,
+     * not an implementation detail).
+     */
+    private static Point2D jitteredPointForCell(long worldSeed, int gridX, int gridZ, int spacingBlocks) {
+        Random jitterRandom = new Random(jitterSeed(worldSeed, gridX, gridZ));
+        int jitteredX = gridX + jitterRandom.nextInt(spacingBlocks);
+        int jitteredZ = gridZ + jitterRandom.nextInt(spacingBlocks);
+        return new Point2D(jitteredX, jitteredZ);
+    }
+
+    private static boolean isInsideBox(Point2D point, int minX, int minZ, int maxX, int maxZ) {
+        return point.x() >= minX && point.x() < maxX && point.z() >= minZ && point.z() < maxZ;
     }
 
     /** Same hash idiom the rest of this codebase uses for deterministic-per-input noise — never a persisted {@link Random} stream. */
