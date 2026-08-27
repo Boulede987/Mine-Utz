@@ -53,22 +53,14 @@ import java.util.Set;
  * this once a real orchestrator exists. This class just reports success or
  * failure for the exact mesh it's given.
  *
- * <p>Candidate order is also fairness-biased, not just jittered: legality-only
- * random picking let {@code BiomeGraph} topology (a biome's own degree/how
- * "central" it is in the adjacency graph) drive systematic rich-get-richer
- * triangle-count skew, independent of graph size — verified empirically both
- * on a 6-biome graph (ocean=61 vs badlands=6 of 182 free faces) and a 12-biome
- * graph (windswept_hills=44 vs desert=2 of 178, with ocean=0 entirely absent).
- * Each biome gets a target quota — its {@link BiomeSizeRange} midpoint
- * SQUARED (final territory is an area, grown cell by cell later, not a raw
- * count, so the fair share should scale with area, not width) — as a
- * fraction of total free faces. At every choice point, legal
- * candidates are ranked by current deficit (quota minus how many faces
- * they've already been given) descending, so an under-represented biome is
- * preferred over an already-quota-filled one whenever both are equally legal;
- * the seeded jitter from {@link #candidatesInDeterministicOrder} still breaks
- * ties and keeps the result deterministic. This never overrides legality or
- * backtracking — it only reorders choices that are already equally legal.
+ * <p>Candidate order is also fairness-biased, not just jittered — see {@link
+ * FaceFairnessQuota} for the real rich-get-richer skew this fixes, the quota
+ * derivation, and the proof it works today. At every choice point, legal candidates
+ * are ranked by current deficit descending, so an under-represented biome is preferred
+ * over an already-quota-filled one whenever both are equally legal; the seeded jitter
+ * from {@link #candidatesInDeterministicOrder} still breaks ties and keeps the result
+ * deterministic. This never overrides legality or backtracking — it only reorders
+ * choices that are already equally legal.
  */
 public final class TriangleIdentitySizeAssignment {
 
@@ -109,11 +101,7 @@ public final class TriangleIdentitySizeAssignment {
     /**
      * Same as {@link #solve(TriangleAdjacency.Adjacency, Set, Map, BiomeGraph, long)}, but
      * also caps how many triangles any ONE biome can be handed in this region — see {@link
-     * #maxTrianglesPerBiome}'s own doc for why this exists: the plain triangle-count quota
-     * ({@link #fairShareWeights}) is proportional to MESH DENSITY (how many free faces the
-     * triangulation happens to produce), which has no relationship to how many REAL,
-     * separate, sensibly-sized patches a biome could physically have in a region this size.
-     * {@code regionAreaBlocks2} is what lets this method tell the two apart. Callers that
+     * FaceFairnessQuota} for why this exists and how the cap is derived. Callers that
      * don't have (or don't need) region-area awareness can keep using the simpler overload,
      * which passes {@link Double#POSITIVE_INFINITY} here (no cap, today's exact behavior).
      *
@@ -140,9 +128,7 @@ public final class TriangleIdentitySizeAssignment {
             domains.put(faceIndex, domain);
         }
 
-        Map<BiomeId, Double> weights = fairShareWeights(allBiomes, graph);
-        int capPerBiome = maxTrianglesPerBiome(regionAreaBlocks2, weights);
-        FairnessTracker fairness = new FairnessTracker(weights, freeFaceIndices.size(), capPerBiome);
+        FaceFairnessQuota fairness = FaceFairnessQuota.forRegion(allBiomes, graph, freeFaceIndices.size(), regionAreaBlocks2);
         Map<Integer, BiomeId> assigned = new LinkedHashMap<>();
         if (!backtrack(domains, assigned, adjacency, freeFaceIndices, graph, worldSeed, fairness)) {
             return Optional.empty();
@@ -155,7 +141,7 @@ public final class TriangleIdentitySizeAssignment {
 
     private static boolean backtrack(
         Map<Integer, List<BiomeId>> domains, Map<Integer, BiomeId> assigned, TriangleAdjacency.Adjacency adjacency,
-        Set<Integer> freeFaceIndices, BiomeGraph graph, long worldSeed, FairnessTracker fairness
+        Set<Integer> freeFaceIndices, BiomeGraph graph, long worldSeed, FaceFairnessQuota fairness
     ) {
         Optional<Integer> nextFace = mostConstrainedUnassignedFace(domains, assigned, freeFaceIndices);
         if (nextFace.isEmpty()) {
@@ -236,97 +222,10 @@ public final class TriangleIdentitySizeAssignment {
     }
 
     /** Jittered order, then stable-sorted by current fairness deficit descending — see class doc's fairness section. Sort is stable so equal-deficit candidates keep the jittered tie-break. */
-    private static List<BiomeId> candidatesInFairnessOrder(List<BiomeId> domain, long worldSeed, int faceIndex, FairnessTracker fairness) {
+    private static List<BiomeId> candidatesInFairnessOrder(List<BiomeId> domain, long worldSeed, int faceIndex, FaceFairnessQuota fairness) {
         List<BiomeId> ordered = candidatesInDeterministicOrder(domain, worldSeed, faceIndex);
         ordered.sort(Comparator.comparingDouble(fairness::deficit).reversed());
         return ordered;
-    }
-
-    /** Each biome's target share of total free faces, proportional to its {@link BiomeSizeRange} midpoint SQUARED — final territory is an area, so fair share must scale with area, not width. */
-    private static Map<BiomeId, Double> fairShareWeights(List<BiomeId> allBiomes, BiomeGraph graph) {
-        Map<BiomeId, Double> weights = new LinkedHashMap<>();
-        for (BiomeId biome : allBiomes) {
-            BiomeSizeRange range = graph.node(biome).sizeRange();
-            double midWidth = (range.minWidthBlocks() + range.maxWidthBlocks()) / 2.0;
-            weights.put(biome, midWidth * midWidth);
-        }
-        return weights;
-    }
-
-    // How many extra same-biome patches (beyond one) a region is allowed to hand a single
-    // biome, on top of that biome's own fair AREA share. See maxTrianglesPerBiome's own doc
-    // for the full derivation - kept generous (not 1) because "multiple disconnected
-    // patches of the same biome in a region" is expected, real behavior, not a bug.
-    private static final double PATCH_COUNT_SLACK = 4.0;
-
-    /**
-     * How many triangles ANY ONE biome should be handed in this region, as an UPPER BOUND
-     * — a real, measured architecture mismatch this fixes: {@link #fairShareWeights}'s own
-     * quota is proportional to TOTAL FREE FACES (a MESH DENSITY number, driven by how
-     * closely {@code SeedGrid} places points), which has no relationship to how many real,
-     * separate, sensibly-sized patches a biome could ever physically fit in a region this
-     * size. On a real production run this handed one narrow-range biome (badlands, 500-800
-     * block target) 20 separate identity triangles in a single 2048-block region — a region
-     * that can geometrically hold only a handful of 500-800-wide patches TOTAL, across every
-     * biome combined. All 20 of that biome's triangles then fought each other (as well as
-     * bigger neighbors) for the same sliver of space, and none of them reliably won enough
-     * of it — the direct cause of a real crash in the geometry-realization rasterizer of
-     * the time (that biome collapsing to isolated 1-2-cell islands with chaotic,
-     * high-arity neighborhoods).
-     *
-     * <p>Derivation: a biome's fair AREA share of the region is {@code regionAreaBlocks2 *
-     * weight / totalWeight}. Dividing that by the biome's OWN average patch footprint
-     * ({@code weight}, since {@link #fairShareWeights} already defines weight as
-     * midpoint-width SQUARED) gives "how many of my own average patches fit in my own fair
-     * share" — and the {@code weight} in the numerator and denominator cancels, so this
-     * comes out to the SAME number for every biome: {@code regionAreaBlocks2 / totalWeight}.
-     * That's not a coincidence or a bug - fairness already scales each biome's area quota by
-     * its own footprint, so "how many of my own patches fit in my own share" is naturally
-     * uniform across biomes once you're fair by area in the first place. {@link
-     * #PATCH_COUNT_SLACK} multiplies that up to allow a biome several real disconnected
-     * patches (not just one), matching this codebase's own established expectation that
-     * multiple patches of the same biome per region is normal.
-     *
-     * <p>A SOFT cap only — see {@link FairnessTracker#deficit}: it steers the CSP's own
-     * candidate ordering away from an already-capped biome, but never removes it from a
-     * face's legal domain, so this can never make an otherwise-solvable mesh unsolvable.
-     */
-    private static int maxTrianglesPerBiome(double regionAreaBlocks2, Map<BiomeId, Double> weights) {
-        double totalWeight = weights.values().stream().mapToDouble(Double::doubleValue).sum();
-        if (totalWeight <= 0 || Double.isInfinite(regionAreaBlocks2)) {
-            return Integer.MAX_VALUE;
-        }
-        return Math.max(1, (int) Math.ceil(PATCH_COUNT_SLACK * regionAreaBlocks2 / totalWeight));
-    }
-
-    /** Tracks each biome's running deficit (target quota minus faces assigned so far) during backtracking, incremented/decremented in lockstep with {@code assigned} so it always reflects the current partial solution, including after backtracking undoes a choice. */
-    private static final class FairnessTracker {
-        private final Map<BiomeId, Double> quotas;
-        private final Map<BiomeId, Integer> counts = new HashMap<>();
-        private final int capPerBiome;
-
-        FairnessTracker(Map<BiomeId, Double> weights, int totalFreeFaces, int capPerBiome) {
-            double totalWeight = weights.values().stream().mapToDouble(Double::doubleValue).sum();
-            quotas = new HashMap<>();
-            weights.forEach((biome, weight) -> quotas.put(biome, weight / totalWeight * totalFreeFaces));
-            this.capPerBiome = capPerBiome;
-        }
-
-        /** Never overrides legality or backtracking (see this class's own doc) - a capped biome just sorts last among still-legal candidates, so it can still be picked if it's genuinely the only legal option left. */
-        double deficit(BiomeId biome) {
-            if (counts.getOrDefault(biome, 0) >= capPerBiome) {
-                return Double.NEGATIVE_INFINITY;
-            }
-            return quotas.getOrDefault(biome, 0.0) - counts.getOrDefault(biome, 0);
-        }
-
-        void increment(BiomeId biome) {
-            counts.merge(biome, 1, Integer::sum);
-        }
-
-        void decrement(BiomeId biome) {
-            counts.merge(biome, -1, Integer::sum);
-        }
     }
 
     private static int pickWidth(BiomeSizeRange range, long worldSeed, int faceIndex, BiomeId biome) {
