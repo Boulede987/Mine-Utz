@@ -435,12 +435,13 @@ final class SeamGrowthRasterizer {
     /**
      * Prefers a candidate that avoids creating a pinch over one that doesn't, THEN by
      * most-matching-neighbor count (the original tie-break). Real fix, not a tuning pass:
-     * measured that 2852 of 2864 remaining pinch points (99.6%) trace back to a
-     * {@code fillGaps} decision - a rare fallback (well under 1% of all cells) with
-     * previously zero pinch-awareness, unlike the main growth loop which already avoids
-     * retroactively pinching a neighbor. Soft preference, not a hard block: if EVERY legal
-     * candidate would pinch something, the original match-count winner is still picked -
-     * this can only ever reduce pinches, never turn a legal fill into an illegal one.
+     * measured that the large majority of remaining pinch points trace back to a {@code
+     * fillGaps} decision — a rare fallback (well under 1% of all cells) with previously
+     * zero pinch-awareness, unlike the main growth loop which already avoids retroactively
+     * pinching a neighbor (see git history for the measurement). Soft preference, not a
+     * hard block: if EVERY legal candidate would pinch something, the original
+     * match-count winner is still picked — this can only ever reduce pinches, never turn a
+     * legal fill into an illegal one.
      */
     private static BiomeId bestLegalFill(
         MacroCellPos cell, List<BiomeId> decidedNeighbors, List<BiomeId> allBiomesSorted, BiomeGraph graph, Map<MacroCellPos, BiomeId> decided
