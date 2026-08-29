@@ -155,7 +155,7 @@ public final class RegionIntegrityValidator {
         return violations;
     }
 
-    /** Two corner-touching (not orthogonal) cells with no legal path between them, and no orthogonal contact either (e.g. d./.f) — not caught by {@link #findIllegalAdjacencies}, and nothing in the generator pipeline checks diagonals directly. */
+    /** Two corner-touching (not orthogonal) cells with no legal path between them, where the two cells at the shared corner ("elbow") are each a different biome from both — not caught by {@link #findIllegalAdjacencies}, and nothing in the generator pipeline checks diagonals directly. */
     private static List<IllegalAdjacency> findDiagonalIllegalAdjacencies(Map<MacroCellPos, BiomeId> assignment, BiomeGraph graph) {
         List<IllegalAdjacency> violations = new ArrayList<>();
         int[][] diagonalOffsets = {{1, 1}, {1, -1}}; // each undirected diagonal pair checked once
