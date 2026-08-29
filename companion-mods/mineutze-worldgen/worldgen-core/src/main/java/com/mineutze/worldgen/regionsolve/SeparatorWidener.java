@@ -23,12 +23,12 @@ import java.util.TreeSet;
  * and forbidding a pair was never meant to produce one).
  *
  * Widens the patch by claiming cells from whichever patches border it,
- * same legality rule as {@link GrowthEngine} — only claims a cell if this
+ * same legality rule as {@link CellPlacementRules} — only claims a cell if this
  * biome stays legal against every OTHER neighbor that cell touches, so a
  * non-filler separator can't widen itself into a new illegal adjacency.
  * Also refuses to claim a cell if doing so would cut its donor patch into
  * two pieces (a "neck" cell) — stealing cells is fundamentally different
- * from {@link GrowthEngine} claiming untouched space: claiming an unclaimed
+ * from {@link CellPlacementRules} claiming untouched space: claiming an unclaimed
  * cell can never disconnect an already-existing patch (there's nothing
  * there to disconnect), but stealing an already-claimed one can, if that
  * cell happened to be the donor patch's only connection between two of its
@@ -148,7 +148,7 @@ final class SeparatorWidener {
      * this parameter existed. Secondary key is distance from the undersized patch's
      * own centroid (fixed at the start of one widen() call, not recomputed as cells
      * get claimed) — same "grow round, not toward wherever the frontier happens to
-     * sort first" fix {@link GrowthEngine} already applies via its own seed-distance
+     * sort first" fix {@link CellPlacementRules} already applies via its own seed-distance
      * ordering. Without ANY distance ordering at all, the plain coordinate-order
      * TreeSet claimed whichever legal cell sorted first by (x, z), which
      * systematically extends in one direction — every separator this widens came

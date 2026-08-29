@@ -116,10 +116,7 @@ public final class TriangleIdentitySizeAssignment {
         // PER JVM RUN (specifically to catch code that wrongly assumes it's stable). Shuffling
         // an already-JVM-random starting order with an otherwise-correctly-seeded Random still
         // produces a JVM-run-dependent result, since Fisher-Yates shuffle's output depends on
-        // the input arrangement, not just the seed - a real bug caught by running the same
-        // worldSeed across separate process launches, not visible within a single JVM's own
-        // test run (see TriangleFieldGeometryRealizationTest's own determinism test, which
-        // passed throughout because it only ever compared two solves in the SAME process).
+        // the input arrangement, not just the seed
         List<BiomeId> allBiomes = graph.nodes().stream().map(BiomeNode::id).sorted().toList();
         Map<Integer, List<BiomeId>> domains = new HashMap<>();
         for (int faceIndex : freeFaceIndices) {

@@ -13,7 +13,7 @@ import java.util.stream.Stream;
  * neighbor; cohesive if it has enough already-assigned support around it,
  * per {@link #MIN_SAME_BIOME_NEIGHBORS}.
  */
-public final class GrowthEngine {
+public final class CellPlacementRules {
 
     /**
      * How tightly a growing patch must hold together: a candidate cell needs at least
@@ -37,7 +37,7 @@ public final class GrowthEngine {
      */
     static final int MIN_SAME_BIOME_NEIGHBORS = 2;
 
-    private GrowthEngine() {
+    private CellPlacementRules() {
     }
 
     /**

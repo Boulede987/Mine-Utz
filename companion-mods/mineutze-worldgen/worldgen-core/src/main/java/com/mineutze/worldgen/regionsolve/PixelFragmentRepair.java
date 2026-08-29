@@ -230,9 +230,9 @@ public final class PixelFragmentRepair {
         return true;
     }
 
-    /** {@link GrowthEngine#isLegal} only checks the 4 orthogonal neighbors (same as the rest of this pipeline) — this repair pass also checks diagonals, since a discretization-born violation has no reason to prefer one over the other. */
+    /** {@link CellPlacementRules#isLegal} only checks the 4 orthogonal neighbors (same as the rest of this pipeline) — this repair pass also checks diagonals, since a discretization-born violation has no reason to prefer one over the other. */
     private static boolean isLegalIncludingDiagonals(MacroCellPos cell, BiomeId candidate, Map<MacroCellPos, BiomeId> assignment, BiomeGraph graph) {
-        if (!GrowthEngine.isLegal(cell, candidate, assignment, graph)) {
+        if (!CellPlacementRules.isLegal(cell, candidate, assignment, graph)) {
             return false;
         }
         for (MacroCellPos diagonal : cell.diagonalNeighbors()) {

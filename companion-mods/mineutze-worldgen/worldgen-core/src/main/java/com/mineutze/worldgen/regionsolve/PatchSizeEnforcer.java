@@ -181,7 +181,7 @@ public final class PatchSizeEnforcer {
             .max(Comparator.<BiomeId>comparingInt(candidatePatchSize::get).thenComparing(Comparator.naturalOrder()));
     }
 
-    /** Like GrowthEngine.isLegal, but checked across every cell of a whole component at once, ignoring the component's own internal edges. */
+    /** Like CellPlacementRules.isLegal, but checked across every cell of a whole component at once, ignoring the component's own internal edges. */
     private static boolean isLegalForWholeComponent(
         Set<MacroCellPos> component, BiomeId candidate, Map<MacroCellPos, BiomeId> assignment, BiomeGraph graph
     ) {
