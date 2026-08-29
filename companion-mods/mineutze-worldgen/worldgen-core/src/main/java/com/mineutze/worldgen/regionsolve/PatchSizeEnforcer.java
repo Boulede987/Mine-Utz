@@ -151,7 +151,7 @@ public final class PatchSizeEnforcer {
                 component.stream().filter(regionCellSet::contains).forEach(cell -> assignment.put(cell, mergeTarget.get()));
                 mergeCount++;
             } else {
-                SeparatorWidener.widen(component, biome, minCells, assignment, regionCellSet, graph, Set.of());
+                SeparatorWidener.widen(component, biome, minCells, assignment, regionCellSet, graph);
                 widenCount++;
             }
             changedAny = true;
