@@ -71,4 +71,23 @@ class TriangleAdjacencyTest {
         assertTrue(adjacency.neighborFaceIndices().get(0).isEmpty());
         assertTrue(adjacency.hullTouchingFaceIndices().contains(0));
     }
+
+    /**
+     * The shared-edge-grouping algorithm is shape-agnostic - it works over a {@link
+     * HexFace} mesh exactly the same way, just with a higher (6, not 3) neighbor cap,
+     * confirming the generalization from {@code List<IndexedTriangle>} to
+     * {@code List<? extends MeshFace>} didn't accidentally bake in a triangle assumption.
+     */
+    @Test
+    void worksOverHexFacesToo() {
+        HexMeshBuilder.HexMesh mesh = HexMeshBuilder.build(200, 0, 0, 6000, 6000);
+        assertTrue(mesh.faces().size() > 20, "expected a real-sized lattice, got " + mesh.faces().size() + " faces");
+
+        TriangleAdjacency.Adjacency adjacency = TriangleAdjacency.of(mesh.faces());
+        for (int faceIndex = 0; faceIndex < mesh.faces().size(); faceIndex++) {
+            Set<Integer> neighbors = adjacency.neighborFaceIndices().get(faceIndex);
+            assertTrue(neighbors.size() <= 6, "face " + faceIndex + " has " + neighbors.size() + " neighbors, expected at most 6");
+            assertFalse(neighbors.contains(faceIndex));
+        }
+    }
 }

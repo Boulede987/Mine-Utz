@@ -61,6 +61,14 @@ public final class ModBiomeGraph {
             // coastal savanna is a normal, common real-world pairing.
             AdjacencyRule.allow(OCEAN, SAVANNA, DEFAULT_BLEND_WIDTH_BLOCKS)
         ),
+        // Stays 8, not 6, while SeamGrowthRasterizer (Moore/8-way legality checks) is
+        // still a live path alongside the hex-mesh pivot (see
+        // doc/decisions/2026-08-29-hex-mesh-edge-displacement.md) - dropping this to 6
+        // early would only pass today's real check by coincidence (6 biomes already
+        // caps comboSize at 6 regardless of what's requested here), but would silently
+        // stop proving the 8-way case a future biome addition needs for as long as that
+        // rasterizer is still live. Drop to 6 only once SeamGrowthRasterizer and
+        // GrowthGapFiller are deleted (that decision doc's Phase 5 cutover).
         8
     );
 
