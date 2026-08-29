@@ -6,12 +6,12 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 
 /** Shared by every export CLI's own main() - was independently duplicated verbatim in each before this. */
-final class ExportDirs {
+public final class ExportDirs {
 
     private ExportDirs() {
     }
 
-    static void createOutputDir(Path outputDir) {
+    public static void createOutputDir(Path outputDir) {
         try {
             Files.createDirectories(outputDir);
         } catch (IOException e) {
