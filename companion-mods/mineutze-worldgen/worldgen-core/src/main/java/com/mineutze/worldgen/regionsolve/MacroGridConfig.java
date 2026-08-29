@@ -37,51 +37,34 @@ public record MacroGridConfig(int macroCellSizeBlocks, int regionSizeCellsPerSid
     // compounding at a corner.
     //
     // AMPLITUDE and WAVELENGTH are coupled, not independent dials - the max per-cell slope
-    // is AMPLITUDE*(2*PI/WAVELENGTH), and it must stay well below 1 or warpX/warpZ folds
-    // (adjacent rows/columns jump by more than a cell, creating gaps/overlaps in the
-    // partition, or a jagged/aliased-looking seam instead of a smooth curve). Real ceiling
-    // is the region/2 bound above, not any particular slope number, so amplitude could
-    // still go higher with a proportionally longer wavelength if the current cap isn't
-    // enough.
+    // is AMPLITUDE*(2*PI/WAVELENGTH). Real ceiling is the region/2 bound above, not any
+    // particular slope value: a single sine wave is provably too regular no matter how
+    // it's tuned (always exactly one bump, nothing a real coastline ever looks like), so
+    // this sums WARP_OCTAVE_COUNT independently-phased sine layers instead (classic
+    // fractional-Brownian-motion construction, the same idea Perlin/simplex noise is built
+    // from) - each shorter-wavelength and smaller-amplitude than the last, each with its
+    // own phase so the layers don't all cross zero at the same spot and cancel back into a
+    // disguised single bump. Octave amplitudes are normalized (divided by the geometric
+    // series sum in octaveAmplitudeNormalizer) so the TOTAL displacement across all octaves
+    // still respects WARP_AMPLITUDE_CELLS_CAP exactly regardless of how wavelength/
+    // persistence are tuned.
     //
-    // A single sine wave (the original version of this warp) is provably too regular no
-    // matter how its amplitude/wavelength are tuned - it's always exactly one bump, nothing
-    // a real coastline/border ever looks like (user feedback, 2026-08-09: "one of my
-    // problems is that it is a simple curve. It should be much less regular"). Real fix is
-    // fractal, not amplitude: sum WARP_OCTAVE_COUNT sine layers, each shorter-wavelength
-    // and smaller-amplitude than the last (classic fractional-Brownian-motion terrain
-    // construction - the same idea Perlin/simplex noise is built from), each with its OWN
-    // independent phase so the layers don't all cross zero at the same spot and cancel into
-    // a disguised single bump again. Octave amplitudes are normalized (divided by the
-    // geometric series sum in octaveAmplitudeNormalizer) so the TOTAL displacement across
-    // all octaves combined still respects WARP_AMPLITUDE_CELLS_CAP exactly regardless of
-    // how wavelength/persistence are tuned - shape changes here never grow the amplitude
-    // budget past what's already region/2-safe.
-    //
-    // First attempt at this (WARP_WAVELENGTH_CELLS=144, WARP_PERSISTENCE=0.35) was STILL
-    // not enough (user feedback, 2026-08-09 follow-up: "still is a slight bend... I should
-    // bowwle, go up and down, be irregular, not always perfectly round"). Root cause: 144
-    // cells is ~4.5x a whole region side (32) - even the dominant octave never completed
-    // half a cycle across one region's actual border length, so it still read as one
-    // monotonic bend, no matter how much fine texture the higher octaves added on top.
-    // Fix: base wavelength must be comparable to (here, slightly under) the region side
-    // itself, so the dominant octave completes a full cycle - genuine direction reversal,
-    // not just a bow - within one border's length. WARP_PERSISTENCE also raised (0.35 to
-    // 0.55) so the next 1-2 octaves carry comparable weight instead of being reduced to
-    // barely-visible texture, since real irregularity means several scales competing, not
-    // one dominant curve plus noise.
-    //
-    // The "keep slope well under 1" caution from the first attempt was a SMOOTHNESS
-    // preference (avoiding a jagged look), not a hard invariant - cellsInRegion's brute-
-    // force scan + regionOf's direct per-cell test give every cell exactly one region
-    // unconditionally, regardless of how sharply warpOffset changes between adjacent
-    // cells, so there is no actual gap/overlap risk from a rougher curve. Since the user
-    // now explicitly wants that rougher, less-smooth read, this constraint is deliberately
-    // relaxed - the ONLY hard invariant left is the total amplitude bound (region/2 for
-    // RegionBoundaryCollector's Moore-neighbor-only assumption), which the normalizer
-    // still guarantees exactly. Verified empirically, not just reasoned about - see
-    // MacroGridConfigTest.warpNeverBleedsPastTheImmediateNeighborRegion, which sweeps real
-    // cells and checks the amplitude bound directly regardless of curve roughness.
+    // WARP_WAVELENGTH_CELLS is deliberately comparable to (slightly under) the region side
+    // itself, not some larger "safe-looking" number: the dominant octave must complete a
+    // full cycle - genuine direction reversal, not just a bow - within one border's actual
+    // length, or the curve still reads as one monotonic bend no matter how much fine
+    // texture the higher octaves add on top. WARP_PERSISTENCE (0.55) is high enough that
+    // the next 1-2 octaves carry comparable weight instead of fading to barely-visible
+    // texture, since real irregularity needs several scales competing, not one dominant
+    // curve plus noise. A stricter "keep slope well under 1" rule was considered and
+    // rejected: cellsInRegion's brute-force scan + regionOf's direct per-cell test give
+    // every cell exactly one region unconditionally regardless of how sharply warpOffset
+    // changes between adjacent cells, so a rougher curve carries no actual gap/overlap
+    // risk - the only hard invariant left is the total amplitude bound (region/2, see
+    // above), which the normalizer still guarantees exactly. Verified empirically, not
+    // just reasoned about - see MacroGridConfigTest.warpNeverBleedsPastTheImmediateNeighborRegion,
+    // which sweeps real cells and checks the amplitude bound directly regardless of curve
+    // roughness.
     private static final double WARP_AMPLITUDE_CELLS_CAP = 8.0;
     private static final double WARP_AMPLITUDE_FRACTION = 0.25;
     private static final double WARP_WAVELENGTH_CELLS = 28.0;
