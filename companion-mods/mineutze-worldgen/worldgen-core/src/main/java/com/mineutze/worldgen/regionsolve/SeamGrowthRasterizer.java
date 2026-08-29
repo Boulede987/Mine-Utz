@@ -86,6 +86,31 @@ final class SeamGrowthRasterizer {
     private record CellEntry(MacroCellPos cell, int faceIndex, double quotaRatio, long distanceSquared) {
     }
 
+    /**
+     * Per-face bookkeeping threaded through every growth step: each face's target cell
+     * count, how many it's claimed so far, its bootstrap seed cell, and which other faces
+     * share its biome. Bundled into one record so a growth step needs one parameter for
+     * all of this instead of four separate maps passed in the same order everywhere.
+     */
+    private record FaceBookkeeping(
+        Map<Integer, Integer> targetCells, Map<Integer, Integer> claimedCountByFace,
+        Map<Integer, MacroCellPos> seedCellByFace, Map<BiomeId, List<Integer>> facesByBiome
+    ) {
+        double quotaRatio(int faceIndex) {
+            return (double) claimedCountByFace.get(faceIndex) / targetCells.get(faceIndex);
+        }
+
+        void claim(int faceIndex) {
+            claimedCountByFace.merge(faceIndex, 1, Integer::sum);
+        }
+    }
+
+    private static final Comparator<CellEntry> QUEUE_PRIORITY_ORDER = Comparator
+        .comparingDouble(CellEntry::quotaRatio)
+        .thenComparingLong(CellEntry::distanceSquared)
+        .thenComparingInt((CellEntry e) -> e.cell().x())
+        .thenComparingInt((CellEntry e) -> e.cell().z());
+
     static Map<MacroCellPos, BiomeId> rasterize(
         List<MacroCellPos> cells, Map<Integer, TriangleIdentitySizeAssignment.Assignment> assignments,
         Map<Integer, Point2D> centroids, BiomeGraph graph,
@@ -99,14 +124,34 @@ final class SeamGrowthRasterizer {
         // safely serves every legality/cohesion lookup with no merge-view cost per check.
         Map<MacroCellPos, BiomeId> decided = new HashMap<>(fixedBoundaryCells);
 
+        FaceBookkeeping bookkeeping = buildFaceBookkeeping(assignments, centroids, gridConfig);
+        PriorityQueue<CellEntry> queue = new PriorityQueue<>(cells.size(), QUEUE_PRIORITY_ORDER);
+
+        reserveHeadStarts(assignments, bookkeeping, regionCellSet, decided, graph, queue);
+        seedInitialCandidates(assignments, bookkeeping, regionCellSet, decided, queue);
+        drainQueue(queue, decided, bookkeeping, regionCellSet, graph, assignments);
+        fillGaps(cells, decided, graph, bookkeeping.seedCellByFace(), assignments);
+
+        return collectResult(cells, decided);
+    }
+
+    /**
+     * One entry per free face: its target cell count (from {@link
+     * TriangleIdentitySizeAssignment.Assignment#widthBlocks} via {@link
+     * MacroGridConfig#cellCountForWidthBlocks}), its bootstrap seed cell (its own triangle
+     * centroid), and which other faces share its biome. Faces grouped by biome - a
+     * region-wide claim-time scan over every DISTINCT biome (a handful, e.g. 6 in
+     * ModBiomeGraph.DEFAULT) instead of every FACE (can be 100+, since one biome routinely
+     * has several separate patches) is what keeps {@link #offerNeighbors}'s "offer to any
+     * other legal biome" step affordable - measured directly: scanning all
+     * assignments.keySet() per claim made the full test suite ~4x slower.
+     */
+    private static FaceBookkeeping buildFaceBookkeeping(
+        Map<Integer, TriangleIdentitySizeAssignment.Assignment> assignments, Map<Integer, Point2D> centroids, MacroGridConfig gridConfig
+    ) {
         Map<Integer, Integer> targetCells = new HashMap<>();
         Map<Integer, Integer> claimedCountByFace = new HashMap<>();
         Map<Integer, MacroCellPos> seedCellByFace = new HashMap<>();
-        // Faces grouped by biome - a region-wide claim-time scan over every DISTINCT
-        // biome (a handful, e.g. 6 in ModBiomeGraph.DEFAULT) instead of every FACE (can be
-        // 100+, since one biome routinely has several separate patches) is what keeps the
-        // "offer to any other legal biome" step (below) affordable - measured directly:
-        // scanning all assignments.keySet() per claim made the full test suite ~4x slower.
         Map<BiomeId, List<Integer>> facesByBiome = new HashMap<>();
         for (Map.Entry<Integer, TriangleIdentitySizeAssignment.Assignment> entry : assignments.entrySet()) {
             int faceIndex = entry.getKey();
@@ -116,49 +161,7 @@ final class SeamGrowthRasterizer {
             seedCellByFace.put(faceIndex, gridConfig.cellContaining(centroid.x(), centroid.z()));
             facesByBiome.computeIfAbsent(entry.getValue().biome(), key -> new ArrayList<>()).add(faceIndex);
         }
-
-        PriorityQueue<CellEntry> queue = new PriorityQueue<>(cells.size(), Comparator
-            .comparingDouble(CellEntry::quotaRatio)
-            .thenComparingLong(CellEntry::distanceSquared)
-            .thenComparingInt((CellEntry e) -> e.cell().x())
-            .thenComparingInt((CellEntry e) -> e.cell().z()));
-
-        reserveHeadStarts(assignments, seedCellByFace, regionCellSet, decided, claimedCountByFace, graph, facesByBiome, targetCells, queue);
-
-        for (int faceIndex : assignments.keySet().stream().sorted().toList()) {
-            MacroCellPos seed = seedCellByFace.get(faceIndex);
-            if (regionCellSet.contains(seed) && !decided.containsKey(seed)) {
-                queue.add(new CellEntry(seed, faceIndex, 0.0, 0L));
-            }
-        }
-
-        while (!queue.isEmpty()) {
-            CellEntry entry = queue.poll();
-            if (decided.containsKey(entry.cell())) {
-                continue; // stale - some other entry already claimed this cell
-            }
-            int faceIndex = entry.faceIndex();
-            // Quota is the PRIMARY ordering signal, never a hard cap on eligibility - a
-            // face past its own target still gets to claim a cell if nothing else legally
-            // wants it, so growth always reaches every cell in the region (soft target,
-            // hard no-gaps requirement - see this class's own doc).
-            BiomeId candidate = assignments.get(faceIndex).biome();
-            if (!isClaimable(entry.cell(), candidate, faceIndex, decided, claimedCountByFace, graph)) {
-                continue;
-            }
-
-            decided.put(entry.cell(), candidate);
-            claimedCountByFace.merge(faceIndex, 1, Integer::sum);
-            offerNeighbors(entry.cell(), candidate, faceIndex, decided, regionCellSet, facesByBiome, claimedCountByFace, targetCells, seedCellByFace, graph, queue);
-        }
-
-        fillGaps(cells, decided, graph, seedCellByFace, assignments);
-
-        Map<MacroCellPos, BiomeId> result = new LinkedHashMap<>();
-        for (MacroCellPos cell : cells) {
-            result.put(cell, decided.get(cell));
-        }
-        return result;
+        return new FaceBookkeeping(targetCells, claimedCountByFace, seedCellByFace, facesByBiome);
     }
 
     /**
@@ -171,38 +174,97 @@ final class SeamGrowthRasterizer {
      * face's own continuation was ever considered), not blocked by any real illegality.
      */
     private static void reserveHeadStarts(
-        Map<Integer, TriangleIdentitySizeAssignment.Assignment> assignments, Map<Integer, MacroCellPos> seedCellByFace,
-        Set<MacroCellPos> regionCellSet, Map<MacroCellPos, BiomeId> decided, Map<Integer, Integer> claimedCountByFace,
-        BiomeGraph graph, Map<BiomeId, List<Integer>> facesByBiome, Map<Integer, Integer> targetCells, PriorityQueue<CellEntry> queue
+        Map<Integer, TriangleIdentitySizeAssignment.Assignment> assignments, FaceBookkeeping bookkeeping,
+        Set<MacroCellPos> regionCellSet, Map<MacroCellPos, BiomeId> decided, BiomeGraph graph, PriorityQueue<CellEntry> queue
     ) {
         for (int faceIndex : assignments.keySet().stream().sorted().toList()) {
-            MacroCellPos seed = seedCellByFace.get(faceIndex);
+            MacroCellPos seed = bookkeeping.seedCellByFace().get(faceIndex);
             if (!regionCellSet.contains(seed) || decided.containsKey(seed)) {
                 continue;
             }
             BiomeId biome = assignments.get(faceIndex).biome();
-            if (!isClaimable(seed, biome, faceIndex, decided, claimedCountByFace, graph)) {
+            if (!isClaimable(seed, biome, faceIndex, decided, bookkeeping, graph)) {
                 continue; // leave it to the main queue below - same outcome as before this pass existed
             }
             decided.put(seed, biome);
-            claimedCountByFace.merge(faceIndex, 1, Integer::sum);
-            List<MacroCellPos> claimedByThisFace = new ArrayList<>(List.of(seed));
-
-            int headStartTarget = Math.max(1, CellPlacementRules.MIN_SAME_BIOME_NEIGHBORS);
-            while (claimedByThisFace.size() < headStartTarget) {
-                MacroCellPos next = pickHeadStartCandidate(claimedByThisFace, biome, faceIndex, decided, regionCellSet, claimedCountByFace, graph, seed);
-                if (next == null) {
-                    break; // no legal room to extend further right now - main queue still gets a shot at it later
-                }
-                decided.put(next, biome);
-                claimedCountByFace.merge(faceIndex, 1, Integer::sum);
-                claimedByThisFace.add(next);
-            }
+            bookkeeping.claim(faceIndex);
+            List<MacroCellPos> claimedByThisFace = claimHeadStartClump(seed, biome, faceIndex, decided, bookkeeping, regionCellSet, graph);
 
             for (MacroCellPos claimed : claimedByThisFace) {
-                offerNeighbors(claimed, biome, faceIndex, decided, regionCellSet, facesByBiome, claimedCountByFace, targetCells, seedCellByFace, graph, queue);
+                offerNeighbors(claimed, biome, faceIndex, decided, regionCellSet, bookkeeping, graph, queue);
             }
         }
+    }
+
+    /**
+     * Extends a face's head-start reservation from its own seed cell up to {@link
+     * CellPlacementRules#MIN_SAME_BIOME_NEIGHBORS} cells, or as many as legally reachable
+     * right now if fewer — see this class's own doc for why every face needs this clump
+     * before open competition starts.
+     */
+    private static List<MacroCellPos> claimHeadStartClump(
+        MacroCellPos seed, BiomeId biome, int faceIndex, Map<MacroCellPos, BiomeId> decided,
+        FaceBookkeeping bookkeeping, Set<MacroCellPos> regionCellSet, BiomeGraph graph
+    ) {
+        List<MacroCellPos> claimed = new ArrayList<>(List.of(seed));
+        int headStartTarget = Math.max(1, CellPlacementRules.MIN_SAME_BIOME_NEIGHBORS);
+        while (claimed.size() < headStartTarget) {
+            MacroCellPos next = pickHeadStartCandidate(claimed, biome, faceIndex, decided, regionCellSet, bookkeeping, graph, seed);
+            if (next == null) {
+                break; // no legal room to extend further right now - main queue still gets a shot at it later
+            }
+            decided.put(next, biome);
+            bookkeeping.claim(faceIndex);
+            claimed.add(next);
+        }
+        return claimed;
+    }
+
+    /** Seeds the queue with every face's own bootstrap cell — {@link #reserveHeadStarts} has already claimed and expanded from some of these, so this only ever adds the ones still unclaimed. */
+    private static void seedInitialCandidates(
+        Map<Integer, TriangleIdentitySizeAssignment.Assignment> assignments, FaceBookkeeping bookkeeping,
+        Set<MacroCellPos> regionCellSet, Map<MacroCellPos, BiomeId> decided, PriorityQueue<CellEntry> queue
+    ) {
+        for (int faceIndex : assignments.keySet().stream().sorted().toList()) {
+            MacroCellPos seed = bookkeeping.seedCellByFace().get(faceIndex);
+            if (regionCellSet.contains(seed) && !decided.containsKey(seed)) {
+                queue.add(new CellEntry(seed, faceIndex, 0.0, 0L));
+            }
+        }
+    }
+
+    /** The main competitive growth loop: repeatedly claims the queue's current best candidate until nothing legal or cohesive is left to claim anywhere. */
+    private static void drainQueue(
+        PriorityQueue<CellEntry> queue, Map<MacroCellPos, BiomeId> decided, FaceBookkeeping bookkeeping,
+        Set<MacroCellPos> regionCellSet, BiomeGraph graph, Map<Integer, TriangleIdentitySizeAssignment.Assignment> assignments
+    ) {
+        while (!queue.isEmpty()) {
+            CellEntry entry = queue.poll();
+            if (decided.containsKey(entry.cell())) {
+                continue; // stale - some other entry already claimed this cell
+            }
+            int faceIndex = entry.faceIndex();
+            // Quota is the PRIMARY ordering signal, never a hard cap on eligibility - a
+            // face past its own target still gets to claim a cell if nothing else legally
+            // wants it, so growth always reaches every cell in the region (soft target,
+            // hard no-gaps requirement - see this class's own doc).
+            BiomeId candidate = assignments.get(faceIndex).biome();
+            if (!isClaimable(entry.cell(), candidate, faceIndex, decided, bookkeeping, graph)) {
+                continue;
+            }
+
+            decided.put(entry.cell(), candidate);
+            bookkeeping.claim(faceIndex);
+            offerNeighbors(entry.cell(), candidate, faceIndex, decided, regionCellSet, bookkeeping, graph, queue);
+        }
+    }
+
+    private static Map<MacroCellPos, BiomeId> collectResult(List<MacroCellPos> cells, Map<MacroCellPos, BiomeId> decided) {
+        Map<MacroCellPos, BiomeId> result = new LinkedHashMap<>();
+        for (MacroCellPos cell : cells) {
+            result.put(cell, decided.get(cell));
+        }
+        return result;
     }
 
     /**
@@ -216,12 +278,12 @@ final class SeamGrowthRasterizer {
      */
     private static boolean isClaimable(
         MacroCellPos cell, BiomeId candidate, int faceIndex,
-        Map<MacroCellPos, BiomeId> decided, Map<Integer, Integer> claimedCountByFace, BiomeGraph graph
+        Map<MacroCellPos, BiomeId> decided, FaceBookkeeping bookkeeping, BiomeGraph graph
     ) {
         if (!legalAgainstAll(candidate, mooreNeighborBiomes(cell, decided), graph)) {
             return false;
         }
-        if (claimedCountByFace.get(faceIndex) >= CellPlacementRules.MIN_SAME_BIOME_NEIGHBORS
+        if (bookkeeping.claimedCountByFace().get(faceIndex) >= CellPlacementRules.MIN_SAME_BIOME_NEIGHBORS
             && !CellPlacementRules.satisfiesCohesion(cell, candidate, decided)) {
             return false;
         }
@@ -243,21 +305,20 @@ final class SeamGrowthRasterizer {
      */
     private static void offerNeighbors(
         MacroCellPos claimedCell, BiomeId candidate, int faceIndex,
-        Map<MacroCellPos, BiomeId> decided, Set<MacroCellPos> regionCellSet, Map<BiomeId, List<Integer>> facesByBiome,
-        Map<Integer, Integer> claimedCountByFace, Map<Integer, Integer> targetCells, Map<Integer, MacroCellPos> seedCellByFace,
+        Map<MacroCellPos, BiomeId> decided, Set<MacroCellPos> regionCellSet, FaceBookkeeping bookkeeping,
         BiomeGraph graph, PriorityQueue<CellEntry> queue
     ) {
         for (MacroCellPos neighbor : claimedCell.mooreNeighbors()) {
             if (!regionCellSet.contains(neighbor) || decided.containsKey(neighbor)) {
                 continue;
             }
-            queue.add(new CellEntry(neighbor, faceIndex, quotaRatio(faceIndex, claimedCountByFace, targetCells), neighbor.distanceSquaredTo(seedCellByFace.get(faceIndex))));
-            for (Map.Entry<BiomeId, List<Integer>> biomeFaces : facesByBiome.entrySet()) {
+            queue.add(new CellEntry(neighbor, faceIndex, bookkeeping.quotaRatio(faceIndex), neighbor.distanceSquaredTo(bookkeeping.seedCellByFace().get(faceIndex))));
+            for (Map.Entry<BiomeId, List<Integer>> biomeFaces : bookkeeping.facesByBiome().entrySet()) {
                 if (!graph.isAllowed(biomeFaces.getKey(), candidate)) {
                     continue;
                 }
-                int bestFace = bestFaceFor(biomeFaces.getValue(), neighbor, claimedCountByFace, targetCells, seedCellByFace);
-                queue.add(new CellEntry(neighbor, bestFace, quotaRatio(bestFace, claimedCountByFace, targetCells), neighbor.distanceSquaredTo(seedCellByFace.get(bestFace))));
+                int bestFace = bestFaceFor(biomeFaces.getValue(), neighbor, bookkeeping);
+                queue.add(new CellEntry(neighbor, bestFace, bookkeeping.quotaRatio(bestFace), neighbor.distanceSquaredTo(bookkeeping.seedCellByFace().get(bestFace))));
             }
         }
     }
@@ -271,7 +332,7 @@ final class SeamGrowthRasterizer {
      */
     private static MacroCellPos pickHeadStartCandidate(
         List<MacroCellPos> claimedByThisFace, BiomeId biome, int faceIndex,
-        Map<MacroCellPos, BiomeId> decided, Set<MacroCellPos> regionCellSet, Map<Integer, Integer> claimedCountByFace,
+        Map<MacroCellPos, BiomeId> decided, Set<MacroCellPos> regionCellSet, FaceBookkeeping bookkeeping,
         BiomeGraph graph, MacroCellPos seed
     ) {
         MacroCellPos best = null;
@@ -281,7 +342,7 @@ final class SeamGrowthRasterizer {
                 if (!regionCellSet.contains(neighbor) || decided.containsKey(neighbor)) {
                     continue;
                 }
-                if (!isClaimable(neighbor, biome, faceIndex, decided, claimedCountByFace, graph)) {
+                if (!isClaimable(neighbor, biome, faceIndex, decided, bookkeeping, graph)) {
                     continue;
                 }
                 long distance = neighbor.distanceSquaredTo(seed);
@@ -296,14 +357,14 @@ final class SeamGrowthRasterizer {
     }
 
     /** Lowest quota-deficit ratio first, then nearest own-seed distance to {@code cell} as a tie-break - same priority rule the main queue itself sorts by, just narrowed to one biome's own (usually small) face list instead of a full priority-queue push per face. */
-    private static int bestFaceFor(List<Integer> facesOfBiome, MacroCellPos cell, Map<Integer, Integer> claimedCountByFace, Map<Integer, Integer> targetCells, Map<Integer, MacroCellPos> seedCellByFace) {
+    private static int bestFaceFor(List<Integer> facesOfBiome, MacroCellPos cell, FaceBookkeeping bookkeeping) {
         int best = facesOfBiome.get(0);
-        double bestRatio = quotaRatio(best, claimedCountByFace, targetCells);
-        long bestDistance = cell.distanceSquaredTo(seedCellByFace.get(best));
+        double bestRatio = bookkeeping.quotaRatio(best);
+        long bestDistance = cell.distanceSquaredTo(bookkeeping.seedCellByFace().get(best));
         for (int i = 1; i < facesOfBiome.size(); i++) {
             int face = facesOfBiome.get(i);
-            double ratio = quotaRatio(face, claimedCountByFace, targetCells);
-            long distance = cell.distanceSquaredTo(seedCellByFace.get(face));
+            double ratio = bookkeeping.quotaRatio(face);
+            long distance = cell.distanceSquaredTo(bookkeeping.seedCellByFace().get(face));
             if (ratio < bestRatio || (ratio == bestRatio && distance < bestDistance)) {
                 best = face;
                 bestRatio = ratio;
@@ -311,10 +372,6 @@ final class SeamGrowthRasterizer {
             }
         }
         return best;
-    }
-
-    private static double quotaRatio(int faceIndex, Map<Integer, Integer> claimedCountByFace, Map<Integer, Integer> targetCells) {
-        return (double) claimedCountByFace.get(faceIndex) / targetCells.get(faceIndex);
     }
 
     private static List<BiomeId> mooreNeighborBiomes(MacroCellPos cell, Map<MacroCellPos, BiomeId> decided) {
