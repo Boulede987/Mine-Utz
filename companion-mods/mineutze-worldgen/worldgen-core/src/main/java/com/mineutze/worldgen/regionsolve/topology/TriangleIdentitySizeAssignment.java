@@ -87,9 +87,9 @@ public final class TriangleIdentitySizeAssignment {
      *                         reassigned. Widths for fixed faces are the caller's own
      *                         concern; this class only ever needs their identity.
      * @return empty if no legal assignment exists for the given mesh/fixed context —
-     *         the graph's own construction-time bridgeability check ({@link
-     *         BiomeGraph#node}'s caller doc) only rules out "impossible in principle"
-     *         configs, not every real local arrangement.
+     *         {@code BiomeGraph}'s own construction-time bridgeability check ({@code
+     *         BridgeHopReachability.requireEveryPairWithinHops}) only rules out
+     *         "impossible in principle" configs, not every real local arrangement.
      */
     public static Optional<Map<Integer, Assignment>> solve(
         TriangleAdjacency.Adjacency adjacency, Set<Integer> freeFaceIndices,
