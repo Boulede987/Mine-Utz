@@ -238,9 +238,15 @@ final class SeamGrowthRasterizer {
     /**
      * Offers every Moore-neighbor of a just-claimed cell to whoever can legally use it -
      * the claiming face itself (guaranteed direct continuation candidate) AND, grouped by
-     * biome, the single best-placed OTHER face of each other legal biome. See this
-     * method's call sites and the class doc for why both the direct push and the
-     * region-wide scan matter.
+     * biome, the single best-placed OTHER face of each other legal biome. Both pushes are
+     * required, not just one: an earlier version pushed ONLY the claiming face for its own
+     * biome (skipping the region-wide scan there), measured WORSE (455 → 591 fragments) -
+     * the scan's "wrong" sibling pick isn't pure waste, it's what lets two separately
+     * CSP-assigned faces of the SAME biome merge into one connected component when a
+     * sibling's stolen cell lands adjacent to this one (fragment detection groups by
+     * biome VALUE, not by which face nominally claimed a cell — see {@link
+     * ConnectedComponents}). Keeping both gets the claiming face a guaranteed
+     * continuation without losing that merging benefit.
      */
     private static void offerNeighbors(
         MacroCellPos claimedCell, BiomeId candidate, int faceIndex,
