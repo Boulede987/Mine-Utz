@@ -82,22 +82,7 @@ final class SeparatorWidener {
         Set<MacroCellPos> component, BiomeId ownBiome, int targetMinCells,
         Map<MacroCellPos, BiomeId> assignment, Set<MacroCellPos> regionCellSet, BiomeGraph graph
     ) {
-        // A caller that widens several components in one pass can hand in a component
-        // that's gone stale: an EARLIER call already legally stole one of these cells for
-        // a different, now-incompatible biome. Re-verifying against the LIVE assignment
-        // here, rather than trusting the caller's snapshot, is the only thing that stops
-        // this call from blindly reasserting a cell straight back to ownBiome with NO
-        // legality check at all (the final commit loop below only checks NEWLY claimed
-        // cells, never the caller-supplied component itself) - confirmed as a real,
-        // pre-existing bug via a genuine repro, not theoretical: two adjacent pinch
-        // clusters (desert, forest) round-tripped a shared boundary cell back and forth,
-        // leaving a live illegal adjacency in the final result.
-        Set<MacroCellPos> currentComponent = new LinkedHashSet<>();
-        for (MacroCellPos cell : component) {
-            if (ownBiome.equals(assignment.get(cell))) {
-                currentComponent.add(cell);
-            }
-        }
+        Set<MacroCellPos> currentComponent = liveComponent(component, ownBiome, assignment);
         if (currentComponent.isEmpty() || currentComponent.size() >= targetMinCells) {
             return;
         }
@@ -108,6 +93,38 @@ final class SeparatorWidener {
         TreeSet<MacroCellPos> frontier = new TreeSet<>(frontierOrder(centroidOf(currentComponent)));
         addUnclaimedNeighbors(currentComponent, claimed, regionCellSet, frontier);
 
+        claimUntilTargetOrFrontierExhausted(claimed, frontier, targetMinCells, ownBiome, assignment, regionCellSet, graph);
+
+        commit(claimed, ownBiome, assignment);
+        STATS.totalNanos += System.nanoTime() - widenStart;
+    }
+
+    /**
+     * Re-verifies {@code component} against the LIVE assignment rather than trusting the
+     * caller's snapshot — a caller that widens several components in one pass can hand in
+     * a component that's gone stale: an EARLIER call already legally stole one of these
+     * cells for a different, now-incompatible biome. Without this, {@link #commit} (which
+     * only checks NEWLY claimed cells, never the caller-supplied component itself) would
+     * blindly reassert a cell straight back to {@code ownBiome} with NO legality check at
+     * all — confirmed as a real, pre-existing bug via a genuine repro, not theoretical:
+     * two adjacent pinch clusters (desert, forest) round-tripped a shared boundary cell
+     * back and forth, leaving a live illegal adjacency in the final result.
+     */
+    private static Set<MacroCellPos> liveComponent(Set<MacroCellPos> component, BiomeId ownBiome, Map<MacroCellPos, BiomeId> assignment) {
+        Set<MacroCellPos> currentComponent = new LinkedHashSet<>();
+        for (MacroCellPos cell : component) {
+            if (ownBiome.equals(assignment.get(cell))) {
+                currentComponent.add(cell);
+            }
+        }
+        return currentComponent;
+    }
+
+    /** Repeatedly claims the frontier's nearest-to-centroid legal, donor-connectivity-safe cell until {@code claimed} reaches {@code targetMinCells} or the frontier runs dry — see {@link #isLegalToClaim} and {@link #stealingPreservesDonorConnectivity} for what each check guards against. */
+    private static void claimUntilTargetOrFrontierExhausted(
+        Set<MacroCellPos> claimed, TreeSet<MacroCellPos> frontier, int targetMinCells, BiomeId ownBiome,
+        Map<MacroCellPos, BiomeId> assignment, Set<MacroCellPos> regionCellSet, BiomeGraph graph
+    ) {
         while (claimed.size() < targetMinCells && !frontier.isEmpty()) {
             MacroCellPos next = frontier.pollFirst();
             STATS.frontierPolls++;
@@ -122,11 +139,12 @@ final class SeparatorWidener {
             claimed.add(next);
             addUnclaimedNeighbors(Set.of(next), claimed, regionCellSet, frontier);
         }
+    }
 
+    private static void commit(Set<MacroCellPos> claimed, BiomeId ownBiome, Map<MacroCellPos, BiomeId> assignment) {
         for (MacroCellPos cell : claimed) {
             assignment.put(cell, ownBiome);
         }
-        STATS.totalNanos += System.nanoTime() - widenStart;
     }
 
     /**
