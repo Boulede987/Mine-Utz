@@ -131,50 +131,7 @@ final class SeamGrowthRasterizer {
             .thenComparingInt((CellEntry e) -> e.cell().x())
             .thenComparingInt((CellEntry e) -> e.cell().z()));
 
-        // Head-start reservation pass: BEFORE any face competes for territory through the
-        // shared queue, give each face (in deterministic faceIndex order) its own seed
-        // cell PLUS enough extra cells to reach CellPlacementRules.MIN_SAME_BIOME_NEIGHBORS,
-        // claimed directly from that face's own growing
-        // frontier (nearest-to-seed tie-break), same legality/cohesion/anti-pinch rules as
-        // the main loop (via isClaimable). Real root-cause fix, not a repair pass over
-        // decided output: without this, EVERY face's first cell (ratio exactly 0.0,
-        // distance exactly 0) sits in the same top priority tier as every other face's
-        // first cell, so who gets a SECOND cell is decided by whichever face's neighbor
-        // offers happen to get processed first in the shared queue - measured directly
-        // that 95% of the resulting size=1 fragments were pure geographic bad luck (all 8
-        // Moore neighbors claimed by other, perfectly LEGAL, faces before this face's own
-        // continuation was ever considered), not blocked by any real illegality. A face
-        // that reaches its own cohesion threshold this way starts real competition already
-        // holding a small legitimate clump, not a single cell one lost neighbor away from
-        // being permanently boxed in.
-        for (int faceIndex : assignments.keySet().stream().sorted().toList()) {
-            MacroCellPos seed = seedCellByFace.get(faceIndex);
-            if (!regionCellSet.contains(seed) || decided.containsKey(seed)) {
-                continue;
-            }
-            BiomeId biome = assignments.get(faceIndex).biome();
-            if (!isClaimable(seed, biome, faceIndex, decided, claimedCountByFace, graph)) {
-                continue; // leave it to the main queue below - same outcome as before this pass existed
-            }
-            decided.put(seed, biome);
-            claimedCountByFace.merge(faceIndex, 1, Integer::sum);
-            List<MacroCellPos> claimedByThisFace = new ArrayList<>(List.of(seed));
-
-            int headStartTarget = Math.max(1, CellPlacementRules.MIN_SAME_BIOME_NEIGHBORS);
-            while (claimedByThisFace.size() < headStartTarget) {
-                MacroCellPos next = pickHeadStartCandidate(claimedByThisFace, biome, faceIndex, decided, regionCellSet, claimedCountByFace, graph, seed);
-                if (next == null) {
-                    break; // no legal room to extend further right now - main queue still gets a shot at it later
-                }
-                decided.put(next, biome);
-                claimedCountByFace.merge(faceIndex, 1, Integer::sum);
-                claimedByThisFace.add(next);
-            }
-
-            for (MacroCellPos claimed : claimedByThisFace) {
-                offerNeighbors(claimed, biome, faceIndex, decided, regionCellSet, facesByBiome, claimedCountByFace, targetCells, seedCellByFace, graph, queue);
-            }
-        }
+        reserveHeadStarts(assignments, seedCellByFace, regionCellSet, decided, claimedCountByFace, graph, facesByBiome, targetCells, queue);
 
         for (int faceIndex : assignments.keySet().stream().sorted().toList()) {
             MacroCellPos seed = seedCellByFace.get(faceIndex);
@@ -210,6 +167,50 @@ final class SeamGrowthRasterizer {
             result.put(cell, decided.get(cell));
         }
         return result;
+    }
+
+    /**
+     * Root-cause fix, not a repair pass over decided output: without this, every face's
+     * first cell sits in the same top priority tier as every other face's first cell
+     * (ratio exactly 0.0, distance exactly 0), so who gets a second cell is decided by
+     * whichever face's neighbor offers happen to get processed first in the shared queue
+     * — measured directly that 95% of the resulting size=1 fragments were pure geographic
+     * bad luck (all 8 Moore neighbors claimed by other, perfectly LEGAL, faces before this
+     * face's own continuation was ever considered), not blocked by any real illegality.
+     */
+    private static void reserveHeadStarts(
+        Map<Integer, TriangleIdentitySizeAssignment.Assignment> assignments, Map<Integer, MacroCellPos> seedCellByFace,
+        Set<MacroCellPos> regionCellSet, Map<MacroCellPos, BiomeId> decided, Map<Integer, Integer> claimedCountByFace,
+        BiomeGraph graph, Map<BiomeId, List<Integer>> facesByBiome, Map<Integer, Integer> targetCells, PriorityQueue<CellEntry> queue
+    ) {
+        for (int faceIndex : assignments.keySet().stream().sorted().toList()) {
+            MacroCellPos seed = seedCellByFace.get(faceIndex);
+            if (!regionCellSet.contains(seed) || decided.containsKey(seed)) {
+                continue;
+            }
+            BiomeId biome = assignments.get(faceIndex).biome();
+            if (!isClaimable(seed, biome, faceIndex, decided, claimedCountByFace, graph)) {
+                continue; // leave it to the main queue below - same outcome as before this pass existed
+            }
+            decided.put(seed, biome);
+            claimedCountByFace.merge(faceIndex, 1, Integer::sum);
+            List<MacroCellPos> claimedByThisFace = new ArrayList<>(List.of(seed));
+
+            int headStartTarget = Math.max(1, CellPlacementRules.MIN_SAME_BIOME_NEIGHBORS);
+            while (claimedByThisFace.size() < headStartTarget) {
+                MacroCellPos next = pickHeadStartCandidate(claimedByThisFace, biome, faceIndex, decided, regionCellSet, claimedCountByFace, graph, seed);
+                if (next == null) {
+                    break; // no legal room to extend further right now - main queue still gets a shot at it later
+                }
+                decided.put(next, biome);
+                claimedCountByFace.merge(faceIndex, 1, Integer::sum);
+                claimedByThisFace.add(next);
+            }
+
+            for (MacroCellPos claimed : claimedByThisFace) {
+                offerNeighbors(claimed, biome, faceIndex, decided, regionCellSet, facesByBiome, claimedCountByFace, targetCells, seedCellByFace, graph, queue);
+            }
+        }
     }
 
     /**
