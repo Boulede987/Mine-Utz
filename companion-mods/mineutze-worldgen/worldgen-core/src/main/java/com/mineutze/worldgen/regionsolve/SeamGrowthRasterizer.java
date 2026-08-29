@@ -66,15 +66,8 @@ import java.util.Set;
  * without ever being real mesh neighbors). Priority is a snapshot taken at push time, a
  * heuristic ordering, not a guarantee, and cheap to keep that way.
  *
- * <p>Once the main queue drains, any cell still unclaimed — growth left a gap, or a
- * face's whole quota went to cells elsewhere — is closed by {@link #fillGaps}, a small
- * fixed-point legality-driven cleanup pass with the same fail-loud dead-end handling the
- * old field stage's final rasterizer used (backstopped by {@link
- * BiomeGraph#requireEveryLocalNeighborhoodSolvable}), expected to be smaller and rarer
- * than before — every adjacency here corresponds to either a real CSP-checked triangle
- * adjacency or an already-known-legal cross-region cell, never an incidental
- * distance-competition overlap between two faces that were never checked against each
- * other.
+ * <p>Once the main queue drains, any cell still unclaimed is closed by {@link #fillGaps}
+ * — see that method's own doc for how and why.
  *
  * <p>Small-fragment and one-cell-pinch counts are a real, ongoing quality measure, not a
  * guarantee — unlike illegal adjacencies (always zero, see above), a face's actual shape
@@ -375,11 +368,15 @@ final class SeamGrowthRasterizer {
     /**
      * Fixed-point cleanup for cells the main growth pass left unclaimed — a real gap
      * between target-bounded faces, or a face whose quota went to cells elsewhere.
-     * Expected small and rare (see this class's own doc for why), unlike the old field
-     * stage's fallback which had to cover the WHOLE final raster. Same fail-loud dead
-     * end the old field stage's final rasterizer used, same tie-break (most matching
-     * already-decided Moore neighbor, then {@link BiomeId} natural order) since nothing
-     * here is tied to a specific face/quota any more — it's a pure legality fill.
+     * Expected small and rare, unlike the old field stage's fallback which had to cover
+     * the WHOLE final raster: every adjacency here corresponds to either a real
+     * CSP-checked triangle adjacency or an already-known-legal cross-region cell, never
+     * an incidental distance-competition overlap between two faces that were never
+     * checked against each other. Same fail-loud dead end the old field stage's final
+     * rasterizer used (backstopped by {@link BiomeGraph#requireEveryLocalNeighborhoodSolvable}),
+     * same tie-break (most matching already-decided Moore neighbor, then {@link BiomeId}
+     * natural order) since nothing here is tied to a specific face/quota any more — it's
+     * a pure legality fill.
      *
      * <p>A cell with ZERO decided Moore neighbors anywhere — confirmed real, not
      * theoretical: {@link MacroGridConfig}'s own region-boundary warp classifies cell
