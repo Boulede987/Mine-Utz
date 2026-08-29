@@ -1,0 +1,86 @@
+So we still use a mesh and a growth algorithm, meaning we hardly have control on which biome end up near another at construction time?
+
+No — the opposite, actually. Two separate steps, each controlling a different thing:
+
+Step 1 (the mesh + the "who can be next to whom" step): Random points get placed on the map, then connected into a triangle mesh — that part IS pretty randomized, just picking rough positions. But then, before any coloring happens, each triangle gets ASSIGNED a biome one at a time, and a triangle is only allowed to get a biome if that biome is legal next to every triangle around it that's already been assigned (checked against the rules you define — like "desert can touch savanna, desert can't touch ocean"). If no legal biome fits, it backtracks and tries something else. This is where "which biomes end up near which" is actually decided and locked in — hard rule, not chance.
+
+Step 2 (growth, the coloring-in step): This only decides the exact SHAPE each already-assigned triangle's biome takes up — the wiggly border line, exactly which square belongs to which patch. It does NOT get to introduce a new neighbor pairing that wasn't already legal — every single square, as it gets colored, is checked against the same rules again. It literally cannot place an illegal touch (that's the "zero illegal adjacencies" guarantee this whole session's testing keeps confirming).
+
+So: which biome families can border each other — fully controlled, hard rule, enforced twice. What's NOT hand-controlled is the exact curve of the border and the rough starting position of each patch — that's what the mesh randomness and the growth competition decide.
+
+✻ Cooked for 21s · done lundi 20:03
+
+❯ Alright. I see a flaw in my original algorthm's logc. What are sizes? Let's say thei're blocks squared. If I assign a plain as the neighbor to deserts, plins will need to be extremely stretched out to be able to completely covert that triangle's edge, right?
+
+  Ran 1 shell command
+
+Let me check whether the actual code ever accounts for real edge length before answering.
+
+  Searched for 1 pattern
+
+Checked the code directly — you're right, real gap, confirmed:
+
+"Size" (widthBlocks) is a side length, and it gets SQUARED into a target AREA (cell count) — a budget for how many squares that patch should get, nothing about shape. And I grepped both the assignment step and the growth step: neither ever looks at how LONG a triangle's actual edge is in blocks. A triangle can have a short edge or a very long one (depends on where the random seed points landed), and the biome assigned there has zero awareness of that when its size gets picked.
+
+So yes — if plains gets picked as the required buffer between desert and some biome desert can't touch, and that particular shared edge happens to be very long, plains' area budget (say 300-600² blocks) has no guarantee it's shaped in a way that reaches all the way across that edge.
+
+Here's the part that saves it from actually breaking: the target size is a soft goal, not a hard stop. If plains is the ONLY legal biome left for a stretch of that border, growth just keeps giving it more squares past its own declared size range rather than leaving a gap or letting an illegal touch happen — the "zero illegal adjacency" guarantee wins, always. So it won't crash and won't produce a bad neighbor pairing. What it CAN do is quietly make that one plains patch much bigger than intended, without anything telling you that happened.
+
+So: not a correctness bug (nothing breaks), but a real, unaddressed design gap — a patch's actual size can silently blow past its declared range whenever geometry forces it, and nothing currently measures or reports how often or how badly. Worth tracking down as a real fix?
+
+✻ Cogitated for 1m 13s · done lundi 20:06
+
+---
+
+IDEA: smarter dead-end pre-check for BiomeGraph (generalize requireEveryLocalNeighborhoodSolvable)
+
+Motivation: real crashes happened because a generated triangle had an impossible
+combination of neighbors (no biome legal against all of them at once) - and historically
+the only way we found these was by generating an actual world and getting unlucky enough
+to hit the bad combination during real play/export. Hunting bugs by luck is a terrible
+way to find them.
+
+BiomeGraph.requireEveryLocalNeighborhoodSolvable(maxNeighbors) already fixes this FOR
+TODAY'S graph: it's a real, deterministic, exhaustive, offline proof (no world generation,
+no luck involved), wired into BiomeGraph.forProduction so an impossible combination fails
+the BUILD itself, not a random real-world generation session later. It works by brute
+force - checking every literal combination of up to maxNeighbors distinct biomes.
+
+The catch: today's graph only has 6 biomes, so brute-force enumeration is cheap. It won't
+stay cheap - a much larger, more realistic biome list makes checking every literal
+combination computationally infeasible (this is the "graph check that was rejected for
+being impossible" - not impossible in concept, impossible to run exhaustively at real
+scale). That's the actual problem this idea solves.
+
+The idea: we don't need to test every combination in every graph. Many concrete
+combinations aren't really distinct problems - they're the same structural situation
+wearing different biome names. Instead of checking every actual tuple of biomes, abstract
+combinations into general "situation types" based on their legality-relationship pattern
+(e.g. "K biomes that are pairwise mutually illegal, needing one shared bridge biome" is
+one abstract shape/type, regardless of which specific biomes fill it) - then just check
+whether the graph contains an instance matching each dangerous type, instead of testing
+every concrete instance of it separately.
+
+Could also be framed in terms of proportions/graph properties instead of exact biome
+counts - thinking in "types" of combinations instead of the specific biomes we happen to
+have. A scale-independent proof technique instead of one that gets combinatorially more
+expensive as the biome list grows.
+
+Not started - requireEveryLocalNeighborhoodSolvable(8) is correct and sufficient for
+today's 6-biome graph, so there's no urgency yet. Worth building before the real biome
+list grows large enough to make brute-force enumeration actually slow/infeasible.
+
+---
+
+IDEA: replace triangles with hexagons for the mesh
+
+Not scoped or investigated yet - flagged 2026-08-29 as a future direction to eventually
+revisit. Current mesh (DelaunayTriangulation over jittered SeedGrid points) gives each
+free face AT MOST 3 real neighbors, by construction (TriangleAdjacency's own guarantee -
+see its class doc: this is the whole reason triangles were chosen originally, to cap how
+many other biomes any one placement can be adjacent to). A hexagonal mesh would change
+that neighbor cap to 6 and likely changes a lot downstream - CSP backtracking's own
+forward-checking assumptions, FaceFairnessQuota's derivation, BiomeGraph's
+maxNeighbors-bounded solvability proof, SeamGrowthRasterizer's growth/cohesion math -
+all currently reason about a mesh whose faces have <=3 neighbors. Needs real design
+work before starting, not a drop-in swap.
