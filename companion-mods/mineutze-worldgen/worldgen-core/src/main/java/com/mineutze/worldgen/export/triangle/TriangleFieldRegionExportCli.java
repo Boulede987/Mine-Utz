@@ -44,7 +44,7 @@ public final class TriangleFieldRegionExportCli {
     private static final int DEFAULT_REGIONS_PER_SIDE = 1;
     private static final MacroGridConfig DEMO_GRID = new MacroGridConfig(4, 512);
 
-    private record Args(long worldSeed, Path outputDir, int regionsPerSide) {
+    record Args(long worldSeed, Path outputDir, int regionsPerSide) {
     }
 
     private TriangleFieldRegionExportCli() {
@@ -67,7 +67,7 @@ public final class TriangleFieldRegionExportCli {
         exitNonZeroIfUnclean(integrityReport);
     }
 
-    private static Args parseArgs(String[] args) {
+    static Args parseArgs(String[] args) {
         return new Args(
             args.length > 0 ? Long.parseLong(args[0]) : DEFAULT_WORLD_SEED,
             Path.of(args.length > 1 ? args[1] : DEFAULT_OUTPUT_DIR),
@@ -75,7 +75,7 @@ public final class TriangleFieldRegionExportCli {
         );
     }
 
-    private static List<RegionPos> buildRegionGrid(int regionsPerSide) {
+    static List<RegionPos> buildRegionGrid(int regionsPerSide) {
         List<RegionPos> regions = new ArrayList<>();
         for (int rx = 0; rx < regionsPerSide; rx++) {
             for (int rz = 0; rz < regionsPerSide; rz++) {

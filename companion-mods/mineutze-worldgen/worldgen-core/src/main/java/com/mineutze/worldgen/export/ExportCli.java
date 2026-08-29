@@ -24,7 +24,7 @@ public final class ExportCli {
     private static final int DEFAULT_REGION_SPAN = 3;
     private static final String DEFAULT_OUTPUT_DIR = "worldgen-export";
 
-    private record Args(long worldSeed, int regionSpan, Path outputDir) {
+    record Args(long worldSeed, int regionSpan, Path outputDir) {
     }
 
     private ExportCli() {
@@ -43,7 +43,7 @@ public final class ExportCli {
         writeAllFormats(parsed.outputDir(), snapshot, new BiomeLegend(graph));
     }
 
-    private static Args parseArgs(String[] args) {
+    static Args parseArgs(String[] args) {
         return new Args(
             args.length > 0 ? Long.parseLong(args[0]) : DEFAULT_WORLD_SEED,
             args.length > 1 ? Integer.parseInt(args[1]) : DEFAULT_REGION_SPAN,
