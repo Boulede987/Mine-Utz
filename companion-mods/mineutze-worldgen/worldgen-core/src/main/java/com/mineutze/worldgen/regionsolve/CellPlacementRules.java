@@ -4,6 +4,7 @@ import com.mineutze.worldgen.biomegraph.BiomeGraph;
 import com.mineutze.worldgen.biomegraph.BiomeId;
 
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Stream;
 
 /**
@@ -54,19 +55,33 @@ public final class CellPlacementRules {
     }
 
     /**
-     * Candidate is legal at this cell if it's allowed next to every
-     * already-assigned neighbor outside the growing patch.
+     * {@code candidate} is legal if it's allowed, per {@code graph}, against every
+     * already-assigned Moore (orthogonal + diagonal) neighbor of every cell in {@code
+     * cellsToCheck} — except any neighbor that's itself inside {@code
+     * excludeFromNeighbors} (the group's own interior when {@code cellsToCheck} is a
+     * whole fragment/component checking itself, or an already-claimed working set for a
+     * single new candidate cell — pass {@code Set.of()} for neither).
+     *
+     * <p>The one shared implementation behind every "can this candidate go here" gate in
+     * this repair pipeline — this same check used to be reimplemented independently in
+     * several places (single-cell and whole-group variants), two of which quietly checked
+     * ORTHOGONAL neighbors only, silently missing a real diagonal illegal-adjacency case
+     * this pipeline is supposed to guarantee against. Consolidating removes the
+     * possibility of that happening a third time, rather than patching those two spots.
      */
     static boolean isLegal(
-        MacroCellPos cell,
-        BiomeId candidate,
-        Map<MacroCellPos, BiomeId> externallyAssigned,
-        BiomeGraph graph
+        Set<MacroCellPos> cellsToCheck, Set<MacroCellPos> excludeFromNeighbors, BiomeId candidate,
+        Map<MacroCellPos, BiomeId> assignment, BiomeGraph graph
     ) {
-        for (MacroCellPos neighbor : cell.orthogonalNeighbors()) {
-            BiomeId neighborBiome = externallyAssigned.get(neighbor);
-            if (neighborBiome != null && !graph.isAllowed(candidate, neighborBiome)) {
-                return false;
+        for (MacroCellPos cell : cellsToCheck) {
+            for (MacroCellPos neighbor : cell.mooreNeighbors()) {
+                if (excludeFromNeighbors.contains(neighbor)) {
+                    continue;
+                }
+                BiomeId neighborBiome = assignment.get(neighbor);
+                if (neighborBiome != null && !graph.isAllowed(candidate, neighborBiome)) {
+                    return false;
+                }
             }
         }
         return true;

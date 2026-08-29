@@ -190,18 +190,15 @@ final class SeparatorWidener {
         }
     }
 
-    /** Legal to steal this cell if the candidate biome is still allowed next to every neighbor it has outside the (growing) claimed set. */
+    /**
+     * Legal to steal this cell if the candidate biome is still allowed (Moore, both
+     * orthogonal and diagonal) next to every neighbor it has outside the (growing)
+     * claimed set — see {@link CellPlacementRules#isLegal} for the shared
+     * implementation. Was orthogonal-only until this delegated to that shared check -
+     * a real, silent diagonal-illegal-adjacency gap, not just a style difference.
+     */
     private static boolean isLegalToClaim(MacroCellPos cell, BiomeId candidate, Set<MacroCellPos> claimed, Map<MacroCellPos, BiomeId> assignment, BiomeGraph graph) {
-        for (MacroCellPos neighbor : cell.orthogonalNeighbors()) {
-            if (claimed.contains(neighbor)) {
-                continue;
-            }
-            BiomeId neighborBiome = assignment.get(neighbor);
-            if (neighborBiome != null && !graph.isAllowed(candidate, neighborBiome)) {
-                return false;
-            }
-        }
-        return true;
+        return CellPlacementRules.isLegal(Set.of(cell), claimed, candidate, assignment, graph);
     }
 
     /**

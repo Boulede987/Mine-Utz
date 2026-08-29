@@ -206,41 +206,13 @@ public final class PixelFragmentRepair {
             .max(Comparator.<BiomeId>comparingLong(id -> neighborCounts.getOrDefault(id, 0L)).thenComparing(Comparator.naturalOrder()));
     }
 
+    /** Legal (Moore, both orthogonal and diagonal) against every neighbor outside the fragment itself — see {@link CellPlacementRules#isLegal} for the shared implementation. */
     private static boolean fragmentAcceptsCandidate(Set<MacroCellPos> fragment, BiomeId candidate, Map<MacroCellPos, BiomeId> assignment, BiomeGraph graph) {
-        for (MacroCellPos cell : fragment) {
-            for (MacroCellPos neighbor : cell.orthogonalNeighbors()) {
-                if (fragment.contains(neighbor)) {
-                    continue;
-                }
-                BiomeId neighborBiome = assignment.get(neighbor);
-                if (neighborBiome != null && !graph.isAllowed(candidate, neighborBiome)) {
-                    return false;
-                }
-            }
-            for (MacroCellPos diagonal : cell.diagonalNeighbors()) {
-                if (fragment.contains(diagonal)) {
-                    continue;
-                }
-                BiomeId diagonalBiome = assignment.get(diagonal);
-                if (diagonalBiome != null && !graph.isAllowed(candidate, diagonalBiome)) {
-                    return false;
-                }
-            }
-        }
-        return true;
+        return CellPlacementRules.isLegal(fragment, fragment, candidate, assignment, graph);
     }
 
-    /** {@link CellPlacementRules#isLegal} only checks the 4 orthogonal neighbors (same as the rest of this pipeline) — this repair pass also checks diagonals, since a discretization-born violation has no reason to prefer one over the other. */
+    /** Legal (Moore, both orthogonal and diagonal) at this one cell — see {@link CellPlacementRules#isLegal} for the shared implementation; a discretization-born violation has no reason to prefer orthogonal over diagonal. */
     private static boolean isLegalIncludingDiagonals(MacroCellPos cell, BiomeId candidate, Map<MacroCellPos, BiomeId> assignment, BiomeGraph graph) {
-        if (!CellPlacementRules.isLegal(cell, candidate, assignment, graph)) {
-            return false;
-        }
-        for (MacroCellPos diagonal : cell.diagonalNeighbors()) {
-            BiomeId diagonalBiome = assignment.get(diagonal);
-            if (diagonalBiome != null && !graph.isAllowed(candidate, diagonalBiome)) {
-                return false;
-            }
-        }
-        return true;
+        return CellPlacementRules.isLegal(Set.of(cell), Set.of(), candidate, assignment, graph);
     }
 }

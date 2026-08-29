@@ -181,21 +181,15 @@ public final class PatchSizeEnforcer {
             .max(Comparator.<BiomeId>comparingInt(candidatePatchSize::get).thenComparing(Comparator.naturalOrder()));
     }
 
-    /** Like CellPlacementRules.isLegal, but checked across every cell of a whole component at once, ignoring the component's own internal edges. */
+    /**
+     * Legal (Moore, both orthogonal and diagonal) against every neighbor outside the
+     * component itself — see {@link CellPlacementRules#isLegal} for the shared
+     * implementation. Was orthogonal-only until this delegated to that shared check -
+     * a real, silent diagonal-illegal-adjacency gap, not just a style difference.
+     */
     private static boolean isLegalForWholeComponent(
         Set<MacroCellPos> component, BiomeId candidate, Map<MacroCellPos, BiomeId> assignment, BiomeGraph graph
     ) {
-        for (MacroCellPos cell : component) {
-            for (MacroCellPos neighbor : cell.orthogonalNeighbors()) {
-                if (component.contains(neighbor)) {
-                    continue;
-                }
-                BiomeId neighborBiome = assignment.get(neighbor);
-                if (neighborBiome != null && !graph.isAllowed(candidate, neighborBiome)) {
-                    return false;
-                }
-            }
-        }
-        return true;
+        return CellPlacementRules.isLegal(component, component, candidate, assignment, graph);
     }
 }
