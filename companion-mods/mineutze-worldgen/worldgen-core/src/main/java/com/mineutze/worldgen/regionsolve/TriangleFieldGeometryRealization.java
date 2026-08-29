@@ -63,50 +63,82 @@ public final class TriangleFieldGeometryRealization {
     private TriangleFieldGeometryRealization() {
     }
 
+    /** This region's own mesh cells' bounding box, in block coordinates — the input to both mesh seeding (padded by {@link #TRIANGULATION_MARGIN_BLOCKS}) and the CSP's own area-fairness math. */
+    private record BlockBounds(int minX, int maxX, int minZ, int maxZ) {
+        double areaBlocks2() {
+            return (double) (maxX - minX) * (maxZ - minZ);
+        }
+    }
+
+    /** The real ≤3-neighbor mesh topology and each face's centroid, shared by every downstream step (identity assignment, fixed-context lookup, growth's own bootstrap seeding). */
+    private record Mesh(List<IndexedTriangle> faces, TriangleAdjacency.Adjacency adjacency, Map<Integer, Point2D> centroids) {
+    }
+
     public static RegionSolveResult realize(RegionSolveInput input) {
         MacroGridConfig gridConfig = input.gridConfig();
         List<MacroCellPos> cells = gridConfig.cellsInRegion(input.region(), input.worldSeed());
-        int cellSize = gridConfig.macroCellSizeBlocks();
+        BlockBounds bounds = blockBoundsOf(cells, gridConfig.macroCellSizeBlocks());
 
+        Mesh mesh = buildMesh(input.worldSeed(), bounds);
+        Map<Integer, BiomeId> fixedFaceBiomes = buildFixedFaceBiomes(mesh.centroids(), gridConfig, input.fixedBoundaryCells());
+        Set<Integer> freeFaceIndices = freeFaceIndices(mesh.faces(), mesh.adjacency(), fixedFaceBiomes);
+
+        Map<Integer, TriangleIdentitySizeAssignment.Assignment> assignments = solveIdentities(
+            mesh.adjacency(), freeFaceIndices, fixedFaceBiomes, input.graph(), input.worldSeed(), bounds.areaBlocks2(), input.region()
+        );
+
+        Map<MacroCellPos, BiomeId> result = SeamGrowthRasterizer.rasterize(
+            cells, assignments, mesh.centroids(), input.graph(), input.fixedBoundaryCells(), gridConfig
+        );
+        return new RegionSolveResult(result, List.of(), 0);
+    }
+
+    private static BlockBounds blockBoundsOf(List<MacroCellPos> cells, int cellSize) {
         int minBlockX = cells.stream().mapToInt(MacroCellPos::x).min().orElseThrow() * cellSize;
         int maxBlockX = (cells.stream().mapToInt(MacroCellPos::x).max().orElseThrow() + 1) * cellSize;
         int minBlockZ = cells.stream().mapToInt(MacroCellPos::z).min().orElseThrow() * cellSize;
         int maxBlockZ = (cells.stream().mapToInt(MacroCellPos::z).max().orElseThrow() + 1) * cellSize;
+        return new BlockBounds(minBlockX, maxBlockX, minBlockZ, maxBlockZ);
+    }
 
+    /** Seeds {@code bounds} padded by {@link #TRIANGULATION_MARGIN_BLOCKS} on every side, then triangulates - the margin is what guarantees every face touching the actual region is non-hull-touching (real neighbor context on every side for the CSP's own legality solving). */
+    private static Mesh buildMesh(long worldSeed, BlockBounds bounds) {
         List<Point2D> points = SeedGrid.seedsIn(
-            input.worldSeed(), SEED_SPACING_BLOCKS,
-            minBlockX - TRIANGULATION_MARGIN_BLOCKS, minBlockZ - TRIANGULATION_MARGIN_BLOCKS,
-            maxBlockX + TRIANGULATION_MARGIN_BLOCKS, maxBlockZ + TRIANGULATION_MARGIN_BLOCKS
+            worldSeed, SEED_SPACING_BLOCKS,
+            bounds.minX() - TRIANGULATION_MARGIN_BLOCKS, bounds.minZ() - TRIANGULATION_MARGIN_BLOCKS,
+            bounds.maxX() + TRIANGULATION_MARGIN_BLOCKS, bounds.maxZ() + TRIANGULATION_MARGIN_BLOCKS
         );
         List<IndexedTriangle> faces = DelaunayTriangulation.triangulateFaces(points);
         TriangleAdjacency.Adjacency adjacency = TriangleAdjacency.of(faces);
 
-        Map<Integer, Point2D> allCentroids = new LinkedHashMap<>();
+        Map<Integer, Point2D> centroids = new LinkedHashMap<>();
         for (int faceIndex = 0; faceIndex < faces.size(); faceIndex++) {
-            allCentroids.put(faceIndex, centroidOf(faces.get(faceIndex), points));
+            centroids.put(faceIndex, centroidOf(faces.get(faceIndex), points));
         }
-        Map<Integer, BiomeId> fixedFaceBiomes = buildFixedFaceBiomes(allCentroids, gridConfig, input.fixedBoundaryCells());
+        return new Mesh(faces, adjacency, centroids);
+    }
 
+    /** Every face that's neither hull-touching (missing real neighbor context, see {@link TriangleAdjacency}'s own doc) nor already fixed by a neighbor region's own solve - the CSP only ever assigns these. */
+    private static Set<Integer> freeFaceIndices(List<IndexedTriangle> faces, TriangleAdjacency.Adjacency adjacency, Map<Integer, BiomeId> fixedFaceBiomes) {
         Set<Integer> freeFaceIndices = new LinkedHashSet<>();
         for (int faceIndex = 0; faceIndex < faces.size(); faceIndex++) {
             if (!adjacency.hullTouchingFaceIndices().contains(faceIndex) && !fixedFaceBiomes.containsKey(faceIndex)) {
                 freeFaceIndices.add(faceIndex);
             }
         }
+        return freeFaceIndices;
+    }
 
-        double regionAreaBlocks2 = (double) (maxBlockX - minBlockX) * (maxBlockZ - minBlockZ);
-        Map<Integer, TriangleIdentitySizeAssignment.Assignment> assignments =
-            TriangleIdentitySizeAssignment.solve(adjacency, freeFaceIndices, fixedFaceBiomes, input.graph(), input.worldSeed(), regionAreaBlocks2)
-                .orElseThrow(() -> new IllegalStateException(
-                    "TriangleFieldGeometryRealization: no legal identity assignment exists for region " + input.region()
-                        + " - the BiomeGraph's own construction-time bridgeability check only rules out configs "
-                        + "impossible in principle, not every real local triangle arrangement."
-                ));
-
-        Map<MacroCellPos, BiomeId> result = SeamGrowthRasterizer.rasterize(
-            cells, assignments, allCentroids, input.graph(), input.fixedBoundaryCells(), gridConfig
-        );
-        return new RegionSolveResult(result, List.of(), 0);
+    private static Map<Integer, TriangleIdentitySizeAssignment.Assignment> solveIdentities(
+        TriangleAdjacency.Adjacency adjacency, Set<Integer> freeFaceIndices, Map<Integer, BiomeId> fixedFaceBiomes,
+        BiomeGraph graph, long worldSeed, double regionAreaBlocks2, RegionPos region
+    ) {
+        return TriangleIdentitySizeAssignment.solve(adjacency, freeFaceIndices, fixedFaceBiomes, graph, worldSeed, regionAreaBlocks2)
+            .orElseThrow(() -> new IllegalStateException(
+                "TriangleFieldGeometryRealization: no legal identity assignment exists for region " + region
+                    + " - the BiomeGraph's own construction-time bridgeability check only rules out configs "
+                    + "impossible in principle, not every real local triangle arrangement."
+            ));
     }
 
     /**
