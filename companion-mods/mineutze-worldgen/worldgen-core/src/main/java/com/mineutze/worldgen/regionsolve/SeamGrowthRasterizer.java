@@ -82,7 +82,7 @@ final class SeamGrowthRasterizer {
     private SeamGrowthRasterizer() {
     }
 
-    private record CellEntry(MacroCellPos cell, int faceIndex, double quotaRatio, long distanceSquared) {
+    record CellEntry(MacroCellPos cell, int faceIndex, double quotaRatio, long distanceSquared) {
     }
 
     /**
@@ -91,7 +91,7 @@ final class SeamGrowthRasterizer {
      * share its biome. Bundled into one record so a growth step needs one parameter for
      * all of this instead of four separate maps passed in the same order everywhere.
      */
-    private record FaceBookkeeping(
+    record FaceBookkeeping(
         Map<Integer, Integer> targetCells, Map<Integer, Integer> claimedCountByFace,
         Map<Integer, MacroCellPos> seedCellByFace, Map<BiomeId, List<Integer>> facesByBiome
     ) {
@@ -275,7 +275,7 @@ final class SeamGrowthRasterizer {
      * first place, so it isn't a real quality signal yet); and doesn't retroactively pinch
      * an already-decided orthogonal neighbor.
      */
-    private static boolean isClaimable(
+    static boolean isClaimable(
         MacroCellPos cell, BiomeId candidate, int faceIndex,
         Map<MacroCellPos, BiomeId> decided, FaceBookkeeping bookkeeping, BiomeGraph graph
     ) {
@@ -302,7 +302,7 @@ final class SeamGrowthRasterizer {
      * ConnectedComponents}). Keeping both gets the claiming face a guaranteed
      * continuation without losing that merging benefit.
      */
-    private static void offerNeighbors(
+    static void offerNeighbors(
         MacroCellPos claimedCell, BiomeId candidate, int faceIndex,
         Map<MacroCellPos, BiomeId> decided, Set<MacroCellPos> regionCellSet, FaceBookkeeping bookkeeping,
         BiomeGraph graph, PriorityQueue<CellEntry> queue
@@ -356,7 +356,7 @@ final class SeamGrowthRasterizer {
     }
 
     /** Lowest quota-deficit ratio first, then nearest own-seed distance to {@code cell} as a tie-break - same priority rule the main queue itself sorts by, just narrowed to one biome's own (usually small) face list instead of a full priority-queue push per face. */
-    private static int bestFaceFor(List<Integer> facesOfBiome, MacroCellPos cell, FaceBookkeeping bookkeeping) {
+    static int bestFaceFor(List<Integer> facesOfBiome, MacroCellPos cell, FaceBookkeeping bookkeeping) {
         int best = facesOfBiome.get(0);
         double bestRatio = bookkeeping.quotaRatio(best);
         long bestDistance = cell.distanceSquaredTo(bookkeeping.seedCellByFace().get(best));
