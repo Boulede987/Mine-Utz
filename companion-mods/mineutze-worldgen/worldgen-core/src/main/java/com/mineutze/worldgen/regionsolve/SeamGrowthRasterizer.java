@@ -76,15 +76,14 @@ import java.util.Set;
  * distance-competition overlap between two faces that were never checked against each
  * other.
  *
- * <p><b>Known open gap</b>: small-fragment and one-cell-pinch counts don't yet match the
- * old field stage's own numbers on every measure — pinches are now solidly ahead, small
- * fragments not fully closed. What's left of each traces mostly to genuine local
- * competition or tight local-legality pockets rather than an identified mechanical bug —
- * see {@link RegionIntegrityValidator} for how these are measured on a real export, and
- * this class's own git history for the sequence of root-cause fixes that got here (each
- * commit message states its own before/after numbers, which is where that history
- * belongs — not duplicated here to go stale the next time this class changes). Zero
- * illegal adjacencies holds throughout regardless.
+ * <p>Small-fragment and one-cell-pinch counts are a real, ongoing quality measure, not a
+ * guarantee — unlike illegal adjacencies (always zero, see above), a face's actual shape
+ * can still end up fragmented or pinched by genuine local competition or a tight
+ * local-legality pocket, neither of which is a bug in this class. See {@link
+ * RegionIntegrityValidator} for how these are measured on a real export, and this class's
+ * own git history for the sequence of root-cause fixes applied so far (each commit
+ * message states its own before/after numbers there, not duplicated here to go stale the
+ * next time this class changes).
  */
 final class SeamGrowthRasterizer {
 
