@@ -22,10 +22,12 @@ public record MacroGridConfig(int macroCellSizeBlocks, int regionSizeCellsPerSid
     // Region-grid domain warp: straight region-solve
     // boundaries read as a hard ruler-straight cut wherever a patch happens to reach one,
     // no amount of patch-level organicizing can hide it (three different pixel-level
-    // attempts tried and measured - see RegionSeamBlender's own git history / session
-    // notes - none worked, because the STRAIGHT LINE is the region partition itself, not
-    // a patch shape). Real fix: the region boundary was never a real geometric feature
-    // worth being straight in the first place - warp it instead of forcing it straight.
+    // cleanup passes tried and measured - PinchResolver, DiagonalCornerResolver,
+    // SeparatorWidthEnforcer, all deleted 2026-08-15 once this warp made them
+    // unnecessary - see this repo's own git history - none worked, because the STRAIGHT
+    // LINE is the region partition itself, not a patch shape). Real fix: the region
+    // boundary was never a real geometric feature worth being straight in the first
+    // place - warp it instead of forcing it straight.
     //
     // AMPLITUDE_CELLS must stay well under half of regionSizeCellsPerSide (32) - the whole
     // rest of this codebase (RegionBoundaryCollector.neighborsOf, SeedRegionCache's
