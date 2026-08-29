@@ -49,28 +49,29 @@ import java.util.Set;
  * neighbor doesn't read as spuriously undersized. Only cells actually in
  * {@code regionCellSet} are ever written back to; a merge into a different
  * biome filters to that set before mutating, and {@link SeparatorWidener}
- * already only ever claims cells within it. Previously this measured size
- * using ONLY {@code regionCellSet} (both to seed AND bound the traversal),
- * which could spuriously merge or steal cells from a patch that was
- * actually fine once its neighbor-side portion was counted — confirmed live
- * (not export-only), fixed by widening what {@code ConnectedComponents}
- * measures without widening what this class writes to.
+ * already only ever claims cells within it. Fixes a real bug found when this
+ * class still ran per-region as part of {@code SeedRegionCache}'s own live
+ * solve (before this session's growth rewrite moved that live path to
+ * {@code SeamGrowthRasterizer}, which doesn't call this class at all — see
+ * this class's own current callers, {@code RegionGridSolver} being the only
+ * one, export-only): measuring size using ONLY {@code regionCellSet} could
+ * spuriously merge or steal cells from a patch that was actually fine once
+ * its neighbor-side portion was counted. {@code
+ * PatchSizeEnforcerTest.measuresComponentSizeAcrossBoundaryContextWithoutMutatingIt}
+ * keeps this behavior real and checked even though today's one real caller
+ * happens to pass equal sets.
  *
  * <p>Loops to a fixed point ({@link #MAX_PASSES} sanity cap) rather than a
  * single pass — merging one undersized component into a neighbor can itself
  * leave a FRESH undersized, disconnected remnant behind (e.g. two small
  * components of different biomes both merge into the same third biome on
  * the same pass; the result isn't necessarily one connected patch). A
- * single pass never re-examines what its own merges just produced.
- * Confirmed live (not export-only, not a synthetic case): the step-by-step
- * visualizer's per-region output — the same result {@code SeedRegionCache}
- * actually serves, queried directly and confirmed by that exact class, not
- * inferred — showed a 5-cell savanna component stranded under savanna's own
- * 61-cell minimum. It read as fine in every export CLI run only because
+ * single pass never re-examines what its own merges just produced. Found
+ * the same way as the paragraph above, same now-obsolete live wiring: a
+ * 5-cell savanna component stranded under savanna's own 61-cell minimum
+ * survived a single pass, and only read as fine in export CLI runs because
  * {@code RegionGridSolver}'s own whole-swath cleanup happened to run this
- * same merge logic a second time afterward — coincidental double coverage
- * for an intra-region defect that needed no cross-region context to fix,
- * not evidence the live path was actually clean.
+ * same merge logic a second time afterward.
  */
 public final class PatchSizeEnforcer {
 
