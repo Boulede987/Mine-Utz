@@ -198,7 +198,7 @@ final class SeparatorWidener {
      * a real, silent diagonal-illegal-adjacency gap, not just a style difference.
      */
     private static boolean isLegalToClaim(MacroCellPos cell, BiomeId candidate, Set<MacroCellPos> claimed, Map<MacroCellPos, BiomeId> assignment, BiomeGraph graph) {
-        return CellPlacementRules.isLegal(Set.of(cell), claimed, candidate, assignment, graph);
+        return CellPlacementRules.isLegalForCell(cell, claimed, candidate, assignment, graph);
     }
 
     /**

@@ -191,6 +191,6 @@ public final class PatchSizeEnforcer {
     private static boolean isLegalForWholeComponent(
         Set<MacroCellPos> component, BiomeId candidate, Map<MacroCellPos, BiomeId> assignment, BiomeGraph graph
     ) {
-        return CellPlacementRules.isLegal(component, component, candidate, assignment, graph);
+        return CellPlacementRules.isLegalForGroup(component, candidate, assignment, graph);
     }
 }

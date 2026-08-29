@@ -208,11 +208,11 @@ public final class PixelFragmentRepair {
 
     /** Legal (Moore, both orthogonal and diagonal) against every neighbor outside the fragment itself — see {@link CellPlacementRules#isLegal} for the shared implementation. */
     private static boolean fragmentAcceptsCandidate(Set<MacroCellPos> fragment, BiomeId candidate, Map<MacroCellPos, BiomeId> assignment, BiomeGraph graph) {
-        return CellPlacementRules.isLegal(fragment, fragment, candidate, assignment, graph);
+        return CellPlacementRules.isLegalForGroup(fragment, candidate, assignment, graph);
     }
 
     /** Legal (Moore, both orthogonal and diagonal) at this one cell — see {@link CellPlacementRules#isLegal} for the shared implementation; a discretization-born violation has no reason to prefer orthogonal over diagonal. */
     private static boolean isLegalIncludingDiagonals(MacroCellPos cell, BiomeId candidate, Map<MacroCellPos, BiomeId> assignment, BiomeGraph graph) {
-        return CellPlacementRules.isLegal(Set.of(cell), Set.of(), candidate, assignment, graph);
+        return CellPlacementRules.isLegalForCell(cell, Set.of(), candidate, assignment, graph);
     }
 }

@@ -54,22 +54,29 @@ public final class CellPlacementRules {
         return sameBiomeNeighbors >= MIN_SAME_BIOME_NEIGHBORS;
     }
 
+    /** Legal (Moore) for one candidate cell, excluding any neighbor inside {@code excludeFromNeighbors} — an already-claimed working set the caller is still assembling, or {@code Set.of()} if there isn't one. */
+    static boolean isLegalForCell(
+        MacroCellPos cell, Set<MacroCellPos> excludeFromNeighbors, BiomeId candidate,
+        Map<MacroCellPos, BiomeId> assignment, BiomeGraph graph
+    ) {
+        return isLegal(Set.of(cell), excludeFromNeighbors, candidate, assignment, graph);
+    }
+
+    /** Legal (Moore) for a whole group checking itself as one unit — a neighbor inside the group's own interior is never counted against it. */
+    static boolean isLegalForGroup(Set<MacroCellPos> group, BiomeId candidate, Map<MacroCellPos, BiomeId> assignment, BiomeGraph graph) {
+        return isLegal(group, group, candidate, assignment, graph);
+    }
+
     /**
-     * {@code candidate} is legal if it's allowed, per {@code graph}, against every
-     * already-assigned Moore (orthogonal + diagonal) neighbor of every cell in {@code
-     * cellsToCheck} — except any neighbor that's itself inside {@code
-     * excludeFromNeighbors} (the group's own interior when {@code cellsToCheck} is a
-     * whole fragment/component checking itself, or an already-claimed working set for a
-     * single new candidate cell — pass {@code Set.of()} for neither).
-     *
-     * <p>The one shared implementation behind every "can this candidate go here" gate in
-     * this repair pipeline — this same check used to be reimplemented independently in
-     * several places (single-cell and whole-group variants), two of which quietly checked
-     * ORTHOGONAL neighbors only, silently missing a real diagonal illegal-adjacency case
-     * this pipeline is supposed to guarantee against. Consolidating removes the
-     * possibility of that happening a third time, rather than patching those two spots.
+     * The one shared implementation behind {@link #isLegalForCell} and {@link
+     * #isLegalForGroup} — this same check used to be reimplemented independently in
+     * several places across the repair pipeline (single-cell and whole-group variants),
+     * two of which quietly checked ORTHOGONAL neighbors only, silently missing a real
+     * diagonal illegal-adjacency case this pipeline is supposed to guarantee against.
+     * Consolidating removes the possibility of that happening a third time, rather than
+     * patching those two spots.
      */
-    static boolean isLegal(
+    private static boolean isLegal(
         Set<MacroCellPos> cellsToCheck, Set<MacroCellPos> excludeFromNeighbors, BiomeId candidate,
         Map<MacroCellPos, BiomeId> assignment, BiomeGraph graph
     ) {
