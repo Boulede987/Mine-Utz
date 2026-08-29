@@ -8,9 +8,10 @@ CROSS_MARK = '✗'
 BIOME_PLANNER_FIXED_COLUMN_COUNT     = 4
 STRUCTURE_PLANNER_FIXED_COLUMN_COUNT = 2
 
-BIOME_PLANNER_FILE     = Path('dimension_biome_planner.xlsx')
-BIOME_PLANNER_SHEET    = 'Biome Planner'
-STRUCTURE_PLANNER_FILE = Path('structure_planner.xlsx')
+BIOME_PLANNER_FILE           = Path('dimension_biome_planner.xlsx')
+BIOME_PLANNER_SHEET          = 'Biome Planner'
+STRUCTURE_PLANNER_FILE       = Path('structure_planner.xlsx')
+BIOME_ADJACENCY_PLANNER_FILE = Path('biome_adjency_planner.xlsx')
 MERGED_BIOME_DATA_DIR  = Path('worldgen_data') / 'merged'
 PAINT_ASSIGNMENTS_FILE = Path('worldgen_data') / 'paint_assignments.json'
 PAINT_SEEDS_FILE       = Path('worldgen_data') / 'paint_seeds.json'
