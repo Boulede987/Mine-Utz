@@ -11,6 +11,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Function;
 
 /**
  * Same-biome flood-fill grouping, shared by every pass that reasons about
@@ -47,34 +48,45 @@ public final class ConnectedComponents {
      * fragments.
      */
     public static List<Set<MacroCellPos>> find(
-        Map<MacroCellPos, BiomeId> assignment, Set<MacroCellPos> ownCellSet, java.util.function.Function<MacroCellPos, List<MacroCellPos>> neighborFn
+        Map<MacroCellPos, BiomeId> assignment, Set<MacroCellPos> ownCellSet, Function<MacroCellPos, List<MacroCellPos>> neighborFn
     ) {
-        List<MacroCellPos> orderedCells = ownCellSet.stream()
-            .sorted(Comparator.comparingInt(MacroCellPos::x).thenComparingInt(MacroCellPos::z))
-            .toList();
         Set<MacroCellPos> visited = new HashSet<>();
         List<Set<MacroCellPos>> components = new ArrayList<>();
 
-        for (MacroCellPos start : orderedCells) {
-            if (visited.contains(start)) {
+        for (MacroCellPos seed : orderedSeeds(ownCellSet)) {
+            if (visited.contains(seed)) {
                 continue;
             }
-            BiomeId biome = assignment.get(start);
-            Set<MacroCellPos> component = new LinkedHashSet<>();
-            Deque<MacroCellPos> frontier = new ArrayDeque<>(List.of(start));
-            visited.add(start);
-            while (!frontier.isEmpty()) {
-                MacroCellPos cell = frontier.pop();
-                component.add(cell);
-                for (MacroCellPos neighbor : neighborFn.apply(cell)) {
-                    if (assignment.containsKey(neighbor) && !visited.contains(neighbor) && biome.equals(assignment.get(neighbor))) {
-                        visited.add(neighbor);
-                        frontier.push(neighbor);
-                    }
-                }
-            }
-            components.add(component);
+            components.add(floodFillFrom(seed, assignment, neighborFn, visited));
         }
         return components;
+    }
+
+    /** Deterministic seed order so which cell "starts" a given component (and therefore the components list's own order) never depends on {@code ownCellSet}'s own (hash-based, unordered) iteration order. */
+    private static List<MacroCellPos> orderedSeeds(Set<MacroCellPos> ownCellSet) {
+        return ownCellSet.stream()
+            .sorted(Comparator.comparingInt(MacroCellPos::x).thenComparingInt(MacroCellPos::z))
+            .toList();
+    }
+
+    /** Every same-biome cell reachable from {@code seed} via {@code neighborFn} — marks each one visited along the way, so no cell is ever claimed by two components. */
+    private static Set<MacroCellPos> floodFillFrom(
+        MacroCellPos seed, Map<MacroCellPos, BiomeId> assignment, Function<MacroCellPos, List<MacroCellPos>> neighborFn, Set<MacroCellPos> visited
+    ) {
+        BiomeId biome = assignment.get(seed);
+        Set<MacroCellPos> component = new LinkedHashSet<>();
+        Deque<MacroCellPos> frontier = new ArrayDeque<>(List.of(seed));
+        visited.add(seed);
+        while (!frontier.isEmpty()) {
+            MacroCellPos cell = frontier.pop();
+            component.add(cell);
+            for (MacroCellPos neighbor : neighborFn.apply(cell)) {
+                if (assignment.containsKey(neighbor) && !visited.contains(neighbor) && biome.equals(assignment.get(neighbor))) {
+                    visited.add(neighbor);
+                    frontier.push(neighbor);
+                }
+            }
+        }
+        return component;
     }
 }
