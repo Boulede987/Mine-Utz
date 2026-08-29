@@ -196,25 +196,7 @@ final class SeparatorWidener {
      * removing it wouldn't split the donor into two disconnected pieces. Only
      * meaningful when the donor has 2+ same-biome neighbors still outside the
      * claimed set; with 0 or 1, {@code cell} can't be bridging two other parts
-     * of the patch. Checked by flood-filling from one such neighbor, through
-     * donor-biome cells only, without ever stepping on {@code cell} itself,
-     * and confirming that reaches every other same-biome neighbor too.
-     *
-     * <p>Exits the flood-fill the moment every {@code donorNeighbors} cell has
-     * been reached, rather than exhaustively exploring the rest of the (possibly
-     * enormous) donor patch first — at production region scale a donor patch can
-     * be hundreds of thousands of cells, and {@code widen} calls this once per
-     * candidate steal, so an ordinary edge-of-patch steal (reachable again within
-     * a handful of steps, going around the removed cell) must not pay for
-     * flooding the whole remaining patch just to confirm what's already known.
-     * Confirmed via jstack: without this, a single {@code widen} call stealing
-     * thousands of cells one at a time out of one dominant donor (an undersized
-     * patch whose real minimum, in cells, is now huge post cell-size-4 - see
-     * {@code MacroGridConfig#cellCountForWidthBlocks}) pegged one core for 20+
-     * minutes. Only a genuine near-cut-vertex - where reaching the other
-     * neighbors really does require searching most of the patch - still pays
-     * close to the full cost, which is correct: that's exactly the case this
-     * check exists to get right.
+     * of the patch.
      */
     static boolean stealingPreservesDonorConnectivity(MacroCellPos cell, Map<MacroCellPos, BiomeId> assignment, Set<MacroCellPos> regionCellSet, Set<MacroCellPos> claimed) {
         STATS.connectivityChecks++;
@@ -223,13 +205,45 @@ final class SeparatorWidener {
             return true;
         }
 
-        List<MacroCellPos> donorNeighbors = cell.orthogonalNeighbors().stream()
-            .filter(n -> regionCellSet.contains(n) && !claimed.contains(n) && donorBiome.equals(assignment.get(n)))
-            .toList();
+        List<MacroCellPos> donorNeighbors = donorNeighborsOutsideClaimed(cell, donorBiome, assignment, regionCellSet, claimed);
         if (donorNeighbors.size() <= 1) {
             return true;
         }
+        return reachesEveryNeighborWithoutCrossing(cell, donorBiome, donorNeighbors, assignment, regionCellSet, claimed);
+    }
 
+    /** Same-biome orthogonal neighbors of {@code cell} that are still real donor territory - inside the region, not already claimed by this {@code widen()} call, and actually {@code donorBiome}. */
+    private static List<MacroCellPos> donorNeighborsOutsideClaimed(
+        MacroCellPos cell, BiomeId donorBiome, Map<MacroCellPos, BiomeId> assignment, Set<MacroCellPos> regionCellSet, Set<MacroCellPos> claimed
+    ) {
+        return cell.orthogonalNeighbors().stream()
+            .filter(neighbor -> regionCellSet.contains(neighbor) && !claimed.contains(neighbor) && donorBiome.equals(assignment.get(neighbor)))
+            .toList();
+    }
+
+    /**
+     * Flood-fills from one donor neighbor, through donor-biome cells only, without ever
+     * stepping on {@code cell} itself, checking whether that reaches every other entry in
+     * {@code donorNeighbors} too — {@code cell} is a cut vertex exactly when it doesn't.
+     *
+     * <p>Exits the moment every {@code donorNeighbors} cell has been reached, rather than
+     * exhaustively exploring the rest of the (possibly enormous) donor patch first — at
+     * production region scale a donor patch can be hundreds of thousands of cells, and
+     * {@code widen} calls this once per candidate steal, so an ordinary edge-of-patch
+     * steal (reachable again within a handful of steps, going around the removed cell)
+     * must not pay for flooding the whole remaining patch just to confirm what's already
+     * known. Confirmed via jstack: without this, a single {@code widen} call stealing
+     * thousands of cells one at a time out of one dominant donor (an undersized patch
+     * whose real minimum, in cells, is now huge post cell-size-4 - see {@code
+     * MacroGridConfig#cellCountForWidthBlocks}) pegged one core for 20+ minutes. Only a
+     * genuine near-cut-vertex - where reaching the other neighbors really does require
+     * searching most of the patch - still pays close to the full cost, which is correct:
+     * that's exactly the case this check exists to get right.
+     */
+    private static boolean reachesEveryNeighborWithoutCrossing(
+        MacroCellPos cell, BiomeId donorBiome, List<MacroCellPos> donorNeighbors,
+        Map<MacroCellPos, BiomeId> assignment, Set<MacroCellPos> regionCellSet, Set<MacroCellPos> claimed
+    ) {
         Set<MacroCellPos> reached = new HashSet<>();
         Deque<MacroCellPos> stack = new ArrayDeque<>(List.of(donorNeighbors.get(0)));
         reached.add(donorNeighbors.get(0));
