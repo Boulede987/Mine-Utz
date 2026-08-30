@@ -28,9 +28,7 @@
     "depth": "minecraft:overworld/depth",
     "erosion": "minecraft:overworld/erosion",
     "final_density": {
-      "type": "minecraft:add",
-      "argument1": {
-        "type": "minecraft:min",
+      "type": "minecraft:min",
         "argument1": {
           "type": "minecraft:squeeze",
           "argument": {
@@ -168,10 +166,6 @@
         },
         "argument2": "minecraft:overworld/caves/noodle"
       },
-      "argument2": {
-        "type": "mineutze_worldgen:biome_shape_offset"
-      }
-    },
     "fluid_level_floodedness": {
       "type": "minecraft:noise",
       "noise": "minecraft:aquifer_fluid_level_floodedness",
