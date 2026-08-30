@@ -25,36 +25,59 @@ Before computing any 3d shape, we compute the distribution. In x,y,z is a warm o
 deserts have no rivers, no lakes
 forests have rivers
 
-## Why triangles, not squares or hexagons
+## Why hexagons, not triangles or squares
 
-The mesh a region is solved over is made of Delaunay triangles, not a square
-grid or a hex grid. Reasons, in order of how much they drove the decision:
+The mesh a region is solved over is a regular hex lattice (`HexMeshBuilder`),
+not Delaunay triangles or a square grid. This superseded an earlier
+triangle-mesh design (see
+`doc/decisions/2026-08-29-hex-mesh-edge-displacement.md` for the full
+rationale) once a real gap in that design surfaced: a Delaunay triangle's
+vertex degree averages ~6, so two triangles can share only a *vertex* (not an
+edge) and still end up pixel-adjacent after rasterization - a case the CSP's
+edge-only legality graph (`TriangleAdjacency`) never checked, which forced
+the old rasterizer to re-check legality live, per cell, during growth (the
+opposite of the original goal: legality decided once, at mesh-generation
+time). Reasons for the hex lattice specifically, in order of how much they
+drove the decision:
 
-- **Legality (adjacency + size).** A triangle has exactly 3 edges, so a face
-  can share an edge with at most 3 other faces, always, by construction (see
-  `TriangleAdjacency`). That's the smallest possible edge-neighbor count for
-  any tiling that has no ambiguous corner/vertex adjacency to worry about
-  (hexagons also get 3-per-vertex, but 6 edges; squares get 4 edges plus 4
-  corner-only neighbors nothing in the live pipeline is allowed to ignore
-  once you're validating a real placement). Fewer, unambiguous neighbors per
-  face means the CSP's per-face legality check (`TriangleIdentitySizeAssignment`)
-  stays cheap and never needs a separate "what about diagonals" rule - there
-  are no diagonals, only edges.
-- **Determinism.** Same seed, same Delaunay triangulation, same face
-  adjacency, every run - no floating-point-order or hash-order surprises to
-  chase.
-- **Performance.** Small, bounded neighbor count per face keeps both the CSP
-  backtracking and the seam-growth rasterization cheap enough for live
-  generation (see the perf concern below).
-- **Natural look.** Irregular triangle sizes and orientations (from Delaunay
-  over jittered seed points) avoid the grid-aligned, blocky look a square or
-  hex grid would bake in, without giving up a hard cap on adjacency.
+- **Legality (adjacency + size), *complete*, not just cheap.** A regular hex
+  lattice has exactly 3 faces meeting at every vertex. With only 3 faces
+  around a point, every pair among them also shares an edge (3 faces, 3
+  edges radiating from the vertex, one edge between each consecutive pair) -
+  there is no configuration where two hex faces touch at a vertex only, ever,
+  by construction. That makes edge-adjacency and vertex-adjacency the *same*
+  relation on a hex mesh, so the CSP's edge-only legality check
+  (`TriangleIdentitySizeAssignment`) is provably complete: no residual
+  vertex-only gap, unlike a triangle mesh. This is also why the live
+  rasterizer (`EdgeDisplacementRasterizer`) needs no live legality re-check
+  at all - legality was already fully decided at CSP time.
+- **One face is one biome patch.** The original design intent was never
+  dynamic growth/merging of same-biome cells into bigger patches - it was one
+  hex face directly BEING one biome patch, with size achieved by displacing
+  that face's own edges (`EdgeDisplacement`, biased by
+  `FaceSizeFeasibility`), not by competing for neighboring same-biome
+  territory. Self-adjacency (a biome legal next to itself) was the mechanism
+  that would have silently allowed that unwanted merge, so it's permanently
+  banned (see `BiomeGraph.isAllowed`'s own doc).
+- **Determinism.** Same seed, same regular lattice, same face adjacency,
+  every run - a regular lattice's vertex positions are pure closed-form
+  geometry, not hashed, so there's no floating-point-order or hash-order
+  surprise to chase, and no per-cell jitter to reintroduce that uncertainty.
+- **Natural look, without giving up the adjacency guarantee.** A perfectly
+  regular lattice would read as grid-aligned/blocky on its own - all the
+  organic visual variety instead comes from edge displacement (wavy,
+  multi-point curves, not one visible bump) and from irregular multi-hex
+  biome patch shapes the CSP assigns, not from irregular cell shapes.
 
 The old square macro-grid (`MacroCellPos`, `CellPlacementRules`,
-`RegionGridSolver`) is a separate, finite one-shot export/debug CLI path, not
-the live in-game generator - it does check Moore/diagonal adjacency, but
-that's a different code path solving a different problem, not evidence
-against the triangle mesh's 3-neighbor cap.
+`RegionGridSolver`) remains a separate, finite one-shot export/debug CLI
+path, not the live in-game generator - it does check Moore/diagonal
+adjacency, but that's a different code path solving a different problem, not
+evidence against the hex mesh's own vertex-degree-3 completeness. Since
+self-adjacency is now globally banned, that debug path's own growth model
+(which still needs same-biome cells to merge into patches) keeps a local,
+file-scoped exemption for its own same-biome adjacency checks - a deliberate
+difference from the live path, not an oversight.
 
 ## Code Concerns
 

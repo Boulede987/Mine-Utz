@@ -1,8 +1,13 @@
 # 2026-08-29 — Hex mesh + edge displacement + precomputed compatibility
 
-Status: proposed, not yet built. Supersedes the triangle-mesh-plus-competitive-growth
-design once implemented (currently live: `SeedGrid` → `DelaunayTriangulation` →
-`TriangleAdjacency` → CSP (`TriangleIdentitySizeAssignment`) → `SeamGrowthRasterizer`).
+Status: implemented and live. Superseded the triangle-mesh-plus-competitive-growth
+design (`SeedGrid` → `DelaunayTriangulation` → `TriangleAdjacency` → CSP
+(`TriangleIdentitySizeAssignment`) → `SeamGrowthRasterizer`/`GrowthGapFiller`, all
+deleted) with `HexMeshBuilder` → `TriangleAdjacency` (generalized to any `MeshFace`) →
+the same CSP → `FaceSizeFeasibility` → `EdgeDisplacementRasterizer`. Self-adjacency
+(a biome legal next to itself) was additionally banned permanently in `BiomeGraph`,
+matching the "one hex face is one biome patch" intent this decision was made for -
+see that class's own doc for the measurement backing that change.
 
 ## Why the current design is being revisited
 
@@ -71,36 +76,39 @@ wide") is no longer a direct stopping condition the way growth's
 cell-by-cell quota tracking gave for free. Change 3 exists to close that gap
 before it ever reaches rasterization.
 
-## Change 3 — precompute a biome/size compatibility table
+## Change 3 — per-region, per-edge size feasibility (revised from the original proposal)
 
-The biome catalog and its `AdjacencyRule`s + size ranges are small (~6
-biomes in `ModBiomeGraph.DEFAULT`) and static — they don't depend on any
-region's actual geometry. Rather than deriving "(biome A, size A) legal next
-to (biome B, size B)?" live during every region's CSP run, compute the full
-legal/illegal table once, up front, from the biome graph alone.
+The original proposal here was a static, precomputed biome/size compatibility
+table. That didn't hold up: `BiomeGraph.isAllowed` is already an O(1) hashmap
+lookup and `AdjacencyRule` has no size-coupling field at all — legality never
+depends on size, so there was no live-legality-recomputation cost to save,
+and no "jointly-satisfiable size pairing" concept to precompute.
 
-This gives two wins:
-- CSP's per-candidate legality check becomes a table lookup instead of a
-  recomputation — a real backtracking-speed win, independent of which
-  rasterizer is in use.
-- For Change 2's size problem: sizes can be chosen so a face and its
-  neighbor are already known to have a jointly-satisfiable size pairing
-  *before* any displacement amplitude is picked, instead of discovering a
-  size clash after rasterizing.
+What actually shipped instead is `FaceSizeFeasibility`, run once per region
+solve between the CSP and the rasterizer: for each free face, compare its
+raw undisplaced area (shoelace formula over its hex vertex loop) against its
+CSP-assigned target width, distribute the error across its own edges, and
+for each shared edge reconcile both faces' desired correction into one
+signed bias value (clamped to a safe fraction of edge length so the
+displaced polygon can't self-intersect). `EdgeDisplacementRasterizer` then
+feeds that bias straight into the same edge-displacement function Change 2
+already describes — sizes stay approximate ("close to target"), not exact,
+same as `FaceFairnessQuota`'s own quotas were already treated as soft.
 
-## Open risks / unknowns (to validate before touching the live path)
+## Open risks / unknowns — resolved
 
-- Displaced-polygon rasterization needs prototyping against a small mesh to
-  see how it actually looks compared to growth's organic patches — hex
-  mesh's fixed macro-topology (unlike growth's ability to let one biome's
-  shape wander past its own cell entirely) may look more "warped-polygon"
-  and less free-form; needs a visual check, not just a legality argument.
-- Vertex-watertightness (Change 1's geometric requirement) needs an actual
-  implementation approach (shared displaced vertex positions, or keep
-  vertices fixed and only displace edge midpoints) — not yet decided which.
-- Change 3's table size/build cost for a larger future biome catalog isn't
-  assessed yet (fine at ~6 biomes; revisit if that catalog grows a lot).
-- `doc/DESIGN.md`'s current "Why triangles, not squares or hexagons" section
-  (added 2026-08-29, commit `ec278b94`) will need revising if this proposal
-  is actually built — it currently argues for the triangle mesh this
-  proposal replaces.
+- Displaced-polygon rasterization's visual quality: confirmed organic, not
+  grid-aligned, via direct PNG renders at production scale (see
+  `HexBiomeRasterVisual`) — one hex face reads as one wavy-edged biome patch,
+  not a warped-polygon tessellation.
+- Vertex-watertightness: solved via `EdgeDisplacement.displacedPolyline`
+  hashing each edge by its own endpoint *coordinates* (canonical lexicographic
+  order), not indices — both faces sharing an edge compute the identical
+  curve regardless of which "direction" each reads it from, so shared
+  vertices always land on the same displaced point with no coordination
+  needed.
+- Change 3's original "compatibility table" framing turned out not to be
+  needed at all (see above) — no table-size/build-cost question to revisit.
+- `doc/DESIGN.md`'s "Why hexagons, not triangles or squares" section now
+  reflects this design (revised from the section that originally argued for
+  the triangle mesh this proposal replaced).

@@ -1,10 +1,21 @@
 # 2026-08-29 — Remove region stitching, keep a shapeless solve-batch
 
-Status: proposed, deferred until after the hex-mesh + edge-displacement pivot
-(`doc/decisions/2026-08-29-hex-mesh-edge-displacement.md`) lands. Both touch
-`TriangleFieldGeometryRealization`'s same orchestration seam; doing them
-together would make it hard to isolate which change caused a given
-regression.
+Status: proposed, still not built. The blocking condition (the hex-mesh +
+edge-displacement pivot, `doc/decisions/2026-08-29-hex-mesh-edge-displacement.md`,
+landing its Phase 5 cutover) is now satisfied — `TriangleFieldGeometryRealization`
+has exactly one live orchestration seam again (old triangle+growth path
+deleted), so this is unblocked whenever it's picked up next.
+
+While chasing that cutover, a real bug surfaced directly in the territory
+this doc already flags as "pure cost, not benefit": `fixedBoundaryCells`
+plumbing existed to paper over the solve-order asymmetry, and
+`EdgeDisplacementRasterizer` turned out to only pre-fill the ONE cell that
+made a neighbor face "fixed", never rasterizing that face's own full
+displaced polygon — silently orphaning cells whenever a fixed face's
+territory spilled into the new region's own cell set. Fixed for now (fixed
+faces are rasterized too, see `EdgeDisplacementRasterizer`'s own doc), but
+it's a concrete data point for this doc's own argument: the solve-order
+asymmetry is a real, recurring source of bugs, not a hypothetical one.
 
 ## Motivation
 
