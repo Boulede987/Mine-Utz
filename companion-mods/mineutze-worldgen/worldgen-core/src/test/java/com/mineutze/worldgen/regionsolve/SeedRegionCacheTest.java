@@ -27,12 +27,27 @@ class SeedRegionCacheTest {
 
     private static final MacroGridConfig SMALL_GRID = new MacroGridConfig(4, 64);
 
+    // A bare 3-node path (desert-savanna-plains, no desert-plains edge) can never fill a hex
+    // face's own 6-neighbor ring now that self-adjacency is banned: on a hex mesh, every pair
+    // of CONSECUTIVE ring neighbors is itself mutually edge-adjacent (vertex-degree-3), so any
+    // two non-center biomes placed next to each other in the ring must also be mutually legal -
+    // with only 2 rules and no self-adjacency, no such ring ever exists. Closing the path into a
+    // 4-clique (every pair mutually legal, one more biome than the bare 3-clique) is the same
+    // fix already established for TriangleFieldGeometryRealizationTest.fourBiomeGraph's own
+    // "add a hub" precedent - a genuine 3-clique alone still deadlocks at cross-region
+    // boundaries, where a free face can end up with fixed neighbors covering ALL 3 biomes at
+    // once (self-adjacency banned rules out every one of them as that face's own candidate);
+    // a 4th mutually-legal biome always leaves one candidate free.
     private static BiomeGraph smallGraph() {
         return new BiomeGraph(
-            List.of(node("desert", 200, 300), node("savanna", 200, 300), node("plains", 100, 200)),
+            List.of(node("desert", 200, 300), node("savanna", 200, 300), node("plains", 100, 200), node("badlands", 150, 250)),
             List.of(
                 AdjacencyRule.allow(id("desert"), id("savanna"), 10),
-                AdjacencyRule.allow(id("savanna"), id("plains"), 10)
+                AdjacencyRule.allow(id("savanna"), id("plains"), 10),
+                AdjacencyRule.allow(id("desert"), id("plains"), 10),
+                AdjacencyRule.allow(id("desert"), id("badlands"), 10),
+                AdjacencyRule.allow(id("savanna"), id("badlands"), 10),
+                AdjacencyRule.allow(id("plains"), id("badlands"), 10)
             )
         );
     }
@@ -108,9 +123,9 @@ class SeedRegionCacheTest {
      *
      * <p>Was rate-based ({@code < 0.05}) before the geometry-realization rasterizer
      * legality-constrained the FINAL rasterization against {@code fixedBoundaryCells}
-     * too (already-committed cross-region context), not just the CSP's Delaunay-adjacent
+     * too (already-committed cross-region context), not just the CSP's mesh-adjacent
      * faces - now a hard zero, Moore (8-way) neighbors included, via {@link
-     * com.mineutze.worldgen.regionsolve.SeamGrowthRasterizer}.
+     * EdgeDisplacementRasterizer}.
      */
     @Test
     void crossRegionProducesZeroIllegalAdjacencies() {
@@ -129,7 +144,7 @@ class SeedRegionCacheTest {
                 BiomeId neighborBiome = regionB.assignment().get(neighbor);
                 if (neighborBiome != null) {
                     pairs++;
-                    if (!graph.isAllowed(entry.getValue(), neighborBiome)) {
+                    if (!entry.getValue().equals(neighborBiome) && !graph.isAllowed(entry.getValue(), neighborBiome)) {
                         illegal++;
                     }
                 }

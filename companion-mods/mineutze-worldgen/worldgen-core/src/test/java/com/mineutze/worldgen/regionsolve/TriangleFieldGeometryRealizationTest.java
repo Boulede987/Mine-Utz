@@ -105,7 +105,7 @@ class TriangleFieldGeometryRealizationTest {
         for (Map.Entry<MacroCellPos, BiomeId> entry : assignment.entrySet()) {
             for (MacroCellPos neighbor : mooreNeighbors(entry.getKey())) {
                 BiomeId neighborBiome = assignment.get(neighbor);
-                if (neighborBiome != null && !graph.isAllowed(entry.getValue(), neighborBiome)) {
+                if (neighborBiome != null && !entry.getValue().equals(neighborBiome) && !graph.isAllowed(entry.getValue(), neighborBiome)) {
                     illegal++;
                 }
             }
@@ -122,12 +122,13 @@ class TriangleFieldGeometryRealizationTest {
     /**
      * The genuine dead end {@link #fourBiomeGraph}'s own doc describes, reproduced directly:
      * a bare 4-cycle graph (no diagonal, unlike the real fixture) has NO biome legal against
-     * all 4 of {desert, savanna, plains, badlands} at once (savanna-badlands is never
-     * allowed), and this specific worldSeed/region genuinely reaches that 4-way convergence
-     * during rasterization. {@code SeamGrowthRasterizer} must fail loud here, never
-     * silently place an illegal biome - matches this codebase's own established production
-     * precedent (see {@code ModOverworldBiomeSource.getNoiseBiome}, which already throws
-     * uncaught for a comparable "should be unreachable" case).
+     * all of {desert, savanna, plains, badlands} converging on a single hex face's own
+     * neighbor set (savanna-badlands is never allowed, and self-adjacency isn't a free pass
+     * either). Unlike the old triangle+growth path, where this could only be caught live
+     * during rasterization, the hex mesh's vertex-degree-3 completeness means legality is
+     * fully decided at CSP time - {@link TriangleIdentitySizeAssignment#solve} itself must
+     * fail loud here (via {@link TriangleFieldGeometryRealization#realize}'s own
+     * {@code orElseThrow}), never silently place an illegal biome.
      */
     @Test
     void genuineDeadEndFailsLoud() {
@@ -135,6 +136,6 @@ class TriangleFieldGeometryRealizationTest {
         IllegalStateException thrown = org.junit.jupiter.api.Assertions.assertThrows(
             IllegalStateException.class, () -> TriangleFieldGeometryRealization.realize(input)
         );
-        assertTrue(thrown.getMessage().contains("SeamGrowthRasterizer"), "expected a diagnostic naming the rasterizer, got: " + thrown.getMessage());
+        assertTrue(thrown.getMessage().contains("no legal identity assignment exists"), "expected a diagnostic naming the CSP's own failure, got: " + thrown.getMessage());
     }
 }

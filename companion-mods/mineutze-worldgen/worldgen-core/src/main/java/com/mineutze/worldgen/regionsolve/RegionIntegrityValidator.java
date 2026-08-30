@@ -147,7 +147,10 @@ public final class RegionIntegrityValidator {
             BiomeId biome = entry.getValue();
             for (MacroCellPos neighborPos : List.of(new MacroCellPos(cell.x() + 1, cell.z()), new MacroCellPos(cell.x(), cell.z() + 1))) {
                 BiomeId neighborBiome = assignment.get(neighborPos);
-                if (neighborBiome != null && !graph.isAllowed(biome, neighborBiome)) {
+                // Same biome touching itself is always fine - it's the same patch's own interior, never a
+                // violation regardless of graph.isAllowed(biome, biome), which is no longer trivially true
+                // now that self-adjacency isn't a free pass (see BiomeGraph.isAllowed's own doc).
+                if (neighborBiome != null && !biome.equals(neighborBiome) && !graph.isAllowed(biome, neighborBiome)) {
                     violations.add(new IllegalAdjacency(cell, biome, neighborPos, neighborBiome));
                 }
             }
@@ -165,7 +168,8 @@ public final class RegionIntegrityValidator {
             for (int[] offset : diagonalOffsets) {
                 MacroCellPos diagonalPos = new MacroCellPos(cell.x() + offset[0], cell.z() + offset[1]);
                 BiomeId diagonalBiome = assignment.get(diagonalPos);
-                if (diagonalBiome == null || graph.isAllowed(biome, diagonalBiome)) {
+                // Same biome touching itself diagonally is always fine, same reasoning as findIllegalAdjacencies.
+                if (diagonalBiome == null || biome.equals(diagonalBiome) || graph.isAllowed(biome, diagonalBiome)) {
                     continue;
                 }
                 MacroCellPos elbow1 = new MacroCellPos(cell.x() + offset[0], cell.z());

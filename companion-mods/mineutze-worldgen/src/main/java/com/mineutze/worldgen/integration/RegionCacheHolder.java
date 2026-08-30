@@ -61,7 +61,7 @@ public final class RegionCacheHolder {
             long seed = serverLevel.getSeed();
             LOGGER.info("[mineutze_worldgen] Overworld loaded, seed {} — region solving starts on first query", seed);
             current = new SeedRegionCache(
-                ModBiomeGraph.DEFAULT, MacroGridConfig.DEFAULT, seed, RegionCacheHolder::logRegionSolved,
+                ModBiomeGraph.OVERWORLD, MacroGridConfig.DEFAULT, seed, RegionCacheHolder::logRegionSolved,
                 new SavedDataRegionPersistenceStore(serverLevel), MAX_CACHED_REGIONS
             );
             READY.countDown();

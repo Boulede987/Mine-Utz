@@ -1,15 +1,28 @@
 package com.mineutze.worldgen.biomegraph;
 
+import com.mineutze.worldgen.regionsolve.EdgeDisplacementRasterizer;
+import com.mineutze.worldgen.regionsolve.MacroCellPos;
 import com.mineutze.worldgen.regionsolve.MacroGridConfig;
 import com.mineutze.worldgen.regionsolve.RegionPos;
 import com.mineutze.worldgen.regionsolve.RegionSolveInput;
 import com.mineutze.worldgen.regionsolve.RegionSolveResult;
 import com.mineutze.worldgen.regionsolve.TriangleFieldGeometryRealization;
+import com.mineutze.worldgen.regionsolve.topology.FaceSizeFeasibility;
+import com.mineutze.worldgen.regionsolve.topology.HexMeshBuilder;
+import com.mineutze.worldgen.regionsolve.topology.NodeEdge;
+import com.mineutze.worldgen.regionsolve.topology.TriangleAdjacency;
+import com.mineutze.worldgen.regionsolve.topology.TriangleIdentitySizeAssignment;
 import org.junit.jupiter.api.Test;
 
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ModBiomeGraphTest {
@@ -47,5 +60,198 @@ class ModBiomeGraphTest {
             int cellCount = cellCountByBiome.getOrDefault(node.id(), 0);
             assertTrue(cellCount > 0, node.id() + " got zero cells in a real production-scale region solve (worldSeed=42) - starved");
         }
+    }
+
+    @Test
+    void overworldHasTheExpectedNodeCount() {
+        assertEquals(48, ModBiomeGraph.OVERWORLD.nodes().size());
+    }
+
+    /**
+     * A biome missing from ONE real solve doesn't prove it can never generate - it might
+     * just be that particular seed's bad luck, not a real problem. But a biome missing
+     * from EVERY solve across several independent seeds is a genuine, confident signal:
+     * if it's in the graph, it's supposed to actually generate, not just be theoretically
+     * placeable somewhere nobody ever reaches. Aggregates cell counts across {@code
+     * OVERWORLD_STARVATION_TRIAL_COUNT} independent real solves before judging any biome
+     * starved, so a single unlucky seed can never trigger a false alarm.
+     *
+     * <p>50, not 10 - measured directly that 10 wasn't always enough: fixing one narrow
+     * biome's starvation (adding rules for {@code snowy_beach}) immediately unmasked
+     * {@code desert} as ALSO starved at that same trial count, a biome that isn't even at
+     * the bare minimum legal-neighbor degree. More trials means fewer of these
+     * one-at-a-time surprises - not a guarantee (still a sample, never a proof), just a
+     * meaningfully higher-confidence one.
+     */
+    private static final int OVERWORLD_STARVATION_TRIAL_COUNT = 50;
+
+    @Test
+    void overworldNoBiomeIsStarvedAcrossManyIndependentRealSolves() {
+        Map<BiomeId, Integer> totalCellCountByBiome = new HashMap<>();
+        for (int trial = 0; trial < OVERWORLD_STARVATION_TRIAL_COUNT; trial++) {
+            long worldSeed = 2026L + trial;
+            Map<MacroCellPos, BiomeId> result = solveAndRasterizeOverworld(worldSeed);
+            for (BiomeId biome : result.values()) {
+                totalCellCountByBiome.merge(biome, 1, Integer::sum);
+            }
+        }
+
+        for (BiomeNode node : ModBiomeGraph.OVERWORLD.nodes()) {
+            int totalCellCount = totalCellCountByBiome.getOrDefault(node.id(), 0);
+            assertTrue(
+                totalCellCount > 0,
+                node.id() + " got zero cells across " + OVERWORLD_STARVATION_TRIAL_COUNT
+                    + " independent real solves - genuinely starved, not just one unlucky seed"
+            );
+        }
+    }
+
+    private static Map<MacroCellPos, BiomeId> solveAndRasterizeOverworld(long worldSeed) {
+        double sizeBlocks = 400;
+        int meshBoxMax = 9000;
+        int realMin = 1500;
+        int realMax = 7500;
+        MacroGridConfig gridConfig = new MacroGridConfig(4, 512);
+
+        HexMeshBuilder.HexMesh mesh = HexMeshBuilder.build(sizeBlocks, 0, 0, meshBoxMax, meshBoxMax);
+        TriangleAdjacency.Adjacency adjacency = TriangleAdjacency.of(mesh.faces());
+        Set<Integer> freeFaceIndices = nonHullTouchingFaceIndices(mesh, adjacency);
+        assertTrue(freeFaceIndices.size() > 50, "expected a real-sized mesh, got " + freeFaceIndices.size() + " free faces");
+
+        Map<Integer, TriangleIdentitySizeAssignment.Assignment> assignments = TriangleIdentitySizeAssignment.solve(
+            adjacency, freeFaceIndices, Map.of(), ModBiomeGraph.OVERWORLD, worldSeed
+        ).orElseThrow(() -> new AssertionError("expected a real hex mesh at this scale to be solvable against ModBiomeGraph.OVERWORLD (worldSeed=" + worldSeed + ")"));
+
+        Map<NodeEdge, Double> bias = FaceSizeFeasibility.biasBlocksByEdge(mesh, adjacency, assignments);
+        List<MacroCellPos> cells = overworldTestCells(gridConfig, realMin, realMin, realMax, realMax);
+        return EdgeDisplacementRasterizer.rasterize(cells, assignments, mesh, bias, Map.of(), Map.of(), gridConfig, worldSeed);
+    }
+
+    /**
+     * The real replacement for the abstract ring check ({@link
+     * BiomeGraph#requireEveryLocalNeighborhoodSolvable}'s own doc explains why that check,
+     * even in its corrected realizable-ring form, still tests far more than the CSP could
+     * ever actually reach at real biome-catalog scale — measured directly: 47,623 of
+     * 201,552 realizable 6-rings in this exact graph have no universal candidate, yet
+     * that's not evidence anything is actually broken). This test instead explores
+     * REACHABLE local neighborhoods directly: take a real, fully-solved mesh (so every
+     * face's surrounding context is genuine, not hypothetical), then for EVERY non-hull
+     * face, re-solve that face plus its own real mesh neighbors together (a small
+     * cluster, matching a face's own real hex neighborhood) against real fixed context
+     * from everything just outside that cluster, using a DIFFERENT worldSeed per cluster
+     * so the CSP explores a genuinely different candidate ordering than the one that
+     * built the base mesh - "replace this neighborhood with another legal one and
+     * continue" for every real neighborhood in a real mesh, not an abstract combinatorial
+     * superset. A failure here names a real, reproducible dead end - an actual reachable
+     * local arrangement, not a hypothetical one.
+     *
+     * <p>Repeats this across {@code BASE_GENERATION_COUNT} independent base generations,
+     * not just one - a single base solve only ever produces the ONE specific set of real
+     * neighborhoods that its own candidate ordering happened to build; a different base
+     * seed produces a genuinely different set of real neighborhoods to check, so more
+     * base generations means more DISTINCT real neighborhoods actually tested, not just
+     * more re-checks of the same ones.
+     */
+    private static final int OVERWORLD_REACHABILITY_BASE_GENERATION_COUNT = 5;
+
+    @Test
+    void overworldSurvivesLocalReassignmentAcrossEveryRealNeighborhood() {
+        HexMeshBuilder.HexMesh mesh = buildRealStressTestMesh();
+        TriangleAdjacency.Adjacency adjacency = TriangleAdjacency.of(mesh.faces());
+        Set<Integer> freeFaceIndices = nonHullTouchingFaceIndices(mesh, adjacency);
+        assertTrue(freeFaceIndices.size() > 50, "expected a real-sized mesh, got " + freeFaceIndices.size() + " free faces");
+
+        int checkedClusters = 0;
+        for (int baseGeneration = 0; baseGeneration < OVERWORLD_REACHABILITY_BASE_GENERATION_COUNT; baseGeneration++) {
+            long baseSeed = 2026L + baseGeneration * 1_000_003L; // spread bases well apart, not adjacent to the trial seeds each derives
+            Map<Integer, BiomeId> baseBiomes = solveRealBaseMesh(adjacency, freeFaceIndices, baseSeed);
+
+            for (int center : freeFaceIndices) {
+                Set<Integer> cluster = clusterAround(center, adjacency, freeFaceIndices);
+                Map<Integer, BiomeId> fixedContext = fixedContextSurrounding(cluster, adjacency, baseBiomes);
+                assertClusterHasALegalAssignment(adjacency, cluster, fixedContext, trialSeedFor(baseSeed, center));
+                checkedClusters++;
+            }
+        }
+        assertTrue(checkedClusters > 50, "expected a real number of neighborhoods actually checked, got " + checkedClusters);
+    }
+
+    private static HexMeshBuilder.HexMesh buildRealStressTestMesh() {
+        double sizeBlocks = 400;
+        int meshBoxMax = 9000;
+        return HexMeshBuilder.build(sizeBlocks, 0, 0, meshBoxMax, meshBoxMax);
+    }
+
+    private static Set<Integer> nonHullTouchingFaceIndices(HexMeshBuilder.HexMesh mesh, TriangleAdjacency.Adjacency adjacency) {
+        Set<Integer> freeFaceIndices = new HashSet<>();
+        for (int faceIndex = 0; faceIndex < mesh.faces().size(); faceIndex++) {
+            if (!adjacency.hullTouchingFaceIndices().contains(faceIndex)) {
+                freeFaceIndices.add(faceIndex);
+            }
+        }
+        return freeFaceIndices;
+    }
+
+    /** One real, fully-solved mesh, collapsed down to just its per-face biome - the genuine surrounding context every cluster below gets stress-tested against. */
+    private static Map<Integer, BiomeId> solveRealBaseMesh(TriangleAdjacency.Adjacency adjacency, Set<Integer> freeFaceIndices, long baseSeed) {
+        Map<Integer, TriangleIdentitySizeAssignment.Assignment> baseAssignments = TriangleIdentitySizeAssignment.solve(
+            adjacency, freeFaceIndices, Map.of(), ModBiomeGraph.OVERWORLD, baseSeed
+        ).orElseThrow(() -> new AssertionError("base mesh itself failed to solve - can't stress-test neighborhoods that don't exist"));
+        Map<Integer, BiomeId> baseBiomes = new HashMap<>();
+        baseAssignments.forEach((faceIndex, assignment) -> baseBiomes.put(faceIndex, assignment.biome()));
+        return baseBiomes;
+    }
+
+    /** A face plus its own real mesh neighbors - a face's own real hex neighborhood - restricted to non-hull-touching faces, since re-deciding a hull-touching neighbor isn't this test's concern. */
+    private static Set<Integer> clusterAround(int center, TriangleAdjacency.Adjacency adjacency, Set<Integer> freeFaceIndices) {
+        Set<Integer> cluster = new HashSet<>(adjacency.neighborFaceIndices().getOrDefault(center, Set.of()));
+        cluster.add(center);
+        cluster.retainAll(freeFaceIndices);
+        return cluster;
+    }
+
+    /** Every real neighbor of the cluster that isn't itself part of it, held at its base-solve biome - the genuine surrounding context the cluster must stay legal against. */
+    private static Map<Integer, BiomeId> fixedContextSurrounding(Set<Integer> cluster, TriangleAdjacency.Adjacency adjacency, Map<Integer, BiomeId> baseBiomes) {
+        Map<Integer, BiomeId> fixedContext = new HashMap<>();
+        for (int clusterFace : cluster) {
+            for (int outerNeighbor : adjacency.neighborFaceIndices().getOrDefault(clusterFace, Set.of())) {
+                if (!cluster.contains(outerNeighbor)) {
+                    fixedContext.put(outerNeighbor, baseBiomes.get(outerNeighbor));
+                }
+            }
+        }
+        return fixedContext;
+    }
+
+    /** Different per cluster, and different from {@code baseSeed} itself - so the CSP explores a genuinely different candidate ordering than whatever built the base mesh, not just re-deriving the same answer. */
+    private static long trialSeedFor(long baseSeed, int center) {
+        return baseSeed + center + 1;
+    }
+
+    private static void assertClusterHasALegalAssignment(
+        TriangleAdjacency.Adjacency adjacency, Set<Integer> cluster, Map<Integer, BiomeId> fixedContext, long trialSeed
+    ) {
+        Optional<Map<Integer, TriangleIdentitySizeAssignment.Assignment>> resolved = TriangleIdentitySizeAssignment.solve(
+            adjacency, cluster, fixedContext, ModBiomeGraph.OVERWORLD, trialSeed
+        );
+        assertTrue(
+            resolved.isPresent(),
+            "real neighborhood " + cluster + " (real fixed context " + fixedContext + ") has no legal assignment - a genuine, reachable dead end"
+        );
+    }
+
+    private static List<MacroCellPos> overworldTestCells(MacroGridConfig gridConfig, int minX, int minZ, int maxX, int maxZ) {
+        int cellSize = gridConfig.macroCellSizeBlocks();
+        int minCellX = Math.floorDiv(minX, cellSize);
+        int maxCellX = Math.floorDiv(maxX - 1, cellSize);
+        int minCellZ = Math.floorDiv(minZ, cellSize);
+        int maxCellZ = Math.floorDiv(maxZ - 1, cellSize);
+        List<MacroCellPos> cells = new ArrayList<>();
+        for (int cellX = minCellX; cellX <= maxCellX; cellX++) {
+            for (int cellZ = minCellZ; cellZ <= maxCellZ; cellZ++) {
+                cells.add(new MacroCellPos(cellX, cellZ));
+            }
+        }
+        return cells;
     }
 }

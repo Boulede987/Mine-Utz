@@ -32,19 +32,19 @@ import java.util.Optional;
 import java.util.Set;
 
 /**
- * Phase 4 gate visual: the actual rasterized biome output of the full new pipeline slice
- * (hex mesh -> real CSP against {@link ModBiomeGraph#DEFAULT} -> {@link
+ * Live-path gate visual: the actual rasterized biome output of the real pipeline (hex
+ * mesh -> real CSP against {@link ModBiomeGraph#OVERWORLD} -> {@link
  * FaceSizeFeasibility} -> {@link EdgeDisplacementRasterizer}), colored per biome — not
  * just mesh wireframe ({@link HexMeshSpikeVisual}), the real end result a player would
- * see, for direct visual comparison against the old triangle+growth pipeline's own
- * exported PNGs (see worldgen-core/triangle-field-export/).
+ * see, at the real 48-biome catalog and the real 400-block hex size this pipeline
+ * actually ships with.
  */
 public final class HexBiomeRasterVisual {
 
-    private static final double SIZE_BLOCKS = 100;
-    private static final int MESH_BOX_MAX = 2000;
-    private static final int REAL_MIN = 400;
-    private static final int REAL_MAX = 1600;
+    private static final double SIZE_BLOCKS = 400;
+    private static final int MESH_BOX_MAX = 8000;
+    private static final int REAL_MIN = 1600;
+    private static final int REAL_MAX = 6400;
     private static final long WORLD_SEED = 2026L;
     private static final MacroGridConfig GRID_CONFIG = new MacroGridConfig(4, 512);
 
@@ -63,17 +63,17 @@ public final class HexBiomeRasterVisual {
             }
         }
 
-        BiomeGraph graph = ModBiomeGraph.DEFAULT;
+        BiomeGraph graph = ModBiomeGraph.OVERWORLD;
         Optional<Map<Integer, TriangleIdentitySizeAssignment.Assignment>> solved =
             TriangleIdentitySizeAssignment.solve(adjacency, freeFaceIndices, Map.of(), graph, WORLD_SEED);
         if (solved.isEmpty()) {
-            throw new IllegalStateException("no legal CSP assignment found for this mesh - shouldn't happen at this scale against ModBiomeGraph.DEFAULT");
+            throw new IllegalStateException("no legal CSP assignment found for this mesh - shouldn't happen at this scale against ModBiomeGraph.OVERWORLD");
         }
         Map<Integer, TriangleIdentitySizeAssignment.Assignment> assignments = solved.get();
         Map<NodeEdge, Double> biasByEdge = FaceSizeFeasibility.biasBlocksByEdge(mesh, adjacency, assignments);
 
         List<MacroCellPos> cells = allCellsIn(GRID_CONFIG, REAL_MIN, REAL_MIN, REAL_MAX, REAL_MAX);
-        Map<MacroCellPos, BiomeId> result = EdgeDisplacementRasterizer.rasterize(cells, assignments, mesh, biasByEdge, Map.of(), GRID_CONFIG, WORLD_SEED);
+        Map<MacroCellPos, BiomeId> result = EdgeDisplacementRasterizer.rasterize(cells, assignments, mesh, biasByEdge, Map.of(), Map.of(), GRID_CONFIG, WORLD_SEED);
 
         Map<BiomeId, Integer> palette = evenlySpacedPalette(graph);
         Path rasterFile = outputDir.resolve("hex_biome_raster.png");

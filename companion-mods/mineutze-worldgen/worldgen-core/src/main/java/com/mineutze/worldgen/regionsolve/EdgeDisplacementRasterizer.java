@@ -53,7 +53,7 @@ public final class EdgeDisplacementRasterizer {
 
     public static Map<MacroCellPos, BiomeId> rasterize(
         List<MacroCellPos> cells, Map<Integer, TriangleIdentitySizeAssignment.Assignment> assignments,
-        HexMeshBuilder.HexMesh mesh, Map<NodeEdge, Double> biasBlocksByEdge,
+        HexMeshBuilder.HexMesh mesh, Map<NodeEdge, Double> biasBlocksByEdge, Map<Integer, BiomeId> fixedFaceBiomes,
         Map<MacroCellPos, BiomeId> fixedBoundaryCells, MacroGridConfig gridConfig, long worldSeed
     ) {
         Set<MacroCellPos> regionCellSet = new HashSet<>(cells);
@@ -63,6 +63,22 @@ public final class EdgeDisplacementRasterizer {
             HexFace face = mesh.faces().get(entry.getKey());
             List<Point2D> boundary = displacedBoundaryOf(face, mesh, biasBlocksByEdge, worldSeed);
             claimCellsInside(boundary, entry.getValue().biome(), regionCellSet, decided, gridConfig);
+        }
+
+        // A fixed face (centroid inside an already-solved neighbor region, see
+        // TriangleFieldGeometryRealization.buildFixedFaceBiomes) is never in `assignments`
+        // (that map only ever holds free/CSP-solved faces) - without rasterizing its own
+        // displaced polygon too, only the ONE cell that made it "fixed" in the first place
+        // (already present via fixedBoundaryCells) would be covered, silently orphaning the
+        // rest of that same face's own territory whenever it straddles into THIS region's
+        // own cells. No bias for these (biasBlocksByEdge never has entries for a fixed
+        // face's own edges - see FaceSizeFeasibility's own within-region-only scope), so
+        // this is wiggle-only displacement, matching a cross-region edge's own documented
+        // "no size-feasibility precision right at a seam" limitation.
+        for (Map.Entry<Integer, BiomeId> entry : fixedFaceBiomes.entrySet()) {
+            HexFace face = mesh.faces().get(entry.getKey());
+            List<Point2D> boundary = displacedBoundaryOf(face, mesh, biasBlocksByEdge, worldSeed);
+            claimCellsInside(boundary, entry.getValue(), regionCellSet, decided, gridConfig);
         }
 
         requireEveryRegionCellCovered(cells, decided);

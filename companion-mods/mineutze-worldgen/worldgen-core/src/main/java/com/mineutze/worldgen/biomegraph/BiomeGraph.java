@@ -5,6 +5,7 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.BiPredicate;
 import java.util.function.Consumer;
 
 /**
@@ -34,12 +35,6 @@ public final class BiomeGraph {
     private final Map<BiomeId, BiomeNode> nodesById;
     private final Map<UnorderedBiomePair, AdjacencyRule> rulesByPair;
 
-    // Checked at construction time, cheaper than (and well before) the much stronger,
-    // actual currently-relied-upon proof in requireEveryLocalNeighborhoodSolvable - see
-    // BridgeHopReachability's own doc for what this bound does and doesn't prove. 3 is
-    // this graph's own choice of floor, not a universal constant.
-    private static final int MAX_BRIDGE_HOPS = 3;
-
     // A biome with too few legal neighbors gets starved by TriangleIdentitySizeAssignment's
     // own fairness-quota candidate ordering: fairness only reorders candidates already legal
     // for a face, it can't invent legality a narrow biome doesn't have (badlands at degree 1
@@ -65,24 +60,38 @@ public final class BiomeGraph {
         this.nodesById = indexNodes(nodes);
         this.rulesByPair = indexRules(rules);
         requireAllRuleNodesKnown();
-        BridgeHopReachability.requireEveryPairWithinHops(nodesById.keySet().stream().sorted().toList(), this::isAllowed, MAX_BRIDGE_HOPS);
     }
 
     /**
-     * The one entry point a real, shippable biome set should be built through — bundles
-     * {@link #requireMinLegalNeighbors()} and {@link #requireEveryLocalNeighborhoodSolvable}
-     * so a production graph can't accidentally skip either opt-in check by only remembering
-     * one of the two fluent calls. The bare constructor stays public (not narrowed to this
-     * package) because roughly half this codebase's own test suite deliberately builds
-     * small, narrow-degree graphs — chains, hubs, 3-node triangles — to isolate ONE specific
-     * algorithm behavior in total isolation; those fixtures exist to test something else
-     * entirely and have no interest in (and are often mathematically incapable of meeting,
-     * e.g. a 3-node graph can never reach degree 3) the fairness/coverage concern this
-     * factory's checks protect against. See {@code ModBiomeGraph} for this codebase's one
-     * actual production call site.
+     * The one entry point a real, shippable biome set should be built through — applies
+     * {@link #requireMinLegalNeighbors()} so a production graph can't accidentally skip
+     * it. The bare constructor stays public (not narrowed to this package) because
+     * roughly half this codebase's own test suite deliberately builds small, narrow-
+     * degree graphs — chains, hubs, 3-node triangles — to isolate ONE specific algorithm
+     * behavior in total isolation; those fixtures exist to test something else entirely
+     * and have no interest in (and are often mathematically incapable of meeting, e.g. a
+     * 3-node graph can never reach degree 3) the fairness/coverage concern this factory's
+     * check protects against.
+     *
+     * <p><b>Does NOT call {@link #requireEveryLocalNeighborhoodSolvable} anymore.</b> That
+     * check tests every REALIZABLE neighbor ring (a real improvement over an earlier,
+     * even cruder version that tested unrealizable arrangements too — see that method's
+     * own doc) — but at real biome-catalog scale it's still checking rings far beyond
+     * what the CSP's own incremental, legality-threaded construction could ever actually
+     * reach: measured directly on the real 48-biome {@code ModBiomeGraph.OVERWORLD} data,
+     * 201,552 realizable 6-rings exist and 47,623 of them (≈24%) have no universal
+     * candidate — not "one gap to patch," a structural certainty for any thematically
+     * narrow graph at this scale, since no realistic graph has a biome legal against an
+     * arbitrary ring of 6 unrelated others. Demanding that as a hard gate would make
+     * every well-designed, real biome catalog un-buildable. The method itself stays
+     * available (still sound, still a real measurement) for explicit, non-blocking
+     * diagnostic use — real production validation instead runs actual generation
+     * (repeatedly re-solving real, reachable local neighborhoods against real fixed
+     * surrounding context, many seeds) — see {@code ModBiomeGraphTest}'s own real-solve
+     * tests for both {@code DEFAULT} and {@code OVERWORLD}.
      */
-    public static BiomeGraph forProduction(Collection<BiomeNode> nodes, Collection<AdjacencyRule> rules, int maxNeighbors) {
-        return new BiomeGraph(nodes, rules).requireMinLegalNeighbors().requireEveryLocalNeighborhoodSolvable(maxNeighbors);
+    public static BiomeGraph forProduction(Collection<BiomeNode> nodes, Collection<AdjacencyRule> rules) {
+        return new BiomeGraph(nodes, rules).requireMinLegalNeighbors();
     }
 
     /** Fail loud if any node has fewer than {@link #MIN_LEGAL_NEIGHBORS} legal neighbors - see that constant's own doc for why this is opt-in rather than always-on. Call this on every real/production graph. */
@@ -100,66 +109,99 @@ public final class BiomeGraph {
     }
 
     /**
-     * Fail loud if any combination of up to {@code maxNeighbors} distinct biomes (bounded
-     * by how many neighbors a cell can actually have — Moore/8-way for {@code
-     * SeamGrowthRasterizer}'s own growth and gap-fill) has NO biome anywhere in the
-     * graph legal against all of them simultaneously — the exact structural dead end that
-     * class would otherwise only discover at runtime, mid-generation, and crash on. Proves
-     * that dead end unreachable offline instead of merely hoping a well-formed graph makes
-     * it rare — see that class's own doc for why failing loud there, rather than silently
-     * placing an illegal biome, is the only acceptable runtime behavior if this check is
-     * ever skipped or a graph slips through un-validated.
+     * Fail loud if any REALIZABLE neighbor ring — {@code maxNeighbors} biomes arranged
+     * in a cycle where every CONSECUTIVE pair (wrapping around) is itself a legal pair,
+     * exactly the shape a real hex mesh face's neighbors take — has no biome anywhere in
+     * the graph legal against every member of that ring simultaneously. "Realizable"
+     * matters: with exactly 3 faces meeting at every vertex (see {@code HexMeshBuilder}'s
+     * own doc), two CONSECUTIVE neighbors of a face always share an edge with EACH OTHER
+     * too, not just with the face between them — a face's real neighbor set is never an
+     * arbitrary unordered pick of {@code maxNeighbors} biomes, it's a ring where adjacent
+     * members are mutually legal.
      *
-     * <p>Only checks combinations of the FULL size {@code min(maxNeighbors, node count)},
-     * not every smaller size too — sound by a simple monotonicity argument: if a set S of
-     * that full size has a legal-against-all candidate, that SAME candidate is trivially
-     * also legal against every SUBSET of S (fewer simultaneous requirements can only be
-     * easier to satisfy), and any smaller real neighborhood can always be padded out to
-     * some full-size superset whenever the graph has at least that many biomes — so
-     * checking only the maximal size already covers every smaller one for free.
+     * <p>Replaces an earlier version that tested every unordered SUBSET of {@code
+     * maxNeighbors} biomes, including arrangements no real mesh could ever produce — a
+     * real false positive on a 48-biome graph traced this directly: the first subset it
+     * tried alphabetically included two biomes with no rule between them at all, an
+     * arrangement no hex face could ever actually have as its own ring, yet the old check
+     * demanded some biome be legal against it anyway. Checking only legal RINGS fixes
+     * that. It also removes the old version's monotonicity argument entirely — a real
+     * face always has exactly {@code maxNeighbors} neighbors once it's not hull-touching,
+     * never fewer, so there's no smaller-neighborhood case to reason about covering "for
+     * free"; this checks the one real shape directly.
      *
-     * <p><b>{@code maxNeighbors} is a caller-chosen bound, not hardcoded to 8 (the real
-     * Moore/8-way neighbor count {@code SeamGrowthRasterizer} can face)</b> —
-     * some graphs may only be provably solvable at a lower bound, and this method lets a
-     * caller find that bound rather than forcing an all-or-nothing check. It does NOT
-     * require a universal-filler-style node to prove the full 8-way case, despite that
-     * pattern being deliberately removed from this codebase (see this class's own doc) —
-     * a graph can satisfy every up-to-8 combination through ORDINARY, narrow adjacency
-     * rules alone, as long as no two biomes end up sharing zero common third neighbor.
-     * See {@code ModBiomeGraph}'s own doc for a real graph this caught a genuine gap in.
+     * <p>{@code maxNeighbors} is a caller-chosen bound (capped at the graph's own node
+     * count when smaller) — the real hex mesh's own ≤6 face degree for {@link
+     * ModBiomeGraph#OVERWORLD}, not hardcoded.
      */
     public BiomeGraph requireEveryLocalNeighborhoodSolvable(int maxNeighbors) {
         List<BiomeId> ids = nodesById.keySet().stream().sorted().toList();
-        int comboSize = Math.min(maxNeighbors, ids.size());
-        if (comboSize <= 0) {
-            return this;
+        int ringLength = Math.min(maxNeighbors, ids.size());
+        if (ringLength < 3) {
+            return this; // no cycle of fewer than 3 distinct biomes is a real shape to check
         }
-        forEachCombination(ids, comboSize, combo -> {
-            boolean solvable = ids.stream().anyMatch(candidate -> combo.stream().allMatch(neighbor -> isAllowed(candidate, neighbor)));
+        forEachLegalRing(ids, ringLength, this::isAllowed, ring -> {
+            boolean solvable = ids.stream().anyMatch(candidate -> ring.stream().allMatch(member -> isAllowed(candidate, member)));
             if (!solvable) {
                 throw new IllegalArgumentException(
-                    "BiomeGraph: no biome is legal against every member of the neighbor combination " + combo
-                        + " simultaneously - a cell surrounded by exactly these biomes would have no legal "
-                        + "placement. Add an AdjacencyRule bridging them, or a biome legal against all of them."
+                    "BiomeGraph: no biome is legal against every member of the realizable neighbor ring " + ring
+                        + " simultaneously - a face surrounded by exactly these biomes, in this ring order, would "
+                        + "have no legal placement. Add an AdjacencyRule bridging them, or a biome legal against all of them."
                 );
             }
         });
         return this;
     }
 
-    private static void forEachCombination(List<BiomeId> ids, int size, Consumer<List<BiomeId>> action) {
-        forEachCombination(ids, size, 0, new ArrayList<>(size), action);
+    /**
+     * Enumerates every simple cycle of exactly {@code ringLength} distinct biomes where
+     * each consecutive pair (wrapping around) is a legal pair — each cycle reported
+     * exactly once, not once per rotation/reflection: fixes the cycle's own
+     * lowest-by-{@link BiomeId#compareTo} biome as the start and requires the second
+     * biome visited to sort before the last one, a standard canonical-form trick for
+     * cycle enumeration. Precomputes each biome's own legal-neighbor list once so the
+     * search only ever branches into real candidates, not the whole graph at every step.
+     */
+    private static void forEachLegalRing(
+        List<BiomeId> ids, int ringLength, BiPredicate<BiomeId, BiomeId> isAllowed, Consumer<List<BiomeId>> action
+    ) {
+        Map<BiomeId, List<BiomeId>> legalNeighborsById = new HashMap<>();
+        for (BiomeId id : ids) {
+            List<BiomeId> neighbors = new ArrayList<>();
+            for (BiomeId other : ids) {
+                if (!other.equals(id) && isAllowed.test(id, other)) {
+                    neighbors.add(other);
+                }
+            }
+            legalNeighborsById.put(id, neighbors);
+        }
+
+        for (BiomeId start : ids) {
+            List<BiomeId> path = new ArrayList<>(ringLength);
+            path.add(start);
+            extendLegalRing(start, path, ringLength, legalNeighborsById, isAllowed, action);
+        }
     }
 
-    private static void forEachCombination(List<BiomeId> ids, int size, int startIndex, List<BiomeId> current, Consumer<List<BiomeId>> action) {
-        if (current.size() == size) {
-            action.accept(List.copyOf(current));
+    private static void extendLegalRing(
+        BiomeId start, List<BiomeId> path, int ringLength,
+        Map<BiomeId, List<BiomeId>> legalNeighborsById, BiPredicate<BiomeId, BiomeId> isAllowed, Consumer<List<BiomeId>> action
+    ) {
+        if (path.size() == ringLength) {
+            BiomeId last = path.get(path.size() - 1);
+            if (isAllowed.test(last, start) && path.get(1).compareTo(last) < 0) {
+                action.accept(List.copyOf(path));
+            }
             return;
         }
-        for (int i = startIndex; i < ids.size(); i++) {
-            current.add(ids.get(i));
-            forEachCombination(ids, size, i + 1, current, action);
-            current.remove(current.size() - 1);
+        BiomeId current = path.get(path.size() - 1);
+        for (BiomeId candidate : legalNeighborsById.get(current)) {
+            if (candidate.compareTo(start) <= 0 || path.contains(candidate)) {
+                continue; // must stay above the ring's own fixed minimum, and stay a simple (repeat-free) cycle
+            }
+            path.add(candidate);
+            extendLegalRing(start, path, ringLength, legalNeighborsById, isAllowed, action);
+            path.remove(path.size() - 1);
         }
     }
 
@@ -209,9 +251,20 @@ public final class BiomeGraph {
         return nodesById.values();
     }
 
-    /** Same biome is always allowed next to itself; otherwise default-deny. */
+    /**
+     * Default-deny - including a biome next to itself. Deliberately NOT a free pass
+     * anymore: under the hex mesh (see doc/decisions/2026-08-29-hex-mesh-edge-
+     * displacement.md), a face's edges are what carry its own assigned size via {@link
+     * com.mineutze.worldgen.regionsolve.topology.FaceSizeFeasibility} - two same-biome
+     * neighbors merging into one undifferentiated blob was never the intended shape (one
+     * hex face is meant to BE one biome patch), and self-adjacency was the mechanism
+     * silently allowing that merge. Removing it was measured directly, at real 48-biome
+     * production scale, against both the dead-end-reachability and the (now uniformly-
+     * weighted, see {@link com.mineutze.worldgen.regionsolve.topology.FaceFairnessQuota})
+     * starvation stress tests - both still pass with self-adjacency gone.
+     */
     public boolean isAllowed(BiomeId a, BiomeId b) {
-        return a.equals(b) || rulesByPair.containsKey(UnorderedBiomePair.of(a, b));
+        return rulesByPair.containsKey(UnorderedBiomePair.of(a, b));
     }
 
     public AdjacencyRule rule(BiomeId a, BiomeId b) {

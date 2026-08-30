@@ -86,7 +86,11 @@ public final class CellPlacementRules {
                     continue;
                 }
                 BiomeId neighborBiome = assignment.get(neighbor);
-                if (neighborBiome != null && !graph.isAllowed(candidate, neighborBiome)) {
+                // Same biome touching itself is always fine - it's the same patch's own interior,
+                // never a violation regardless of graph.isAllowed(biome, biome), which is no longer
+                // trivially true now that self-adjacency isn't a free pass (see BiomeGraph.isAllowed's
+                // own doc). This class's own growth model still needs same-biome cells to merge.
+                if (neighborBiome != null && !candidate.equals(neighborBiome) && !graph.isAllowed(candidate, neighborBiome)) {
                     return false;
                 }
             }

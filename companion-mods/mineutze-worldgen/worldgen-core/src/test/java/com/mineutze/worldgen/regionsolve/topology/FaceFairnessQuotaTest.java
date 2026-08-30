@@ -1,10 +1,6 @@
 package com.mineutze.worldgen.regionsolve.topology;
 
-import com.mineutze.worldgen.biomegraph.AdjacencyRule;
-import com.mineutze.worldgen.biomegraph.BiomeGraph;
 import com.mineutze.worldgen.biomegraph.BiomeId;
-import com.mineutze.worldgen.biomegraph.BiomeNode;
-import com.mineutze.worldgen.biomegraph.BiomeSizeRange;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -23,27 +19,26 @@ class FaceFairnessQuotaTest {
         return new BiomeId("test", path);
     }
 
-    private static BiomeNode node(String path, int minWidthBlocks, int maxWidthBlocks) {
-        return new BiomeNode(id(path), new BiomeSizeRange(minWidthBlocks, maxWidthBlocks));
-    }
-
+    /**
+     * "Mostly equally rare" (see {@link FaceFairnessQuota#fairShareWeights}'s own doc for
+     * why size-range-based weighting was removed) - a narrow-range and a wide-range biome
+     * get the exact SAME fair share, regardless of their own {@code BiomeSizeRange}.
+     */
     @Test
-    void quotaIsProportionalToSizeRangeMidpointSquared() {
-        BiomeId small = id("small"); // midpoint 100 -> weight 10_000
-        BiomeId big = id("big");     // midpoint 200 -> weight 40_000, 4x small's
-        BiomeGraph graph = new BiomeGraph(List.of(node("small", 100, 100), node("big", 200, 200)), List.of(AdjacencyRule.allow(small, big, 10)));
+    void quotaIsUniformAcrossBiomesRegardlessOfSizeRange() {
+        BiomeId small = id("small");
+        BiomeId big = id("big");
 
-        FaceFairnessQuota quota = FaceFairnessQuota.forRegion(List.of(small, big), graph, 50, Double.POSITIVE_INFINITY);
+        FaceFairnessQuota quota = FaceFairnessQuota.forRegion(List.of(small, big), 50, Double.POSITIVE_INFINITY);
 
-        assertEquals(10.0, quota.deficit(small), 1e-9, "small's fair share of 50 faces, weighted 10_000 of 50_000 total");
-        assertEquals(40.0, quota.deficit(big), 1e-9, "big's fair share, weighted 40_000 of 50_000 total - 4x small's, matching its 4x weight");
+        assertEquals(25.0, quota.deficit(small), 1e-9, "small's fair share of 50 faces, split evenly with big");
+        assertEquals(25.0, quota.deficit(big), 1e-9, "big's fair share - same as small's, size range no longer weights this");
     }
 
     @Test
     void incrementAndDecrementMoveTheDeficitByExactlyOne() {
         BiomeId biome = id("biome");
-        BiomeGraph graph = new BiomeGraph(List.of(node("biome", 100, 100)), List.of());
-        FaceFairnessQuota quota = FaceFairnessQuota.forRegion(List.of(biome), graph, 10, Double.POSITIVE_INFINITY);
+        FaceFairnessQuota quota = FaceFairnessQuota.forRegion(List.of(biome), 10, Double.POSITIVE_INFINITY);
         double initialDeficit = quota.deficit(biome);
 
         quota.increment(biome);
@@ -56,10 +51,9 @@ class FaceFairnessQuotaTest {
     @Test
     void deficitIsNegativeInfinityOnceTheSoftCapIsReached() {
         BiomeId biome = id("biome");
-        BiomeGraph graph = new BiomeGraph(List.of(node("biome", 100, 100)), List.of());
-        // weight = 100^2 = 10_000; cap = ceil(PATCH_COUNT_SLACK(4.0) * regionAreaBlocks2 / totalWeight)
-        // = ceil(4.0 * 2500 / 10_000) = ceil(1.0) = 1.
-        FaceFairnessQuota quota = FaceFairnessQuota.forRegion(List.of(biome), graph, 10, 2500.0);
+        // one biome -> totalWeight = 1.0 (uniform); cap = ceil(PATCH_COUNT_SLACK(4.0) * regionAreaBlocks2 / totalWeight)
+        // = ceil(4.0 * 0.2 / 1.0) = ceil(0.8) = 1.
+        FaceFairnessQuota quota = FaceFairnessQuota.forRegion(List.of(biome), 10, 0.2);
 
         quota.increment(biome);
 
@@ -69,8 +63,7 @@ class FaceFairnessQuotaTest {
     @Test
     void anInfiniteRegionAreaNeverCaps() {
         BiomeId biome = id("biome");
-        BiomeGraph graph = new BiomeGraph(List.of(node("biome", 100, 100)), List.of());
-        FaceFairnessQuota quota = FaceFairnessQuota.forRegion(List.of(biome), graph, 10, Double.POSITIVE_INFINITY);
+        FaceFairnessQuota quota = FaceFairnessQuota.forRegion(List.of(biome), 10, Double.POSITIVE_INFINITY);
 
         for (int i = 0; i < 1000; i++) {
             quota.increment(biome);

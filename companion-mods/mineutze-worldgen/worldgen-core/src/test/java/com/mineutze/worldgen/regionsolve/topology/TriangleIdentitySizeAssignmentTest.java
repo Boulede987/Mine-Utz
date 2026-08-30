@@ -45,7 +45,8 @@ class TriangleIdentitySizeAssignmentTest {
 
         List<AdjacencyRule> rules = List.of(
             AdjacencyRule.allow(id("desert"), id("savanna"), 10),
-            AdjacencyRule.allow(id("savanna"), id("plains"), 10)
+            AdjacencyRule.allow(id("savanna"), id("plains"), 10),
+            AdjacencyRule.allow(id("desert"), id("plains"), 10)
         );
         BiomeGraph forwardOrder = new BiomeGraph(List.of(node("desert", 200, 300), node("savanna", 200, 300), node("plains", 100, 200)), rules);
         BiomeGraph reverseOrder = new BiomeGraph(List.of(node("plains", 100, 200), node("savanna", 200, 300), node("desert", 200, 300)), rules);
@@ -200,12 +201,20 @@ class TriangleIdentitySizeAssignmentTest {
         return interior;
     }
 
+    // A bare 3-node chain (no desert-plains edge) leaves plenty of real interior faces with
+    // no legal candidate now that self-adjacency is banned: a face surrounded entirely by
+    // other free faces (no fixed anchor) needs SOME biome legal against whatever its
+    // neighbors settle on, and a 2-edge chain with no self-adjacency escape hatch runs out of
+    // options across a real mesh. Closed into a 3-clique (every pair mutually legal), same
+    // "add the missing edge" fix already established for
+    // TriangleFieldGeometryRealizationTest.fourBiomeGraph's own hub.
     private static BiomeGraph threeBiomeChainGraph() {
         return new BiomeGraph(
             List.of(node("desert", 200, 300), node("savanna", 200, 300), node("plains", 100, 200)),
             List.of(
                 AdjacencyRule.allow(id("desert"), id("savanna"), 10),
-                AdjacencyRule.allow(id("savanna"), id("plains"), 10)
+                AdjacencyRule.allow(id("savanna"), id("plains"), 10),
+                AdjacencyRule.allow(id("desert"), id("plains"), 10)
             )
         );
     }

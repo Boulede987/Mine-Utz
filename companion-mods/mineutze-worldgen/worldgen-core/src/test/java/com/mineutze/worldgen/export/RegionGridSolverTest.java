@@ -87,7 +87,7 @@ class RegionGridSolverTest {
         for (Map.Entry<MacroCellPos, BiomeId> entry : snapshot.cells().entrySet()) {
             for (MacroCellPos neighbor : mooreNeighbors(entry.getKey())) {
                 BiomeId neighborBiome = snapshot.cells().get(neighbor);
-                if (neighborBiome != null && !graph.isAllowed(entry.getValue(), neighborBiome)) {
+                if (neighborBiome != null && !entry.getValue().equals(neighborBiome) && !graph.isAllowed(entry.getValue(), neighborBiome)) {
                     illegal++;
                 }
             }

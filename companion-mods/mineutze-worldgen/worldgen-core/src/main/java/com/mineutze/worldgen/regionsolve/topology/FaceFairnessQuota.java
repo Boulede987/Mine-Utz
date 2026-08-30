@@ -1,8 +1,6 @@
 package com.mineutze.worldgen.regionsolve.topology;
 
-import com.mineutze.worldgen.biomegraph.BiomeGraph;
 import com.mineutze.worldgen.biomegraph.BiomeId;
-import com.mineutze.worldgen.biomegraph.BiomeSizeRange;
 
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -41,8 +39,8 @@ final class FaceFairnessQuota {
         this.capPerBiome = capPerBiome;
     }
 
-    static FaceFairnessQuota forRegion(List<BiomeId> allBiomes, BiomeGraph graph, int totalFreeFaces, double regionAreaBlocks2) {
-        Map<BiomeId, Double> weights = fairShareWeights(allBiomes, graph);
+    static FaceFairnessQuota forRegion(List<BiomeId> allBiomes, int totalFreeFaces, double regionAreaBlocks2) {
+        Map<BiomeId, Double> weights = fairShareWeights(allBiomes);
         double totalWeight = weights.values().stream().mapToDouble(Double::doubleValue).sum();
 
         Map<BiomeId, Double> quotas = new HashMap<>();
@@ -51,13 +49,32 @@ final class FaceFairnessQuota {
         return new FaceFairnessQuota(quotas, maxTrianglesPerBiome(regionAreaBlocks2, weights));
     }
 
-    /** Each biome's target share of total free faces, proportional to its {@link BiomeSizeRange} midpoint SQUARED — final territory is an area, so fair share must scale with area, not width. */
-    private static Map<BiomeId, Double> fairShareWeights(List<BiomeId> allBiomes, BiomeGraph graph) {
+    /**
+     * Every biome gets the SAME weight - "mostly equally rare" is the goal, not fair-by-
+     * area. Used to scale a per-{@code BiomeSizeRange} midpoint SQUARED here, back when a
+     * biome's territory was assembled by {@code SeamGrowthRasterizer} competitively
+     * growing many mesh cells into one patch - a wide-range biome genuinely needed more
+     * raw material to reach its footprint then, so weighting quota by size² made sense.
+     * That assumption doesn't hold anymore: under the hex + edge-displacement pipeline
+     * (see doc/decisions/2026-08-29-hex-mesh-edge-displacement.md), especially once
+     * same-biome self-adjacency is removed, every face already IS one full-sized patch
+     * regardless of which biome lands there - size² weighting was measured directly to
+     * still hand the ~11 widest-range biomes (mostly the ocean/mountain cluster) several
+     * times the initial priority of a narrow-range one, starving roughly the same ~31
+     * biomes across every seed tried, independent of legality (every one of them had a
+     * real, legal opportunity to place somewhere - they just never won the ordering
+     * tie-break before the mesh filled up).
+     *
+     * <p>Deliberately NOT weighted by how structurally hard a biome is to place (e.g. its
+     * own graph degree) either, despite that being a real, reasonable idea - no measured
+     * evidence yet that uniform weighting alone leaves narrow-degree biomes behind; add
+     * that correction only if a real stress-test run (mirroring {@code
+     * ModBiomeGraphTest}'s own starvation tests) actually shows it's still needed.
+     */
+    private static Map<BiomeId, Double> fairShareWeights(List<BiomeId> allBiomes) {
         Map<BiomeId, Double> weights = new LinkedHashMap<>();
         for (BiomeId biome : allBiomes) {
-            BiomeSizeRange range = graph.node(biome).sizeRange();
-            double midWidth = (range.minWidthBlocks() + range.maxWidthBlocks()) / 2.0;
-            weights.put(biome, midWidth * midWidth);
+            weights.put(biome, 1.0);
         }
         return weights;
     }
@@ -77,15 +94,12 @@ final class FaceFairnessQuota {
      * the time (that biome collapsing to isolated 1-2-cell islands with chaotic,
      * high-arity neighborhoods).
      *
-     * <p>Derivation: a biome's fair AREA share of the region is {@code regionAreaBlocks2 *
-     * weight / totalWeight}. Dividing that by the biome's OWN average patch footprint
-     * ({@code weight}, since {@link #fairShareWeights} already defines weight as
-     * midpoint-width SQUARED) gives "how many of my own average patches fit in my own fair
-     * share" — and the {@code weight} in the numerator and denominator cancels, so this
-     * comes out to the SAME number for every biome: {@code regionAreaBlocks2 / totalWeight}.
-     * That's not a coincidence or a bug - fairness already scales each biome's area quota by
-     * its own footprint, so "how many of my own patches fit in my own share" is naturally
-     * uniform across biomes once you're fair by area in the first place. {@link
+     * <p>Derivation, updated for uniform {@link #fairShareWeights}: with every weight equal
+     * to 1.0, {@code totalWeight} is just the biome count, so {@code regionAreaBlocks2 /
+     * totalWeight} is simply the region's area divided evenly across every biome — a flat
+     * per-biome area budget, independent of that biome's own size range (this used to
+     * "cancel out" a variable per-biome footprint weight when weight was size-based; with
+     * weight now uniform, there's nothing left to cancel, it's just an even split). {@link
      * #PATCH_COUNT_SLACK} multiplies that up to allow a biome several real disconnected
      * patches (not just one), matching this codebase's own established expectation that
      * multiple patches of the same biome per region is normal.

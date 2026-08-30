@@ -53,8 +53,8 @@ class EdgeDisplacementRasterizerTest {
             BiomeId biome = result.get(cell);
             for (MacroCellPos neighbor : cell.mooreNeighbors()) {
                 BiomeId neighborBiome = result.get(neighbor);
-                if (neighborBiome == null) {
-                    continue; // outside the tested interior box
+                if (neighborBiome == null || biome.equals(neighborBiome)) {
+                    continue; // outside the tested interior box, or same patch's own interior
                 }
                 assertTrue(
                     ModBiomeGraph.DEFAULT.isAllowed(biome, neighborBiome),
@@ -90,7 +90,7 @@ class EdgeDisplacementRasterizerTest {
 
         assertThrows(
             IllegalStateException.class,
-            () -> EdgeDisplacementRasterizer.rasterize(cellsWithAnImpossibleOne, assignments, mesh, bias, Map.of(), GRID_CONFIG, worldSeed)
+            () -> EdgeDisplacementRasterizer.rasterize(cellsWithAnImpossibleOne, assignments, mesh, bias, Map.of(), Map.of(), GRID_CONFIG, worldSeed)
         );
     }
 
@@ -107,7 +107,7 @@ class EdgeDisplacementRasterizerTest {
 
         Map<NodeEdge, Double> bias = FaceSizeFeasibility.biasBlocksByEdge(mesh, adjacency, assignments);
         List<MacroCellPos> cells = allCellsIn(GRID_CONFIG, REAL_MIN, REAL_MIN, REAL_MAX, REAL_MAX);
-        return EdgeDisplacementRasterizer.rasterize(cells, assignments, mesh, bias, Map.of(), GRID_CONFIG, worldSeed);
+        return EdgeDisplacementRasterizer.rasterize(cells, assignments, mesh, bias, Map.of(), Map.of(), GRID_CONFIG, worldSeed);
     }
 
     private static Set<Integer> nonHullTouchingFaceIndices(HexMeshBuilder.HexMesh mesh, TriangleAdjacency.Adjacency adjacency) {

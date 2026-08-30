@@ -15,6 +15,9 @@ import com.mineutze.worldgen.regionsolve.topology.TriangleIdentitySizeAssignment
 
 import javax.imageio.ImageIO;
 import java.awt.Color;
+import java.awt.Font;
+import java.awt.FontMetrics;
+import java.awt.Graphics2D;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -41,6 +44,7 @@ public final class HexRasterSizeExperiment {
         int meshBoxMax = args.length > 3 ? Integer.parseInt(args[3]) : 2000;
         int realMin = args.length > 5 ? Integer.parseInt(args[4]) : 400;
         int realMax = args.length > 5 ? Integer.parseInt(args[5]) : 1600;
+        boolean useOverworld = args.length > 6 && args[6].equals("overworld");
 
         HexMeshBuilder.HexMesh mesh = HexMeshBuilder.build(sizeBlocks, 0, 0, meshBoxMax, meshBoxMax);
         TriangleAdjacency.Adjacency adjacency = TriangleAdjacency.of(mesh.faces());
@@ -51,19 +55,64 @@ public final class HexRasterSizeExperiment {
             }
         }
 
-        BiomeGraph graph = ModBiomeGraph.DEFAULT;
+        BiomeGraph graph = useOverworld ? ModBiomeGraph.OVERWORLD : ModBiomeGraph.DEFAULT;
         Optional<Map<Integer, TriangleIdentitySizeAssignment.Assignment>> solved =
             TriangleIdentitySizeAssignment.solve(adjacency, freeFaceIndices, Map.of(), graph, WORLD_SEED);
         Map<Integer, TriangleIdentitySizeAssignment.Assignment> assignments = solved.orElseThrow();
         Map<NodeEdge, Double> biasByEdge = useBias ? FaceSizeFeasibility.biasBlocksByEdge(mesh, adjacency, assignments) : Map.of();
 
         List<MacroCellPos> cells = allCellsIn(GRID_CONFIG, realMin, realMin, realMax, realMax);
-        Map<MacroCellPos, BiomeId> result = EdgeDisplacementRasterizer.rasterize(cells, assignments, mesh, biasByEdge, Map.of(), GRID_CONFIG, WORLD_SEED);
+        Map<MacroCellPos, BiomeId> result = EdgeDisplacementRasterizer.rasterize(cells, assignments, mesh, biasByEdge, Map.of(), Map.of(), GRID_CONFIG, WORLD_SEED);
 
         Map<BiomeId, Integer> palette = evenlySpacedPalette(graph);
-        BufferedImage image = renderRaster(cells, result, palette);
-        writePng(image, outputFile);
+        Path legendFile = legendPathFor(outputFile);
+        writePng(renderRaster(cells, result, palette), outputFile);
+        writePng(renderLegend(graph, palette), legendFile);
         System.out.println("size=" + sizeBlocks + " bias=" + useBias + " -> " + outputFile.toAbsolutePath());
+        System.out.println("legend -> " + legendFile.toAbsolutePath());
+    }
+
+    private static Path legendPathFor(Path rasterFile) {
+        String fileName = rasterFile.getFileName().toString();
+        String legendName = fileName.contains(".")
+            ? fileName.substring(0, fileName.lastIndexOf('.')) + "_legend" + fileName.substring(fileName.lastIndexOf('.'))
+            : fileName + "_legend";
+        return rasterFile.resolveSibling(legendName);
+    }
+
+    /** An actual color swatch per biome, own image - matches {@code TriangleFieldPngExporter}'s/{@code HexBiomeRasterVisual}'s own established convention (a legend baked into the raster ran labels off the image once there were more than a handful of biomes). */
+    private static BufferedImage renderLegend(BiomeGraph graph, Map<BiomeId, Integer> palette) {
+        List<BiomeId> sortedIds = graph.nodes().stream().map(BiomeNode::id).sorted().toList();
+
+        int swatchSize = 24;
+        int rowHeight = 32;
+        int padding = 10;
+        Font font = new Font(Font.SANS_SERIF, Font.PLAIN, 16);
+
+        BufferedImage measuring = new BufferedImage(1, 1, BufferedImage.TYPE_INT_RGB);
+        FontMetrics metrics = measuring.createGraphics().getFontMetrics(font);
+        int maxLabelWidth = sortedIds.stream().mapToInt(id -> metrics.stringWidth(id.toString())).max().orElse(0);
+
+        int width = padding * 3 + swatchSize + maxLabelWidth;
+        int height = padding * 2 + sortedIds.size() * rowHeight;
+
+        BufferedImage image = new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);
+        Graphics2D g = image.createGraphics();
+        g.setColor(Color.WHITE);
+        g.fillRect(0, 0, width, height);
+        g.setFont(font);
+
+        int y = padding;
+        for (BiomeId id : sortedIds) {
+            g.setColor(new Color(palette.get(id)));
+            g.fillRect(padding, y, swatchSize, swatchSize);
+            g.setColor(Color.BLACK);
+            g.drawRect(padding, y, swatchSize, swatchSize);
+            g.drawString(id.toString(), padding * 2 + swatchSize, y + swatchSize - metrics.getDescent());
+            y += rowHeight;
+        }
+        g.dispose();
+        return image;
     }
 
     private static Map<BiomeId, Integer> evenlySpacedPalette(BiomeGraph graph) {

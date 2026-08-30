@@ -42,10 +42,14 @@ class BiomeGraphTest {
      * No node is required to be universally legal anymore (see BiomeGraph's own
      * doc) - every biome, including whichever one plays a filler-like role, can be
      * restricted like any other. OCEAN here has only ONE rule (to DESERT, not
-     * SAVANNA) - far from universally legal - and the graph still builds fine,
-     * since that single rule keeps it within {@code MAX_BRIDGE_HOPS} of every
-     * other node (see {@code isolatedNodeWithNoBridgeFailsFast} for the case
-     * where a node is restricted too far to bridge at all).
+     * SAVANNA) - far from universally legal - and the graph still builds fine.
+     * A node's overall reachability/connectivity is no longer checked at bare
+     * construction time at all (see this class's own git history: the
+     * BridgeHopReachability pre-check this comment used to describe was removed as
+     * providing little real signal beyond what {@link
+     * #requireEveryLocalNeighborhoodSolvable} already proves directly) - only
+     * {@code forProduction}'s opt-in checks (min-legal-neighbors,
+     * every-local-neighborhood-solvable) still validate a real production graph.
      */
     @Test
     void graphWithNoNodeAllowedEverywhereStillBuildsFine() {
@@ -58,42 +62,16 @@ class BiomeGraphTest {
         assertFalse(graph.isAllowed(SAVANNA, OCEAN));
     }
 
-    /**
-     * A node with zero rules to anything can never legally touch another biome -
-     * if it and another biome ever end up spatially adjacent during world gen,
-     * that's an unrecoverable dead end. Catching that at graph-construction time,
-     * not a runtime crash mid-world-gen.
-     */
+    /** A fully isolated node (zero rules to anything) no longer fails at bare construction time - only {@code forProduction}'s {@code requireMinLegalNeighbors} (or {@code requireEveryLocalNeighborhoodSolvable}) would catch this now, and only for callers that opt into it. */
     @Test
-    void isolatedNodeWithNoBridgeFailsFast() {
-        assertThrows(IllegalArgumentException.class, () -> new BiomeGraph(
+    void isolatedNodeStillBuildsAtTheBareConstructorLevel() {
+        BiomeGraph graph = new BiomeGraph(
             List.of(node(DESERT), node(SAVANNA), node(OCEAN)),
             List.of(AdjacencyRule.allow(DESERT, SAVANNA, 10))
-        ));
-    }
+        );
 
-    /**
-     * The real-world case this check exists for: not a fully isolated node (that's
-     * the case above), but two biomes that ARE connected through the rest of the
-     * graph - just too many hops apart to clear {@code MAX_BRIDGE_HOPS} (found via
-     * badlands/forest needing exactly the maximum supported 3-hop path
-     * badlands-desert-plains-forest; this chain pushes one hop past that).
-     * DESERT-SAVANNA-PLAINS-OCEAN-
-     * FOREST is a straight line, so DESERT to FOREST is 4 hops - one more than
-     * {@code MAX_BRIDGE_HOPS} - even though every adjacent pair in the chain is
-     * legal and the graph as a whole is fully connected.
-     */
-    @Test
-    void pairBeyondBridgeHopsFailsFastEvenWhenGraphIsFullyConnected() {
-        assertThrows(IllegalArgumentException.class, () -> new BiomeGraph(
-            List.of(node(DESERT), node(SAVANNA), node(PLAINS), node(OCEAN), node(FOREST)),
-            List.of(
-                AdjacencyRule.allow(DESERT, SAVANNA, 10),
-                AdjacencyRule.allow(SAVANNA, PLAINS, 10),
-                AdjacencyRule.allow(PLAINS, OCEAN, 10),
-                AdjacencyRule.allow(OCEAN, FOREST, 10)
-            )
-        ));
+        assertFalse(graph.isAllowed(OCEAN, DESERT));
+        assertFalse(graph.isAllowed(OCEAN, SAVANNA));
     }
 
     @Test
@@ -131,10 +109,10 @@ class BiomeGraphTest {
     }
 
     @Test
-    void sameBiomeIsAlwaysAllowedNextToItself() {
+    void sameBiomeIsNeverAllowedNextToItself() {
         BiomeGraph graph = new BiomeGraph(List.of(node(PLAINS)), List.of());
 
-        assertTrue(graph.isAllowed(PLAINS, PLAINS));
+        assertFalse(graph.isAllowed(PLAINS, PLAINS));
     }
 
     @Test
@@ -154,30 +132,44 @@ class BiomeGraphTest {
     }
 
     /**
-     * PLAINS is a local hub (legal against all 3 others) - the 4-way combination
-     * {DESERT, SAVANNA, PLAINS, OCEAN} has PLAINS itself as a simultaneously-legal
-     * candidate, and by the monotonicity argument in this method's own doc, so does
-     * every smaller subset.
+     * DESERT-SAVANNA-PLAINS is a full triangle (every pair mutually legal, not just a
+     * chain) and FOREST is a hub legal to all three but to nothing else. With only these
+     * 4 nodes total and ringLength capped at 3, every realizable 3-ring is exactly one of
+     * {DESERT,SAVANNA,PLAINS}, {DESERT,SAVANNA,FOREST}, {DESERT,PLAINS,FOREST}, or
+     * {SAVANNA,PLAINS,FOREST} - and since self-adjacency is banned, a ring member can never
+     * solve its OWN ring, so each of these 4 rings needs the one node NOT in it (the other
+     * clique member, or FOREST) to be legal against all 3 members simultaneously. Because
+     * DESERT/SAVANNA/PLAINS are pairwise legal AND each individually legal to FOREST, that
+     * always holds - a genuinely realizable "solvable only via a node outside the ring"
+     * case, not degenerate self-adjacency. (A 5th node like the old OCEAN would leave a
+     * 4-ring with zero nodes free to solve it at all once self-adjacency can't fill in -
+     * see this method's own doc on why maxNeighbors must stay below the total node count
+     * for a hub fixture to mean anything.)
      */
     @Test
-    void requireEveryLocalNeighborhoodSolvablePassesWhenAHubExists() {
+    void requireEveryLocalNeighborhoodSolvablePassesWhenARingHasAnOutsideHub() {
         BiomeGraph graph = new BiomeGraph(
-            List.of(node(DESERT), node(SAVANNA), node(PLAINS), node(OCEAN)),
+            List.of(node(DESERT), node(SAVANNA), node(PLAINS), node(FOREST)),
             List.of(
+                AdjacencyRule.allow(DESERT, SAVANNA, 10),
+                AdjacencyRule.allow(SAVANNA, PLAINS, 10),
                 AdjacencyRule.allow(PLAINS, DESERT, 10),
-                AdjacencyRule.allow(PLAINS, SAVANNA, 10),
-                AdjacencyRule.allow(PLAINS, OCEAN, 10)
+                AdjacencyRule.allow(FOREST, DESERT, 10),
+                AdjacencyRule.allow(FOREST, SAVANNA, 10),
+                AdjacencyRule.allow(FOREST, PLAINS, 10)
             )
         );
 
-        graph.requireEveryLocalNeighborhoodSolvable(4);
+        graph.requireEveryLocalNeighborhoodSolvable(3);
     }
 
     /**
-     * A bare 4-cycle (no diagonal) - {DESERT, SAVANNA, PLAINS, OCEAN} converging
-     * simultaneously has no legal candidate (SAVANNA-OCEAN is never allowed, and
-     * neither is DESERT-PLAINS): this is the exact real dead end
-     * {@code SeamGrowthRasterizer} would otherwise only discover mid-generation.
+     * A bare 4-cycle (no diagonal, no outside hub) - DESERT-SAVANNA-PLAINS-OCEAN-DESERT
+     * IS a real, legal ring (every consecutive pair allowed), but no biome is legal
+     * against all 4 ring members at once (DESERT isn't legal to PLAINS, its opposite
+     * corner, and neither ring member nor anything else bridges that): this is the
+     * exact real dead end {@code SeamGrowthRasterizer} would otherwise only discover
+     * mid-generation.
      */
     @Test
     void requireEveryLocalNeighborhoodSolvableThrowsOnAGenuineDeadEnd() {
@@ -192,20 +184,21 @@ class BiomeGraphTest {
         );
 
         IllegalArgumentException thrown = assertThrows(IllegalArgumentException.class, () -> graph.requireEveryLocalNeighborhoodSolvable(4));
-        assertTrue(thrown.getMessage().contains("no biome is legal against every member"), "expected a diagnostic naming the unsolvable combination, got: " + thrown.getMessage());
+        assertTrue(thrown.getMessage().contains("no biome is legal against every member"), "expected a diagnostic naming the unsolvable ring, got: " + thrown.getMessage());
     }
 
-    /**
-     * Regression guard on the production graph itself, not just synthetic fixtures -
-     * {@code ModBiomeGraph.DEFAULT} already calls this in its own static initializer at
-     * maxNeighbors=8 (the real Moore/8-way count), proving zero unsolvable neighbor
-     * combinations exist at ANY size for this graph - not a universal-filler-style
-     * escape hatch, just one added rule (ocean-savanna) closing the one real gap a
-     * production crash found (see that graph's own doc). This test mostly documents
-     * and locks in that proof rather than discovering something new.
-     */
+    /** No legal ring of the requested length exists at all (a bare star/hub has no cycle) - vacuously passes, since there's nothing realizable to check, not a false confirmation of anything. */
     @Test
-    void modBiomeGraphDefaultPassesItsOwnValidationBound() {
-        com.mineutze.worldgen.biomegraph.ModBiomeGraph.DEFAULT.requireEveryLocalNeighborhoodSolvable(8);
+    void requireEveryLocalNeighborhoodSolvablePassesVacuouslyWhenNoLegalRingExists() {
+        BiomeGraph graph = new BiomeGraph(
+            List.of(node(DESERT), node(SAVANNA), node(PLAINS), node(OCEAN)),
+            List.of(
+                AdjacencyRule.allow(PLAINS, DESERT, 10),
+                AdjacencyRule.allow(PLAINS, SAVANNA, 10),
+                AdjacencyRule.allow(PLAINS, OCEAN, 10)
+            )
+        );
+
+        graph.requireEveryLocalNeighborhoodSolvable(4);
     }
 }
