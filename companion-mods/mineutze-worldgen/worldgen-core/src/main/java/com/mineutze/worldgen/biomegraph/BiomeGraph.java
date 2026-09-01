@@ -109,6 +109,48 @@ public final class BiomeGraph {
     }
 
     /**
+     * Fail loud if any node's every legal neighbor shares its own exact {@link
+     * BiomeSizeRange} - a real, static, mesh-independent structural gap, not an
+     * instance-specific one: found directly against the real 48-biome catalog, both
+     * {@code DEEP_LUKEWARM_OCEAN} and {@code MANGROVE_SWAMP}'s own legal neighbors are
+     * ALL the same size range as themselves. A face surrounded only by same-tier
+     * neighbors can never trade area with any of them - {@link
+     * com.mineutze.worldgen.regionsolve.topology.FaceSizeFeasibility}'s own per-edge
+     * reconciliation is exactly zero whenever two neighbors want the same shrink/grow
+     * direction (see that class's own doc) - so a biome failing this check can never
+     * reach its own target size in ANY mesh, regardless of seed. Unlike {@link
+     * #requireEveryLocalNeighborhoodSolvable}, this is NOT prone to overcounting: it only
+     * needs each node's own static legal-neighbor list and each neighbor's own size
+     * range, no mesh/instance-dependent domain narrowing involved at all - a property of
+     * the graph alone, checkable once, always sound.
+     *
+     * <p>Deliberately NOT part of {@link #forProduction}'s automatic bundle: the real
+     * catalog fails this TODAY (see above), so wiring it in would break {@code
+     * ModBiomeGraph.OVERWORLD}'s own static initializer before those two real gaps are
+     * actually closed with a real {@link AdjacencyRule} - a game-design call (which
+     * differently-sized biome each should legally border), not this method's job to make.
+     * Call this explicitly once that fix lands.
+     */
+    public BiomeGraph requireEveryBiomeHasACrossTierNeighbor() {
+        for (BiomeId id : nodesById.keySet()) {
+            BiomeSizeRange ownSizeRange = node(id).sizeRange();
+            List<BiomeId> legalNeighbors = nodesById.keySet().stream()
+                .filter(other -> !other.equals(id) && isAllowed(id, other))
+                .sorted()
+                .toList();
+            boolean hasCrossTierNeighbor = legalNeighbors.stream().anyMatch(other -> !node(other).sizeRange().equals(ownSizeRange));
+            if (!hasCrossTierNeighbor) {
+                throw new IllegalArgumentException(
+                    "BiomeGraph: " + id + " (size range " + ownSizeRange + ") has no legal neighbor in a "
+                        + "DIFFERENT size range - every legal neighbor is the same tier: " + legalNeighbors + ". "
+                        + "Add an AdjacencyRule to some biome with a different BiomeSizeRange."
+                );
+            }
+        }
+        return this;
+    }
+
+    /**
      * Fail loud if any REALIZABLE neighbor ring — {@code maxNeighbors} biomes arranged
      * in a cycle where every CONSECUTIVE pair (wrapping around) is itself a legal pair,
      * exactly the shape a real hex mesh face's neighbors take — has no biome anywhere in

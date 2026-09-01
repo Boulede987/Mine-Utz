@@ -23,9 +23,35 @@ import java.util.Optional;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ModBiomeGraphTest {
+
+    /**
+     * A tracked, known gap - NOT a "should always pass" gate. {@code
+     * BiomeGraph.requireEveryBiomeHasACrossTierNeighbor} is deliberately not part of
+     * {@code forProduction}'s automatic bundle (see that method's own doc) precisely
+     * because the real catalog fails it today: both {@code deep_lukewarm_ocean} and
+     * {@code mangrove_swamp}'s own legal neighbors are all the same {@code
+     * BiomeSizeRange} as themselves, so {@code FaceSizeFeasibility}'s per-edge area
+     * correction can never help either of them reach its own target size, in any mesh,
+     * regardless of seed. This test exists so that gap stays visible in the suite, not
+     * just in a memory file - once a real cross-tier {@code AdjacencyRule} is added for
+     * both, this test should be REPLACED with one asserting
+     * {@code ModBiomeGraph.OVERWORLD.requireEveryBiomeHasACrossTierNeighbor()} passes
+     * cleanly, not left pointing at a fix that no longer applies.
+     */
+    @Test
+    void overworldHasTwoKnownCrossTierGaps() {
+        IllegalArgumentException thrown = assertThrows(
+            IllegalArgumentException.class, ModBiomeGraph.OVERWORLD::requireEveryBiomeHasACrossTierNeighbor
+        );
+        assertTrue(
+            thrown.getMessage().contains("minecraft:deep_lukewarm_ocean") || thrown.getMessage().contains("minecraft:mangrove_swamp"),
+            "expected a diagnostic naming one of the two known stuck biomes, got: " + thrown.getMessage()
+        );
+    }
 
     /**
      * Real, deterministic, re-runnable replacement for the anecdotal justification

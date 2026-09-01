@@ -22,6 +22,10 @@ class BiomeGraphTest {
         return new BiomeNode(id, new BiomeSizeRange(700, 1000));
     }
 
+    private static BiomeNode node(BiomeId id, int minWidthBlocks, int maxWidthBlocks) {
+        return new BiomeNode(id, new BiomeSizeRange(minWidthBlocks, maxWidthBlocks));
+    }
+
     @Test
     void validGraphBuildsFine() {
         BiomeGraph graph = new BiomeGraph(
@@ -200,5 +204,42 @@ class BiomeGraphTest {
         );
 
         graph.requireEveryLocalNeighborhoodSolvable(4);
+    }
+
+    /**
+     * DESERT and OCEAN share one size range (700-1000), PLAINS has a different one
+     * (300-600). DESERT's own only legal neighbor is OCEAN, its own same tier - a real
+     * structural gap: {@code FaceSizeFeasibility}'s per-edge area correction can never
+     * help DESERT reach its own target size in any mesh, since a shared edge can't trade
+     * area when both sides want the same shrink/grow direction. OCEAN and PLAINS each
+     * have a real cross-tier neighbor and correctly pass.
+     */
+    @Test
+    void requireEveryBiomeHasACrossTierNeighborThrowsWhenANodeIsStuckInItsOwnTier() {
+        BiomeGraph graph = new BiomeGraph(
+            List.of(node(DESERT, 700, 1000), node(OCEAN, 700, 1000), node(PLAINS, 300, 600)),
+            List.of(
+                AdjacencyRule.allow(DESERT, OCEAN, 10),
+                AdjacencyRule.allow(OCEAN, PLAINS, 10)
+            )
+        );
+
+        IllegalArgumentException thrown = assertThrows(IllegalArgumentException.class, graph::requireEveryBiomeHasACrossTierNeighbor);
+        assertTrue(thrown.getMessage().contains(DESERT.toString()), "expected a diagnostic naming the stuck biome, got: " + thrown.getMessage());
+    }
+
+    /** Same shape as {@link #requireEveryBiomeHasACrossTierNeighborThrowsWhenANodeIsStuckInItsOwnTier}, but DESERT also gets a direct PLAINS rule - every node now has a real cross-tier neighbor, passes cleanly. */
+    @Test
+    void requireEveryBiomeHasACrossTierNeighborPassesWhenEveryNodeHasOne() {
+        BiomeGraph graph = new BiomeGraph(
+            List.of(node(DESERT, 700, 1000), node(OCEAN, 700, 1000), node(PLAINS, 300, 600)),
+            List.of(
+                AdjacencyRule.allow(DESERT, OCEAN, 10),
+                AdjacencyRule.allow(OCEAN, PLAINS, 10),
+                AdjacencyRule.allow(DESERT, PLAINS, 10)
+            )
+        );
+
+        graph.requireEveryBiomeHasACrossTierNeighbor();
     }
 }
