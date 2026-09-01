@@ -61,6 +61,34 @@ import java.util.Set;
  * nothing changes — conflicts several hops away are pruned immediately
  * instead of being rediscovered node by node.
  *
+ * <p><b>Binary AC-3 alone still wasn't enough.</b> Found by direct
+ * measurement, not theory: {@code worldSeed=2060} against {@code
+ * ModBiomeGraph.OVERWORLD} at {@code HEX_SIZE_BLOCKS=325} thrashed for 60+
+ * seconds with binary propagation alone, recursion depth pinned flat around
+ * 230/238 faces the whole time (real CPU burn, not a hang) — captured its
+ * exact residual state directly: 3 mutually-adjacent faces (a real hex
+ * vertex) all narrowed to the same 4-value domain, whose only two legal
+ * pairs were disjoint (no biome legal with members of BOTH pairs) — a real,
+ * provable dead end with zero valid triples, that binary arc consistency
+ * cannot see because it only ever asks "does X have some compatible value
+ * in Y" one pair at a time, never "does some value work against BOTH Y and
+ * Z simultaneously." {@link #forwardCheck} now also runs ternary
+ * consistency ({@link #reviseTriple}) over every real mesh-vertex triple
+ * ({@link #mutualNeighborTrianglesByFace}, derived purely from the
+ * adjacency graph — 3 mutually-adjacent faces IS a mesh vertex, by {@code
+ * HexMeshBuilder}'s own vertex-degree-3 guarantee, no separate geometry
+ * needed), interleaved with binary propagation to one joint fixed point
+ * (a shrink from either kind can enable further shrinks of the other).
+ * Considered and rejected: encoding this as a {@code BiomeGraph}
+ * construction-time rule instead — checked directly, every one of the 262
+ * real legal pairs in {@code OVERWORLD} already extends to at least one
+ * real triangle somewhere in the graph (zero exceptions), including both
+ * pairs from the {@code worldSeed=2060} dead end. The graph itself was
+ * never deficient; the specific triangle's domain got narrowed down to
+ * exactly those two disjoint pairs by unrelated legality pressure from each
+ * face's OTHER neighbors, a purely dynamic, per-instance narrowing no
+ * static graph property can predict or rule out in advance.
+ *
  * <p>{@link #backtrack} also enforces a hard node budget ({@link
  * SearchBudget}) as a safety net independent of how good propagation is —
  * some instance can still be genuinely hard, and "hangs indefinitely" is
@@ -159,7 +187,8 @@ public final class TriangleIdentitySizeAssignment {
         FaceFairnessQuota fairness = FaceFairnessQuota.forRegion(allBiomes, freeFaceIndices.size(), regionAreaBlocks2);
         Map<Integer, BiomeId> assigned = new LinkedHashMap<>();
         SearchBudget budget = SearchBudget.forFaceCount(freeFaceIndices.size());
-        if (!backtrack(domains, assigned, adjacency, freeFaceIndices, graph, worldSeed, fairness, budget)) {
+        Map<Integer, List<int[]>> mutualNeighborTrianglesByFace = mutualNeighborTrianglesByFace(adjacency, freeFaceIndices);
+        if (!backtrack(domains, assigned, adjacency, freeFaceIndices, graph, worldSeed, fairness, budget, mutualNeighborTrianglesByFace)) {
             return Optional.empty();
         }
 
@@ -170,7 +199,8 @@ public final class TriangleIdentitySizeAssignment {
 
     private static boolean backtrack(
         Map<Integer, List<BiomeId>> domains, Map<Integer, BiomeId> assigned, TriangleAdjacency.Adjacency adjacency,
-        Set<Integer> freeFaceIndices, BiomeGraph graph, long worldSeed, FaceFairnessQuota fairness, SearchBudget budget
+        Set<Integer> freeFaceIndices, BiomeGraph graph, long worldSeed, FaceFairnessQuota fairness, SearchBudget budget,
+        Map<Integer, List<int[]>> mutualNeighborTrianglesByFace
     ) {
         budget.visitNode(freeFaceIndices.size());
         Optional<Integer> nextFace = mostConstrainedUnassignedFace(domains, assigned, freeFaceIndices);
@@ -186,8 +216,11 @@ public final class TriangleIdentitySizeAssignment {
 
             assigned.put(faceIndex, candidate);
             fairness.increment(candidate);
-            Map<Integer, List<BiomeId>> prunedDomains = forwardCheck(faceIndex, candidate, domains, adjacency, freeFaceIndices, assigned, graph);
-            if (prunedDomains != null && backtrack(prunedDomains, assigned, adjacency, freeFaceIndices, graph, worldSeed, fairness, budget)) {
+            Map<Integer, List<BiomeId>> prunedDomains = forwardCheck(
+                faceIndex, candidate, domains, adjacency, freeFaceIndices, assigned, graph, mutualNeighborTrianglesByFace
+            );
+            if (prunedDomains != null
+                && backtrack(prunedDomains, assigned, adjacency, freeFaceIndices, graph, worldSeed, fairness, budget, mutualNeighborTrianglesByFace)) {
                 return true;
             }
             fairness.decrement(candidate);
@@ -197,49 +230,85 @@ public final class TriangleIdentitySizeAssignment {
     }
 
     /**
-     * AC-3-style arc-consistency propagation, not just single-hop forward checking (see
-     * class doc for why plain forward checking stopped being enough once the mesh pivoted
-     * to hex). Seeds a worklist with {@code faceIndex}'s own unassigned neighbors (the
-     * direct effect of the new assignment); every time revising a face's domain against
-     * one of its neighbors actually shrinks it, every OTHER unassigned neighbor of THAT
-     * face gets re-revised too, and so on until the worklist drains - a conflict several
-     * hops away is pruned immediately instead of only being discovered once the search
-     * physically backtracks its way there.
+     * AC-3-style arc-consistency propagation (binary: {@link #reviseAgainstSingleValue}/
+     * {@link #reviseAgainstDomain}) PLUS mesh-vertex triple-consistency (ternary: {@link
+     * #reviseTriple}) run to a joint fixed point — see class doc for why binary
+     * consistency alone isn't enough. Binary arc consistency only ever asks "does face X
+     * have SOME compatible value in face Y's domain" one pair at a time; it can leave a
+     * domain looking perfectly fine against every neighbor INDIVIDUALLY while having no
+     * value that works against ALL of a real mesh-vertex triple SIMULTANEOUSLY - the exact
+     * gap measured directly on {@code worldSeed=2060} at {@code HEX_SIZE_BLOCKS=325}: 3
+     * mutually-adjacent faces (a real hex vertex, guaranteed to exist by {@code
+     * HexMeshBuilder}'s own vertex-degree-3 property) each independently kept candidates
+     * that, taken together, formed no legal triple at all (their shared 4-value domain's
+     * only two legal pairs were disjoint - no 3-clique existed). A shrink from either kind
+     * of revision can enable further shrinks of the OTHER kind, so both worklists are
+     * drained together in one loop until NEITHER changes anything, not run once each.
      *
      * @return a copy of {@code domains} with every domain reachable by propagation pruned
-     * to values still consistent with at least one value in each neighbor's own domain, or
-     * {@code null} if propagation empties any domain (a dead end, detected as early as
-     * arc consistency alone can detect it).
+     * to values consistent with every neighbor's own domain (binary) AND every real
+     * mesh-vertex triple it participates in (ternary), or {@code null} if propagation
+     * empties any domain (a dead end, detected as early as this level of consistency can
+     * detect it - still not a completeness guarantee, see {@link SearchBudget}).
      */
     private static Map<Integer, List<BiomeId>> forwardCheck(
         int faceIndex, BiomeId candidate, Map<Integer, List<BiomeId>> domains, TriangleAdjacency.Adjacency adjacency,
-        Set<Integer> freeFaceIndices, Map<Integer, BiomeId> assigned, BiomeGraph graph
+        Set<Integer> freeFaceIndices, Map<Integer, BiomeId> assigned, BiomeGraph graph,
+        Map<Integer, List<int[]>> mutualNeighborTrianglesByFace
     ) {
         Map<Integer, List<BiomeId>> next = new HashMap<>(domains);
-        Deque<Integer> worklist = new ArrayDeque<>();
+        Deque<Integer> binaryWorklist = new ArrayDeque<>();
+        Deque<int[]> triangleWorklist = new ArrayDeque<>();
 
         for (int neighbor : adjacency.neighborFaceIndices().getOrDefault(faceIndex, Set.of())) {
             if (!freeFaceIndices.contains(neighbor) || assigned.containsKey(neighbor)) {
                 continue;
             }
-            if (!reviseAgainstSingleValue(neighbor, candidate, next, graph, worklist)) {
+            if (!reviseAgainstSingleValue(neighbor, candidate, next, graph, binaryWorklist)) {
                 return null;
             }
         }
+        enqueueTrianglesOf(faceIndex, mutualNeighborTrianglesByFace, assigned, triangleWorklist);
 
-        while (!worklist.isEmpty()) {
-            int shrunk = worklist.poll();
-            List<BiomeId> shrunkDomain = next.get(shrunk);
-            for (int neighbor : adjacency.neighborFaceIndices().getOrDefault(shrunk, Set.of())) {
-                if (!freeFaceIndices.contains(neighbor) || assigned.containsKey(neighbor)) {
-                    continue;
+        while (!binaryWorklist.isEmpty() || !triangleWorklist.isEmpty()) {
+            while (!binaryWorklist.isEmpty()) {
+                int shrunk = binaryWorklist.poll();
+                List<BiomeId> shrunkDomain = next.get(shrunk);
+                for (int neighbor : adjacency.neighborFaceIndices().getOrDefault(shrunk, Set.of())) {
+                    if (!freeFaceIndices.contains(neighbor) || assigned.containsKey(neighbor)) {
+                        continue;
+                    }
+                    if (!reviseAgainstDomain(neighbor, shrunkDomain, next, graph, binaryWorklist)) {
+                        return null;
+                    }
                 }
-                if (!reviseAgainstDomain(neighbor, shrunkDomain, next, graph, worklist)) {
+                enqueueTrianglesOf(shrunk, mutualNeighborTrianglesByFace, assigned, triangleWorklist);
+            }
+
+            if (!triangleWorklist.isEmpty()) {
+                int[] triangle = triangleWorklist.poll();
+                Set<Integer> shrunkByTriple = reviseTriple(triangle, next, graph);
+                if (shrunkByTriple == null) {
                     return null;
+                }
+                for (int shrunkFace : shrunkByTriple) {
+                    binaryWorklist.add(shrunkFace);
+                    enqueueTrianglesOf(shrunkFace, mutualNeighborTrianglesByFace, assigned, triangleWorklist);
                 }
             }
         }
         return next;
+    }
+
+    private static void enqueueTrianglesOf(
+        int faceIndex, Map<Integer, List<int[]>> mutualNeighborTrianglesByFace, Map<Integer, BiomeId> assigned, Deque<int[]> triangleWorklist
+    ) {
+        for (int[] triangle : mutualNeighborTrianglesByFace.getOrDefault(faceIndex, List.of())) {
+            if (assigned.containsKey(triangle[0]) || assigned.containsKey(triangle[1]) || assigned.containsKey(triangle[2])) {
+                continue; // a fixed member reduces this to ordinary pairwise consistency, already handled above
+            }
+            triangleWorklist.add(triangle);
+        }
     }
 
     /** Prunes {@code domains.get(faceToRevise)} to values legal against the single value {@code fixedValue} - enqueues {@code faceToRevise} if this actually shrinks it. @return false if the domain empties (an immediate dead end). */
@@ -274,6 +343,101 @@ public final class TriangleIdentitySizeAssignment {
             worklist.add(faceToRevise);
         }
         return true;
+    }
+
+    /**
+     * Ternary consistency for one real mesh-vertex triple {@code (a, b, c)} (all three
+     * mutually adjacent - see {@link #mutualNeighborTrianglesByFace}): prunes each face's
+     * domain to only values that have SOME simultaneous, mutually-legal completion in the
+     * OTHER TWO faces' current domains - a genuine 3-way check binary arc consistency
+     * cannot express, since it only ever reasons about one pair at a time. This is the
+     * exact gap that let {@code worldSeed=2060}'s dead end (see class doc) go undetected
+     * until brute chronological backtracking eventually rediscovered it.
+     *
+     * @return the set of faces (among {@code a, b, c}) whose domain actually shrank, or
+     * {@code null} if any domain emptied (a dead end - no legal joint assignment exists
+     * for this triple given the other two's current domains).
+     */
+    private static Set<Integer> reviseTriple(int[] triangle, Map<Integer, List<BiomeId>> domains, BiomeGraph graph) {
+        int a = triangle[0];
+        int b = triangle[1];
+        int c = triangle[2];
+        List<BiomeId> domainA = domains.get(a);
+        List<BiomeId> domainB = domains.get(b);
+        List<BiomeId> domainC = domains.get(c);
+
+        List<BiomeId> revisedA = domainA.stream().filter(value -> hasLegalCompletion(value, domainB, domainC, graph)).toList();
+        List<BiomeId> revisedB = domainB.stream().filter(value -> hasLegalCompletion(value, domainA, domainC, graph)).toList();
+        List<BiomeId> revisedC = domainC.stream().filter(value -> hasLegalCompletion(value, domainA, domainB, graph)).toList();
+        if (revisedA.isEmpty() || revisedB.isEmpty() || revisedC.isEmpty()) {
+            return null;
+        }
+
+        Set<Integer> shrunk = new java.util.HashSet<>();
+        if (revisedA.size() != domainA.size()) {
+            domains.put(a, revisedA);
+            shrunk.add(a);
+        }
+        if (revisedB.size() != domainB.size()) {
+            domains.put(b, revisedB);
+            shrunk.add(b);
+        }
+        if (revisedC.size() != domainC.size()) {
+            domains.put(c, revisedC);
+            shrunk.add(c);
+        }
+        return shrunk;
+    }
+
+    /** Whether some pair (one value from each of {@code domainX}, {@code domainY}) is mutually legal AND both legal against {@code value} - the actual joint 3-way check {@link #reviseTriple} needs. */
+    private static boolean hasLegalCompletion(BiomeId value, List<BiomeId> domainX, List<BiomeId> domainY, BiomeGraph graph) {
+        for (BiomeId x : domainX) {
+            if (!graph.isAllowed(value, x)) {
+                continue;
+            }
+            for (BiomeId y : domainY) {
+                if (graph.isAllowed(value, y) && graph.isAllowed(x, y)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Every real mesh-vertex triple among free faces, indexed by each member face for
+     * cheap "which triangles does this face's shrink affect" lookups. Derived purely from
+     * {@code adjacency} (no raw mesh geometry needed): 3 faces are mutually adjacent if
+     * and only if they share a real mesh vertex, since {@link
+     * com.mineutze.worldgen.regionsolve.topology.HexMeshBuilder}'s own vertex-degree-3
+     * guarantee means EVERY vertex has EXACTLY 3 faces meeting there, all pairwise
+     * adjacent, and no other 3-way mutual-adjacency configuration can occur on this mesh -
+     * finding every (A, B, C) where A-B, A-C, and B-C are ALL edges in the adjacency graph
+     * is exactly finding every real vertex, with no separate vertex data structure needed.
+     * Computed once per {@link #solve} call (the adjacency structure never changes during
+     * backtracking, only the domains do), not per search node.
+     */
+    private static Map<Integer, List<int[]>> mutualNeighborTrianglesByFace(TriangleAdjacency.Adjacency adjacency, Set<Integer> freeFaceIndices) {
+        Map<Integer, List<int[]>> byFace = new HashMap<>();
+        for (int a : freeFaceIndices) {
+            List<Integer> higherFreeNeighbors = adjacency.neighborFaceIndices().getOrDefault(a, Set.of()).stream()
+                .filter(n -> n > a && freeFaceIndices.contains(n))
+                .sorted()
+                .toList();
+            for (int i = 0; i < higherFreeNeighbors.size(); i++) {
+                for (int j = i + 1; j < higherFreeNeighbors.size(); j++) {
+                    int b = higherFreeNeighbors.get(i);
+                    int c = higherFreeNeighbors.get(j);
+                    if (adjacency.neighborFaceIndices().getOrDefault(b, Set.of()).contains(c)) {
+                        int[] triangle = {a, b, c};
+                        byFace.computeIfAbsent(a, key -> new ArrayList<>()).add(triangle);
+                        byFace.computeIfAbsent(b, key -> new ArrayList<>()).add(triangle);
+                        byFace.computeIfAbsent(c, key -> new ArrayList<>()).add(triangle);
+                    }
+                }
+            }
+        }
+        return byFace;
     }
 
     private static Optional<Integer> mostConstrainedUnassignedFace(Map<Integer, List<BiomeId>> domains, Map<Integer, BiomeId> assigned, Set<Integer> freeFaceIndices) {
