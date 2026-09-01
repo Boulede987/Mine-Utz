@@ -124,7 +124,7 @@ class ModBiomeGraphTest {
     }
 
     private static Map<MacroCellPos, BiomeId> solveAndRasterizeOverworld(long worldSeed) {
-        double sizeBlocks = 400;
+        double sizeBlocks = 325; // matches TriangleFieldGeometryRealization.HEX_SIZE_BLOCKS - kept in sync manually, see that constant's own doc
         int meshBoxMax = 9000;
         int realMin = 1500;
         int realMax = 7500;
@@ -194,7 +194,7 @@ class ModBiomeGraphTest {
     }
 
     private static HexMeshBuilder.HexMesh buildRealStressTestMesh() {
-        double sizeBlocks = 400;
+        double sizeBlocks = 325; // matches TriangleFieldGeometryRealization.HEX_SIZE_BLOCKS - kept in sync manually, see that constant's own doc
         int meshBoxMax = 9000;
         return HexMeshBuilder.build(sizeBlocks, 0, 0, meshBoxMax, meshBoxMax);
     }

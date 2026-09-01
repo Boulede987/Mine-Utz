@@ -41,7 +41,10 @@ import java.util.Set;
  */
 public final class HexBiomeRasterVisual {
 
-    private static final double SIZE_BLOCKS = 400;
+    // Matches TriangleFieldGeometryRealization.HEX_SIZE_BLOCKS - kept in sync manually
+    // since worldgen-core's export/ tools are deliberately standalone from the live
+    // orchestrator, not a dependency on it.
+    private static final double SIZE_BLOCKS = 325;
     private static final int MESH_BOX_MAX = 8000;
     private static final int REAL_MIN = 1600;
     private static final int REAL_MAX = 6400;

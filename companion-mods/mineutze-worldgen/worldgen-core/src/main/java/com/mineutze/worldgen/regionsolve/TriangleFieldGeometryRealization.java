@@ -48,25 +48,35 @@ import java.util.Set;
  */
 public final class TriangleFieldGeometryRealization {
 
-    // Matches doc/DESIGN.md's own target widths (300-1000 blocks): a hex's corner-to-
-    // corner span is 2x this, so one face's own raw footprint already approximates one
-    // real biome patch (see FaceSizeFeasibility's own doc) - size correction is then a
-    // small nudge, not the primary sizing mechanism.
+    // 650-block undisplaced width (circumradius 325), not the naive 800 (circumradius
+    // 400) doc/DESIGN.md's raw 300-1000 range midpoint would suggest - chosen to minimize
+    // the REAL 48-biome catalog's total starting size deficit instead: ModBiomeGraph.
+    // OVERWORLD's own size ranges aren't evenly spread across that 300-1000 range (14
+    // biomes in a 300-600 tier, 24 in 500-800, only 10 in 700-1000), and 800 sits at
+    // tier-2's own ceiling but far above the ENTIRE tier-1 range (max 600) - every tier-1
+    // face started 200-500 blocks oversized before FaceSizeFeasibility's per-edge bias
+    // even ran, regardless of neighbor (that mechanism can only trade area with a shared
+    // edge's other side, so a same-tier neighborhood - 51% of all real legal pairs - has
+    // little pull to offer). 650 was picked by minimizing total
+    // |targetArea(biome's own midpoint width) - targetArea(650)| summed across all 48 real
+    // biomes, weighted by how many biomes actually fall in each tier - see
+    // FaceSizeFeasibility's own doc for the area formula this reuses. Still a starting
+    // point, not a full fix: same-tier neighbors can still only trade a small amount of
+    // area with each other, and pairs at truly opposite tier extremes (e.g. beach-min next
+    // to ocean-max) can still exceed FaceSizeFeasibility's own bias clamp - both tracked
+    // separately, this constant only reduces every face's OWN starting gap before either
+    // comes into play.
     //
-    // A retune to 325 (minimizing the real 48-biome catalog's total starting size
-    // deficit - tier-1 biomes' 300-600 range sits well under this 800-wide baseline) was
-    // tried and REVERTED: it exposed a real, severe worst-case in
-    // TriangleIdentitySizeAssignment's own backtracking search - worldSeed 2026+8=2034
-    // against ModBiomeGraph.OVERWORLD took 13s to solve at size 400 but was STILL RUNNING
-    // (300+ CPU-seconds, ~222-deep recursion) at size 325 before being killed, confirmed
-    // via jstack against a live `./gradlew test` run, not a guess. This isn't a NEW bug
-    // from the retune - 13s for one solve at size 400 is already a real latent worst-case,
-    // just one that stayed survivable at this size. The retune made an already-existing
-    // exponential-backtracking risk in the CSP itself cross from "slow" to "effectively
-    // hangs" for at least one real seed. See ModBiomeGraphTest's own note on this - fixing
-    // it needs real work on the CSP (constraint propagation beyond plain MRV, or a hard
-    // node/time budget with a fail-loud diagnostic), not a different size constant.
-    private static final double HEX_SIZE_BLOCKS = 400;
+    // This EXACT value was tried once already and reverted: it originally exposed two real
+    // dead ends in TriangleIdentitySizeAssignment's own backtracking search that plain
+    // forward checking (and later, binary AC-3 alone) couldn't see - worldSeed=2034's
+    // 13s-at-400-but-non-terminating-at-325 case, then worldSeed=2060's genuine
+    // zero-valid-triple mesh-vertex dead end. Both are fixed now (real AC-3 + mesh-vertex
+    // triple consistency + a hard node-budget safety net - see that class's own doc for
+    // the full story). Swept all 50 real starvation-test seeds at this exact value
+    // post-fix: 100% solve clean. Re-applying it is not just re-trying the same broken
+    // thing again - the actual blocker was fixed at its own root, in the CSP, not here.
+    private static final double HEX_SIZE_BLOCKS = 325;
     // Generous margin (matches the old triangle mesh's own empirically-trusted value) -
     // guarantees every face touching the actual region is non-hull-touching (real
     // neighbor context on every side for the CSP's own legality solving).
