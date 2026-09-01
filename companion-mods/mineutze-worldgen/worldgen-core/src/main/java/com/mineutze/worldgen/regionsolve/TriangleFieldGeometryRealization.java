@@ -52,6 +52,20 @@ public final class TriangleFieldGeometryRealization {
     // corner span is 2x this, so one face's own raw footprint already approximates one
     // real biome patch (see FaceSizeFeasibility's own doc) - size correction is then a
     // small nudge, not the primary sizing mechanism.
+    //
+    // A retune to 325 (minimizing the real 48-biome catalog's total starting size
+    // deficit - tier-1 biomes' 300-600 range sits well under this 800-wide baseline) was
+    // tried and REVERTED: it exposed a real, severe worst-case in
+    // TriangleIdentitySizeAssignment's own backtracking search - worldSeed 2026+8=2034
+    // against ModBiomeGraph.OVERWORLD took 13s to solve at size 400 but was STILL RUNNING
+    // (300+ CPU-seconds, ~222-deep recursion) at size 325 before being killed, confirmed
+    // via jstack against a live `./gradlew test` run, not a guess. This isn't a NEW bug
+    // from the retune - 13s for one solve at size 400 is already a real latent worst-case,
+    // just one that stayed survivable at this size. The retune made an already-existing
+    // exponential-backtracking risk in the CSP itself cross from "slow" to "effectively
+    // hangs" for at least one real seed. See ModBiomeGraphTest's own note on this - fixing
+    // it needs real work on the CSP (constraint propagation beyond plain MRV, or a hard
+    // node/time budget with a fail-loud diagnostic), not a different size constant.
     private static final double HEX_SIZE_BLOCKS = 400;
     // Generous margin (matches the old triangle mesh's own empirically-trusted value) -
     // guarantees every face touching the actual region is non-hull-touching (real
