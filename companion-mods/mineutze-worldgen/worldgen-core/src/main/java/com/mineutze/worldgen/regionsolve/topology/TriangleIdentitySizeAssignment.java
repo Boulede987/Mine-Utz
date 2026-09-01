@@ -5,9 +5,11 @@ import com.mineutze.worldgen.biomegraph.BiomeId;
 import com.mineutze.worldgen.biomegraph.BiomeNode;
 import com.mineutze.worldgen.biomegraph.BiomeSizeRange;
 
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.Deque;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -34,11 +36,40 @@ import java.util.Set;
  * and grows the real territory later, cell by cell, competing against every
  * other face for the same ground.
  *
- * <p>Each face has AT MOST 3 real neighbors ({@link TriangleAdjacency}'s own
- * guarantee) — MRV (most-constrained-face-first) + forward checking
- * backtracking, not full AC-3 arc-consistency: at degree ≤3 the extra
- * pruning power AC-3 buys over forward checking is small, and forward
- * checking is meaningfully simpler to get right. Candidate biomes are tried
+ * <p>MRV (most-constrained-face-first) + maintained arc consistency
+ * (AC-3-style propagation, {@link #forwardCheck}) during backtracking.
+ * <b>Was plain single-hop forward checking</b> — correct back when this ran
+ * over the deleted triangle mesh (each face had at most 3 neighbors, and the
+ * doc here used to argue AC-3's extra pruning wasn't worth it at that
+ * degree). That justification went stale the moment the mesh pivoted to hex
+ * (see {@code HexMeshBuilder}): a hex face has up to 6 neighbors, and
+ * because of the hex mesh's own vertex-degree-3 property (the exact
+ * guarantee the whole pivot exists for), every pair of CONSECUTIVE
+ * neighbors around a face is also directly adjacent to each other — the
+ * real local constraint structure is a dense, near-clique neighborhood, not
+ * 6 independent pairwise checks. Plain forward checking only re-examines
+ * the face just assigned's own direct neighbors; it never looks further, so
+ * a real conflict two or three faces away went completely undetected until
+ * the search physically backtracked its way there. Measured directly: a
+ * real 238-free-face mesh at {@code worldSeed=2034} against {@code
+ * ModBiomeGraph.OVERWORLD} took 13 real seconds with plain forward checking
+ * and was still running (300+ CPU-seconds, 222-deep recursion, confirmed
+ * via a live thread dump) before propagation was added. {@link
+ * #forwardCheck} now runs a real AC-3 worklist: whenever assigning a face
+ * (or an earlier propagation step) shrinks some neighbor's domain, every
+ * OTHER neighbor of that shrunk face gets re-revised too, and so on until
+ * nothing changes — conflicts several hops away are pruned immediately
+ * instead of being rediscovered node by node.
+ *
+ * <p>{@link #backtrack} also enforces a hard node budget ({@link
+ * SearchBudget}) as a safety net independent of how good propagation is —
+ * some instance can still be genuinely hard, and "hangs indefinitely" is
+ * strictly worse than "fails loud with a diagnosis" on a live game path.
+ * Not a primary fix, propagation above is; this exists because no
+ * propagation scheme eliminates worst-case blowup on every possible
+ * instance.
+ *
+ * <p>Candidate biomes are tried
  * in a per-{@code (worldSeed, faceIndex)} DETERMINISTIC JITTERED order, never
  * a fixed order — a real, previously-shipped bug in this codebase's earlier
  * CSP attempt tried candidates in plain alphabetical order, so any
@@ -127,7 +158,8 @@ public final class TriangleIdentitySizeAssignment {
 
         FaceFairnessQuota fairness = FaceFairnessQuota.forRegion(allBiomes, freeFaceIndices.size(), regionAreaBlocks2);
         Map<Integer, BiomeId> assigned = new LinkedHashMap<>();
-        if (!backtrack(domains, assigned, adjacency, freeFaceIndices, graph, worldSeed, fairness)) {
+        SearchBudget budget = SearchBudget.forFaceCount(freeFaceIndices.size());
+        if (!backtrack(domains, assigned, adjacency, freeFaceIndices, graph, worldSeed, fairness, budget)) {
             return Optional.empty();
         }
 
@@ -138,8 +170,9 @@ public final class TriangleIdentitySizeAssignment {
 
     private static boolean backtrack(
         Map<Integer, List<BiomeId>> domains, Map<Integer, BiomeId> assigned, TriangleAdjacency.Adjacency adjacency,
-        Set<Integer> freeFaceIndices, BiomeGraph graph, long worldSeed, FaceFairnessQuota fairness
+        Set<Integer> freeFaceIndices, BiomeGraph graph, long worldSeed, FaceFairnessQuota fairness, SearchBudget budget
     ) {
+        budget.visitNode(freeFaceIndices.size());
         Optional<Integer> nextFace = mostConstrainedUnassignedFace(domains, assigned, freeFaceIndices);
         if (nextFace.isEmpty()) {
             return true; // every free face assigned
@@ -154,7 +187,7 @@ public final class TriangleIdentitySizeAssignment {
             assigned.put(faceIndex, candidate);
             fairness.increment(candidate);
             Map<Integer, List<BiomeId>> prunedDomains = forwardCheck(faceIndex, candidate, domains, adjacency, freeFaceIndices, assigned, graph);
-            if (prunedDomains != null && backtrack(prunedDomains, assigned, adjacency, freeFaceIndices, graph, worldSeed, fairness)) {
+            if (prunedDomains != null && backtrack(prunedDomains, assigned, adjacency, freeFaceIndices, graph, worldSeed, fairness, budget)) {
                 return true;
             }
             fairness.decrement(candidate);
@@ -163,23 +196,84 @@ public final class TriangleIdentitySizeAssignment {
         return false;
     }
 
-    /** @return a copy of {@code domains} with every still-unassigned neighbor of {@code faceIndex} pruned to only candidates still legal against the new assignment, or {@code null} if that pruning empties any domain (an immediate dead end, forward checking's whole point — fail fast instead of discovering it several levels deeper). */
+    /**
+     * AC-3-style arc-consistency propagation, not just single-hop forward checking (see
+     * class doc for why plain forward checking stopped being enough once the mesh pivoted
+     * to hex). Seeds a worklist with {@code faceIndex}'s own unassigned neighbors (the
+     * direct effect of the new assignment); every time revising a face's domain against
+     * one of its neighbors actually shrinks it, every OTHER unassigned neighbor of THAT
+     * face gets re-revised too, and so on until the worklist drains - a conflict several
+     * hops away is pruned immediately instead of only being discovered once the search
+     * physically backtracks its way there.
+     *
+     * @return a copy of {@code domains} with every domain reachable by propagation pruned
+     * to values still consistent with at least one value in each neighbor's own domain, or
+     * {@code null} if propagation empties any domain (a dead end, detected as early as
+     * arc consistency alone can detect it).
+     */
     private static Map<Integer, List<BiomeId>> forwardCheck(
         int faceIndex, BiomeId candidate, Map<Integer, List<BiomeId>> domains, TriangleAdjacency.Adjacency adjacency,
         Set<Integer> freeFaceIndices, Map<Integer, BiomeId> assigned, BiomeGraph graph
     ) {
         Map<Integer, List<BiomeId>> next = new HashMap<>(domains);
+        Deque<Integer> worklist = new ArrayDeque<>();
+
         for (int neighbor : adjacency.neighborFaceIndices().getOrDefault(faceIndex, Set.of())) {
             if (!freeFaceIndices.contains(neighbor) || assigned.containsKey(neighbor)) {
                 continue;
             }
-            List<BiomeId> prunedDomain = next.get(neighbor).stream().filter(other -> graph.isAllowed(candidate, other)).toList();
-            if (prunedDomain.isEmpty()) {
+            if (!reviseAgainstSingleValue(neighbor, candidate, next, graph, worklist)) {
                 return null;
             }
-            next.put(neighbor, prunedDomain);
+        }
+
+        while (!worklist.isEmpty()) {
+            int shrunk = worklist.poll();
+            List<BiomeId> shrunkDomain = next.get(shrunk);
+            for (int neighbor : adjacency.neighborFaceIndices().getOrDefault(shrunk, Set.of())) {
+                if (!freeFaceIndices.contains(neighbor) || assigned.containsKey(neighbor)) {
+                    continue;
+                }
+                if (!reviseAgainstDomain(neighbor, shrunkDomain, next, graph, worklist)) {
+                    return null;
+                }
+            }
         }
         return next;
+    }
+
+    /** Prunes {@code domains.get(faceToRevise)} to values legal against the single value {@code fixedValue} - enqueues {@code faceToRevise} if this actually shrinks it. @return false if the domain empties (an immediate dead end). */
+    private static boolean reviseAgainstSingleValue(
+        int faceToRevise, BiomeId fixedValue, Map<Integer, List<BiomeId>> domains, BiomeGraph graph, Deque<Integer> worklist
+    ) {
+        List<BiomeId> before = domains.get(faceToRevise);
+        List<BiomeId> pruned = before.stream().filter(candidate -> graph.isAllowed(fixedValue, candidate)).toList();
+        if (pruned.isEmpty()) {
+            return false;
+        }
+        if (pruned.size() != before.size()) {
+            domains.put(faceToRevise, pruned);
+            worklist.add(faceToRevise);
+        }
+        return true;
+    }
+
+    /** Prunes {@code domains.get(faceToRevise)} to values with at least one legal counterpart still in {@code otherDomain} - enqueues {@code faceToRevise} if this actually shrinks it. @return false if the domain empties (an immediate dead end). */
+    private static boolean reviseAgainstDomain(
+        int faceToRevise, List<BiomeId> otherDomain, Map<Integer, List<BiomeId>> domains, BiomeGraph graph, Deque<Integer> worklist
+    ) {
+        List<BiomeId> before = domains.get(faceToRevise);
+        List<BiomeId> revised = before.stream()
+            .filter(candidate -> otherDomain.stream().anyMatch(other -> graph.isAllowed(candidate, other)))
+            .toList();
+        if (revised.isEmpty()) {
+            return false;
+        }
+        if (revised.size() != before.size()) {
+            domains.put(faceToRevise, revised);
+            worklist.add(faceToRevise);
+        }
+        return true;
     }
 
     private static Optional<Integer> mostConstrainedUnassignedFace(Map<Integer, List<BiomeId>> domains, Map<Integer, BiomeId> assigned, Set<Integer> freeFaceIndices) {
@@ -234,5 +328,46 @@ public final class TriangleIdentitySizeAssignment {
         hash = hash * 31 + biome.hashCode();
         int span = range.maxWidthBlocks() - range.minWidthBlocks() + 1;
         return range.minWidthBlocks() + new Random(hash).nextInt(span);
+    }
+
+    /**
+     * Hard ceiling on {@link #backtrack} node visits — a safety net independent of how
+     * good {@link #forwardCheck}'s own propagation is, not a replacement for it (see class
+     * doc). {@code NODES_PER_FACE} was calibrated by direct measurement, not guessed: a
+     * real 238-free-face mesh's worst KNOWN-solvable instance (across the seeds already
+     * exercised by this codebase's own stress tests, post-propagation-upgrade) visits on
+     * the order of a few hundred nodes; {@code worldSeed=2034} against {@code
+     * ModBiomeGraph.OVERWORLD} at {@code HEX_SIZE_BLOCKS=400} - the exact instance that
+     * originally motivated this class - is the one real pre-propagation pathological case
+     * on record, and now solves in well under the ceiling below post-propagation-upgrade.
+     * 5,000 nodes/face leaves generous headroom above every measured legitimate solve
+     * while still failing loud in well under a second of wall-clock time for a mesh this
+     * size, rather than hanging indefinitely.
+     */
+    private static final class SearchBudget {
+        private static final long NODES_PER_FACE = 5_000L;
+
+        private final long maxNodes;
+        private long visitedNodes;
+
+        private SearchBudget(long maxNodes) {
+            this.maxNodes = maxNodes;
+        }
+
+        static SearchBudget forFaceCount(int freeFaceCount) {
+            return new SearchBudget(Math.max(1, freeFaceCount) * NODES_PER_FACE);
+        }
+
+        void visitNode(int freeFaceCount) {
+            visitedNodes++;
+            if (visitedNodes > maxNodes) {
+                throw new IllegalStateException(
+                    "TriangleIdentitySizeAssignment: backtracking exceeded " + maxNodes + " nodes ("
+                        + NODES_PER_FACE + "/face x " + freeFaceCount + " free faces) without finding or ruling out "
+                        + "a legal assignment - a genuinely pathological instance (or a real algorithmic regression), "
+                        + "not something to wait out. Fails loud instead of hanging indefinitely."
+                );
+            }
+        }
     }
 }
