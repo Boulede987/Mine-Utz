@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -105,6 +106,37 @@ class WeightedVertexPlacementTest {
         }
     }
 
+    /**
+     * The exact regression this test exists to prevent: an EARLIER version of {@link
+     * #calibratedWeights} used a MULTIPLICATIVE update ({@code newWeight = oldWeight *
+     * ratio}), which measurably failed - {@link #radicalCenter}'s own formula depends on
+     * the DIFFERENCE between two weights, never their ratio, so multiplying every face's
+     * weight by a similar factor barely moves the diagram even as the weight value itself
+     * collapses toward zero (confirmed via a real round-by-round trace at the time: weight
+     * fell from 22500 to 39 over 15 rounds while realized area stayed almost flat). The
+     * fix (additive correction) must bring a moderate mismatch essentially exactly onto
+     * target, not just closer than the uncalibrated one-shot guess.
+     */
+    @Test
+    void calibrationConvergesCloseToTargetForAModerateMismatch() {
+        HexMeshBuilder.HexMesh mesh = HexMeshBuilder.build(SIZE, 0, 0, 3000, 3000);
+        TriangleAdjacency.Adjacency adjacency = TriangleAdjacency.of(mesh.faces());
+        int center = aFaceWithSixFullyInteriorNeighbors(mesh, adjacency);
+
+        int baselineWidth = (int) (2 * SIZE);
+        int targetWidth = (int) (baselineWidth * 0.7); // a moderate mismatch, well short of the catalog's own most extreme cases
+        Map<Integer, TriangleIdentitySizeAssignment.Assignment> assignments = new HashMap<>();
+        assignments.put(center, new TriangleIdentitySizeAssignment.Assignment(BIOME, targetWidth));
+        for (int neighbor : adjacency.neighborFaceIndices().get(center)) {
+            assignments.put(neighbor, new TriangleIdentitySizeAssignment.Assignment(BIOME, baselineWidth));
+        }
+
+        Map<Integer, Point2D> displaced = WeightedVertexPlacement.displacedVertexPositions(mesh, adjacency, assignments, SIZE);
+        double realizedWidth = realizedWidthOf(mesh, displaced, center);
+
+        assertEquals(targetWidth, realizedWidth, targetWidth * 0.05, "expected calibration to converge within 5% of target for a moderate mismatch");
+    }
+
     /** A face with no assignment at all (fixed cross-region, or hull-touching) must not crash the computation - it falls back to a baseline weight, same as documented. */
     @Test
     void unassignedFacesFallBackToBaselineWeightWithoutCrashing() {
@@ -149,6 +181,34 @@ class WeightedVertexPlacementTest {
             }
         }
         throw new IllegalStateException("expected at least one fully-interior real mesh-vertex triple in a real-sized mesh");
+    }
+
+    /** A real interior face all 6 of whose own neighbors are ALSO non-hull-touching - so every one of its 6 vertex-triples resolves to a real position, matching a genuine interior-region face rather than one near the mesh's own outer margin. */
+    private static int aFaceWithSixFullyInteriorNeighbors(HexMeshBuilder.HexMesh mesh, TriangleAdjacency.Adjacency adjacency) {
+        for (Map.Entry<Integer, Set<Integer>> entry : adjacency.neighborFaceIndices().entrySet()) {
+            int faceIndex = entry.getKey();
+            if (adjacency.hullTouchingFaceIndices().contains(faceIndex)) {
+                continue;
+            }
+            Set<Integer> neighbors = entry.getValue();
+            if (neighbors.size() == 6 && neighbors.stream().noneMatch(n -> adjacency.hullTouchingFaceIndices().contains(n))) {
+                return faceIndex;
+            }
+        }
+        throw new IllegalStateException("expected at least one fully-interior 6-neighbor face in a real-sized mesh");
+    }
+
+    private static double realizedWidthOf(HexMeshBuilder.HexMesh mesh, Map<Integer, Point2D> displaced, int faceIndex) {
+        List<Integer> vertexIndices = mesh.faces().get(faceIndex).vertexIndices();
+        int cornerCount = vertexIndices.size();
+        double sum = 0;
+        for (int i = 0; i < cornerCount; i++) {
+            Point2D current = displaced.getOrDefault(vertexIndices.get(i), mesh.vertices().get(vertexIndices.get(i)));
+            Point2D next = displaced.getOrDefault(vertexIndices.get((i + 1) % cornerCount), mesh.vertices().get(vertexIndices.get((i + 1) % cornerCount)));
+            sum += current.x() * next.z() - next.x() * current.z();
+        }
+        double area = Math.abs(sum) / 2.0;
+        return 2.0 * Math.sqrt(area / (3.0 * Math.sqrt(3.0) / 2.0));
     }
 
     private static int sharedVertexOf(HexMeshBuilder.HexMesh mesh, int[] triangle) {

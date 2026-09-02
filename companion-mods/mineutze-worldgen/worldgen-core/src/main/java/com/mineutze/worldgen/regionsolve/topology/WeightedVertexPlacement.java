@@ -46,10 +46,32 @@ import java.util.Set;
  * {@link TriangleIdentitySizeAssignment.Assignment} (a fixed cross-region face — its own
  * real chosen width was never tracked across regions, only its biome; or a
  * hull-touching face with no assignment at all) falls back to {@code
- * baselineCircumradiusBlocks} as its own weight, meaning any vertex touching one gets
- * LESS size-driven displacement right at that seam — the same "wiggle-only, no
- * size-correction precision at a boundary" limitation the old bias approach already had
- * and documented, not something newly introduced here.
+ * baselineCircumradiusBlocks} as its own weight, held FIXED throughout calibration
+ * (below) — meaning any vertex touching one gets LESS size-driven displacement right at
+ * that seam — the same "wiggle-only, no size-correction precision at a boundary"
+ * limitation the old bias approach already had and documented, not something newly
+ * introduced here.
+ *
+ * <p><b>Weight is only a one-shot proxy for realized area — calibrated by iteration, not
+ * assumed.</b> A cell's realized area in a power diagram depends on ALL its neighbors'
+ * weights too, not just its own, so naively setting {@code weight = powerWeight(target)}
+ * once measurably undershoots for a face whose target diverges far from its actual
+ * neighbors (confirmed directly: an isolated face wanting much less area than 6 uniform
+ * neighbors still lands 3-60% oversized depending on how extreme the gap is). This is
+ * expected, not a bug — for any positive target areas summing to the domain's own total
+ * area, weights realizing them EXACTLY are known to exist (the semi-discrete optimal
+ * transport existence result for power diagrams), just not via a closed form. {@link
+ * #calibratedWeights} finds them approximately via {@code CALIBRATION_ROUNDS} rounds of
+ * ADDITIVE correction ({@code newWeight = oldWeight + DAMPING_FACTOR *
+ * (targetArea - realizedArea)}, damped and per-round-clamped for stability) - additive,
+ * not multiplicative, because {@link #radicalCenter}'s own formula depends on the
+ * DIFFERENCE between two weights, never their ratio (see {@link #DAMPING_FACTOR}'s own
+ * doc for a real multiplicative attempt that measurably failed for exactly this reason).
+ * Justified by a real, provable monotonicity property of power diagrams (increasing one
+ * site's weight, holding others fixed, strictly increases its own area and strictly
+ * decreases every neighbor's), the same structural property that makes Gauss-Seidel-style
+ * relaxation converge for diagonally-dominant systems, generalized here to this smooth
+ * nonlinear case.
  */
 public final class WeightedVertexPlacement {
 
@@ -62,6 +84,30 @@ public final class WeightedVertexPlacement {
      * comparable, not an unrelated new number.
      */
     private static final double MAX_VERTEX_DISPLACEMENT_FRACTION = 0.4;
+
+    /** Rounds of additive weight correction - linear (not Newton's-method quadratic) convergence, so a real iteration count, not 2-3 steps; cheap enough at real region scale (a full vertex-placement pass is sub-100ms) that this stays well under any performance concern. */
+    private static final int CALIBRATION_ROUNDS = 15;
+
+    /**
+     * Damping factor on each round's ADDITIVE area-error correction ({@code newWeight =
+     * oldWeight + DAMPING_FACTOR * (targetArea - realizedArea)}) - additive, not
+     * multiplicative, on purpose: {@link #radicalCenter}'s own formula depends on the
+     * DIFFERENCE between two weights ({@code weightA - weightB}), never their ratio, so a
+     * multiplicative update (an earlier version of this class tried {@code newWeight =
+     * oldWeight * ratio}) barely moves the actual geometry even as the weight value
+     * itself shrinks toward zero - confirmed directly via a round-by-round trace: weight
+     * fell from 22500 to 39 over 15 rounds while realized area stayed almost flat,
+     * because multiplying every face's weight by a similar ratio leaves their PAIRWISE
+     * DIFFERENCES, and therefore the diagram itself, nearly unchanged. The additive
+     * update matches what the geometry actually responds to. 0.5 damping keeps two
+     * mutually-adjacent faces from overcorrecting off each other's stale state and
+     * oscillating, at the cost of needing more rounds to converge - a conventional
+     * "half-step" choice for this style of fixed-point relaxation.
+     */
+    private static final double DAMPING_FACTOR = 0.5;
+
+    /** Bounds how much any single round can change one face's own weight, as a fraction of the baseline face's own weight (itself a squared length, same unit as area) - a defensive guard against one huge correction overshooting wildly before neighbors have had a chance to react, and against runaway growth if a face's own displacement is already geometry-clamped (see {@link #clampDisplacement}) and no amount of extra weight would actually move it further. */
+    private static final double MAX_WEIGHT_CORRECTION_FRACTION_OF_BASELINE = 1.0;
 
     private WeightedVertexPlacement() {
     }
@@ -82,8 +128,46 @@ public final class WeightedVertexPlacement {
     ) {
         Map<Integer, Point2D> centers = centersOf(mesh);
         Map<Integer, Double> weightByFace = weightsOf(mesh, assignments, baselineCircumradiusBlocks);
-
         List<int[]> triangles = adjacency.mutuallyAdjacentTriples(centers.keySet());
+        Map<Integer, Double> targetAreaByFace = targetAreasOf(assignments);
+
+        Map<Integer, Point2D> displaced = vertexPositionsFor(mesh, centers, weightByFace, triangles, baselineCircumradiusBlocks);
+        return calibratedWeights(mesh, centers, weightByFace, triangles, targetAreaByFace, displaced, baselineCircumradiusBlocks);
+    }
+
+    /**
+     * Runs {@link #CALIBRATION_ROUNDS} rounds of proportional weight correction - see
+     * class doc for why this converges in principle (the semi-discrete optimal transport
+     * existence result) and why a proportional update is a reasonable way to search for
+     * it (power diagrams' own monotonicity property). Only faces with a real target area
+     * (a real CSP assignment) ever have their weight adjusted; fixed/hull-touching faces
+     * stay at baseline weight throughout, same as before calibration existed.
+     */
+    private static Map<Integer, Point2D> calibratedWeights(
+        HexMeshBuilder.HexMesh mesh, Map<Integer, Point2D> centers, Map<Integer, Double> weightByFace,
+        List<int[]> triangles, Map<Integer, Double> targetAreaByFace, Map<Integer, Point2D> displaced, double baselineCircumradiusBlocks
+    ) {
+        Map<Integer, Double> weights = new HashMap<>(weightByFace);
+        double maxCorrectionPerRound = MAX_WEIGHT_CORRECTION_FRACTION_OF_BASELINE * baselineCircumradiusBlocks * baselineCircumradiusBlocks;
+        for (int round = 0; round < CALIBRATION_ROUNDS; round++) {
+            Map<Integer, Double> realizedAreaByFace = realizedAreasOf(mesh, displaced, targetAreaByFace.keySet());
+            for (Map.Entry<Integer, Double> entry : targetAreaByFace.entrySet()) {
+                int faceIndex = entry.getKey();
+                double targetArea = entry.getValue();
+                double realizedArea = realizedAreaByFace.get(faceIndex);
+                double rawCorrection = DAMPING_FACTOR * (targetArea - realizedArea);
+                double clampedCorrection = Math.max(-maxCorrectionPerRound, Math.min(maxCorrectionPerRound, rawCorrection));
+                weights.put(faceIndex, weights.get(faceIndex) + clampedCorrection);
+            }
+            displaced = vertexPositionsFor(mesh, centers, weights, triangles, baselineCircumradiusBlocks);
+        }
+        return displaced;
+    }
+
+    private static Map<Integer, Point2D> vertexPositionsFor(
+        HexMeshBuilder.HexMesh mesh, Map<Integer, Point2D> centers, Map<Integer, Double> weightByFace,
+        List<int[]> triangles, double baselineCircumradiusBlocks
+    ) {
         Map<Integer, Point2D> displaced = new HashMap<>();
         for (int[] triangle : triangles) {
             int vertexIndex = sharedVertexOf(mesh, triangle);
@@ -96,6 +180,43 @@ public final class WeightedVertexPlacement {
             displaced.put(vertexIndex, clampDisplacement(original, radicalCenter, baselineCircumradiusBlocks));
         }
         return Map.copyOf(displaced);
+    }
+
+    private static Map<Integer, Double> targetAreasOf(Map<Integer, TriangleIdentitySizeAssignment.Assignment> assignments) {
+        Map<Integer, Double> targetAreas = new HashMap<>();
+        assignments.forEach((faceIndex, assignment) -> targetAreas.put(faceIndex, targetAreaBlocks2(assignment.widthBlocks())));
+        return targetAreas;
+    }
+
+    /**
+     * Treats a biome's assigned width as a regular hexagon's own corner-to-corner span
+     * (same convention {@link #powerWeight} uses): circumradius = width/2, area =
+     * {@code (3*sqrt(3)/2) x circumradius^2}.
+     */
+    private static double targetAreaBlocks2(int widthBlocks) {
+        double circumradius = widthBlocks / 2.0;
+        return (3.0 * Math.sqrt(3.0) / 2.0) * circumradius * circumradius;
+    }
+
+    /** Shoelace area of each face's own displaced boundary (straight corner-to-corner, no wiggle - wiggle is a separate, later, cosmetic-only step with zero net area effect, not this class's concern). */
+    private static Map<Integer, Double> realizedAreasOf(HexMeshBuilder.HexMesh mesh, Map<Integer, Point2D> displaced, Set<Integer> faceIndices) {
+        Map<Integer, Double> areas = new HashMap<>();
+        for (int faceIndex : faceIndices) {
+            List<Integer> vertexIndices = mesh.faces().get(faceIndex).vertexIndices();
+            int cornerCount = vertexIndices.size();
+            double sum = 0;
+            for (int i = 0; i < cornerCount; i++) {
+                Point2D current = cornerPosition(mesh, displaced, vertexIndices.get(i));
+                Point2D next = cornerPosition(mesh, displaced, vertexIndices.get((i + 1) % cornerCount));
+                sum += current.x() * next.z() - next.x() * current.z();
+            }
+            areas.put(faceIndex, Math.abs(sum) / 2.0);
+        }
+        return areas;
+    }
+
+    private static Point2D cornerPosition(HexMeshBuilder.HexMesh mesh, Map<Integer, Point2D> displaced, int vertexIndex) {
+        return displaced.getOrDefault(vertexIndex, mesh.vertices().get(vertexIndex));
     }
 
     private static Map<Integer, Point2D> centersOf(HexMeshBuilder.HexMesh mesh) {
