@@ -7,11 +7,11 @@ import com.mineutze.worldgen.biomegraph.ModBiomeGraph;
 import com.mineutze.worldgen.regionsolve.EdgeDisplacementRasterizer;
 import com.mineutze.worldgen.regionsolve.MacroCellPos;
 import com.mineutze.worldgen.regionsolve.MacroGridConfig;
-import com.mineutze.worldgen.regionsolve.topology.FaceSizeFeasibility;
 import com.mineutze.worldgen.regionsolve.topology.HexMeshBuilder;
-import com.mineutze.worldgen.regionsolve.topology.NodeEdge;
+import com.mineutze.worldgen.regionsolve.topology.Point2D;
 import com.mineutze.worldgen.regionsolve.topology.TriangleAdjacency;
 import com.mineutze.worldgen.regionsolve.topology.TriangleIdentitySizeAssignment;
+import com.mineutze.worldgen.regionsolve.topology.WeightedVertexPlacement;
 
 import javax.imageio.ImageIO;
 import java.awt.Color;
@@ -34,10 +34,9 @@ import java.util.Set;
 /**
  * Live-path gate visual: the actual rasterized biome output of the real pipeline (hex
  * mesh -> real CSP against {@link ModBiomeGraph#OVERWORLD} -> {@link
- * FaceSizeFeasibility} -> {@link EdgeDisplacementRasterizer}), colored per biome — not
- * just mesh wireframe ({@link HexMeshSpikeVisual}), the real end result a player would
- * see, at the real 48-biome catalog and the real 400-block hex size this pipeline
- * actually ships with.
+ * WeightedVertexPlacement} -> {@link EdgeDisplacementRasterizer}), colored per biome —
+ * the real end result a player would see, at the real 48-biome catalog and the real
+ * hex size this pipeline actually ships with.
  */
 public final class HexBiomeRasterVisual {
 
@@ -73,10 +72,10 @@ public final class HexBiomeRasterVisual {
             throw new IllegalStateException("no legal CSP assignment found for this mesh - shouldn't happen at this scale against ModBiomeGraph.OVERWORLD");
         }
         Map<Integer, TriangleIdentitySizeAssignment.Assignment> assignments = solved.get();
-        Map<NodeEdge, Double> biasByEdge = FaceSizeFeasibility.biasBlocksByEdge(mesh, adjacency, assignments);
+        Map<Integer, Point2D> displacedVertices = WeightedVertexPlacement.displacedVertexPositions(mesh, adjacency, assignments, SIZE_BLOCKS);
 
         List<MacroCellPos> cells = allCellsIn(GRID_CONFIG, REAL_MIN, REAL_MIN, REAL_MAX, REAL_MAX);
-        Map<MacroCellPos, BiomeId> result = EdgeDisplacementRasterizer.rasterize(cells, assignments, mesh, biasByEdge, Map.of(), Map.of(), GRID_CONFIG, WORLD_SEED);
+        Map<MacroCellPos, BiomeId> result = EdgeDisplacementRasterizer.rasterize(cells, assignments, mesh, displacedVertices, Map.of(), Map.of(), GRID_CONFIG, WORLD_SEED);
 
         Map<BiomeId, Integer> palette = evenlySpacedPalette(graph);
         Path rasterFile = outputDir.resolve("hex_biome_raster.png");

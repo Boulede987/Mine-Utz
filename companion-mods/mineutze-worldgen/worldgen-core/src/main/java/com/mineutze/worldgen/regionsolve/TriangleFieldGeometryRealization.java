@@ -2,13 +2,12 @@ package com.mineutze.worldgen.regionsolve;
 
 import com.mineutze.worldgen.biomegraph.BiomeGraph;
 import com.mineutze.worldgen.biomegraph.BiomeId;
-import com.mineutze.worldgen.regionsolve.topology.FaceSizeFeasibility;
 import com.mineutze.worldgen.regionsolve.topology.HexFace;
 import com.mineutze.worldgen.regionsolve.topology.HexMeshBuilder;
-import com.mineutze.worldgen.regionsolve.topology.NodeEdge;
 import com.mineutze.worldgen.regionsolve.topology.Point2D;
 import com.mineutze.worldgen.regionsolve.topology.TriangleAdjacency;
 import com.mineutze.worldgen.regionsolve.topology.TriangleIdentitySizeAssignment;
+import com.mineutze.worldgen.regionsolve.topology.WeightedVertexPlacement;
 
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -21,9 +20,10 @@ import java.util.Set;
  * faces meeting at every vertex — see doc/decisions/2026-08-29-hex-mesh-edge-
  * displacement.md) → {@link TriangleAdjacency} (real ≤6-neighbor mesh topology) → {@link
  * TriangleIdentitySizeAssignment} (fused identity+size CSP, legality fully decided
- * here) → {@link FaceSizeFeasibility} (per-edge size-correction bias) → {@link
- * EdgeDisplacementRasterizer} (independent per-face polygon rasterization, no
- * competition, no live legality re-check) → {@code Map<MacroCellPos,BiomeId>}.
+ * here) → {@link WeightedVertexPlacement} (power-diagram vertex placement, size baked
+ * directly into WHERE each corner sits) → {@link EdgeDisplacementRasterizer}
+ * (independent per-face polygon rasterization, no competition, no live legality
+ * re-check) → {@code Map<MacroCellPos,BiomeId>}.
  *
  * <p>Supersedes the earlier Delaunay-triangle-mesh + competitive-growth path (deleted
  * alongside {@link DelaunayTriangulation}, {@code SeamGrowthRasterizer}, {@code
@@ -35,16 +35,18 @@ import java.util.Set;
  * checking is provably complete and the rasterizer needs no live check at all.
  *
  * <p><b>The mesh's raw point positions matter only up to identity+size assignment.</b>
- * After that, a face's actual SHAPE comes from displacing its own edges (bias for size,
- * wiggle for organic texture), never from growth competing for territory. {@link
- * RegionSolveInput#fixedBoundaryCells} is still consulted for IDENTITY (a face whose
- * centroid falls in an already-solved neighbor is fixed to that neighbor's own decision,
- * via {@link TriangleIdentitySizeAssignment}'s existing {@code fixedFaceBiomes}
- * mechanism — see {@link #buildFixedFaceBiomes}); a cross-region shared edge gets no
- * bias from {@link FaceSizeFeasibility} (only within-region edges are scoped there — see
- * its own doc), so a region boundary displaces with wiggle only, not size-correction —
- * matches the same "legality guaranteed, seam smoothness a separate concern" split the
- * old path already had.
+ * After that, a face's actual SHAPE comes from its own corners' weighted positions
+ * ({@link WeightedVertexPlacement}) plus organic wiggle ({@link
+ * com.mineutze.worldgen.regionsolve.topology.EdgeDisplacement}), never from growth
+ * competing for territory. {@link RegionSolveInput#fixedBoundaryCells} is still
+ * consulted for IDENTITY (a face whose centroid falls in an already-solved neighbor is
+ * fixed to that neighbor's own decision, via {@link TriangleIdentitySizeAssignment}'s
+ * existing {@code fixedFaceBiomes} mechanism — see {@link #buildFixedFaceBiomes}); a
+ * cross-region vertex falls back to a baseline (unweighted) position in {@link
+ * WeightedVertexPlacement} (only real, in-region assignments carry a real weight — see
+ * its own doc), so a region boundary displaces with wiggle only, not size-driven
+ * precision — matches the same "legality guaranteed, seam smoothness a separate
+ * concern" split the old path already had.
  */
 public final class TriangleFieldGeometryRealization {
 
@@ -53,19 +55,19 @@ public final class TriangleFieldGeometryRealization {
     // the REAL 48-biome catalog's total starting size deficit instead: ModBiomeGraph.
     // OVERWORLD's own size ranges aren't evenly spread across that 300-1000 range (14
     // biomes in a 300-600 tier, 24 in 500-800, only 10 in 700-1000), and 800 sits at
-    // tier-2's own ceiling but far above the ENTIRE tier-1 range (max 600) - every tier-1
-    // face started 200-500 blocks oversized before FaceSizeFeasibility's per-edge bias
-    // even ran, regardless of neighbor (that mechanism can only trade area with a shared
-    // edge's other side, so a same-tier neighborhood - 51% of all real legal pairs - has
-    // little pull to offer). 650 was picked by minimizing total
-    // |targetArea(biome's own midpoint width) - targetArea(650)| summed across all 48 real
-    // biomes, weighted by how many biomes actually fall in each tier - see
-    // FaceSizeFeasibility's own doc for the area formula this reuses. Still a starting
-    // point, not a full fix: same-tier neighbors can still only trade a small amount of
-    // area with each other, and pairs at truly opposite tier extremes (e.g. beach-min next
-    // to ocean-max) can still exceed FaceSizeFeasibility's own bias clamp - both tracked
-    // separately, this constant only reduces every face's OWN starting gap before either
-    // comes into play.
+    // tier-2's own ceiling but far above the ENTIRE tier-1 range (max 600). 650 was picked
+    // by minimizing total |targetArea(biome's own midpoint width) - targetArea(650)|
+    // summed across all 48 real biomes, weighted by how many biomes actually fall in each
+    // tier - see WeightedVertexPlacement's own doc for the area/weight formula this
+    // reuses. Still not a full fix, even under the current power-diagram size mechanism
+    // (this constant was originally justified against the OLDER, deleted per-edge
+    // additive-bias mechanism, whose "same-tier neighbors trade zero area" degeneracy no
+    // longer exists as a hard rule - but a real, measured, softer version of the same
+    // problem remains: a face wanting to be much smaller than its actual surrounding
+    // weights still lands systematically oversized, since weight-equals-target-area is
+    // only a one-shot proxy for realized area, not an exact one - see
+    // WeightedVertexPlacement's own doc). This constant reduces every face's OWN starting
+    // gap regardless of which size mechanism sits downstream of it.
     //
     // This EXACT value was tried once already and reverted: it originally exposed two real
     // dead ends in TriangleIdentitySizeAssignment's own backtracking search that plain
@@ -113,9 +115,9 @@ public final class TriangleFieldGeometryRealization {
             adjacency, freeFaceIndices, fixedFaceBiomes, input.graph(), input.worldSeed(), bounds.areaBlocks2(), input.region()
         );
 
-        Map<NodeEdge, Double> bias = FaceSizeFeasibility.biasBlocksByEdge(mesh, adjacency, assignments);
+        Map<Integer, Point2D> displacedVertices = WeightedVertexPlacement.displacedVertexPositions(mesh, adjacency, assignments, HEX_SIZE_BLOCKS);
         Map<MacroCellPos, BiomeId> result = EdgeDisplacementRasterizer.rasterize(
-            cells, assignments, mesh, bias, fixedFaceBiomes, input.fixedBoundaryCells(), gridConfig, input.worldSeed()
+            cells, assignments, mesh, displacedVertices, fixedFaceBiomes, input.fixedBoundaryCells(), gridConfig, input.worldSeed()
         );
         return new RegionSolveResult(result, List.of(), 0);
     }

@@ -113,16 +113,26 @@ public final class BiomeGraph {
      * BiomeSizeRange} - a real, static, mesh-independent structural gap, not an
      * instance-specific one: found directly against the real 48-biome catalog, both
      * {@code DEEP_LUKEWARM_OCEAN} and {@code MANGROVE_SWAMP}'s own legal neighbors are
-     * ALL the same size range as themselves. A face surrounded only by same-tier
-     * neighbors can never trade area with any of them - {@link
-     * com.mineutze.worldgen.regionsolve.topology.FaceSizeFeasibility}'s own per-edge
-     * reconciliation is exactly zero whenever two neighbors want the same shrink/grow
-     * direction (see that class's own doc) - so a biome failing this check can never
-     * reach its own target size in ANY mesh, regardless of seed. Unlike {@link
-     * #requireEveryLocalNeighborhoodSolvable}, this is NOT prone to overcounting: it only
-     * needs each node's own static legal-neighbor list and each neighbor's own size
-     * range, no mesh/instance-dependent domain narrowing involved at all - a property of
-     * the graph alone, checkable once, always sound.
+     * ALL the same size range as themselves.
+     *
+     * <p>This check's own rationale predates a redesign of how size actually gets
+     * realized (per-edge additive bias, {@code FaceSizeFeasibility}, replaced by {@link
+     * com.mineutze.worldgen.regionsolve.topology.WeightedVertexPlacement}'s power-diagram
+     * vertex placement) - under the OLD mechanism, two same-tier neighbors produced
+     * EXACTLY zero correction, a provable dead end. The new mechanism has no such hard
+     * zero (it differentiates by weight MAGNITUDE, not by "which direction do we each
+     * want," so two same-tier neighbors with different chosen widths still get a real,
+     * if imperfect, correction) - but measured directly post-redesign, same-tier
+     * neighborhoods still correlate with measurably worse size fidelity:
+     * {@code DEEP_LUKEWARM_OCEAN} averaged ~35% undersized across a real 10-seed sample,
+     * a real, if softer, consequence of the same root issue, not eliminated by the
+     * redesign. This check's underlying signal remains a real, useful floor, even though
+     * its exact "can never reach target, in any mesh" framing is now an overstatement.
+     *
+     * <p>Unlike {@link #requireEveryLocalNeighborhoodSolvable}, this is NOT prone to
+     * overcounting: it only needs each node's own static legal-neighbor list and each
+     * neighbor's own size range, no mesh/instance-dependent domain narrowing involved at
+     * all - a property of the graph alone, checkable once, always sound.
      *
      * <p>Deliberately NOT part of {@link #forProduction}'s automatic bundle: the real
      * catalog fails this TODAY (see above), so wiring it in would break {@code
@@ -296,8 +306,8 @@ public final class BiomeGraph {
     /**
      * Default-deny - including a biome next to itself. Deliberately NOT a free pass
      * anymore: under the hex mesh (see doc/decisions/2026-08-29-hex-mesh-edge-
-     * displacement.md), a face's edges are what carry its own assigned size via {@link
-     * com.mineutze.worldgen.regionsolve.topology.FaceSizeFeasibility} - two same-biome
+     * displacement.md), a face's own corners are what carry its own assigned size via
+     * {@link com.mineutze.worldgen.regionsolve.topology.WeightedVertexPlacement} - two same-biome
      * neighbors merging into one undifferentiated blob was never the intended shape (one
      * hex face is meant to BE one biome patch), and self-adjacency was the mechanism
      * silently allowing that merge. Removing it was measured directly, at real 48-biome

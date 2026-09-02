@@ -24,6 +24,15 @@ import java.util.List;
  * meshes compute the bit-identical curve for a shared physical edge with no
  * live coordination between them — this is the actual mechanism watertight
  * cross-mesh seams depend on, not a property of {@link NodeEdge} indices.
+ * Still true when the endpoints are {@link WeightedVertexPlacement}'s own
+ * computed positions, not raw hex vertices — both regions independently
+ * compute the identical radical-center point for a shared vertex from the
+ * same face weights, so the coordinates still agree with no coordination.
+ *
+ * <p>Wiggle only, no separate bias knob — macro-scale sizing now lives
+ * entirely in WHERE the two endpoints are ({@link WeightedVertexPlacement}),
+ * not in a mid-edge additive term (formerly this method's own {@code
+ * biasBlocks} parameter, removed alongside {@code FaceSizeFeasibility}).
  */
 public final class EdgeDisplacement {
 
@@ -38,31 +47,17 @@ public final class EdgeDisplacement {
      * {@code (2 + INTERIOR_POINT_COUNT)}-point polyline starting at {@code a}
      * and ending at {@code b} (in that order, whichever physical endpoint
      * either one is). Every interior point is offset perpendicular to the
-     * chord by {@code biasBlocks} (a systematic, signed nudge - see below)
-     * plus an independently-hashed random wiggle of at most
-     * {@code ±wiggleAmplitudeBlocks} - the two are separate knobs: wiggle is
-     * organic texture with no net direction, bias is a deliberate net push
-     * to one side (e.g. {@link FaceSizeFeasibility}'s per-edge area
-     * correction).
+     * chord by an independently-hashed random wiggle of at most
+     * {@code ±wiggleAmplitudeBlocks} — organic texture with no net
+     * direction.
      *
-     * <p>{@code biasBlocks} is signed in a fixed CANONICAL direction,
-     * independent of which order {@code a}/{@code b} are passed in: positive
-     * means "toward the side the perpendicular {@code (-dz, dx)} of
-     * {@code (canonicalUpper - canonicalLower)} points to", where
-     * {@code canonicalLower}/{@code canonicalUpper} are {@code a}/{@code b}
-     * sorted lexicographically. A caller determining which physical side
-     * that is for a given face (as {@link FaceSizeFeasibility} does, via a
-     * cross-product sign test against that face's own centroid) gets a
-     * bias value that means the same physical thing regardless of which
-     * order it happened to look up the edge's endpoints in.
-     *
-     * <p>Order-independent otherwise too: calling with {@code (a, b)} or
-     * {@code (b, a)} produces the exact same set of interior point
-     * POSITIONS, just walked in the opposite direction to match whichever
-     * endpoint order was requested - see this class's own doc for why that
-     * is the actual mechanism cross-mesh watertightness depends on.
+     * <p>Order-independent: calling with {@code (a, b)} or {@code (b, a)}
+     * produces the exact same set of interior point POSITIONS, just walked
+     * in the opposite direction to match whichever endpoint order was
+     * requested — see this class's own doc for why that is the actual
+     * mechanism cross-mesh watertightness depends on.
      */
-    public static List<Point2D> displacedPolyline(Point2D a, Point2D b, long worldSeed, double wiggleAmplitudeBlocks, double biasBlocks) {
+    public static List<Point2D> displacedPolyline(Point2D a, Point2D b, long worldSeed, double wiggleAmplitudeBlocks) {
         if (wiggleAmplitudeBlocks < 0) {
             throw new IllegalArgumentException("wiggleAmplitudeBlocks must be non-negative, got " + wiggleAmplitudeBlocks);
         }
@@ -74,7 +69,7 @@ public final class EdgeDisplacement {
         Point2D lower = reversed ? b : a;
         Point2D upper = reversed ? a : b;
 
-        List<Point2D> canonical = canonicalPolyline(lower, upper, worldSeed, wiggleAmplitudeBlocks, biasBlocks);
+        List<Point2D> canonical = canonicalPolyline(lower, upper, worldSeed, wiggleAmplitudeBlocks);
         if (!reversed) {
             return canonical;
         }
@@ -87,7 +82,7 @@ public final class EdgeDisplacement {
         return a.x() != b.x() ? a.x() < b.x() : a.z() < b.z();
     }
 
-    private static List<Point2D> canonicalPolyline(Point2D lower, Point2D upper, long worldSeed, double wiggleAmplitudeBlocks, double biasBlocks) {
+    private static List<Point2D> canonicalPolyline(Point2D lower, Point2D upper, long worldSeed, double wiggleAmplitudeBlocks) {
         double dx = upper.x() - lower.x();
         double dz = upper.z() - lower.z();
         double length = Math.hypot(dx, dz);
@@ -100,7 +95,7 @@ public final class EdgeDisplacement {
             double t = (double) i / (INTERIOR_POINT_COUNT + 1);
             double baseX = lower.x() + dx * t;
             double baseZ = lower.z() + dz * t;
-            double offset = biasBlocks + wiggleAmplitudeBlocks * signedUnitOffset(lower, upper, worldSeed, i);
+            double offset = wiggleAmplitudeBlocks * signedUnitOffset(lower, upper, worldSeed, i);
             points.add(new Point2D(baseX + perpX * offset, baseZ + perpZ * offset));
         }
         points.add(upper);

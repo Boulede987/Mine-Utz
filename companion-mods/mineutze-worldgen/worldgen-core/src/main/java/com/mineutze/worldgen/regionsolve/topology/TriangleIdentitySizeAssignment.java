@@ -405,36 +405,17 @@ public final class TriangleIdentitySizeAssignment {
     }
 
     /**
-     * Every real mesh-vertex triple among free faces, indexed by each member face for
-     * cheap "which triangles does this face's shrink affect" lookups. Derived purely from
-     * {@code adjacency} (no raw mesh geometry needed): 3 faces are mutually adjacent if
-     * and only if they share a real mesh vertex, since {@link
-     * com.mineutze.worldgen.regionsolve.topology.HexMeshBuilder}'s own vertex-degree-3
-     * guarantee means EVERY vertex has EXACTLY 3 faces meeting there, all pairwise
-     * adjacent, and no other 3-way mutual-adjacency configuration can occur on this mesh -
-     * finding every (A, B, C) where A-B, A-C, and B-C are ALL edges in the adjacency graph
-     * is exactly finding every real vertex, with no separate vertex data structure needed.
-     * Computed once per {@link #solve} call (the adjacency structure never changes during
-     * backtracking, only the domains do), not per search node.
+     * Every real mesh-vertex triple among free faces ({@link
+     * TriangleAdjacency.Adjacency#mutuallyAdjacentTriples}), indexed by each member face
+     * for cheap "which triangles does this face's shrink affect" lookups. Computed once
+     * per {@link #solve} call (the adjacency structure never changes during backtracking,
+     * only the domains do), not per search node.
      */
     private static Map<Integer, List<int[]>> mutualNeighborTrianglesByFace(TriangleAdjacency.Adjacency adjacency, Set<Integer> freeFaceIndices) {
         Map<Integer, List<int[]>> byFace = new HashMap<>();
-        for (int a : freeFaceIndices) {
-            List<Integer> higherFreeNeighbors = adjacency.neighborFaceIndices().getOrDefault(a, Set.of()).stream()
-                .filter(n -> n > a && freeFaceIndices.contains(n))
-                .sorted()
-                .toList();
-            for (int i = 0; i < higherFreeNeighbors.size(); i++) {
-                for (int j = i + 1; j < higherFreeNeighbors.size(); j++) {
-                    int b = higherFreeNeighbors.get(i);
-                    int c = higherFreeNeighbors.get(j);
-                    if (adjacency.neighborFaceIndices().getOrDefault(b, Set.of()).contains(c)) {
-                        int[] triangle = {a, b, c};
-                        byFace.computeIfAbsent(a, key -> new ArrayList<>()).add(triangle);
-                        byFace.computeIfAbsent(b, key -> new ArrayList<>()).add(triangle);
-                        byFace.computeIfAbsent(c, key -> new ArrayList<>()).add(triangle);
-                    }
-                }
+        for (int[] triangle : adjacency.mutuallyAdjacentTriples(freeFaceIndices)) {
+            for (int face : triangle) {
+                byFace.computeIfAbsent(face, key -> new ArrayList<>()).add(triangle);
             }
         }
         return byFace;

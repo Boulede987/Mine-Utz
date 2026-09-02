@@ -7,11 +7,11 @@ import com.mineutze.worldgen.regionsolve.RegionPos;
 import com.mineutze.worldgen.regionsolve.RegionSolveInput;
 import com.mineutze.worldgen.regionsolve.RegionSolveResult;
 import com.mineutze.worldgen.regionsolve.TriangleFieldGeometryRealization;
-import com.mineutze.worldgen.regionsolve.topology.FaceSizeFeasibility;
 import com.mineutze.worldgen.regionsolve.topology.HexMeshBuilder;
-import com.mineutze.worldgen.regionsolve.topology.NodeEdge;
+import com.mineutze.worldgen.regionsolve.topology.Point2D;
 import com.mineutze.worldgen.regionsolve.topology.TriangleAdjacency;
 import com.mineutze.worldgen.regionsolve.topology.TriangleIdentitySizeAssignment;
+import com.mineutze.worldgen.regionsolve.topology.WeightedVertexPlacement;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
@@ -34,11 +34,13 @@ class ModBiomeGraphTest {
      * {@code forProduction}'s automatic bundle (see that method's own doc) precisely
      * because the real catalog fails it today: both {@code deep_lukewarm_ocean} and
      * {@code mangrove_swamp}'s own legal neighbors are all the same {@code
-     * BiomeSizeRange} as themselves, so {@code FaceSizeFeasibility}'s per-edge area
-     * correction can never help either of them reach its own target size, in any mesh,
-     * regardless of seed. This test exists so that gap stays visible in the suite, not
-     * just in a memory file - once a real cross-tier {@code AdjacencyRule} is added for
-     * both, this test should be REPLACED with one asserting
+     * BiomeSizeRange} as themselves. Under the current power-diagram size mechanism
+     * ({@code WeightedVertexPlacement}) this is no longer a provable dead end, just a
+     * measured real one - {@code deep_lukewarm_ocean} averaged ~35% undersized across a
+     * real 10-seed sample, still worse than biomes with a real cross-tier neighbor. This
+     * test exists so that gap stays visible in the suite, not just in a memory file -
+     * once a real cross-tier {@code AdjacencyRule} is added for both, this test should be
+     * REPLACED with one asserting
      * {@code ModBiomeGraph.OVERWORLD.requireEveryBiomeHasACrossTierNeighbor()} passes
      * cleanly, not left pointing at a fix that no longer applies.
      */
@@ -165,9 +167,9 @@ class ModBiomeGraphTest {
             adjacency, freeFaceIndices, Map.of(), ModBiomeGraph.OVERWORLD, worldSeed
         ).orElseThrow(() -> new AssertionError("expected a real hex mesh at this scale to be solvable against ModBiomeGraph.OVERWORLD (worldSeed=" + worldSeed + ")"));
 
-        Map<NodeEdge, Double> bias = FaceSizeFeasibility.biasBlocksByEdge(mesh, adjacency, assignments);
+        Map<Integer, Point2D> displacedVertices = WeightedVertexPlacement.displacedVertexPositions(mesh, adjacency, assignments, sizeBlocks);
         List<MacroCellPos> cells = overworldTestCells(gridConfig, realMin, realMin, realMax, realMax);
-        return EdgeDisplacementRasterizer.rasterize(cells, assignments, mesh, bias, Map.of(), Map.of(), gridConfig, worldSeed);
+        return EdgeDisplacementRasterizer.rasterize(cells, assignments, mesh, displacedVertices, Map.of(), Map.of(), gridConfig, worldSeed);
     }
 
     /**

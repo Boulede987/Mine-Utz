@@ -4,10 +4,10 @@ import com.mineutze.worldgen.biomegraph.BiomeGraph;
 import com.mineutze.worldgen.biomegraph.BiomeId;
 import com.mineutze.worldgen.biomegraph.ModBiomeGraph;
 import com.mineutze.worldgen.regionsolve.topology.HexMeshBuilder;
-import com.mineutze.worldgen.regionsolve.topology.NodeEdge;
-import com.mineutze.worldgen.regionsolve.topology.FaceSizeFeasibility;
+import com.mineutze.worldgen.regionsolve.topology.Point2D;
 import com.mineutze.worldgen.regionsolve.topology.TriangleAdjacency;
 import com.mineutze.worldgen.regionsolve.topology.TriangleIdentitySizeAssignment;
+import com.mineutze.worldgen.regionsolve.topology.WeightedVertexPlacement;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
@@ -32,7 +32,7 @@ class EdgeDisplacementRasterizerTest {
 
     /**
      * The whole point of the hex-mesh pivot, checked end to end against the real
-     * production graph: a real CSP solve, fed through {@link FaceSizeFeasibility} and
+     * production graph: a real CSP solve, fed through {@link WeightedVertexPlacement} and
      * this rasterizer, produces full coverage AND zero illegal Moore-adjacencies with NO
      * live legality check anywhere in this class - legality was already fully decided at
      * CSP time. Only the mesh's own well-interior cells are checked (see class-level
@@ -83,14 +83,14 @@ class EdgeDisplacementRasterizerTest {
             TriangleIdentitySizeAssignment.solve(adjacency, freeFaceIndices, Map.of(), ModBiomeGraph.DEFAULT, worldSeed);
         assertTrue(solved.isPresent());
         Map<Integer, TriangleIdentitySizeAssignment.Assignment> assignments = solved.get();
-        Map<NodeEdge, Double> bias = FaceSizeFeasibility.biasBlocksByEdge(mesh, adjacency, assignments);
+        Map<Integer, Point2D> displacedVertices = WeightedVertexPlacement.displacedVertexPositions(mesh, adjacency, assignments, SIZE);
 
         List<MacroCellPos> cellsWithAnImpossibleOne = new ArrayList<>(allCellsIn(GRID_CONFIG, 150, 150, 350, 350));
         cellsWithAnImpossibleOne.add(new MacroCellPos(1_000_000, 1_000_000)); // nowhere near this mesh
 
         assertThrows(
             IllegalStateException.class,
-            () -> EdgeDisplacementRasterizer.rasterize(cellsWithAnImpossibleOne, assignments, mesh, bias, Map.of(), Map.of(), GRID_CONFIG, worldSeed)
+            () -> EdgeDisplacementRasterizer.rasterize(cellsWithAnImpossibleOne, assignments, mesh, displacedVertices, Map.of(), Map.of(), GRID_CONFIG, worldSeed)
         );
     }
 
@@ -105,9 +105,9 @@ class EdgeDisplacementRasterizerTest {
         assertTrue(solved.isPresent(), "expected a real hex mesh at this scale to be solvable against ModBiomeGraph.DEFAULT");
         Map<Integer, TriangleIdentitySizeAssignment.Assignment> assignments = solved.get();
 
-        Map<NodeEdge, Double> bias = FaceSizeFeasibility.biasBlocksByEdge(mesh, adjacency, assignments);
+        Map<Integer, Point2D> displacedVertices = WeightedVertexPlacement.displacedVertexPositions(mesh, adjacency, assignments, SIZE);
         List<MacroCellPos> cells = allCellsIn(GRID_CONFIG, REAL_MIN, REAL_MIN, REAL_MAX, REAL_MAX);
-        return EdgeDisplacementRasterizer.rasterize(cells, assignments, mesh, bias, Map.of(), Map.of(), GRID_CONFIG, worldSeed);
+        return EdgeDisplacementRasterizer.rasterize(cells, assignments, mesh, displacedVertices, Map.of(), Map.of(), GRID_CONFIG, worldSeed);
     }
 
     private static Set<Integer> nonHullTouchingFaceIndices(HexMeshBuilder.HexMesh mesh, TriangleAdjacency.Adjacency adjacency) {

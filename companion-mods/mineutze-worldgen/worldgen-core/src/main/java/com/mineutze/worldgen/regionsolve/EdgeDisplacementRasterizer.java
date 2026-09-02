@@ -4,7 +4,6 @@ import com.mineutze.worldgen.biomegraph.BiomeId;
 import com.mineutze.worldgen.regionsolve.topology.EdgeDisplacement;
 import com.mineutze.worldgen.regionsolve.topology.HexFace;
 import com.mineutze.worldgen.regionsolve.topology.HexMeshBuilder;
-import com.mineutze.worldgen.regionsolve.topology.NodeEdge;
 import com.mineutze.worldgen.regionsolve.topology.Point2D;
 import com.mineutze.worldgen.regionsolve.topology.TriangleIdentitySizeAssignment;
 
@@ -19,22 +18,22 @@ import java.util.Set;
 /**
  * Replaces {@link SeamGrowthRasterizer}'s competitive, per-cell-legality-checked growth
  * with independent per-face polygon rasterization: each free face's own displaced
- * boundary ({@link EdgeDisplacement}, biased by {@link
- * com.mineutze.worldgen.regionsolve.topology.FaceSizeFeasibility}) is rasterized on its
- * own, no competition, and — the whole point of the hex-mesh pivot (see
- * doc/decisions/2026-08-29-hex-mesh-edge-displacement.md) — NO live per-cell legality
- * re-check, because a hex mesh's vertex-degree-3 property already makes the CSP's
- * edge-only legality check complete: no vertex-only touch can ever slip through the way
- * it could for a triangle mesh.
+ * boundary ({@link EdgeDisplacement} wiggle, positioned by {@link
+ * com.mineutze.worldgen.regionsolve.topology.WeightedVertexPlacement}'s own power-diagram
+ * vertex placement) is rasterized on its own, no competition, and — the whole point of
+ * the hex-mesh pivot (see doc/decisions/2026-08-29-hex-mesh-edge-displacement.md) — NO
+ * live per-cell legality re-check, because a hex mesh's vertex-degree-3 property already
+ * makes the CSP's edge-only legality check complete: no vertex-only touch can ever slip
+ * through the way it could for a triangle mesh.
  *
- * <p><b>Scope limitation, inherited from {@code FaceSizeFeasibility}:</b> a cross-region
- * boundary edge (the OTHER face isn't in this call's own {@code assignments}, only its
- * already-decided BIOME is known via {@code fixedBoundaryCells}) gets zero bias — still
- * deterministic and watertight (both regions independently compute the identical
- * wiggle-only curve for a shared physical edge), just without size-feasibility precision
- * right at a region seam. A real open item this codebase's own
- * doc/decisions/2026-08-29-remove-region-stitching.md proposes eliminating entirely by
- * removing region-shaped stitching, not something silently solved here.
+ * <p><b>Scope limitation, inherited from {@code WeightedVertexPlacement}:</b> a
+ * cross-region boundary vertex (a face there isn't in this call's own {@code
+ * assignments}, only its already-decided BIOME is known via {@code fixedBoundaryCells})
+ * gets a baseline (unweighted) position there — still deterministic and watertight (both
+ * regions independently compute the identical point for a shared physical vertex), just
+ * without size-driven precision right at a region seam. A real open item this codebase's
+ * own doc/decisions/2026-08-29-remove-region-stitching.md proposes eliminating entirely
+ * by removing region-shaped stitching, not something silently solved here.
  *
  * <p><b>Completeness is an assertion, not a repair pass</b> — unlike growth (where an
  * unclaimed cell was an expected, frequent occurrence {@link GrowthGapFiller} existed to
@@ -53,7 +52,7 @@ public final class EdgeDisplacementRasterizer {
 
     public static Map<MacroCellPos, BiomeId> rasterize(
         List<MacroCellPos> cells, Map<Integer, TriangleIdentitySizeAssignment.Assignment> assignments,
-        HexMeshBuilder.HexMesh mesh, Map<NodeEdge, Double> biasBlocksByEdge, Map<Integer, BiomeId> fixedFaceBiomes,
+        HexMeshBuilder.HexMesh mesh, Map<Integer, Point2D> displacedVertexPositions, Map<Integer, BiomeId> fixedFaceBiomes,
         Map<MacroCellPos, BiomeId> fixedBoundaryCells, MacroGridConfig gridConfig, long worldSeed
     ) {
         Set<MacroCellPos> regionCellSet = new HashSet<>(cells);
@@ -61,7 +60,7 @@ public final class EdgeDisplacementRasterizer {
 
         for (Map.Entry<Integer, TriangleIdentitySizeAssignment.Assignment> entry : assignments.entrySet()) {
             HexFace face = mesh.faces().get(entry.getKey());
-            List<Point2D> boundary = displacedBoundaryOf(face, mesh, biasBlocksByEdge, worldSeed);
+            List<Point2D> boundary = displacedBoundaryOf(face, mesh, displacedVertexPositions, worldSeed);
             claimCellsInside(boundary, entry.getValue().biome(), regionCellSet, decided, gridConfig);
         }
 
@@ -71,13 +70,14 @@ public final class EdgeDisplacementRasterizer {
         // displaced polygon too, only the ONE cell that made it "fixed" in the first place
         // (already present via fixedBoundaryCells) would be covered, silently orphaning the
         // rest of that same face's own territory whenever it straddles into THIS region's
-        // own cells. No bias for these (biasBlocksByEdge never has entries for a fixed
-        // face's own edges - see FaceSizeFeasibility's own within-region-only scope), so
-        // this is wiggle-only displacement, matching a cross-region edge's own documented
-        // "no size-feasibility precision right at a seam" limitation.
+        // own cells. Its own corners still get whatever position WeightedVertexPlacement
+        // computed for them (baseline-weighted, since a fixed face has no real assignment
+        // here - see that class's own scope doc), so this is wiggle-only displacement right
+        // at those corners, matching a cross-region edge's own documented "no size-driven
+        // precision at a seam" limitation.
         for (Map.Entry<Integer, BiomeId> entry : fixedFaceBiomes.entrySet()) {
             HexFace face = mesh.faces().get(entry.getKey());
-            List<Point2D> boundary = displacedBoundaryOf(face, mesh, biasBlocksByEdge, worldSeed);
+            List<Point2D> boundary = displacedBoundaryOf(face, mesh, displacedVertexPositions, worldSeed);
             claimCellsInside(boundary, entry.getValue(), regionCellSet, decided, gridConfig);
         }
 
@@ -85,9 +85,9 @@ public final class EdgeDisplacementRasterizer {
         return collectResult(cells, decided);
     }
 
-    /** Walks a face's own vertex loop, displacing each edge in turn - each edge's polyline already starts where the previous one ended, so only its FIRST point (except for the very first edge) is dropped to avoid a duplicate. */
+    /** Walks a face's own vertex loop, displacing each edge in turn - each edge's polyline already starts where the previous one ended, so only its FIRST point (except for the very first edge) is dropped to avoid a duplicate. Corner positions come from {@code displacedVertexPositions} where available (real, weighted placement), falling back to the raw undisplaced position for a true outer-hull vertex with no real mesh-vertex triple - see WeightedVertexPlacement's own doc. */
     private static List<Point2D> displacedBoundaryOf(
-        HexFace face, HexMeshBuilder.HexMesh mesh, Map<NodeEdge, Double> biasBlocksByEdge, long worldSeed
+        HexFace face, HexMeshBuilder.HexMesh mesh, Map<Integer, Point2D> displacedVertexPositions, long worldSeed
     ) {
         List<Integer> vertexIndices = face.vertexIndices();
         int cornerCount = vertexIndices.size();
@@ -95,11 +95,10 @@ public final class EdgeDisplacementRasterizer {
         for (int i = 0; i < cornerCount; i++) {
             int aIndex = vertexIndices.get(i);
             int bIndex = vertexIndices.get((i + 1) % cornerCount);
-            Point2D a = mesh.vertices().get(aIndex);
-            Point2D b = mesh.vertices().get(bIndex);
+            Point2D a = displacedVertexPositions.getOrDefault(aIndex, mesh.vertices().get(aIndex));
+            Point2D b = displacedVertexPositions.getOrDefault(bIndex, mesh.vertices().get(bIndex));
             double edgeLength = Math.hypot(b.x() - a.x(), b.z() - a.z());
-            double bias = biasBlocksByEdge.getOrDefault(NodeEdge.of(aIndex, bIndex), 0.0);
-            List<Point2D> edgePolyline = EdgeDisplacement.displacedPolyline(a, b, worldSeed, WIGGLE_FRACTION_OF_EDGE_LENGTH * edgeLength, bias);
+            List<Point2D> edgePolyline = EdgeDisplacement.displacedPolyline(a, b, worldSeed, WIGGLE_FRACTION_OF_EDGE_LENGTH * edgeLength);
             boundary.addAll(boundary.isEmpty() ? edgePolyline : edgePolyline.subList(1, edgePolyline.size()));
         }
         return boundary;

@@ -209,9 +209,10 @@ class BiomeGraphTest {
     /**
      * DESERT and OCEAN share one size range (700-1000), PLAINS has a different one
      * (300-600). DESERT's own only legal neighbor is OCEAN, its own same tier - a real
-     * structural gap: {@code FaceSizeFeasibility}'s per-edge area correction can never
-     * help DESERT reach its own target size in any mesh, since a shared edge can't trade
-     * area when both sides want the same shrink/grow direction. OCEAN and PLAINS each
+     * structural gap: DESERT can never legally border a differently-sized biome, so its
+     * own size correction has strictly less to work with than a biome with a real
+     * cross-tier option (see {@code BiomeGraph.requireEveryBiomeHasACrossTierNeighbor}'s
+     * own doc for the measured, current-mechanism consequence). OCEAN and PLAINS each
      * have a real cross-tier neighbor and correctly pass.
      */
     @Test

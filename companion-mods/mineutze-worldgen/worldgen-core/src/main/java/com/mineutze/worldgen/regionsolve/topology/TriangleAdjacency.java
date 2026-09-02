@@ -27,6 +27,42 @@ import java.util.Set;
 public final class TriangleAdjacency {
 
     public record Adjacency(Map<Integer, Set<Integer>> neighborFaceIndices, Set<Integer> hullTouchingFaceIndices) {
+
+        /**
+         * Every set of 3 mutually-adjacent faces among {@code faceIndices} - each is
+         * exactly one real mesh vertex on a hex mesh, by {@link HexMeshBuilder}'s own
+         * vertex-degree-3 guarantee: EVERY vertex has EXACTLY 3 faces meeting there, all
+         * pairwise adjacent, and no other 3-way mutual-adjacency configuration can occur.
+         * Finding every {@code (A, B, C)} where A-B, A-C, and B-C are ALL edges in this
+         * adjacency graph is exactly finding every real vertex among {@code faceIndices},
+         * with no separate vertex data structure needed. Each triple reported exactly
+         * once, canonically ordered ({@code a < b < c}).
+         *
+         * <p>Shared by {@link TriangleIdentitySizeAssignment}'s own ternary
+         * constraint-propagation (free faces only, during backtracking) and {@link
+         * WeightedVertexPlacement}'s power-diagram vertex placement (every face with a
+         * real position, after the CSP has already run) - both need "which face-triples
+         * correspond to a real mesh vertex," just over different face-index subsets.
+         */
+        public List<int[]> mutuallyAdjacentTriples(Set<Integer> faceIndices) {
+            List<int[]> triples = new ArrayList<>();
+            for (int a : faceIndices) {
+                List<Integer> higherNeighbors = neighborFaceIndices.getOrDefault(a, Set.of()).stream()
+                    .filter(n -> n > a && faceIndices.contains(n))
+                    .sorted()
+                    .toList();
+                for (int i = 0; i < higherNeighbors.size(); i++) {
+                    for (int j = i + 1; j < higherNeighbors.size(); j++) {
+                        int b = higherNeighbors.get(i);
+                        int c = higherNeighbors.get(j);
+                        if (neighborFaceIndices.getOrDefault(b, Set.of()).contains(c)) {
+                            triples.add(new int[]{a, b, c});
+                        }
+                    }
+                }
+            }
+            return triples;
+        }
     }
 
     private TriangleAdjacency() {
