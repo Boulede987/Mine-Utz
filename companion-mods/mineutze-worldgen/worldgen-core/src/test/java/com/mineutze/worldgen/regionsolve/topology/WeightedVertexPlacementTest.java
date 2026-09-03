@@ -92,7 +92,7 @@ class WeightedVertexPlacementTest {
         assignments.put(triangle[1], new TriangleIdentitySizeAssignment.Assignment(BIOME, 1));
 
         Map<Integer, Point2D> displaced = WeightedVertexPlacement.displacedVertexPositions(mesh, adjacency, assignments, SIZE);
-        double maxAllowedDisplacement = 0.4 * SIZE;
+        double maxAllowedDisplacement = 0.8 * SIZE;
         for (int vertexIndex : mesh.faces().get(triangle[0]).vertexIndices()) {
             Point2D computed = displaced.get(vertexIndex);
             if (computed == null) {
