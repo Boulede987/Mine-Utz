@@ -3,6 +3,7 @@ package com.mineutze.worldgen.regionsolve.topology;
 import com.mineutze.worldgen.biomegraph.BiomeId;
 import org.junit.jupiter.api.Test;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -80,9 +81,18 @@ class WeightedVertexPlacementTest {
         assertTrue(foundARealShift, "expected at least one of the oversized face's own boundary vertices to move farther from its own center");
     }
 
-    /** Mirrors the old per-edge bias clamp's own test intent: an extreme weight mismatch must still keep every displaced vertex within a bounded distance of its own undisplaced position, never producing a self-intersecting polygon regardless of how large the mismatch requests. */
+    /**
+     * The real property the adaptive clamp exists to guarantee, checked directly rather
+     * than by proxy: under an extreme weight mismatch, EVERY face in the mesh (not just
+     * the extreme one - a neighbor pulled hard by it could fold too) must still be a
+     * simple polygon (no self-intersection), no matter how large the requested
+     * displacement is. This replaces an older, weaker version of this test that only
+     * checked DISTANCE against a fixed threshold - a proxy for simplicity, not simplicity
+     * itself, since a vertex can stay well within any distance bound and still cross an
+     * adjacent edge if enough OTHER corners have also moved.
+     */
     @Test
-    void extremeWeightMismatchStaysClampedToASimplePolygon() {
+    void extremeWeightMismatchNeverProducesASelfIntersectingFace() {
         HexMeshBuilder.HexMesh mesh = HexMeshBuilder.build(SIZE, 0, 0, 3000, 3000);
         TriangleAdjacency.Adjacency adjacency = TriangleAdjacency.of(mesh.faces());
         int[] triangle = anyRealTriangle(mesh, adjacency);
@@ -92,18 +102,44 @@ class WeightedVertexPlacementTest {
         assignments.put(triangle[1], new TriangleIdentitySizeAssignment.Assignment(BIOME, 1));
 
         Map<Integer, Point2D> displaced = WeightedVertexPlacement.displacedVertexPositions(mesh, adjacency, assignments, SIZE);
-        double maxAllowedDisplacement = 0.8 * SIZE;
-        for (int vertexIndex : mesh.faces().get(triangle[0]).vertexIndices()) {
-            Point2D computed = displaced.get(vertexIndex);
-            if (computed == null) {
-                continue;
+
+        for (int faceIndex = 0; faceIndex < mesh.faces().size(); faceIndex++) {
+            List<Point2D> corners = new ArrayList<>();
+            for (int vertexIndex : mesh.faces().get(faceIndex).vertexIndices()) {
+                corners.add(displaced.getOrDefault(vertexIndex, mesh.vertices().get(vertexIndex)));
             }
-            Point2D original = mesh.vertices().get(vertexIndex);
-            assertTrue(
-                distance(original, computed) <= maxAllowedDisplacement + 1e-6,
-                "vertex " + vertexIndex + " displaced past the self-intersection-safe clamp"
-            );
+            assertTrue(isPolygonSimple(corners), "face " + faceIndex + " became a self-intersecting polygon under an extreme weight mismatch");
         }
+    }
+
+    /**
+     * The exact case that used to plateau under the old flat 0.4/0.8 displacement clamp:
+     * a face targeting roughly half its 6 uniform neighbors' width (the ratio of the real
+     * catalog's single most extreme tier-1 mismatch). Under the flat clamp this stuck at
+     * ratio 1.30 regardless of calibration rounds - proven to be a geometry-clamp limit,
+     * not an iteration limit, by the fact 15 and 60 rounds gave byte-identical results.
+     * The adaptive per-face clamp removes that artificial ceiling: it only limits a face
+     * as far as ITS OWN real geometry requires, so this same case now converges close to
+     * target instead of plateauing.
+     */
+    @Test
+    void theCatalogsMostExtremeSizeMismatchNoLongerPlateausUnderTheAdaptiveClamp() {
+        HexMeshBuilder.HexMesh mesh = HexMeshBuilder.build(SIZE, 0, 0, 3000, 3000);
+        TriangleAdjacency.Adjacency adjacency = TriangleAdjacency.of(mesh.faces());
+        int center = aFaceWithSixFullyInteriorNeighbors(mesh, adjacency);
+
+        int baselineWidth = (int) (2 * SIZE);
+        int targetWidth = (int) Math.round(baselineWidth * (300.0 / 650.0)); // same ratio as the catalog's most extreme real case
+        Map<Integer, TriangleIdentitySizeAssignment.Assignment> assignments = new HashMap<>();
+        assignments.put(center, new TriangleIdentitySizeAssignment.Assignment(BIOME, targetWidth));
+        for (int neighbor : adjacency.neighborFaceIndices().get(center)) {
+            assignments.put(neighbor, new TriangleIdentitySizeAssignment.Assignment(BIOME, baselineWidth));
+        }
+
+        Map<Integer, Point2D> displaced = WeightedVertexPlacement.displacedVertexPositions(mesh, adjacency, assignments, SIZE);
+        double realizedWidth = realizedWidthOf(mesh, displaced, center);
+
+        assertEquals(targetWidth, realizedWidth, targetWidth * 0.10, "expected the adaptive clamp to close the old plateau (was stuck at ratio 1.30) to within 10% of target");
     }
 
     /**
@@ -150,6 +186,68 @@ class WeightedVertexPlacementTest {
 
         Map<Integer, Point2D> displaced = WeightedVertexPlacement.displacedVertexPositions(mesh, adjacency, assignments, SIZE);
         assertTrue(displaced.containsKey(sharedVertexOf(mesh, triangle)), "expected the shared vertex to still resolve using baseline weight for the unassigned faces");
+    }
+
+    /**
+     * Independent reimplementation of the production simplicity check (same standard
+     * orientation-based segment-intersection test), not a call into the private
+     * production method - these tests exist to verify the real geometric PROPERTY the
+     * production code claims to guarantee, so they must not share its implementation, or
+     * a shared bug in both would go undetected.
+     */
+    @Test
+    void isPolygonSimpleReturnsTrueForARegularHexagon() {
+        HexMeshBuilder.HexMesh mesh = HexMeshBuilder.build(SIZE, 0, 0, 3000, 3000);
+        List<Point2D> corners = new ArrayList<>();
+        for (int vertexIndex : mesh.faces().get(anyRealTriangle(mesh, TriangleAdjacency.of(mesh.faces()))[0]).vertexIndices()) {
+            corners.add(mesh.vertices().get(vertexIndex));
+        }
+        assertTrue(isPolygonSimple(corners), "a real, undisplaced regular hexagon must always be simple");
+    }
+
+    @Test
+    void isPolygonSimpleReturnsFalseForAHandBuiltBowtieQuadrilateral() {
+        List<Point2D> bowtie = List.of(
+            new Point2D(0, 0), new Point2D(10, 10), new Point2D(10, 0), new Point2D(0, 10)
+        ); // edges (0,0)-(10,10) and (10,0)-(0,10) cross in the middle - a textbook bowtie
+        assertTrue(!isPolygonSimple(bowtie), "expected a hand-built bowtie quadrilateral to be detected as non-simple");
+    }
+
+    @Test
+    void isPolygonSimpleDoesNotFlagASharedCornerBetweenAdjacentEdgesAsACrossing() {
+        List<Point2D> irregularButSimple = List.of(
+            new Point2D(0, 0), new Point2D(10, -2), new Point2D(20, 0),
+            new Point2D(18, 15), new Point2D(10, 40), new Point2D(2, 15)
+        ); // one corner (10, 40) pulled far out, but the shape never crosses itself
+        assertTrue(isPolygonSimple(irregularButSimple), "a heavily irregular but genuinely non-crossing hexagon must not be flagged as unsimple");
+    }
+
+    /** Standalone reimplementation, deliberately not sharing code with the production method under test - see the class doc above the first of these tests. */
+    private static boolean isPolygonSimple(List<Point2D> corners) {
+        int cornerCount = corners.size();
+        for (int i = 0; i < cornerCount; i++) {
+            for (int j = i + 2; j < cornerCount; j++) {
+                if (i == 0 && j == cornerCount - 1) {
+                    continue;
+                }
+                if (segmentsCross(corners.get(i), corners.get((i + 1) % cornerCount), corners.get(j), corners.get((j + 1) % cornerCount))) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
+    private static boolean segmentsCross(Point2D a1, Point2D a2, Point2D b1, Point2D b2) {
+        double d1 = orientation(b1, b2, a1);
+        double d2 = orientation(b1, b2, a2);
+        double d3 = orientation(a1, a2, b1);
+        double d4 = orientation(a1, a2, b2);
+        return ((d1 > 0 && d2 < 0) || (d1 < 0 && d2 > 0)) && ((d3 > 0 && d4 < 0) || (d3 < 0 && d4 > 0));
+    }
+
+    private static double orientation(Point2D a, Point2D b, Point2D c) {
+        return (b.x() - a.x()) * (c.z() - a.z()) - (b.z() - a.z()) * (c.x() - a.x());
     }
 
     private static Map<Integer, TriangleIdentitySizeAssignment.Assignment> uniformAssignments(
