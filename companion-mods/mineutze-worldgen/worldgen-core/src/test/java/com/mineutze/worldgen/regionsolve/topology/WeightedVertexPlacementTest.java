@@ -34,7 +34,7 @@ class WeightedVertexPlacementTest {
         TriangleAdjacency.Adjacency adjacency = TriangleAdjacency.of(mesh.faces());
         Map<Integer, TriangleIdentitySizeAssignment.Assignment> uniformAssignments = uniformAssignments(mesh, adjacency, (int) (2 * SIZE));
 
-        Map<Integer, Point2D> displaced = WeightedVertexPlacement.displacedVertexPositions(mesh, adjacency, uniformAssignments, SIZE);
+        Map<Integer, Point2D> displaced = WeightedVertexPlacement.displacedVertexPositions(mesh, adjacency, uniformAssignments, SIZE, 0.0);
         assertTrue(displaced.size() > 10, "expected a real number of resolved mesh vertices, got " + displaced.size());
 
         for (Map.Entry<Integer, Point2D> entry : displaced.entrySet()) {
@@ -62,7 +62,7 @@ class WeightedVertexPlacementTest {
         Map<Integer, TriangleIdentitySizeAssignment.Assignment> assignments = uniformAssignments(mesh, adjacency, (int) (2 * SIZE));
         assignments.put(bigFace, new TriangleIdentitySizeAssignment.Assignment(BIOME, (int) (2 * SIZE * 3)));
 
-        Map<Integer, Point2D> displaced = WeightedVertexPlacement.displacedVertexPositions(mesh, adjacency, assignments, SIZE);
+        Map<Integer, Point2D> displaced = WeightedVertexPlacement.displacedVertexPositions(mesh, adjacency, assignments, SIZE, 0.0);
         Point2D bigFaceCenter = centroidOf(mesh, bigFace);
 
         boolean foundARealShift = false;
@@ -101,7 +101,7 @@ class WeightedVertexPlacementTest {
         assignments.put(triangle[0], new TriangleIdentitySizeAssignment.Assignment(BIOME, 100_000));
         assignments.put(triangle[1], new TriangleIdentitySizeAssignment.Assignment(BIOME, 1));
 
-        Map<Integer, Point2D> displaced = WeightedVertexPlacement.displacedVertexPositions(mesh, adjacency, assignments, SIZE);
+        Map<Integer, Point2D> displaced = WeightedVertexPlacement.displacedVertexPositions(mesh, adjacency, assignments, SIZE, 0.0);
 
         for (int faceIndex = 0; faceIndex < mesh.faces().size(); faceIndex++) {
             List<Point2D> corners = new ArrayList<>();
@@ -136,7 +136,7 @@ class WeightedVertexPlacementTest {
             assignments.put(neighbor, new TriangleIdentitySizeAssignment.Assignment(BIOME, baselineWidth));
         }
 
-        Map<Integer, Point2D> displaced = WeightedVertexPlacement.displacedVertexPositions(mesh, adjacency, assignments, SIZE);
+        Map<Integer, Point2D> displaced = WeightedVertexPlacement.displacedVertexPositions(mesh, adjacency, assignments, SIZE, 0.0);
         double realizedWidth = realizedWidthOf(mesh, displaced, center);
 
         assertEquals(targetWidth, realizedWidth, targetWidth * 0.10, "expected the adaptive clamp to close the old plateau (was stuck at ratio 1.30) to within 10% of target");
@@ -167,7 +167,7 @@ class WeightedVertexPlacementTest {
             assignments.put(neighbor, new TriangleIdentitySizeAssignment.Assignment(BIOME, baselineWidth));
         }
 
-        Map<Integer, Point2D> displaced = WeightedVertexPlacement.displacedVertexPositions(mesh, adjacency, assignments, SIZE);
+        Map<Integer, Point2D> displaced = WeightedVertexPlacement.displacedVertexPositions(mesh, adjacency, assignments, SIZE, 0.0);
         double realizedWidth = realizedWidthOf(mesh, displaced, center);
 
         assertEquals(targetWidth, realizedWidth, targetWidth * 0.05, "expected calibration to converge within 5% of target for a moderate mismatch");
@@ -184,7 +184,7 @@ class WeightedVertexPlacementTest {
         Map<Integer, TriangleIdentitySizeAssignment.Assignment> assignments = new HashMap<>();
         assignments.put(triangle[0], new TriangleIdentitySizeAssignment.Assignment(BIOME, (int) (2 * SIZE)));
 
-        Map<Integer, Point2D> displaced = WeightedVertexPlacement.displacedVertexPositions(mesh, adjacency, assignments, SIZE);
+        Map<Integer, Point2D> displaced = WeightedVertexPlacement.displacedVertexPositions(mesh, adjacency, assignments, SIZE, 0.0);
         assertTrue(displaced.containsKey(sharedVertexOf(mesh, triangle)), "expected the shared vertex to still resolve using baseline weight for the unassigned faces");
     }
 

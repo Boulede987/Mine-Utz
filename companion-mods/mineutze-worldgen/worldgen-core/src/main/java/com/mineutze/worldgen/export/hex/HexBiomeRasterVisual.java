@@ -72,7 +72,8 @@ public final class HexBiomeRasterVisual {
             throw new IllegalStateException("no legal CSP assignment found for this mesh - shouldn't happen at this scale against ModBiomeGraph.OVERWORLD");
         }
         Map<Integer, TriangleIdentitySizeAssignment.Assignment> assignments = solved.get();
-        Map<Integer, Point2D> displacedVertices = WeightedVertexPlacement.displacedVertexPositions(mesh, adjacency, assignments, SIZE_BLOCKS);
+        double minEdgeLengthBlocks = 3 * GRID_CONFIG.macroCellSizeBlocks(); // matches TriangleFieldGeometryRealization.MIN_EDGE_LENGTH_MACRO_CELLS
+        Map<Integer, Point2D> displacedVertices = WeightedVertexPlacement.displacedVertexPositions(mesh, adjacency, assignments, SIZE_BLOCKS, minEdgeLengthBlocks);
 
         List<MacroCellPos> cells = allCellsIn(GRID_CONFIG, REAL_MIN, REAL_MIN, REAL_MAX, REAL_MAX);
         Map<MacroCellPos, BiomeId> result = EdgeDisplacementRasterizer.rasterize(cells, assignments, mesh, displacedVertices, Map.of(), Map.of(), GRID_CONFIG, WORLD_SEED);

@@ -83,7 +83,7 @@ class EdgeDisplacementRasterizerTest {
             TriangleIdentitySizeAssignment.solve(adjacency, freeFaceIndices, Map.of(), ModBiomeGraph.DEFAULT, worldSeed);
         assertTrue(solved.isPresent());
         Map<Integer, TriangleIdentitySizeAssignment.Assignment> assignments = solved.get();
-        Map<Integer, Point2D> displacedVertices = WeightedVertexPlacement.displacedVertexPositions(mesh, adjacency, assignments, SIZE);
+        Map<Integer, Point2D> displacedVertices = WeightedVertexPlacement.displacedVertexPositions(mesh, adjacency, assignments, SIZE, 3 * GRID_CONFIG.macroCellSizeBlocks());
 
         List<MacroCellPos> cellsWithAnImpossibleOne = new ArrayList<>(allCellsIn(GRID_CONFIG, 150, 150, 350, 350));
         cellsWithAnImpossibleOne.add(new MacroCellPos(1_000_000, 1_000_000)); // nowhere near this mesh
@@ -105,7 +105,7 @@ class EdgeDisplacementRasterizerTest {
         assertTrue(solved.isPresent(), "expected a real hex mesh at this scale to be solvable against ModBiomeGraph.DEFAULT");
         Map<Integer, TriangleIdentitySizeAssignment.Assignment> assignments = solved.get();
 
-        Map<Integer, Point2D> displacedVertices = WeightedVertexPlacement.displacedVertexPositions(mesh, adjacency, assignments, SIZE);
+        Map<Integer, Point2D> displacedVertices = WeightedVertexPlacement.displacedVertexPositions(mesh, adjacency, assignments, SIZE, 3 * GRID_CONFIG.macroCellSizeBlocks());
         List<MacroCellPos> cells = allCellsIn(GRID_CONFIG, REAL_MIN, REAL_MIN, REAL_MAX, REAL_MAX);
         return EdgeDisplacementRasterizer.rasterize(cells, assignments, mesh, displacedVertices, Map.of(), Map.of(), GRID_CONFIG, worldSeed);
     }

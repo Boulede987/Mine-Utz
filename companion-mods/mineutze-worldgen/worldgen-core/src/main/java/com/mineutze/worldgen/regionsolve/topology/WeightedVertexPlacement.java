@@ -84,6 +84,24 @@ public final class WeightedVertexPlacement {
      */
     private static final int BISECTION_ITERATIONS = 30;
 
+    /**
+     * Cap on {@link #geometricallyValidPositions}'s own fixed-point rounds. Each face
+     * validates ITSELF assuming uniform scaling, but the per-vertex minimum-reconciliation
+     * across faces can leave different corners of the SAME face at different final
+     * scales - a shape no single face's own check ever actually validated. Found as a
+     * real bug, not a hypothetical: adding the minimum-edge-length check surfaced a real
+     * "5+ cells not covered by any face" failure in {@code
+     * SeedRegionCacheTest.differentRegionsProduceIndependentResults} that plain
+     * simplicity alone had apparently never triggered. Fixed by re-validating and
+     * re-shrinking to a real fixed point instead of trusting one independent pass - the
+     * same lesson as {@link TriangleIdentitySizeAssignment}'s own binary-AC-3-wasn't-
+     * enough history, at the geometry layer instead of the CSP layer. Each round only
+     * ever shrinks positions further toward the always-valid original, so this converges
+     * monotonically; 20 rounds is generous headroom for a hex face's own small (≤6)
+     * neighborhood to settle, not a value picked to just barely clear one seed.
+     */
+    private static final int MAX_VALIDATION_ROUNDS = 20;
+
     /** Rounds of additive weight correction - linear (not Newton's-method quadratic) convergence, so a real iteration count, not 2-3 steps; cheap enough at real region scale (a full vertex-placement pass is sub-100ms) that this stays well under any performance concern. */
     private static final int CALIBRATION_ROUNDS = 15;
 
@@ -105,7 +123,7 @@ public final class WeightedVertexPlacement {
      */
     private static final double DAMPING_FACTOR = 0.5;
 
-    /** Bounds how much any single round can change one face's own weight, as a fraction of the baseline face's own weight (itself a squared length, same unit as area) - a defensive guard against one huge correction overshooting wildly before neighbors have had a chance to react, and against runaway growth if a face's own displacement is already geometry-clamped (see {@link #simplicityClampedPositions}) and no amount of extra weight would actually move it further. */
+    /** Bounds how much any single round can change one face's own weight, as a fraction of the baseline face's own weight (itself a squared length, same unit as area) - a defensive guard against one huge correction overshooting wildly before neighbors have had a chance to react, and against runaway growth if a face's own displacement is already geometry-clamped (see {@link #geometricallyValidPositions}) and no amount of extra weight would actually move it further. */
     private static final double MAX_WEIGHT_CORRECTION_FRACTION_OF_BASELINE = 1.0;
 
     private WeightedVertexPlacement() {
@@ -123,15 +141,16 @@ public final class WeightedVertexPlacement {
      */
     public static Map<Integer, Point2D> displacedVertexPositions(
         HexMeshBuilder.HexMesh mesh, TriangleAdjacency.Adjacency adjacency,
-        Map<Integer, TriangleIdentitySizeAssignment.Assignment> assignments, double baselineCircumradiusBlocks
+        Map<Integer, TriangleIdentitySizeAssignment.Assignment> assignments, double baselineCircumradiusBlocks,
+        double minEdgeLengthBlocks
     ) {
         Map<Integer, Point2D> centers = centersOf(mesh);
         Map<Integer, Double> weightByFace = weightsOf(mesh, assignments, baselineCircumradiusBlocks);
         List<int[]> triangles = adjacency.mutuallyAdjacentTriples(centers.keySet());
         Map<Integer, Double> targetAreaByFace = targetAreasOf(assignments);
 
-        Map<Integer, Point2D> displaced = vertexPositionsFor(mesh, centers, weightByFace, triangles);
-        return calibratedWeights(mesh, centers, weightByFace, triangles, targetAreaByFace, displaced, baselineCircumradiusBlocks);
+        Map<Integer, Point2D> displaced = vertexPositionsFor(mesh, centers, weightByFace, triangles, minEdgeLengthBlocks);
+        return calibratedWeights(mesh, centers, weightByFace, triangles, targetAreaByFace, displaced, baselineCircumradiusBlocks, minEdgeLengthBlocks);
     }
 
     /**
@@ -144,7 +163,8 @@ public final class WeightedVertexPlacement {
      */
     private static Map<Integer, Point2D> calibratedWeights(
         HexMeshBuilder.HexMesh mesh, Map<Integer, Point2D> centers, Map<Integer, Double> weightByFace,
-        List<int[]> triangles, Map<Integer, Double> targetAreaByFace, Map<Integer, Point2D> displaced, double baselineCircumradiusBlocks
+        List<int[]> triangles, Map<Integer, Double> targetAreaByFace, Map<Integer, Point2D> displaced,
+        double baselineCircumradiusBlocks, double minEdgeLengthBlocks
     ) {
         Map<Integer, Double> weights = new HashMap<>(weightByFace);
         double maxCorrectionPerRound = MAX_WEIGHT_CORRECTION_FRACTION_OF_BASELINE * baselineCircumradiusBlocks * baselineCircumradiusBlocks;
@@ -158,20 +178,20 @@ public final class WeightedVertexPlacement {
                 double clampedCorrection = Math.max(-maxCorrectionPerRound, Math.min(maxCorrectionPerRound, rawCorrection));
                 weights.put(faceIndex, weights.get(faceIndex) + clampedCorrection);
             }
-            displaced = vertexPositionsFor(mesh, centers, weights, triangles);
+            displaced = vertexPositionsFor(mesh, centers, weights, triangles, minEdgeLengthBlocks);
         }
         return displaced;
     }
 
     /**
      * Every mesh vertex's RAW radical-center position (see {@link #radicalCenter}), then
-     * clamped for geometric safety by {@link #simplicityClampedPositions} — two separate
-     * concerns kept separate: this method computes what the SIZE math wants, the
-     * simplicity pass decides how much of that the GEOMETRY can actually tolerate without
-     * folding a polygon over itself.
+     * clamped for geometric safety by {@link #geometricallyValidPositions} — two separate
+     * concerns kept separate: this method computes what the SIZE math wants, the validity
+     * pass decides how much of that the GEOMETRY can actually tolerate.
      */
     private static Map<Integer, Point2D> vertexPositionsFor(
-        HexMeshBuilder.HexMesh mesh, Map<Integer, Point2D> centers, Map<Integer, Double> weightByFace, List<int[]> triangles
+        HexMeshBuilder.HexMesh mesh, Map<Integer, Point2D> centers, Map<Integer, Double> weightByFace,
+        List<int[]> triangles, double minEdgeLengthBlocks
     ) {
         Map<Integer, Point2D> raw = new HashMap<>();
         for (int[] triangle : triangles) {
@@ -183,80 +203,147 @@ public final class WeightedVertexPlacement {
             );
             raw.put(vertexIndex, radicalCenter);
         }
-        return simplicityClampedPositions(mesh, Map.copyOf(raw));
+        return geometricallyValidPositions(mesh, Map.copyOf(raw), minEdgeLengthBlocks);
     }
 
     /**
      * Replaces a single flat displacement-distance cap with a per-face, per-round
      * geometric check: no face's own hexagon is ever allowed to become a self-intersecting
-     * polygon, no matter how extreme the weight mismatch driving it. A flat cap picked one
-     * number for the whole mesh (safe only because it was small enough for the worst case
-     * seen so far); this instead asks, for each face, "how far can THIS face's own 6
-     * corners move before its own edges cross?" — so an easy, uncrowded face can move
-     * farther than a flat cap would ever allow, while a genuinely tight face is held back
-     * exactly as far as its own real geometry requires, not by a shared global number.
+     * polygon, AND no single edge of it is ever allowed to collapse below {@code
+     * minEdgeLengthBlocks} — no matter how extreme the weight mismatch driving it. A flat
+     * distance cap picked one number for the whole mesh (safe only because it was small
+     * enough for the worst case seen so far); this instead asks, for each face, "how far
+     * can THIS face's own 6 corners move before its own shape breaks?" — so an easy,
+     * uncrowded face can move farther than a flat cap would ever allow, while a genuinely
+     * tight face is held back exactly as far as its own real geometry requires.
+     *
+     * <p>The minimum-edge-length half of this check exists because self-intersection alone
+     * is NOT enough: a face can shrink one of its own edges toward zero length while
+     * staying perfectly simple the whole way there (two adjacent corners merging is not a
+     * crossing). Measured directly against the real 48-biome catalog before this existed:
+     * a 30-seed sweep found realized edge lengths as low as {@code 7e-12} blocks (a
+     * literal point, not a thin sliver) and 95 real illegal biome adjacencies in {@code
+     * com.mineutze.worldgen.regionsolve.RegionIntegrityValidator}'s own pixel-grid check —
+     * a buffer face squeezed thinner
+     * than one macro cell contains zero cell centers there, so the rasterizer's
+     * point-in-polygon test skips it locally and the two faces on either side of it end up
+     * pixel-adjacent with nothing sampled in between. This can never happen at a single
+     * shared mesh vertex between two illegal-to-touch biomes (hex vertex-degree-3 means
+     * any 2 faces meeting a third at one vertex are ALSO mesh-adjacent to each other, so
+     * the CSP already forbids an illegal pair from ever sharing one there) — it happens
+     * along a STRETCH of a legal buffer face's own boundary instead, which no legality
+     * check (graph-level or self-intersection-level) was ever positioned to catch.
      *
      * <p>A vertex belongs to up to 3 faces at once, and its final position must be the
      * SAME value read by all of them (this is what makes a shared edge watertight between
      * two faces — see {@link EdgeDisplacement}'s own doc). So each face independently
      * computes the largest UNIFORM scale ({@link #maxSafeScale}) that keeps its own 6
-     * corners simple, then every vertex takes the SMALLEST scale demanded by any face that
+     * corners valid, then every vertex takes the SMALLEST scale demanded by any face that
      * owns it — the most conservative requirement always wins, never averaged.
+     *
+     * <p>One pass of that is NOT enough on its own: a face validates ITSELF assuming all 6
+     * of its own corners scale UNIFORMLY together, but after per-vertex min-reconciliation,
+     * different corners of that SAME face can end up at DIFFERENT final scales (each driven
+     * by whichever other face shares that specific corner) — a shape neither owning face's
+     * own uniform-scale check ever actually tested. Found as a real bug: adding the
+     * minimum-edge-length check (not simplicity alone, which apparently stayed lucky)
+     * surfaced a genuine "cells not covered by any face" failure from exactly this gap.
+     * Fixed by repeating validation-and-reshrink to a real fixed point: each round,
+     * re-check every face's CURRENT (possibly non-uniformly-shrunk) shape and shrink
+     * further, toward the always-valid original, only as much as still needed. Since every
+     * round only ever moves positions closer to the original undisplaced vertex (never
+     * farther), this is a monotonically tightening sequence bounded below by a shape
+     * that's always valid, so it converges; a round where no face needed further
+     * shrinking is the fixed point, and the loop stops there instead of always spending
+     * the full {@link #MAX_VALIDATION_ROUNDS}.
      */
-    private static Map<Integer, Point2D> simplicityClampedPositions(HexMeshBuilder.HexMesh mesh, Map<Integer, Point2D> rawPositions) {
-        Map<Integer, Double> minScaleByVertex = new HashMap<>();
-        for (int faceIndex = 0; faceIndex < mesh.faces().size(); faceIndex++) {
-            List<Integer> vertexIndices = mesh.faces().get(faceIndex).vertexIndices();
-            List<Point2D> original = new ArrayList<>();
-            List<Point2D> candidate = new ArrayList<>();
-            for (int vertexIndex : vertexIndices) {
-                Point2D basePosition = mesh.vertices().get(vertexIndex);
-                original.add(basePosition);
-                candidate.add(rawPositions.getOrDefault(vertexIndex, basePosition));
-            }
-            double safeScale = maxSafeScale(original, candidate);
-            for (int vertexIndex : vertexIndices) {
-                if (rawPositions.containsKey(vertexIndex)) {
-                    minScaleByVertex.merge(vertexIndex, safeScale, Math::min);
+    private static Map<Integer, Point2D> geometricallyValidPositions(
+        HexMeshBuilder.HexMesh mesh, Map<Integer, Point2D> rawPositions, double minEdgeLengthBlocks
+    ) {
+        Map<Integer, Point2D> current = rawPositions;
+        for (int round = 0; round < MAX_VALIDATION_ROUNDS; round++) {
+            Map<Integer, Double> minScaleByVertex = new HashMap<>();
+            boolean anyFaceStillNeedsShrinking = false;
+            for (int faceIndex = 0; faceIndex < mesh.faces().size(); faceIndex++) {
+                List<Integer> vertexIndices = mesh.faces().get(faceIndex).vertexIndices();
+                List<Point2D> original = new ArrayList<>();
+                List<Point2D> candidate = new ArrayList<>();
+                for (int vertexIndex : vertexIndices) {
+                    Point2D basePosition = mesh.vertices().get(vertexIndex);
+                    original.add(basePosition);
+                    candidate.add(current.getOrDefault(vertexIndex, basePosition));
+                }
+                double furtherScale = maxSafeScale(original, candidate, minEdgeLengthBlocks);
+                if (furtherScale < 1.0) {
+                    anyFaceStillNeedsShrinking = true;
+                }
+                for (int vertexIndex : vertexIndices) {
+                    if (current.containsKey(vertexIndex)) {
+                        minScaleByVertex.merge(vertexIndex, furtherScale, Math::min);
+                    }
                 }
             }
-        }
 
-        Map<Integer, Point2D> finalPositions = new HashMap<>();
-        for (Map.Entry<Integer, Point2D> entry : rawPositions.entrySet()) {
-            int vertexIndex = entry.getKey();
-            double scale = minScaleByVertex.getOrDefault(vertexIndex, 1.0);
-            finalPositions.put(vertexIndex, lerp(mesh.vertices().get(vertexIndex), entry.getValue(), scale));
+            Map<Integer, Point2D> next = new HashMap<>();
+            for (Map.Entry<Integer, Point2D> entry : current.entrySet()) {
+                int vertexIndex = entry.getKey();
+                double scale = minScaleByVertex.getOrDefault(vertexIndex, 1.0);
+                next.put(vertexIndex, lerp(mesh.vertices().get(vertexIndex), entry.getValue(), scale));
+            }
+            current = Map.copyOf(next);
+            if (!anyFaceStillNeedsShrinking) {
+                break;
+            }
         }
-        return Map.copyOf(finalPositions);
+        return current;
     }
 
     /**
      * The largest {@code t} in {@code [0, 1]} such that moving every one of
      * {@code original}'s corners {@code t} of the way toward its matching {@code candidate}
-     * corner keeps the resulting polygon simple (no two of its own non-adjacent edges
-     * cross). Binary search, not a closed form — there is no formula for "how far is too
-     * far" once more than one corner has moved at once. Assumes simplicity is monotonic in
-     * {@code t} (true at {@code t=0} since the undisplaced hex lattice is always simple,
-     * breaks past some threshold, never flips back to simple beyond that) — a real
-     * assumption about this specific deformation (all corners moving continuously outward
-     * from a simple starting shape), not a general truth about arbitrary polygons.
+     * corner keeps the resulting polygon {@link #isGeometricallyValid valid} (simple AND
+     * no edge shorter than {@code minEdgeLengthBlocks}). Binary search, not a closed form —
+     * there is no formula for "how far is too far" once more than one corner has moved at
+     * once. Assumes validity is monotonic in {@code t} (true at {@code t=0}, since the
+     * undisplaced regular hexagon is always simple and every one of its edges equals the
+     * mesh's own baseline circumradius exactly; breaks past some threshold, never flips
+     * back to valid beyond that) — a real assumption about this specific deformation (all
+     * corners moving continuously outward from a valid starting shape), not a general
+     * truth about arbitrary polygons. {@code minEdgeLengthBlocks} must stay below the
+     * baseline circumradius for this base case to hold — the caller's own responsibility,
+     * same as {@code MAX_VERTEX_DISPLACEMENT_FRACTION} was before it.
      */
-    private static double maxSafeScale(List<Point2D> original, List<Point2D> candidate) {
-        if (isSimplePolygon(lerpAll(original, candidate, 1.0))) {
+    private static double maxSafeScale(List<Point2D> original, List<Point2D> candidate, double minEdgeLengthBlocks) {
+        if (isGeometricallyValid(lerpAll(original, candidate, 1.0), minEdgeLengthBlocks)) {
             return 1.0;
         }
         double lowSafe = 0.0;
         double highUnsafe = 1.0;
         for (int iteration = 0; iteration < BISECTION_ITERATIONS; iteration++) {
             double mid = (lowSafe + highUnsafe) / 2.0;
-            if (isSimplePolygon(lerpAll(original, candidate, mid))) {
+            if (isGeometricallyValid(lerpAll(original, candidate, mid), minEdgeLengthBlocks)) {
                 lowSafe = mid;
             } else {
                 highUnsafe = mid;
             }
         }
         return lowSafe;
+    }
+
+    private static boolean isGeometricallyValid(List<Point2D> corners, double minEdgeLengthBlocks) {
+        return isSimplePolygon(corners) && hasMinimumEdgeLength(corners, minEdgeLengthBlocks);
+    }
+
+    private static boolean hasMinimumEdgeLength(List<Point2D> corners, double minEdgeLengthBlocks) {
+        int cornerCount = corners.size();
+        for (int i = 0; i < cornerCount; i++) {
+            Point2D current = corners.get(i);
+            Point2D next = corners.get((i + 1) % cornerCount);
+            if (Math.hypot(current.x() - next.x(), current.z() - next.z()) < minEdgeLengthBlocks) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private static List<Point2D> lerpAll(List<Point2D> original, List<Point2D> candidate, double t) {

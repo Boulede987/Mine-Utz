@@ -89,6 +89,19 @@ public final class TriangleFieldGeometryRealization {
     // source of truth, not two independently-tuned numbers that could quietly drift apart.
     static final int TRIANGULATION_MARGIN_BLOCKS = 1500;
 
+    // A face's own edge is a real physical boundary only if it's wide enough for the
+    // macro-cell pixel grid to actually sample it - a face squeezed thinner than this
+    // contains zero cell centers along that edge, so the rasterizer's point-in-polygon
+    // test silently skips it there and whichever two faces sit on either side end up
+    // pixel-adjacent with nothing sampled between them. Found as a REAL, live defect
+    // (not a hypothetical): a 30-seed sweep of the real 48-biome catalog, before this
+    // existed, found realized edge lengths as low as 7e-12 blocks and 95 real illegal
+    // biome adjacencies via RegionIntegrityValidator. 3 macro cells, not 1 - a single
+    // cell-width margin still leaves almost no room for the macro grid's own region
+    // warp (MacroGridConfig's own boundary wobble) to shift which cell actually samples
+    // a given point from one solve to the next.
+    private static final int MIN_EDGE_LENGTH_MACRO_CELLS = 6;
+
     private TriangleFieldGeometryRealization() {
     }
 
@@ -115,7 +128,8 @@ public final class TriangleFieldGeometryRealization {
             adjacency, freeFaceIndices, fixedFaceBiomes, input.graph(), input.worldSeed(), bounds.areaBlocks2(), input.region()
         );
 
-        Map<Integer, Point2D> displacedVertices = WeightedVertexPlacement.displacedVertexPositions(mesh, adjacency, assignments, HEX_SIZE_BLOCKS);
+        double minEdgeLengthBlocks = MIN_EDGE_LENGTH_MACRO_CELLS * gridConfig.macroCellSizeBlocks();
+        Map<Integer, Point2D> displacedVertices = WeightedVertexPlacement.displacedVertexPositions(mesh, adjacency, assignments, HEX_SIZE_BLOCKS, minEdgeLengthBlocks);
         Map<MacroCellPos, BiomeId> result = EdgeDisplacementRasterizer.rasterize(
             cells, assignments, mesh, displacedVertices, fixedFaceBiomes, input.fixedBoundaryCells(), gridConfig, input.worldSeed()
         );

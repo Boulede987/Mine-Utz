@@ -11,6 +11,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -41,6 +42,16 @@ import java.util.Set;
  * construction here, given a generous enough mesh margin. A gap or overlap now means a
  * real bug (insufficient margin, or a rasterizer defect), not something to silently
  * paper over.
+ *
+ * <p><b>KNOWN, OPEN BUG (found 2026-09-04, not yet fixed):</b> {@link #requireNoOverlaps}
+ * fires on 13 of the standard 50 starvation-test seeds — a face's own polygon can grow
+ * large enough to overlap a DIFFERENT, non-adjacent face's territory in space, which
+ * {@code WeightedVertexPlacement}'s per-face-local checks (simplicity, minimum edge
+ * length) can never catch, since each only ever validates one face's own 6 corners in
+ * isolation against itself. See {@code
+ * ModBiomeGraphTest.overworldHasAKnownFacePolygonOverlapBug} (worldSeed=2031, the
+ * smallest concrete reproducer) for the tracked regression case — do not silently soften
+ * or remove {@link #requireNoOverlaps} to make callers stop seeing this; it is real.
  */
 public final class EdgeDisplacementRasterizer {
 
@@ -58,10 +69,12 @@ public final class EdgeDisplacementRasterizer {
         Set<MacroCellPos> regionCellSet = new HashSet<>(cells);
         Map<MacroCellPos, BiomeId> decided = new HashMap<>(fixedBoundaryCells);
 
+        Set<MacroCellPos> claimedThisCall = new HashSet<>();
+        Set<MacroCellPos> overlaps = new LinkedHashSet<>();
         for (Map.Entry<Integer, TriangleIdentitySizeAssignment.Assignment> entry : assignments.entrySet()) {
             HexFace face = mesh.faces().get(entry.getKey());
             List<Point2D> boundary = displacedBoundaryOf(face, mesh, displacedVertexPositions, worldSeed);
-            claimCellsInside(boundary, entry.getValue().biome(), regionCellSet, decided, gridConfig);
+            claimCellsInside(boundary, entry.getValue().biome(), regionCellSet, decided, gridConfig, claimedThisCall, overlaps);
         }
 
         // A fixed face (centroid inside an already-solved neighbor region, see
@@ -78,10 +91,11 @@ public final class EdgeDisplacementRasterizer {
         for (Map.Entry<Integer, BiomeId> entry : fixedFaceBiomes.entrySet()) {
             HexFace face = mesh.faces().get(entry.getKey());
             List<Point2D> boundary = displacedBoundaryOf(face, mesh, displacedVertexPositions, worldSeed);
-            claimCellsInside(boundary, entry.getValue(), regionCellSet, decided, gridConfig);
+            claimCellsInside(boundary, entry.getValue(), regionCellSet, decided, gridConfig, claimedThisCall, overlaps);
         }
 
         requireEveryRegionCellCovered(cells, decided);
+        requireNoOverlaps(overlaps);
         return collectResult(cells, decided);
     }
 
@@ -104,9 +118,21 @@ public final class EdgeDisplacementRasterizer {
         return boundary;
     }
 
-    /** Only tests macro-cells within the boundary's own bounding box, not the whole region - a real face touches at most a small, bounded slice of a large region. */
+    /**
+     * Only tests macro-cells within the boundary's own bounding box, not the whole region -
+     * a real face touches at most a small, bounded slice of a large region.
+     *
+     * <p>{@code overlaps} records a cell whose center falls inside TWO different free
+     * faces' own polygons - a real bug this class's own doc already claimed to treat as
+     * seriously as a gap, but which nothing actually checked for until now. A cell already
+     * present in {@code decided} from {@code fixedBoundaryCells} (an already-solved
+     * neighbor region's own prior decision, not a face processed in THIS call) is a
+     * legitimate, expected pre-decision, not an overlap - only a collision against ANOTHER
+     * face from THIS SAME call's own {@code assignments}/{@code fixedFaceBiomes} counts.
+     */
     private static void claimCellsInside(
-        List<Point2D> boundary, BiomeId biome, Set<MacroCellPos> regionCellSet, Map<MacroCellPos, BiomeId> decided, MacroGridConfig gridConfig
+        List<Point2D> boundary, BiomeId biome, Set<MacroCellPos> regionCellSet, Map<MacroCellPos, BiomeId> decided,
+        MacroGridConfig gridConfig, Set<MacroCellPos> claimedThisCall, Set<MacroCellPos> overlaps
     ) {
         int cellSizeBlocks = gridConfig.macroCellSizeBlocks();
         double minX = Double.POSITIVE_INFINITY;
@@ -128,14 +154,23 @@ public final class EdgeDisplacementRasterizer {
         for (int cellX = minCellX; cellX <= maxCellX; cellX++) {
             for (int cellZ = minCellZ; cellZ <= maxCellZ; cellZ++) {
                 MacroCellPos candidate = new MacroCellPos(cellX, cellZ);
-                if (!regionCellSet.contains(candidate) || decided.containsKey(candidate)) {
+                if (!regionCellSet.contains(candidate)) {
                     continue;
                 }
                 double centerX = cellX * cellSizeBlocks + cellSizeBlocks / 2.0;
                 double centerZ = cellZ * cellSizeBlocks + cellSizeBlocks / 2.0;
-                if (isInsidePolygon(boundary, centerX, centerZ)) {
-                    decided.put(candidate, biome);
+                if (!isInsidePolygon(boundary, centerX, centerZ)) {
+                    continue;
                 }
+                if (claimedThisCall.contains(candidate)) {
+                    overlaps.add(candidate); // a different face from THIS call already claimed it - keep its (first) claim, just report the collision
+                    continue;
+                }
+                if (decided.containsKey(candidate)) {
+                    continue; // already decided by fixedBoundaryCells (a neighbor region's own prior call) - expected, not an overlap
+                }
+                decided.put(candidate, biome);
+                claimedThisCall.add(candidate);
             }
         }
     }
@@ -181,6 +216,25 @@ public final class EdgeDisplacementRasterizer {
             throw new IllegalStateException(
                 "EdgeDisplacementRasterizer: " + uncovered.size() + "+ region cell(s) not covered by any face's own polygon, e.g. "
                     + uncovered + " - insufficient mesh margin or a rasterizer defect, not an expected occurrence under this design"
+            );
+        }
+    }
+
+    /**
+     * A cell whose center falls inside TWO different faces' own polygons is a real bug
+     * (a valid planar tiling never lets two cells overlap) - this class's own doc always
+     * claimed to treat overlap as seriously as a gap, but nothing actually checked for it
+     * until this was added alongside the minimum-edge-length fix in {@code
+     * WeightedVertexPlacement}, whose own per-face-local checks can't see a face growing
+     * large enough to reach into a DISTANT, non-adjacent face's territory - a genuinely
+     * different failure mode from the local self-intersection/thin-edge ones that class
+     * does guard against.
+     */
+    private static void requireNoOverlaps(Set<MacroCellPos> overlaps) {
+        if (!overlaps.isEmpty()) {
+            throw new IllegalStateException(
+                "EdgeDisplacementRasterizer: " + overlaps.size() + " region cell(s) claimed by more than one face's own polygon, e.g. "
+                    + overlaps.stream().limit(5).toList() + " - two faces' territory overlapped in space, not an expected occurrence under this design"
             );
         }
     }
