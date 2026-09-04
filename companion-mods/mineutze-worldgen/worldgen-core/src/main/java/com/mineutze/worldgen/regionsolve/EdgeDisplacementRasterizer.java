@@ -4,7 +4,9 @@ import com.mineutze.worldgen.biomegraph.BiomeId;
 import com.mineutze.worldgen.regionsolve.topology.EdgeDisplacement;
 import com.mineutze.worldgen.regionsolve.topology.HexFace;
 import com.mineutze.worldgen.regionsolve.topology.HexMeshBuilder;
+import com.mineutze.worldgen.regionsolve.topology.NodeEdge;
 import com.mineutze.worldgen.regionsolve.topology.Point2D;
+import com.mineutze.worldgen.regionsolve.topology.TriangleAdjacency;
 import com.mineutze.worldgen.regionsolve.topology.TriangleIdentitySizeAssignment;
 
 import java.util.ArrayList;
@@ -59,16 +61,13 @@ import java.util.Set;
  */
 public final class EdgeDisplacementRasterizer {
 
-    /** Kept proportional to each edge's own length (not an absolute block count) so texture stays comparable regardless of hex size tuning — same self-scaling-dial spirit {@link MacroGridConfig}'s own warp amplitude/wavelength coupling already established. */
-    private static final double WIGGLE_FRACTION_OF_EDGE_LENGTH = 0.08;
-
     private EdgeDisplacementRasterizer() {
     }
 
     public static Map<MacroCellPos, BiomeId> rasterize(
         List<MacroCellPos> cells, Map<Integer, TriangleIdentitySizeAssignment.Assignment> assignments,
-        HexMeshBuilder.HexMesh mesh, Map<Integer, Point2D> displacedVertexPositions, Map<Integer, BiomeId> fixedFaceBiomes,
-        Map<MacroCellPos, BiomeId> fixedBoundaryCells, MacroGridConfig gridConfig, long worldSeed
+        HexMeshBuilder.HexMesh mesh, TriangleAdjacency.Adjacency adjacency, Map<Integer, Point2D> displacedVertexPositions,
+        Map<Integer, BiomeId> fixedFaceBiomes, Map<MacroCellPos, BiomeId> fixedBoundaryCells, MacroGridConfig gridConfig, long worldSeed
     ) {
         Set<MacroCellPos> regionCellSet = new HashSet<>(cells);
         Map<MacroCellPos, BiomeId> decided = new HashMap<>(fixedBoundaryCells);
@@ -76,8 +75,7 @@ public final class EdgeDisplacementRasterizer {
         Set<MacroCellPos> claimedThisCall = new HashSet<>();
         Set<MacroCellPos> overlaps = new LinkedHashSet<>();
         for (Map.Entry<Integer, TriangleIdentitySizeAssignment.Assignment> entry : assignments.entrySet()) {
-            HexFace face = mesh.faces().get(entry.getKey());
-            List<Point2D> boundary = displacedBoundaryOf(face, mesh, displacedVertexPositions, worldSeed);
+            List<Point2D> boundary = displacedBoundaryOf(entry.getKey(), mesh, adjacency, displacedVertexPositions, worldSeed);
             claimCellsInside(boundary, entry.getValue().biome(), regionCellSet, decided, gridConfig, claimedThisCall, overlaps);
         }
 
@@ -93,8 +91,7 @@ public final class EdgeDisplacementRasterizer {
         // at those corners, matching a cross-region edge's own documented "no size-driven
         // precision at a seam" limitation.
         for (Map.Entry<Integer, BiomeId> entry : fixedFaceBiomes.entrySet()) {
-            HexFace face = mesh.faces().get(entry.getKey());
-            List<Point2D> boundary = displacedBoundaryOf(face, mesh, displacedVertexPositions, worldSeed);
+            List<Point2D> boundary = displacedBoundaryOf(entry.getKey(), mesh, adjacency, displacedVertexPositions, worldSeed);
             claimCellsInside(boundary, entry.getValue(), regionCellSet, decided, gridConfig, claimedThisCall, overlaps);
         }
 
@@ -103,23 +100,68 @@ public final class EdgeDisplacementRasterizer {
         return collectResult(cells, decided);
     }
 
-    /** Walks a face's own vertex loop, displacing each edge in turn - each edge's polyline already starts where the previous one ended, so only its FIRST point (except for the very first edge) is dropped to avoid a duplicate. Corner positions come from {@code displacedVertexPositions} where available (real, weighted placement), falling back to the raw undisplaced position for a true outer-hull vertex with no real mesh-vertex triple - see WeightedVertexPlacement's own doc. */
+    /**
+     * Walks a face's own vertex loop, displacing each edge in turn - each edge's
+     * polyline already starts where the previous one ended, so only its FIRST point
+     * (except for the very first edge) is dropped to avoid a duplicate. Corner positions
+     * come from {@code displacedVertexPositions} where available (real, weighted
+     * placement), falling back to the raw undisplaced position for a true outer-hull
+     * vertex with no real mesh-vertex triple - see WeightedVertexPlacement's own doc.
+     *
+     * <p>Looks up the OTHER face sharing each edge (if any) to give {@link
+     * EdgeDisplacement} both owning faces' own centers - its by-construction safety
+     * guarantee needs both, not just this face's own. A hull edge (only one owning face)
+     * passes {@code null} for the other pole, matching how a hull-touching face already
+     * gets less precision elsewhere in this pipeline.
+     */
     private static List<Point2D> displacedBoundaryOf(
-        HexFace face, HexMeshBuilder.HexMesh mesh, Map<Integer, Point2D> displacedVertexPositions, long worldSeed
+        int faceIndex, HexMeshBuilder.HexMesh mesh, TriangleAdjacency.Adjacency adjacency,
+        Map<Integer, Point2D> displacedVertexPositions, long worldSeed
     ) {
+        HexFace face = mesh.faces().get(faceIndex);
         List<Integer> vertexIndices = face.vertexIndices();
         int cornerCount = vertexIndices.size();
+        Point2D thisFaceCenter = faceCenterOf(faceIndex, mesh, displacedVertexPositions);
+
         List<Point2D> boundary = new ArrayList<>();
         for (int i = 0; i < cornerCount; i++) {
             int aIndex = vertexIndices.get(i);
             int bIndex = vertexIndices.get((i + 1) % cornerCount);
             Point2D a = displacedVertexPositions.getOrDefault(aIndex, mesh.vertices().get(aIndex));
             Point2D b = displacedVertexPositions.getOrDefault(bIndex, mesh.vertices().get(bIndex));
-            double edgeLength = Math.hypot(b.x() - a.x(), b.z() - a.z());
-            List<Point2D> edgePolyline = EdgeDisplacement.displacedPolyline(a, b, worldSeed, WIGGLE_FRACTION_OF_EDGE_LENGTH * edgeLength);
+
+            Integer neighborIndex = otherFaceSharingEdge(faceIndex, aIndex, bIndex, adjacency, mesh);
+            Point2D neighborCenter = neighborIndex == null ? null : faceCenterOf(neighborIndex, mesh, displacedVertexPositions);
+
+            List<Point2D> edgePolyline = EdgeDisplacement.displacedPolyline(a, b, worldSeed, thisFaceCenter, neighborCenter);
             boundary.addAll(boundary.isEmpty() ? edgePolyline : edgePolyline.subList(1, edgePolyline.size()));
         }
         return boundary;
+    }
+
+    /** Centroid of a face's own CURRENT (displaced, still-straight) 6 corners - the pole {@link EdgeDisplacement} measures angles against, not the original undisplaced lattice point, since angles need to be meaningful relative to the shape actually being wiggled. */
+    private static Point2D faceCenterOf(int faceIndex, HexMeshBuilder.HexMesh mesh, Map<Integer, Point2D> displacedVertexPositions) {
+        List<Integer> vertexIndices = mesh.faces().get(faceIndex).vertexIndices();
+        double sumX = 0;
+        double sumZ = 0;
+        for (int vertexIndex : vertexIndices) {
+            Point2D corner = displacedVertexPositions.getOrDefault(vertexIndex, mesh.vertices().get(vertexIndex));
+            sumX += corner.x();
+            sumZ += corner.z();
+        }
+        int cornerCount = vertexIndices.size();
+        return new Point2D(sumX / cornerCount, sumZ / cornerCount);
+    }
+
+    /** The one other face (if any) sharing the physical edge (aIndex, bIndex) with faceIndex - null for a hull edge with only one real owning face. Checked via each candidate neighbor's own edge list rather than a separate edge-to-faces map, since a face has at most 6 neighbors - cheap either way. */
+    private static Integer otherFaceSharingEdge(int faceIndex, int aIndex, int bIndex, TriangleAdjacency.Adjacency adjacency, HexMeshBuilder.HexMesh mesh) {
+        NodeEdge edge = NodeEdge.of(aIndex, bIndex);
+        for (int neighborIndex : adjacency.neighborFaceIndices().getOrDefault(faceIndex, Set.of())) {
+            if (mesh.faces().get(neighborIndex).edges().contains(edge)) {
+                return neighborIndex;
+            }
+        }
+        return null;
     }
 
     /**

@@ -225,7 +225,7 @@ class ModBiomeGraphTest {
 
         Map<Integer, Point2D> displacedVertices = WeightedVertexPlacement.displacedVertexPositions(mesh, adjacency, assignments, sizeBlocks, 6 * gridConfig.macroCellSizeBlocks()); // matches TriangleFieldGeometryRealization.MIN_EDGE_LENGTH_MACRO_CELLS
         List<MacroCellPos> cells = overworldTestCells(gridConfig, realMin, realMin, realMax, realMax);
-        return EdgeDisplacementRasterizer.rasterize(cells, assignments, mesh, displacedVertices, Map.of(), Map.of(), gridConfig, worldSeed);
+        return EdgeDisplacementRasterizer.rasterize(cells, assignments, mesh, adjacency, displacedVertices, Map.of(), Map.of(), gridConfig, worldSeed);
     }
 
     /**

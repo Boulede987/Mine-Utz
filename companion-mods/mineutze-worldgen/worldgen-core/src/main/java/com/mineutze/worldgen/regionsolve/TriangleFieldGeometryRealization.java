@@ -131,7 +131,7 @@ public final class TriangleFieldGeometryRealization {
         double minEdgeLengthBlocks = MIN_EDGE_LENGTH_MACRO_CELLS * gridConfig.macroCellSizeBlocks();
         Map<Integer, Point2D> displacedVertices = WeightedVertexPlacement.displacedVertexPositions(mesh, adjacency, assignments, HEX_SIZE_BLOCKS, minEdgeLengthBlocks);
         Map<MacroCellPos, BiomeId> result = EdgeDisplacementRasterizer.rasterize(
-            cells, assignments, mesh, displacedVertices, fixedFaceBiomes, input.fixedBoundaryCells(), gridConfig, input.worldSeed()
+            cells, assignments, mesh, adjacency, displacedVertices, fixedFaceBiomes, input.fixedBoundaryCells(), gridConfig, input.worldSeed()
         );
         return new RegionSolveResult(result, List.of(), 0);
     }

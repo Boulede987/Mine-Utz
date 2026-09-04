@@ -90,7 +90,7 @@ class EdgeDisplacementRasterizerTest {
 
         assertThrows(
             IllegalStateException.class,
-            () -> EdgeDisplacementRasterizer.rasterize(cellsWithAnImpossibleOne, assignments, mesh, displacedVertices, Map.of(), Map.of(), GRID_CONFIG, worldSeed)
+            () -> EdgeDisplacementRasterizer.rasterize(cellsWithAnImpossibleOne, assignments, mesh, adjacency, displacedVertices, Map.of(), Map.of(), GRID_CONFIG, worldSeed)
         );
     }
 
@@ -107,7 +107,7 @@ class EdgeDisplacementRasterizerTest {
 
         Map<Integer, Point2D> displacedVertices = WeightedVertexPlacement.displacedVertexPositions(mesh, adjacency, assignments, SIZE, 3 * GRID_CONFIG.macroCellSizeBlocks());
         List<MacroCellPos> cells = allCellsIn(GRID_CONFIG, REAL_MIN, REAL_MIN, REAL_MAX, REAL_MAX);
-        return EdgeDisplacementRasterizer.rasterize(cells, assignments, mesh, displacedVertices, Map.of(), Map.of(), GRID_CONFIG, worldSeed);
+        return EdgeDisplacementRasterizer.rasterize(cells, assignments, mesh, adjacency, displacedVertices, Map.of(), Map.of(), GRID_CONFIG, worldSeed);
     }
 
     private static Set<Integer> nonHullTouchingFaceIndices(HexMeshBuilder.HexMesh mesh, TriangleAdjacency.Adjacency adjacency) {

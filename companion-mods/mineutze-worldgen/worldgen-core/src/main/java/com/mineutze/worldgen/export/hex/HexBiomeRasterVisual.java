@@ -76,7 +76,7 @@ public final class HexBiomeRasterVisual {
         Map<Integer, Point2D> displacedVertices = WeightedVertexPlacement.displacedVertexPositions(mesh, adjacency, assignments, SIZE_BLOCKS, minEdgeLengthBlocks);
 
         List<MacroCellPos> cells = allCellsIn(GRID_CONFIG, REAL_MIN, REAL_MIN, REAL_MAX, REAL_MAX);
-        Map<MacroCellPos, BiomeId> result = EdgeDisplacementRasterizer.rasterize(cells, assignments, mesh, displacedVertices, Map.of(), Map.of(), GRID_CONFIG, WORLD_SEED);
+        Map<MacroCellPos, BiomeId> result = EdgeDisplacementRasterizer.rasterize(cells, assignments, mesh, adjacency, displacedVertices, Map.of(), Map.of(), GRID_CONFIG, WORLD_SEED);
 
         Map<BiomeId, Integer> palette = evenlySpacedPalette(graph);
         Path rasterFile = outputDir.resolve("hex_biome_raster.png");
