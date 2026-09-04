@@ -5,6 +5,7 @@ import com.mineutze.worldgen.biomegraph.BiomeNode;
 import com.mineutze.worldgen.biomegraph.ModBiomeGraph;
 import com.mineutze.worldgen.regionsolve.MacroCellPos;
 import com.mineutze.worldgen.regionsolve.MacroGridConfig;
+import com.mojang.logging.LogUtils;
 import com.mojang.serialization.DataResult;
 import com.mojang.serialization.DynamicOps;
 import com.mojang.serialization.MapCodec;
@@ -20,6 +21,7 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.level.biome.Biome;
 import net.minecraft.world.level.biome.BiomeSource;
 import net.minecraft.world.level.biome.Climate;
+import org.slf4j.Logger;
 
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -35,6 +37,8 @@ import java.util.stream.Stream;
  * data/minecraft/dimension/overworld.json datapack override.
  */
 public class ModOverworldBiomeSource extends BiomeSource {
+
+    private static final Logger LOGGER = LogUtils.getLogger();
 
     /**
      * {@code RecordCodecBuilder}'s own {@code .group()}/{@code .apply()} tuple machinery
@@ -111,6 +115,20 @@ public class ModOverworldBiomeSource extends BiomeSource {
         return CODEC;
     }
 
+    /**
+     * A wrapping try/catch purely for logging, not recovery - this method still rethrows
+     * unconditionally. Found necessary the hard way (2026-09-04): a real in-game CSP
+     * dead end thrown from here, reached via {@code /locate biome}, left NO trace in
+     * either {@code latest.log} or {@code debug.log} - vanilla's own command-error
+     * handling reports a bare "An unexpected error occurred trying to execute that
+     * command" to chat and never logs the underlying exception to any file at all. This
+     * is the one point in the whole call chain from Minecraft's own biome-sampling code
+     * down into {@code worldgen-core} (deliberately dependency-free, no logger available
+     * there - see that module's own build.gradle doc) that both HAS a real logger and
+     * sits BEFORE whatever downstream Minecraft code might silently swallow the
+     * exception - so this is where the guarantee has to live, not further up a call
+     * chain we don't control.
+     */
     @Override
     public Holder<Biome> getNoiseBiome(int quartX, int quartY, int quartZ, Climate.Sampler sampler) {
         MacroGridConfig grid = MacroGridConfig.DEFAULT;
@@ -119,7 +137,13 @@ public class ModOverworldBiomeSource extends BiomeSource {
             Math.floorDiv(QuartPos.toBlock(quartZ), grid.macroCellSizeBlocks())
         );
 
-        BiomeId biomeId = RegionCacheHolder.get().biomeAt(cell);
+        BiomeId biomeId;
+        try {
+            biomeId = RegionCacheHolder.get().biomeAt(cell);
+        } catch (RuntimeException e) {
+            LOGGER.error("[mineutze_worldgen] getNoiseBiome failed at cell {} (quart {},{},{})", cell, quartX, quartY, quartZ, e);
+            throw e;
+        }
         Holder<Biome> resolved = biomesById.get(BiomeIdAdapter.toResourceLocation(biomeId));
         if (resolved == null) {
             // Should be unreachable: the solver only ever assigns biomes from
