@@ -186,6 +186,31 @@ class ModBiomeGraphTest {
         assertThrows(IllegalStateException.class, () -> solveAndRasterizeOverworld(2031L));
     }
 
+    /**
+     * The exact 30-seed range ({@code 5000..5029}) that originally found this whole
+     * arc's founding bug (2026-09-04): 95 real illegal adjacencies from edges collapsing
+     * toward zero length. Fixed in stages - minimum edge length (95->4-7), then the
+     * minimum-realized-area floor added for the user's own "one face still looks way too
+     * small" follow-up report turned out to ALSO clear the residual illegal adjacencies
+     * and overlaps on this specific range entirely (0 illegal, 0 overlap-seeds), a real
+     * measured side effect, not assumed. Locked in here as a permanent regression bound
+     * on the exact range that mattered, not the whole 50-seed starvation range (which
+     * still includes worldSeed=2031, the tracked, still-open overlap bug - see {@link
+     * #overworldHasAKnownFacePolygonOverlapBug}, a DIFFERENT range this test
+     * deliberately avoids so it can assert something true today).
+     */
+    @Test
+    void overworldHasZeroIllegalAdjacenciesOnTheFoundingBugSeedRange() {
+        int totalIllegal = 0;
+        for (long worldSeed = 5000; worldSeed < 5030; worldSeed++) {
+            Map<MacroCellPos, BiomeId> result = solveAndRasterizeOverworld(worldSeed);
+            com.mineutze.worldgen.regionsolve.RegionIntegrityValidator.Report report =
+                com.mineutze.worldgen.regionsolve.RegionIntegrityValidator.validate(result, ModBiomeGraph.OVERWORLD);
+            totalIllegal += report.illegalAdjacencies().size();
+        }
+        assertEquals(0, totalIllegal, "expected zero illegal adjacencies across worldSeed 5000..5029 - a real regression on the exact range that found this bug in the first place");
+    }
+
     private static Map<MacroCellPos, BiomeId> solveAndRasterizeOverworld(long worldSeed) {
         double sizeBlocks = 325; // matches TriangleFieldGeometryRealization.HEX_SIZE_BLOCKS - kept in sync manually, see that constant's own doc
         int meshBoxMax = 9000;

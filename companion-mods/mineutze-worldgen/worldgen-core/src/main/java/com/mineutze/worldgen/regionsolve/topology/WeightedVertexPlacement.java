@@ -102,6 +102,39 @@ public final class WeightedVertexPlacement {
      */
     private static final int MAX_VALIDATION_ROUNDS = 20;
 
+    /**
+     * Floor on a face's own realized area, as a fraction of ITS OWN target area - a THIRD
+     * geometric validity condition alongside simplicity and minimum edge length, added
+     * for a different failure mode than either: a face whose edges are all comfortably
+     * long and whose polygon is perfectly simple can still land badly undersized overall
+     * (measured directly: a real 370-block-target beach face realized only 260.8 blocks,
+     * ratio 0.70, roughly HALF the target AREA - not a self-intersection or a thin-edge
+     * problem, just the calibration loop's own known residual, see this class's own doc
+     * on weight being "only a one-shot proxy for realized area"). Unlike the other two
+     * conditions (checked against an ABSOLUTE floor, since a collapsed edge or a folded
+     * polygon is bad regardless of what biome it is), this one is relative to the face's
+     * OWN target - a 300-block-target biome realizing 250 blocks is fine, a 1000-block
+     * one realizing 250 is not, so one shared fraction (not one shared absolute number)
+     * is the right shape for this specific guard. 0 disables the check entirely for a
+     * face with no real target (fixed/hull-touching), same convention as the other two.
+     *
+     * <p><b>Must be capped at the baseline hexagon's own area, not applied raw.</b> Found
+     * as a real bug via a pre-existing test breaking: for an OVERSIZED target (bigger
+     * than baseline), {@code 0.7 x targetArea} can exceed the area of the ORIGINAL
+     * undisplaced hexagon itself - meaning even {@code t=0} (always valid for the other
+     * two conditions) fails this one, breaking the binary search's whole foundation.
+     * Worse, since area only GROWS as {@code t} increases toward an oversized target,
+     * the fix this condition would want (grow more) is the OPPOSITE of what shrinking
+     * toward original does - confirmed directly: an oversized face got ZERO growth at
+     * all once this went uncapped, since the search kept shrinking (the right move for
+     * simplicity/min-edge) while that only ever made the area gap worse. Capping the
+     * floor at the baseline area (see {@link #geometricallyValidPositions}'s own call
+     * site) restores "always valid at t=0" for every case: an oversized target's floor
+     * becomes trivially satisfied by baseline area (correctly permissive, doesn't block
+     * growth), while an undersized target's floor stays real and below baseline.
+     */
+    private static final double MIN_REALIZED_AREA_FRACTION_OF_TARGET = 0.7;
+
     /** Rounds of additive weight correction - linear (not Newton's-method quadratic) convergence, so a real iteration count, not 2-3 steps; cheap enough at real region scale (a full vertex-placement pass is sub-100ms) that this stays well under any performance concern. */
     private static final int CALIBRATION_ROUNDS = 15;
 
@@ -149,7 +182,7 @@ public final class WeightedVertexPlacement {
         List<int[]> triangles = adjacency.mutuallyAdjacentTriples(centers.keySet());
         Map<Integer, Double> targetAreaByFace = targetAreasOf(assignments);
 
-        Map<Integer, Point2D> displaced = vertexPositionsFor(mesh, centers, weightByFace, triangles, minEdgeLengthBlocks);
+        Map<Integer, Point2D> displaced = vertexPositionsFor(mesh, centers, weightByFace, triangles, minEdgeLengthBlocks, targetAreaByFace, baselineCircumradiusBlocks);
         return calibratedWeights(mesh, centers, weightByFace, triangles, targetAreaByFace, displaced, baselineCircumradiusBlocks, minEdgeLengthBlocks);
     }
 
@@ -178,7 +211,7 @@ public final class WeightedVertexPlacement {
                 double clampedCorrection = Math.max(-maxCorrectionPerRound, Math.min(maxCorrectionPerRound, rawCorrection));
                 weights.put(faceIndex, weights.get(faceIndex) + clampedCorrection);
             }
-            displaced = vertexPositionsFor(mesh, centers, weights, triangles, minEdgeLengthBlocks);
+            displaced = vertexPositionsFor(mesh, centers, weights, triangles, minEdgeLengthBlocks, targetAreaByFace, baselineCircumradiusBlocks);
         }
         return displaced;
     }
@@ -191,7 +224,7 @@ public final class WeightedVertexPlacement {
      */
     private static Map<Integer, Point2D> vertexPositionsFor(
         HexMeshBuilder.HexMesh mesh, Map<Integer, Point2D> centers, Map<Integer, Double> weightByFace,
-        List<int[]> triangles, double minEdgeLengthBlocks
+        List<int[]> triangles, double minEdgeLengthBlocks, Map<Integer, Double> targetAreaByFace, double baselineCircumradiusBlocks
     ) {
         Map<Integer, Point2D> raw = new HashMap<>();
         for (int[] triangle : triangles) {
@@ -203,14 +236,16 @@ public final class WeightedVertexPlacement {
             );
             raw.put(vertexIndex, radicalCenter);
         }
-        return geometricallyValidPositions(mesh, Map.copyOf(raw), minEdgeLengthBlocks);
+        return geometricallyValidPositions(mesh, Map.copyOf(raw), minEdgeLengthBlocks, targetAreaByFace, baselineCircumradiusBlocks);
     }
 
     /**
      * Replaces a single flat displacement-distance cap with a per-face, per-round
      * geometric check: no face's own hexagon is ever allowed to become a self-intersecting
-     * polygon, AND no single edge of it is ever allowed to collapse below {@code
-     * minEdgeLengthBlocks} — no matter how extreme the weight mismatch driving it. A flat
+     * polygon, no single edge of it is ever allowed to collapse below {@code
+     * minEdgeLengthBlocks}, AND its own realized area is never allowed to drop below
+     * {@link #MIN_REALIZED_AREA_FRACTION_OF_TARGET} of its own target — no matter how
+     * extreme the weight mismatch driving it. A flat
      * distance cap picked one number for the whole mesh (safe only because it was small
      * enough for the worst case seen so far); this instead asks, for each face, "how far
      * can THIS face's own 6 corners move before its own shape breaks?" — so an easy,
@@ -258,8 +293,10 @@ public final class WeightedVertexPlacement {
      * the full {@link #MAX_VALIDATION_ROUNDS}.
      */
     private static Map<Integer, Point2D> geometricallyValidPositions(
-        HexMeshBuilder.HexMesh mesh, Map<Integer, Point2D> rawPositions, double minEdgeLengthBlocks
+        HexMeshBuilder.HexMesh mesh, Map<Integer, Point2D> rawPositions, double minEdgeLengthBlocks,
+        Map<Integer, Double> targetAreaByFace, double baselineCircumradiusBlocks
     ) {
+        double baselineAreaBlocks2 = (3.0 * Math.sqrt(3.0) / 2.0) * baselineCircumradiusBlocks * baselineCircumradiusBlocks;
         Map<Integer, Point2D> current = rawPositions;
         for (int round = 0; round < MAX_VALIDATION_ROUNDS; round++) {
             Map<Integer, Double> minScaleByVertex = new HashMap<>();
@@ -273,7 +310,10 @@ public final class WeightedVertexPlacement {
                     original.add(basePosition);
                     candidate.add(current.getOrDefault(vertexIndex, basePosition));
                 }
-                double furtherScale = maxSafeScale(original, candidate, minEdgeLengthBlocks);
+                double minAreaBlocks2 = Math.min(
+                    targetAreaByFace.getOrDefault(faceIndex, 0.0) * MIN_REALIZED_AREA_FRACTION_OF_TARGET, baselineAreaBlocks2
+                );
+                double furtherScale = maxSafeScale(original, candidate, minEdgeLengthBlocks, minAreaBlocks2);
                 if (furtherScale < 1.0) {
                     anyFaceStillNeedsShrinking = true;
                 }
@@ -313,15 +353,15 @@ public final class WeightedVertexPlacement {
      * baseline circumradius for this base case to hold — the caller's own responsibility,
      * same as {@code MAX_VERTEX_DISPLACEMENT_FRACTION} was before it.
      */
-    private static double maxSafeScale(List<Point2D> original, List<Point2D> candidate, double minEdgeLengthBlocks) {
-        if (isGeometricallyValid(lerpAll(original, candidate, 1.0), minEdgeLengthBlocks)) {
+    private static double maxSafeScale(List<Point2D> original, List<Point2D> candidate, double minEdgeLengthBlocks, double minAreaBlocks2) {
+        if (isGeometricallyValid(lerpAll(original, candidate, 1.0), minEdgeLengthBlocks, minAreaBlocks2)) {
             return 1.0;
         }
         double lowSafe = 0.0;
         double highUnsafe = 1.0;
         for (int iteration = 0; iteration < BISECTION_ITERATIONS; iteration++) {
             double mid = (lowSafe + highUnsafe) / 2.0;
-            if (isGeometricallyValid(lerpAll(original, candidate, mid), minEdgeLengthBlocks)) {
+            if (isGeometricallyValid(lerpAll(original, candidate, mid), minEdgeLengthBlocks, minAreaBlocks2)) {
                 lowSafe = mid;
             } else {
                 highUnsafe = mid;
@@ -330,8 +370,8 @@ public final class WeightedVertexPlacement {
         return lowSafe;
     }
 
-    private static boolean isGeometricallyValid(List<Point2D> corners, double minEdgeLengthBlocks) {
-        return isSimplePolygon(corners) && hasMinimumEdgeLength(corners, minEdgeLengthBlocks);
+    private static boolean isGeometricallyValid(List<Point2D> corners, double minEdgeLengthBlocks, double minAreaBlocks2) {
+        return isSimplePolygon(corners) && hasMinimumEdgeLength(corners, minEdgeLengthBlocks) && hasMinimumArea(corners, minAreaBlocks2);
     }
 
     private static boolean hasMinimumEdgeLength(List<Point2D> corners, double minEdgeLengthBlocks) {
@@ -344,6 +384,18 @@ public final class WeightedVertexPlacement {
             }
         }
         return true;
+    }
+
+    /** Shoelace area of this candidate hexagon against {@code minAreaBlocks2} - see {@link #MIN_REALIZED_AREA_FRACTION_OF_TARGET}'s own doc for why this is a per-face RELATIVE floor, not an absolute one like the other two conditions. */
+    private static boolean hasMinimumArea(List<Point2D> corners, double minAreaBlocks2) {
+        int cornerCount = corners.size();
+        double sum = 0;
+        for (int i = 0; i < cornerCount; i++) {
+            Point2D current = corners.get(i);
+            Point2D next = corners.get((i + 1) % cornerCount);
+            sum += current.x() * next.z() - next.x() * current.z();
+        }
+        return Math.abs(sum) / 2.0 >= minAreaBlocks2;
     }
 
     private static List<Point2D> lerpAll(List<Point2D> original, List<Point2D> candidate, double t) {
