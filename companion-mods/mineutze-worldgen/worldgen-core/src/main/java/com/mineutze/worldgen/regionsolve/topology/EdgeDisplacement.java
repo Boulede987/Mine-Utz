@@ -3,6 +3,7 @@ package com.mineutze.worldgen.regionsolve.topology;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Random;
 
 /**
  * Displaces a mesh edge's straight chord into a wavy polyline: several
@@ -102,7 +103,31 @@ public final class EdgeDisplacement {
         return points;
     }
 
-    /** Deterministic value in {@code [-1, 1)} for one interior point - same hash idiom the rest of this codebase uses for deterministic-per-input noise, never a persisted {@link java.util.Random} stream. */
+    /**
+     * Deterministic value in {@code [-1, 1)} for one interior point - a FRESH {@link
+     * Random} per call, never a persisted stream (matches {@link SeedGrid}'s own idiom).
+     *
+     * <p><b>Real bug, found and fixed 2026-09-04:</b> the original version folded {@code
+     * pointIndex} into the seed via one final {@code seed = seed * 31 + pointIndex} step,
+     * then read the result directly (XOR-folded, no further mixing) - since that's the
+     * LAST operation before reading, a change of just 1-3 in {@code pointIndex} only ever
+     * perturbs the seed's lowest few bits, with no subsequent avalanche step to spread
+     * that into the bits the final value actually reads from. Measured directly: the 3
+     * "independent" interior points on a real edge came out agreeing to 9 decimal places
+     * - not independent at all, just one offset value read 3 times, collapsing the whole
+     * multi-point design into a single smooth bow per edge (exactly the "one bump reads
+     * as fake no matter how tuned" failure {@link com.mineutze.worldgen.regionsolve.MacroGridConfig}'s
+     * own doc already diagnosed for a different mechanism).
+     *
+     * <p>Fixed by discarding {@link Random}'s own FIRST draw before using its second: one
+     * fresh {@code nextDouble()} call from a seed differing only in its lowest bits was
+     * measured to still be too similar (agreeing to ~3 decimal places, better but not
+     * genuinely independent) - {@link Random}'s LCG needs to actually run its
+     * multiply-and-add step at least once on already-mixed state before the tiny
+     * {@code pointIndex} perturbation has fully diffused into the high bits the returned
+     * value is read from. Verified directly: with one discarded draw, 5 consecutive
+     * {@code pointIndex} values scatter across the whole range, no longer clustering.
+     */
     private static double signedUnitOffset(Point2D lower, Point2D upper, long worldSeed, int pointIndex) {
         long seed = worldSeed ^ SALT;
         seed = seed * 31 + Double.doubleToLongBits(lower.x());
@@ -110,7 +135,8 @@ public final class EdgeDisplacement {
         seed = seed * 31 + Double.doubleToLongBits(upper.x());
         seed = seed * 31 + Double.doubleToLongBits(upper.z());
         seed = seed * 31 + pointIndex;
-        long nonNegative = (seed ^ (seed >>> 32)) & 0xFFFF_FFFFL;
-        return (double) nonNegative / 0xFFFF_FFFFL * 2.0 - 1.0;
+        Random random = new Random(seed);
+        random.nextDouble(); // discarded - see this method's own doc for why one draw isn't enough diffusion
+        return random.nextDouble() * 2.0 - 1.0;
     }
 }
