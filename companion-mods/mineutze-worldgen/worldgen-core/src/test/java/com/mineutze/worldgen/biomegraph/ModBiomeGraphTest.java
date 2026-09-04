@@ -127,13 +127,6 @@ class ModBiomeGraphTest {
      * the bare minimum legal-neighbor degree. More trials means fewer of these
      * one-at-a-time surprises - not a guarantee (still a sample, never a proof), just a
      * meaningfully higher-confidence one.
-     *
-     * <p><b>KNOWN, currently expected to fail (2026-09-04):</b> 13 of these 50 seeds trip
-     * the real, tracked face-polygon-overlap bug documented on {@link
-     * #overworldHasAKnownFacePolygonOverlapBug} - this test throwing that SAME exception
-     * is that known bug surfacing here too, not a starvation regression. Leave both
-     * failing until overlap itself is fixed; do not silently catch/skip the exception
-     * here just to make this specific test green again.
      */
     private static final int OVERWORLD_STARVATION_TRIAL_COUNT = 50;
 
@@ -159,31 +152,34 @@ class ModBiomeGraphTest {
     }
 
     /**
-     * KNOWN, REAL, OPEN BUG - tracked, not fixed. Found 2026-09-04 while wiring
-     * {@link com.mineutze.worldgen.regionsolve.RegionIntegrityValidator} into a real,
-     * multi-seed check for the first time (previously only exercised against a tiny
-     * synthetic 4-biome graph, one seed). {@code EdgeDisplacementRasterizer} can let two
-     * DIFFERENT faces' own polygons claim the same macro cell - a face's shape reaching
-     * far enough to overlap a distant, non-adjacent face's own territory, which none of
-     * {@code WeightedVertexPlacement}'s per-face-local checks (simplicity, minimum edge
-     * length) are positioned to catch, since both only ever validate one face's own 6
-     * corners in isolation. Swept the standard 50-seed starvation range
-     * ({@code 2026..2075}): 13 of 50 seeds (26%) trigger it, from as few as 2 to as many
-     * as 527 overlapping cells - common, not a rare edge case. {@code worldSeed=2031} (30
-     * overlapping cells) is the first and smallest reproducer, used here as the concrete,
-     * re-runnable regression case rather than relying on a vague description.
+     * FIXED (2026-09-04, commit history: found via {@link
+     * com.mineutze.worldgen.regionsolve.RegionIntegrityValidator} wired into a real
+     * multi-seed check for the first time; root-caused and fixed by re-adding {@code
+     * WeightedVertexPlacement.MAX_VERTEX_DISPLACEMENT_FRACTION} as a fourth, GLOBAL
+     * validity condition alongside the three per-face-local ones). Real root cause: the
+     * per-face simplicity/minimum-edge/minimum-area checks each only ever look at ONE
+     * face's own 6 corners in isolation - none of them bounds how far a vertex can move
+     * in absolute terms, so a face could grow large enough to physically reach a
+     * DISTANT, non-mesh-adjacent face's own territory without ever tripping any of the
+     * three local checks. Confirmed directly: {@code worldSeed=2031} (the smallest of 13
+     * affected seeds in the standard 50-seed range, 527 overlapping cells at the worst
+     * seed) stopped throwing the moment the absolute cap was restored.
      *
-     * <p>Predates the minimum-edge-length fix entirely - confirmed directly by disabling
-     * it (0.0): overlap got WORSE (89 cells on one run), not better, so the min-edge fix
-     * is a real net improvement despite not fully closing this. This test intentionally
-     * asserts the CURRENT bad behavior (mirrors {@link #overworldHasTwoKnownCrossTierGaps}'s
-     * own convention for a real, open, tracked defect) - replace with a real
-     * zero-overlap assertion once this is fixed, do not delete or weaken it to make the
-     * suite quietly go green.
+     * <p>This test now asserts the FIX across every standard starvation-range seed, not
+     * just the one former reproducer - the user's own explicit requirement ("we must
+     * have 0 illegal adjacencies ever"), not just "the known reproducer is gone."
      */
     @Test
-    void overworldHasAKnownFacePolygonOverlapBug() {
-        assertThrows(IllegalStateException.class, () -> solveAndRasterizeOverworld(2031L));
+    void overworldHasZeroIllegalAdjacenciesAcrossEveryStarvationRangeSeed() {
+        int totalIllegal = 0;
+        for (int trial = 0; trial < OVERWORLD_STARVATION_TRIAL_COUNT; trial++) {
+            long worldSeed = 2026L + trial;
+            Map<MacroCellPos, BiomeId> result = solveAndRasterizeOverworld(worldSeed);
+            com.mineutze.worldgen.regionsolve.RegionIntegrityValidator.Report report =
+                com.mineutze.worldgen.regionsolve.RegionIntegrityValidator.validate(result, ModBiomeGraph.OVERWORLD);
+            totalIllegal += report.illegalAdjacencies().size();
+        }
+        assertEquals(0, totalIllegal, "expected zero illegal adjacencies across every worldSeed in the standard starvation range (2026.." + (2025 + OVERWORLD_STARVATION_TRIAL_COUNT) + ")");
     }
 
     /**

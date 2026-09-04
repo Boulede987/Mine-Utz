@@ -135,6 +135,36 @@ public final class WeightedVertexPlacement {
      */
     private static final double MIN_REALIZED_AREA_FRACTION_OF_TARGET = 0.7;
 
+    /**
+     * A FOURTH, absolute condition: no vertex may ever move farther than this fraction of
+     * the mesh's own baseline circumradius from its own undisplaced lattice position - a
+     * global safety net the other three conditions don't provide, since each of them only
+     * ever examines ONE face's own 6 corners in isolation. A face can be perfectly simple,
+     * have every edge comfortably long, and have plenty of area, while still having grown
+     * so large that it physically reaches into a DISTANT, non-mesh-adjacent face's own
+     * territory - none of the other three checks can see that, because none of them ever
+     * looks at any OTHER face's geometry.
+     *
+     * <p>This is a real, measured, previously-reopened gap, not a defensive guess: the
+     * original design had exactly this cap (as the sole clamp, before the per-face
+     * adaptive checks existed), empirically swept to 0.8 as the largest value that stayed
+     * clean of real illegal adjacencies (1.0 measurably broke correctness - illegal
+     * adjacencies reappeared). When the per-face simplicity/min-edge/min-area conditions
+     * were built, this absolute cap was dropped entirely, on the assumption the new
+     * LOCAL checks would be enough - they are not, for exactly the reason above, and this
+     * is very likely the real root cause of the face-polygon-overlap bug tracked at
+     * {@code ModBiomeGraphTest.overworldHasAKnownFacePolygonOverlapBug} (worldSeed=2031):
+     * confirmed directly by re-adding this cap and re-testing that exact seed.
+     *
+     * <p>0.8 is reused here, not re-derived, because the underlying question is the same
+     * one already answered empirically for the flat-clamp era: how far can ANY vertex
+     * move before it risks reaching territory it has no business reaching. The other
+     * three conditions still do real, independent work (this cap alone never guaranteed
+     * simplicity, minimum edge length, or minimum area - each was found as its own real,
+     * separate bug with its own separate fix).
+     */
+    private static final double MAX_VERTEX_DISPLACEMENT_FRACTION = 0.8;
+
     /** Rounds of additive weight correction - linear (not Newton's-method quadratic) convergence, so a real iteration count, not 2-3 steps; cheap enough at real region scale (a full vertex-placement pass is sub-100ms) that this stays well under any performance concern. */
     private static final int CALIBRATION_ROUNDS = 15;
 
@@ -297,6 +327,7 @@ public final class WeightedVertexPlacement {
         Map<Integer, Double> targetAreaByFace, double baselineCircumradiusBlocks
     ) {
         double baselineAreaBlocks2 = (3.0 * Math.sqrt(3.0) / 2.0) * baselineCircumradiusBlocks * baselineCircumradiusBlocks;
+        double maxDisplacementBlocks = MAX_VERTEX_DISPLACEMENT_FRACTION * baselineCircumradiusBlocks;
         Map<Integer, Point2D> current = rawPositions;
         for (int round = 0; round < MAX_VALIDATION_ROUNDS; round++) {
             Map<Integer, Double> minScaleByVertex = new HashMap<>();
@@ -313,7 +344,7 @@ public final class WeightedVertexPlacement {
                 double minAreaBlocks2 = Math.min(
                     targetAreaByFace.getOrDefault(faceIndex, 0.0) * MIN_REALIZED_AREA_FRACTION_OF_TARGET, baselineAreaBlocks2
                 );
-                double furtherScale = maxSafeScale(original, candidate, minEdgeLengthBlocks, minAreaBlocks2);
+                double furtherScale = maxSafeScale(original, candidate, minEdgeLengthBlocks, minAreaBlocks2, maxDisplacementBlocks);
                 if (furtherScale < 1.0) {
                     anyFaceStillNeedsShrinking = true;
                 }
@@ -353,15 +384,17 @@ public final class WeightedVertexPlacement {
      * baseline circumradius for this base case to hold — the caller's own responsibility,
      * same as {@code MAX_VERTEX_DISPLACEMENT_FRACTION} was before it.
      */
-    private static double maxSafeScale(List<Point2D> original, List<Point2D> candidate, double minEdgeLengthBlocks, double minAreaBlocks2) {
-        if (isGeometricallyValid(lerpAll(original, candidate, 1.0), minEdgeLengthBlocks, minAreaBlocks2)) {
+    private static double maxSafeScale(
+        List<Point2D> original, List<Point2D> candidate, double minEdgeLengthBlocks, double minAreaBlocks2, double maxDisplacementBlocks
+    ) {
+        if (isGeometricallyValid(original, lerpAll(original, candidate, 1.0), minEdgeLengthBlocks, minAreaBlocks2, maxDisplacementBlocks)) {
             return 1.0;
         }
         double lowSafe = 0.0;
         double highUnsafe = 1.0;
         for (int iteration = 0; iteration < BISECTION_ITERATIONS; iteration++) {
             double mid = (lowSafe + highUnsafe) / 2.0;
-            if (isGeometricallyValid(lerpAll(original, candidate, mid), minEdgeLengthBlocks, minAreaBlocks2)) {
+            if (isGeometricallyValid(original, lerpAll(original, candidate, mid), minEdgeLengthBlocks, minAreaBlocks2, maxDisplacementBlocks)) {
                 lowSafe = mid;
             } else {
                 highUnsafe = mid;
@@ -370,8 +403,21 @@ public final class WeightedVertexPlacement {
         return lowSafe;
     }
 
-    private static boolean isGeometricallyValid(List<Point2D> corners, double minEdgeLengthBlocks, double minAreaBlocks2) {
-        return isSimplePolygon(corners) && hasMinimumEdgeLength(corners, minEdgeLengthBlocks) && hasMinimumArea(corners, minAreaBlocks2);
+    private static boolean isGeometricallyValid(
+        List<Point2D> original, List<Point2D> corners, double minEdgeLengthBlocks, double minAreaBlocks2, double maxDisplacementBlocks
+    ) {
+        return isSimplePolygon(corners) && hasMinimumEdgeLength(corners, minEdgeLengthBlocks) && hasMinimumArea(corners, minAreaBlocks2)
+            && hasBoundedDisplacement(original, corners, maxDisplacementBlocks);
+    }
+
+    /** Each corner checked against its OWN original position - a global cap independent of the other 5 corners' own behavior, see {@link #MAX_VERTEX_DISPLACEMENT_FRACTION}'s own doc for why the other three conditions can't provide this on their own. */
+    private static boolean hasBoundedDisplacement(List<Point2D> original, List<Point2D> corners, double maxDisplacementBlocks) {
+        for (int i = 0; i < original.size(); i++) {
+            if (Math.hypot(corners.get(i).x() - original.get(i).x(), corners.get(i).z() - original.get(i).z()) > maxDisplacementBlocks) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private static boolean hasMinimumEdgeLength(List<Point2D> corners, double minEdgeLengthBlocks) {

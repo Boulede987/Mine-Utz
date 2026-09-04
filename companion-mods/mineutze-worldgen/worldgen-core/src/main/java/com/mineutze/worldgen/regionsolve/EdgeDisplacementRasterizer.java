@@ -43,15 +43,19 @@ import java.util.Set;
  * real bug (insufficient margin, or a rasterizer defect), not something to silently
  * paper over.
  *
- * <p><b>KNOWN, OPEN BUG (found 2026-09-04, not yet fixed):</b> {@link #requireNoOverlaps}
- * fires on 13 of the standard 50 starvation-test seeds — a face's own polygon can grow
- * large enough to overlap a DIFFERENT, non-adjacent face's territory in space, which
- * {@code WeightedVertexPlacement}'s per-face-local checks (simplicity, minimum edge
- * length) can never catch, since each only ever validates one face's own 6 corners in
- * isolation against itself. See {@code
- * ModBiomeGraphTest.overworldHasAKnownFacePolygonOverlapBug} (worldSeed=2031, the
- * smallest concrete reproducer) for the tracked regression case — do not silently soften
- * or remove {@link #requireNoOverlaps} to make callers stop seeing this; it is real.
+ * <p><b>{@link #requireNoOverlaps} — found and fixed 2026-09-04.</b> Originally fired on
+ * 13 of the standard 50 starvation-test seeds: a face's own polygon could grow large
+ * enough to overlap a DIFFERENT, non-adjacent face's territory in space, which {@code
+ * WeightedVertexPlacement}'s per-face-local checks (simplicity, minimum edge length,
+ * minimum area) could never catch on their own, since each only ever validates one
+ * face's own 6 corners in isolation against itself, never against any OTHER face's
+ * geometry. Root-caused and fixed by re-adding {@code MAX_VERTEX_DISPLACEMENT_FRACTION}
+ * as a fourth, GLOBAL condition (an absolute cap on how far any vertex can move from its
+ * own undisplaced position) alongside the three local ones — see that constant's own
+ * doc. Regression-tested across the full standard seed range in {@code
+ * ModBiomeGraphTest.overworldHasZeroIllegalAdjacenciesAcrossEveryStarvationRangeSeed}.
+ * Do not remove {@link #requireNoOverlaps} now that it's quiet — it is what proved the
+ * fix, and what will catch a future regression.
  */
 public final class EdgeDisplacementRasterizer {
 
