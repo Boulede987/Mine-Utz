@@ -184,6 +184,25 @@ public final class TriangleFieldGeometryRealization {
         return freeFaceIndices;
     }
 
+    /**
+     * The exception message here is the ONLY diagnostic trail a real, in-game dead end
+     * leaves behind - {@code worldgen-core} deliberately has no logging dependency (see
+     * this module's own build.gradle doc: staying pure Java keeps its tests fast plain
+     * JUnit, not NeoForge's "unit testing mode" that boots a whole Minecraft instance),
+     * so there is no separate logger call to fall back on. Whatever isn't in THIS string
+     * is gone once the crash report closes - found the hard way (2026-09-04): a real
+     * in-game dead end at {@code worldSeed=42}, {@code RegionPos[-2,8]}, reached only via
+     * a structure-placement ring search (far outside spawn, never exercised by this
+     * codebase's own 50-seed 2026-2075 sweep), crashed with only the region name to go
+     * on - not enough to reproduce without re-running the exact same seed and hoping the
+     * same ring search fires again. Every field a future repro test would need to
+     * reconstruct this EXACT CSP call is included directly: the seed, the region, how
+     * many faces were free vs. already fixed by a neighboring region's own solve, AND the
+     * full fixed-face biome assignment itself (the one input a synthetic single-region
+     * test can't fabricate on its own - it comes from whatever neighboring regions
+     * happened to solve first, in whatever order this specific run's worker threads
+     * happened to reach them).
+     */
     private static Map<Integer, TriangleIdentitySizeAssignment.Assignment> solveIdentities(
         TriangleAdjacency.Adjacency adjacency, Set<Integer> freeFaceIndices, Map<Integer, BiomeId> fixedFaceBiomes,
         BiomeGraph graph, long worldSeed, double regionAreaBlocks2, RegionPos region
@@ -191,8 +210,11 @@ public final class TriangleFieldGeometryRealization {
         return TriangleIdentitySizeAssignment.solve(adjacency, freeFaceIndices, fixedFaceBiomes, graph, worldSeed, regionAreaBlocks2)
             .orElseThrow(() -> new IllegalStateException(
                 "TriangleFieldGeometryRealization: no legal identity assignment exists for region " + region
-                    + " - the BiomeGraph's own construction-time checks only rule out configs "
-                    + "impossible in principle, not every real local mesh arrangement."
+                    + " (worldSeed=" + worldSeed + ") - the BiomeGraph's own construction-time checks only rule out"
+                    + " configs impossible in principle, not every real local mesh arrangement."
+                    + " freeFaceCount=" + freeFaceIndices.size() + ", fixedFaceCount=" + fixedFaceBiomes.size()
+                    + ", regionAreaBlocks2=" + regionAreaBlocks2
+                    + ", fixedFaceBiomes=" + fixedFaceBiomes
             ));
     }
 
