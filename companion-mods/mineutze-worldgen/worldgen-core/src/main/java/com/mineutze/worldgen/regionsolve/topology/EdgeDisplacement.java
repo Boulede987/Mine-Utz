@@ -81,6 +81,14 @@ public final class EdgeDisplacement {
     private static final int INTERIOR_POINT_COUNT = 3;
 
     /**
+     * Chaikin corner-cutting rounds applied to the finished polyline (see {@link
+     * #chaikinSmooth}) — 2 is enough to turn a visibly sharp zigzag into a gentle curve
+     * without exploding the point count per edge (each round roughly doubles it: 5 points
+     * become 10, then 19-ish after two rounds, still cheap for a 6-edge hex face).
+     */
+    private static final int SMOOTHING_ITERATIONS = 2;
+
+    /**
      * Shrinks every closed-form safe range before using it, so a point never lands
      * EXACTLY on its own angular boundary (where floating-point error could tip it
      * across) and two neighbors approaching the same bisector from opposite sides never
@@ -183,7 +191,44 @@ public final class EdgeDisplacement {
             points.add(new Point2D(base.x() + perpX * offset, base.z() + perpZ * offset));
         }
         points.add(upper);
-        return points;
+        return chaikinSmooth(points, SMOOTHING_ITERATIONS);
+    }
+
+    /**
+     * Rounds off the sharp zigzag between widely-swinging interior points into a gentle
+     * curve — {@link #INTERIOR_POINT_COUNT} independent points connected by straight
+     * segments reads as spiky/starburst whenever two neighbors swing to opposite sides,
+     * since a zigzag of straight lines has a real corner at every point, not a curve.
+     *
+     * <p><b>Provably safe without any new verification</b> — this only ever needs to
+     * preserve the safety already established above, not re-derive it. Standard open-curve
+     * Chaikin corner-cutting: the two endpoints are kept EXACTLY (they're the real hex
+     * corners other edges connect to), and every other point is replaced by two points at
+     * 25% and 75% along its own original segment. Every point this ever produces, at any
+     * iteration depth, lies exactly ON a straight segment between two points that were
+     * already proven angularly safe (from both owning poles) - and a straight segment
+     * between two angularly-ordered-safe points is itself entirely safe, since none of our
+     * edges ever span close to half the full circle around either pole (a real, checkable
+     * fact for hex geometry, not assumed), so the radial view along that segment can't
+     * double back on itself. Recursion doesn't weaken this: each later iteration only ever
+     * interpolates between points from the previous iteration, which are themselves safe
+     * by the same argument, on strictly smaller sub-segments of the original safe ones.
+     */
+    private static List<Point2D> chaikinSmooth(List<Point2D> points, int iterations) {
+        List<Point2D> current = points;
+        for (int iteration = 0; iteration < iterations; iteration++) {
+            List<Point2D> next = new ArrayList<>();
+            next.add(current.get(0));
+            for (int i = 0; i < current.size() - 1; i++) {
+                Point2D p = current.get(i);
+                Point2D q = current.get(i + 1);
+                next.add(lerp(p, q, 0.25));
+                next.add(lerp(p, q, 0.75));
+            }
+            next.add(current.get(current.size() - 1));
+            current = next;
+        }
+        return current;
     }
 
     private static Point2D lerp(Point2D from, Point2D to, double t) {
