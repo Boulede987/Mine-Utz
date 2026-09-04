@@ -78,7 +78,15 @@ import java.util.Random;
 public final class EdgeDisplacement {
 
     private static final long SALT = Salt.of("EdgeDisplacement.wiggle");
-    private static final int INTERIOR_POINT_COUNT = 3;
+    private static final long INTENSITY_SALT = Salt.of("EdgeDisplacement.edgeIntensity");
+
+    /**
+     * Floor on {@link #edgeIntensity}'s own [MIN_EDGE_INTENSITY, 1.0) range - every edge
+     * keeps at least SOME wiggle (never perfectly straight), but how much of its own
+     * available safe room it actually uses varies edge to edge.
+     */
+    private static final double MIN_EDGE_INTENSITY = 0.25;
+    private static final int INTERIOR_POINT_COUNT = 6;
 
     /**
      * Chaikin corner-cutting rounds applied to the finished polyline (see {@link
@@ -86,7 +94,7 @@ public final class EdgeDisplacement {
      * without exploding the point count per edge (each round roughly doubles it: 5 points
      * become 10, then 19-ish after two rounds, still cheap for a 6-edge hex face).
      */
-    private static final int SMOOTHING_ITERATIONS = 2;
+    private static final int SMOOTHING_ITERATIONS = 3;
 
     /**
      * Shrinks every closed-form safe range before using it, so a point never lands
@@ -168,6 +176,7 @@ public final class EdgeDisplacement {
         double length = Math.hypot(dx, dz);
         double perpX = -dz / length;
         double perpZ = dx / length;
+        double intensity = edgeIntensity(lower, upper, worldSeed);
 
         List<Point2D> points = new ArrayList<>(INTERIOR_POINT_COUNT + 2);
         points.add(lower);
@@ -187,11 +196,34 @@ public final class EdgeDisplacement {
             double dNegativeLimit = range[1] * SAFETY_MARGIN;
 
             double raw = signedUnitOffset(lower, upper, worldSeed, i);
-            double offset = raw >= 0 ? raw * dPositiveLimit : raw * dNegativeLimit;
+            double offset = (raw >= 0 ? raw * dPositiveLimit : raw * dNegativeLimit) * intensity;
             points.add(new Point2D(base.x() + perpX * offset, base.z() + perpZ * offset));
         }
         points.add(upper);
         return chaikinSmooth(points, SMOOTHING_ITERATIONS);
+    }
+
+    /**
+     * Real variety, not just detail: without this, every edge uses close to its own full
+     * safe range, so every hex ends up with a similarly-sized bulge on all 6 of its own
+     * edges - a different kind of unwanted uniformity than a sharp corner (every patch
+     * reading as the same "6-lobed flower" silhouette, just smoother). Scales the whole
+     * edge's own offset by one extra, edge-level random factor - some edges stay calm
+     * (closer to their own straight chord), others use nearly all their available room,
+     * mimicking how a real coastline has wild capes AND quiet stretches, not a uniform
+     * wobble everywhere. Same hash idiom, a different salt so it doesn't correlate with
+     * the per-point offsets, and the same symmetric (lower, upper) inputs so both faces
+     * sharing this edge compute the identical intensity with no coordination.
+     */
+    private static double edgeIntensity(Point2D lower, Point2D upper, long worldSeed) {
+        long seed = worldSeed ^ INTENSITY_SALT;
+        seed = seed * 31 + Double.doubleToLongBits(lower.x());
+        seed = seed * 31 + Double.doubleToLongBits(lower.z());
+        seed = seed * 31 + Double.doubleToLongBits(upper.x());
+        seed = seed * 31 + Double.doubleToLongBits(upper.z());
+        Random random = new Random(seed);
+        random.nextDouble();
+        return MIN_EDGE_INTENSITY + (1.0 - MIN_EDGE_INTENSITY) * random.nextDouble();
     }
 
     /**
