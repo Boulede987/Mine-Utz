@@ -83,9 +83,13 @@ public final class EdgeDisplacement {
     /**
      * Floor on {@link #edgeIntensity}'s own [MIN_EDGE_INTENSITY, 1.0) range - every edge
      * keeps at least SOME wiggle (never perfectly straight), but how much of its own
-     * available safe room it actually uses varies edge to edge.
+     * available safe room it actually uses varies edge to edge. Raised from 0.25 - that
+     * floor let an unlucky edge draw down near a quarter of its own room, reading as
+     * flat/calm rather than genuinely wavy; 0.6 keeps real edge-to-edge variety (still a
+     * ~1.7x spread between the calmest and boldest draw) while making sure "calm" never
+     * means "basically straight."
      */
-    private static final double MIN_EDGE_INTENSITY = 0.25;
+    private static final double MIN_EDGE_INTENSITY = 0.6;
     private static final int INTERIOR_POINT_COUNT = 6;
 
     /**
