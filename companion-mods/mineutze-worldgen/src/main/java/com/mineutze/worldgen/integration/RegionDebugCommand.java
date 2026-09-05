@@ -3,8 +3,6 @@ package com.mineutze.worldgen.integration;
 import com.mineutze.worldgen.biomegraph.BiomeId;
 import com.mineutze.worldgen.regionsolve.MacroCellPos;
 import com.mineutze.worldgen.regionsolve.MacroGridConfig;
-import com.mineutze.worldgen.regionsolve.RegionPos;
-import com.mineutze.worldgen.regionsolve.RegionSolveResult;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.context.CommandContext;
@@ -15,13 +13,13 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.event.RegisterCommandsEvent;
 
-import java.util.Map;
-import java.util.TreeMap;
 
 /**
- * `/mineutzeworldgen solveregion` - reports the region solve at the command source's
- * position, via the SAME {@link RegionCacheHolder}/{@code SeedRegionCache} in-memory
- * path real terrain generation uses ({@link ModOverworldBiomeSource#getNoiseBiome}).
+ * `/mineutzeworldgen solveregion` - reports the biome at the command source's own
+ * position, via the SAME {@link RegionCacheHolder}/{@code SeedMeshCache} in-memory path
+ * real terrain generation uses ({@link ModOverworldBiomeSource#getNoiseBiome}). No more
+ * "region"/"window" to report alongside it — see {@code SeedMeshCache}'s own doc for why
+ * there's no fixed-size batch concept left in this mechanism at all.
  *
  * Used to go through a separate SavedData-backed cache instead (since deleted:
  * RegionCacheManager/RegionCacheData). That path independently tracked "which
@@ -58,25 +56,17 @@ public final class RegionDebugCommand {
     private static int solveRegionAtSource(CommandContext<CommandSourceStack> context) {
         CommandSourceStack source = context.getSource();
         Vec3 position = source.getPosition();
-        long worldSeed = source.getLevel().getSeed();
 
         MacroGridConfig grid = MacroGridConfig.DEFAULT;
         MacroCellPos cell = new MacroCellPos(
             Math.floorDiv((int) position.x, grid.macroCellSizeBlocks()),
             Math.floorDiv((int) position.z, grid.macroCellSizeBlocks())
         );
-        RegionPos region = grid.regionOf(cell, worldSeed);
 
-        RegionSolveResult result = RegionCacheHolder.get().resultFor(region);
-        Map<MacroCellPos, BiomeId> assignment = result.assignment();
-        Map<BiomeId, Long> biomeCounts = countByBiome(assignment);
-        BiomeId here = assignment.get(cell);
+        BiomeId here = RegionCacheHolder.get().biomeAt(cell);
 
-        source.sendSuccess(() -> Component.literal(
-            "Region " + region.x() + "," + region.z() + " (" + assignment.size() + " cells, live SeedRegionCache): "
-                + "here=" + here + " " + biomeCounts
-        ), false);
-        return assignment.size();
+        source.sendSuccess(() -> Component.literal("Cell " + cell.x() + "," + cell.z() + " (live SeedMeshCache): here=" + here), false);
+        return 1;
     }
 
     /**
@@ -101,13 +91,5 @@ public final class RegionDebugCommand {
             "Exported " + result.cellsExported() + " cells to " + result.outputDir()
         ), false);
         return result.cellsExported();
-    }
-
-    private static Map<BiomeId, Long> countByBiome(Map<MacroCellPos, BiomeId> assignment) {
-        Map<BiomeId, Long> counts = new TreeMap<>();
-        for (BiomeId biome : assignment.values()) {
-            counts.merge(biome, 1L, Long::sum);
-        }
-        return counts;
     }
 }

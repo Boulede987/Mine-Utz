@@ -102,8 +102,13 @@ public final class HexBiomeRasterVisual {
         return cells;
     }
 
-    /** Evenly-spaced hues at this small, known biome count - maximizes visual separation, same reasoning {@code TriangleFieldPngExporter} already uses for the old pipeline's own export. */
-    private static Map<BiomeId, Integer> evenlySpacedPalette(BiomeGraph graph) {
+    /**
+     * Evenly-spaced hues at this small, known biome count - maximizes visual separation,
+     * same reasoning {@code TriangleFieldPngExporter} already uses for the old pipeline's
+     * own export. Package-visible (not private) so {@link HexRegionGridVisual} can reuse
+     * the exact same rendering pipeline for a multi-region view instead of duplicating it.
+     */
+    static Map<BiomeId, Integer> evenlySpacedPalette(BiomeGraph graph) {
         List<BiomeId> sortedIds = graph.nodes().stream().map(BiomeNode::id).sorted().toList();
         Map<BiomeId, Integer> palette = new LinkedHashMap<>();
         for (int i = 0; i < sortedIds.size(); i++) {
@@ -113,7 +118,7 @@ public final class HexBiomeRasterVisual {
         return palette;
     }
 
-    private static BufferedImage renderRaster(List<MacroCellPos> cells, Map<MacroCellPos, BiomeId> result, Map<BiomeId, Integer> palette) {
+    static BufferedImage renderRaster(List<MacroCellPos> cells, Map<MacroCellPos, BiomeId> result, Map<BiomeId, Integer> palette) {
         int minCellX = cells.stream().mapToInt(MacroCellPos::x).min().orElseThrow();
         int minCellZ = cells.stream().mapToInt(MacroCellPos::z).min().orElseThrow();
         int maxCellX = cells.stream().mapToInt(MacroCellPos::x).max().orElseThrow();
@@ -129,7 +134,7 @@ public final class HexBiomeRasterVisual {
     }
 
     /** An actual color swatch per biome, own image - matches {@code TriangleFieldPngExporter}'s own established convention (a stacked/inline legend baked into the raster ran the label off the image once there were more than a handful of biomes). */
-    private static BufferedImage renderLegend(BiomeGraph graph, Map<BiomeId, Integer> palette) {
+    static BufferedImage renderLegend(BiomeGraph graph, Map<BiomeId, Integer> palette) {
         List<BiomeId> sortedIds = graph.nodes().stream().map(BiomeNode::id).sorted().toList();
 
         int swatchSize = 24;
@@ -163,7 +168,7 @@ public final class HexBiomeRasterVisual {
         return image;
     }
 
-    private static void writePng(BufferedImage image, Path file) {
+    static void writePng(BufferedImage image, Path file) {
         try {
             if (file.getParent() != null) {
                 Files.createDirectories(file.getParent());

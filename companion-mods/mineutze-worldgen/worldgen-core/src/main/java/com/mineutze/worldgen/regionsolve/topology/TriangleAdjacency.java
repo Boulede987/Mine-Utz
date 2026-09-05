@@ -1,6 +1,7 @@
 package com.mineutze.worldgen.regionsolve.topology;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -66,6 +67,27 @@ public final class TriangleAdjacency {
     }
 
     private TriangleAdjacency() {
+    }
+
+    /**
+     * The one mesh-vertex index shared by all 3 faces in a real vertex-triangle (see
+     * {@link Adjacency#mutuallyAdjacentTriples}) — guaranteed to exist and be unique by the
+     * hex mesh's own vertex-degree-3 property. Shared by {@link WeightedVertexPlacement}
+     * (computing a vertex's displaced position) and {@code TriangleFieldGeometryRealization}
+     * (deciding which vertices are now eligible to commit to the global vertex store) —
+     * both need the same "which raw vertex index does this triple correspond to" lookup.
+     */
+    public static int sharedVertexOf(HexMeshBuilder.HexMesh mesh, int[] triangle) {
+        Set<Integer> shared = new HashSet<>(mesh.faces().get(triangle[0]).vertexIndices());
+        shared.retainAll(mesh.faces().get(triangle[1]).vertexIndices());
+        shared.retainAll(mesh.faces().get(triangle[2]).vertexIndices());
+        if (shared.size() != 1) {
+            throw new IllegalStateException(
+                "TriangleAdjacency.sharedVertexOf: 3 mutually-adjacent faces " + java.util.Arrays.toString(triangle) + " share "
+                    + shared.size() + " vertice(s), expected exactly 1 - not a valid hex mesh vertex triple"
+            );
+        }
+        return shared.iterator().next();
     }
 
     public static Adjacency of(List<? extends MeshFace> faces) {

@@ -173,6 +173,64 @@ class WeightedVertexPlacementTest {
         assertEquals(targetWidth, realizedWidth, targetWidth * 0.05, "expected calibration to converge within 5% of target for a moderate mismatch");
     }
 
+    /**
+     * The direct fix for the cross-region seam bug (see {@code DecidedVertexStore}'s own
+     * doc): a face with no {@code assignments} entry but a real committed width behaves
+     * EXACTLY like a face that DOES have a fresh {@code assignments} entry of that same
+     * width, for placement purposes - not like an unassigned/baseline face. Same moderate-
+     * mismatch setup as {@link #calibrationConvergesCloseToTargetForAModerateMismatch}, but
+     * the 6 ring neighbors' widths arrive via {@code committedWidthBlocksByFace} instead of
+     * {@code assignments} - the realized center width must land within the same tolerance,
+     * proving the committed-width path isn't silently falling back to baseline.
+     */
+    @Test
+    void committedFaceWidthIsUsedInPlaceOfBaselineWeight() {
+        HexMeshBuilder.HexMesh mesh = HexMeshBuilder.build(SIZE, 0, 0, 3000, 3000);
+        TriangleAdjacency.Adjacency adjacency = TriangleAdjacency.of(mesh.faces());
+        int center = aFaceWithSixFullyInteriorNeighbors(mesh, adjacency);
+
+        int baselineWidth = (int) (2 * SIZE);
+        int targetWidth = (int) (baselineWidth * 0.7);
+        Map<Integer, TriangleIdentitySizeAssignment.Assignment> assignments = new HashMap<>();
+        assignments.put(center, new TriangleIdentitySizeAssignment.Assignment(BIOME, targetWidth));
+        Map<Integer, Integer> committedWidthBlocksByFace = new HashMap<>();
+        for (int neighbor : adjacency.neighborFaceIndices().get(center)) {
+            committedWidthBlocksByFace.put(neighbor, baselineWidth);
+        }
+
+        Map<Integer, Point2D> displaced = WeightedVertexPlacement.displacedVertexPositions(
+            mesh, adjacency, assignments, SIZE, 0.0, committedWidthBlocksByFace, Map.of()
+        );
+        double realizedWidth = realizedWidthOf(mesh, displaced, center);
+
+        assertEquals(targetWidth, realizedWidth, targetWidth * 0.05, "expected a committed neighbor width to drive placement the same as a fresh assignment would");
+    }
+
+    /**
+     * The other half of the seam fix: a vertex already present in {@code
+     * committedVertexPositions} must come back EXACTLY as given, completely unaffected by
+     * an otherwise-extreme surrounding weight mismatch that would normally clamp/reshrink
+     * it - it's an immovable anchor, not just another candidate to validate.
+     */
+    @Test
+    void committedVertexPositionIsNeverAlteredRegardlessOfSurroundingWeights() {
+        HexMeshBuilder.HexMesh mesh = HexMeshBuilder.build(SIZE, 0, 0, 3000, 3000);
+        TriangleAdjacency.Adjacency adjacency = TriangleAdjacency.of(mesh.faces());
+        int[] triangle = anyRealTriangle(mesh, adjacency);
+        int sharedVertex = sharedVertexOf(mesh, triangle);
+        Point2D committedPosition = new Point2D(mesh.vertices().get(sharedVertex).x() + 3.0, mesh.vertices().get(sharedVertex).z() - 5.0);
+
+        Map<Integer, TriangleIdentitySizeAssignment.Assignment> assignments = uniformAssignments(mesh, adjacency, (int) (2 * SIZE));
+        assignments.put(triangle[0], new TriangleIdentitySizeAssignment.Assignment(BIOME, 100_000));
+        assignments.put(triangle[1], new TriangleIdentitySizeAssignment.Assignment(BIOME, 1));
+
+        Map<Integer, Point2D> displaced = WeightedVertexPlacement.displacedVertexPositions(
+            mesh, adjacency, assignments, SIZE, 0.0, Map.of(), Map.of(sharedVertex, committedPosition)
+        );
+
+        assertEquals(committedPosition, displaced.get(sharedVertex), "a committed vertex position must never be altered by calibration or the geometric-validity clamp");
+    }
+
     /** A face with no assignment at all (fixed cross-region, or hull-touching) must not crash the computation - it falls back to a baseline weight, same as documented. */
     @Test
     void unassignedFacesFallBackToBaselineWeightWithoutCrashing() {

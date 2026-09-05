@@ -84,4 +84,53 @@ class HexGridTest {
         assertThrows(IllegalArgumentException.class, () -> HexGrid.axialPositionsIn(100, 0, 0, 0, 100));
         assertThrows(IllegalArgumentException.class, () -> HexGrid.axialPositionsIn(100, 100, 0, 0, 100));
     }
+
+    @Test
+    void nearestAxialPosRoundTripsExactlyOnARealCenter() {
+        double size = 250;
+        for (HexGrid.AxialPos pos : HexGrid.axialPositionsIn(size, -2000, -2000, 2000, 2000)) {
+            Point2D center = HexGrid.centerOf(pos, size);
+            assertEquals(pos, HexGrid.nearestAxialPos(center, size), "center of " + pos + " didn't round-trip");
+        }
+    }
+
+    /** A point nudged a small fraction of the way toward one specific neighbor must resolve to THAT neighbor, not drift to some other one. */
+    @Test
+    void nearestAxialPosResolvesToTheCorrectNeighborWhenNudgedTowardIt() {
+        double size = 250;
+        HexGrid.AxialPos origin = new HexGrid.AxialPos(0, 0);
+        HexGrid.AxialPos neighbor = new HexGrid.AxialPos(1, 0);
+        Point2D originCenter = HexGrid.centerOf(origin, size);
+        Point2D neighborCenter = HexGrid.centerOf(neighbor, size);
+
+        Point2D nudgedTowardNeighbor = new Point2D(
+            originCenter.x() + 0.9 * (neighborCenter.x() - originCenter.x()),
+            originCenter.z() + 0.9 * (neighborCenter.z() - originCenter.z())
+        );
+        assertEquals(neighbor, HexGrid.nearestAxialPos(nudgedTowardNeighbor, size));
+
+        Point2D nudgedTowardOrigin = new Point2D(
+            originCenter.x() + 0.1 * (neighborCenter.x() - originCenter.x()),
+            originCenter.z() + 0.1 * (neighborCenter.z() - originCenter.z())
+        );
+        assertEquals(origin, HexGrid.nearestAxialPos(nudgedTowardOrigin, size));
+    }
+
+    /** Every real lattice center, checked directly - {@code nearestAxialPos} of a point exactly HALFWAY between a center and any of its own hex corners must still resolve to that same center (the corner is, by construction, closer to the center than to any other lattice point). */
+    @Test
+    void nearestAxialPosIsCorrectAcrossARealLatticeNotJustOneHandPickedCase() {
+        double size = 180;
+        List<HexGrid.AxialPos> positions = HexGrid.axialPositionsIn(size, -3000, -3000, 3000, 3000);
+        for (HexGrid.AxialPos pos : positions) {
+            Point2D center = HexGrid.centerOf(pos, size);
+            for (int corner = 0; corner < 6; corner++) {
+                double angle = Math.toRadians(60.0 * corner - 30.0);
+                Point2D nearCenter = new Point2D(
+                    center.x() + 0.1 * size * Math.cos(angle),
+                    center.z() + 0.1 * size * Math.sin(angle)
+                );
+                assertEquals(pos, HexGrid.nearestAxialPos(nearCenter, size), "a point 10% of the way toward corner " + corner + " of " + pos + " resolved to the wrong face");
+            }
+        }
+    }
 }

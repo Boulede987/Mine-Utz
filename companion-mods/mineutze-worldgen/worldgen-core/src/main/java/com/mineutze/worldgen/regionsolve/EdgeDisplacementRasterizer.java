@@ -114,7 +114,8 @@ public final class EdgeDisplacementRasterizer {
      * passes {@code null} for the other pole, matching how a hull-touching face already
      * gets less precision elsewhere in this pipeline.
      */
-    private static List<Point2D> displacedBoundaryOf(
+    /** Package-visible (not private) so {@code FaceLocator}/cluster-growth code can build a single face's own real boundary directly, without going through a whole region/window solve. */
+    static List<Point2D> displacedBoundaryOf(
         int faceIndex, HexMeshBuilder.HexMesh mesh, TriangleAdjacency.Adjacency adjacency,
         Map<Integer, Point2D> displacedVertexPositions, long worldSeed
     ) {
@@ -231,7 +232,8 @@ public final class EdgeDisplacementRasterizer {
      * com.mineutze.worldgen.regionsolve.topology.HexGrid} already use elsewhere, applied
      * here to polygon membership instead of a box.
      */
-    private static boolean isInsidePolygon(List<Point2D> boundary, double x, double z) {
+    /** Package-visible (not private) - see {@link #displacedBoundaryOf}'s own doc for why. */
+    static boolean isInsidePolygon(List<Point2D> boundary, double x, double z) {
         boolean inside = false;
         for (int i = 0; i < boundary.size() - 1; i++) {
             Point2D p1 = boundary.get(i);

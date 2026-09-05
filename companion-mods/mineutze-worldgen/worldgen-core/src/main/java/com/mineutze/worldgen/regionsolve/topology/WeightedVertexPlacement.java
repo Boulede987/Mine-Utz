@@ -1,9 +1,7 @@
 package com.mineutze.worldgen.regionsolve.topology;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -201,19 +199,55 @@ public final class WeightedVertexPlacement {
      * TriangleAdjacency}'s own doc) has no entry here; callers fall back to the raw
      * position for those, matching how hull-touching faces are already excluded from
      * CSP assignment without error elsewhere in this pipeline.
+     *
+     * <p>Equivalent to calling the 7-argument overload with no already-decided context —
+     * every face falls back to {@code baselineCircumradiusBlocks} exactly as before this
+     * class became store-aware. Kept so every existing caller/test compiles unchanged.
      */
     public static Map<Integer, Point2D> displacedVertexPositions(
         HexMeshBuilder.HexMesh mesh, TriangleAdjacency.Adjacency adjacency,
         Map<Integer, TriangleIdentitySizeAssignment.Assignment> assignments, double baselineCircumradiusBlocks,
         double minEdgeLengthBlocks
     ) {
+        return displacedVertexPositions(mesh, adjacency, assignments, baselineCircumradiusBlocks, minEdgeLengthBlocks, Map.of(), Map.of());
+    }
+
+    /**
+     * Store-aware overload: {@code committedWidthBlocksByFace} supplies a REAL width for a
+     * face that has no {@code assignments} entry this batch because it was already decided
+     * by an earlier batch (via {@code DecidedFaceStore}) — used in place of the generic
+     * {@code baselineCircumradiusBlocks} fallback, and (like every unassigned face) held
+     * FIXED throughout calibration, never recalibrated. This is the direct fix for the
+     * cross-region seam bug: two batches independently computing the same shared vertex
+     * used to feed a DIFFERENT weight for whichever neighbor face wasn't their own free
+     * assignment (baseline placeholder vs. the neighbor's own real chosen width),
+     * producing two different radical centers for what should be one physical point.
+     *
+     * <p>{@code committedVertexPositions} supplies a vertex's own FINAL position, already
+     * committed by an earlier batch (via {@code DecidedVertexStore}) — treated as an
+     * immovable anchor: used as-is for every face that owns it (so neighboring, still-fresh
+     * corners validate against its TRUE final shape), never recomputed or reshrunk. Combined
+     * with the fixed-weight behavior above, this guarantees a vertex committed once is
+     * reproduced identically by every later batch that touches it, closing the
+     * watertightness gap at its actual root instead of only removing the region-shaped
+     * partition that used to make it visible.
+     */
+    public static Map<Integer, Point2D> displacedVertexPositions(
+        HexMeshBuilder.HexMesh mesh, TriangleAdjacency.Adjacency adjacency,
+        Map<Integer, TriangleIdentitySizeAssignment.Assignment> assignments, double baselineCircumradiusBlocks,
+        double minEdgeLengthBlocks, Map<Integer, Integer> committedWidthBlocksByFace, Map<Integer, Point2D> committedVertexPositions
+    ) {
         Map<Integer, Point2D> centers = centersOf(mesh);
-        Map<Integer, Double> weightByFace = weightsOf(mesh, assignments, baselineCircumradiusBlocks);
+        Map<Integer, Double> weightByFace = weightsOf(mesh, assignments, committedWidthBlocksByFace, baselineCircumradiusBlocks);
         List<int[]> triangles = adjacency.mutuallyAdjacentTriples(centers.keySet());
         Map<Integer, Double> targetAreaByFace = targetAreasOf(assignments);
 
-        Map<Integer, Point2D> displaced = vertexPositionsFor(mesh, centers, weightByFace, triangles, minEdgeLengthBlocks, targetAreaByFace, baselineCircumradiusBlocks);
-        return calibratedWeights(mesh, centers, weightByFace, triangles, targetAreaByFace, displaced, baselineCircumradiusBlocks, minEdgeLengthBlocks);
+        Map<Integer, Point2D> displaced = vertexPositionsFor(
+            mesh, centers, weightByFace, triangles, minEdgeLengthBlocks, targetAreaByFace, baselineCircumradiusBlocks, committedVertexPositions
+        );
+        return calibratedWeights(
+            mesh, centers, weightByFace, triangles, targetAreaByFace, displaced, baselineCircumradiusBlocks, minEdgeLengthBlocks, committedVertexPositions
+        );
     }
 
     /**
@@ -227,7 +261,7 @@ public final class WeightedVertexPlacement {
     private static Map<Integer, Point2D> calibratedWeights(
         HexMeshBuilder.HexMesh mesh, Map<Integer, Point2D> centers, Map<Integer, Double> weightByFace,
         List<int[]> triangles, Map<Integer, Double> targetAreaByFace, Map<Integer, Point2D> displaced,
-        double baselineCircumradiusBlocks, double minEdgeLengthBlocks
+        double baselineCircumradiusBlocks, double minEdgeLengthBlocks, Map<Integer, Point2D> committedVertexPositions
     ) {
         Map<Integer, Double> weights = new HashMap<>(weightByFace);
         double maxCorrectionPerRound = MAX_WEIGHT_CORRECTION_FRACTION_OF_BASELINE * baselineCircumradiusBlocks * baselineCircumradiusBlocks;
@@ -241,7 +275,7 @@ public final class WeightedVertexPlacement {
                 double clampedCorrection = Math.max(-maxCorrectionPerRound, Math.min(maxCorrectionPerRound, rawCorrection));
                 weights.put(faceIndex, weights.get(faceIndex) + clampedCorrection);
             }
-            displaced = vertexPositionsFor(mesh, centers, weights, triangles, minEdgeLengthBlocks, targetAreaByFace, baselineCircumradiusBlocks);
+            displaced = vertexPositionsFor(mesh, centers, weights, triangles, minEdgeLengthBlocks, targetAreaByFace, baselineCircumradiusBlocks, committedVertexPositions);
         }
         return displaced;
     }
@@ -254,11 +288,12 @@ public final class WeightedVertexPlacement {
      */
     private static Map<Integer, Point2D> vertexPositionsFor(
         HexMeshBuilder.HexMesh mesh, Map<Integer, Point2D> centers, Map<Integer, Double> weightByFace,
-        List<int[]> triangles, double minEdgeLengthBlocks, Map<Integer, Double> targetAreaByFace, double baselineCircumradiusBlocks
+        List<int[]> triangles, double minEdgeLengthBlocks, Map<Integer, Double> targetAreaByFace, double baselineCircumradiusBlocks,
+        Map<Integer, Point2D> committedVertexPositions
     ) {
         Map<Integer, Point2D> raw = new HashMap<>();
         for (int[] triangle : triangles) {
-            int vertexIndex = sharedVertexOf(mesh, triangle);
+            int vertexIndex = TriangleAdjacency.sharedVertexOf(mesh, triangle);
             Point2D radicalCenter = radicalCenter(
                 centers.get(triangle[0]), weightByFace.get(triangle[0]),
                 centers.get(triangle[1]), weightByFace.get(triangle[1]),
@@ -266,7 +301,7 @@ public final class WeightedVertexPlacement {
             );
             raw.put(vertexIndex, radicalCenter);
         }
-        return geometricallyValidPositions(mesh, Map.copyOf(raw), minEdgeLengthBlocks, targetAreaByFace, baselineCircumradiusBlocks);
+        return geometricallyValidPositions(mesh, Map.copyOf(raw), minEdgeLengthBlocks, targetAreaByFace, baselineCircumradiusBlocks, committedVertexPositions);
     }
 
     /**
@@ -322,13 +357,25 @@ public final class WeightedVertexPlacement {
      * shrinking is the fixed point, and the loop stops there instead of always spending
      * the full {@link #MAX_VALIDATION_ROUNDS}.
      */
+    /**
+     * {@code committedVertexPositions} entries are treated as immovable anchors, not
+     * candidates to validate/shrink: both the "original" and "candidate" reference used for
+     * such a vertex is its own committed position (never {@code mesh.vertices()}'s raw
+     * lattice point, never {@code current}'s freshly-computed one), so {@link #lerp} between
+     * two equal points returns that exact point regardless of scale — a committed vertex
+     * can never drift, at any round, by any amount, while every OTHER face that shares it
+     * still validates against its TRUE final shape instead of a stale or approximate stand-
+     * in. This is what makes a vertex committed once, by one batch, reproduced identically
+     * by every later batch that touches it — see {@link DecidedVertexStore}'s own doc.
+     */
     private static Map<Integer, Point2D> geometricallyValidPositions(
         HexMeshBuilder.HexMesh mesh, Map<Integer, Point2D> rawPositions, double minEdgeLengthBlocks,
-        Map<Integer, Double> targetAreaByFace, double baselineCircumradiusBlocks
+        Map<Integer, Double> targetAreaByFace, double baselineCircumradiusBlocks, Map<Integer, Point2D> committedVertexPositions
     ) {
         double baselineAreaBlocks2 = (3.0 * Math.sqrt(3.0) / 2.0) * baselineCircumradiusBlocks * baselineCircumradiusBlocks;
         double maxDisplacementBlocks = MAX_VERTEX_DISPLACEMENT_FRACTION * baselineCircumradiusBlocks;
-        Map<Integer, Point2D> current = rawPositions;
+        Map<Integer, Point2D> current = new HashMap<>(rawPositions);
+        current.putAll(committedVertexPositions);
         for (int round = 0; round < MAX_VALIDATION_ROUNDS; round++) {
             Map<Integer, Double> minScaleByVertex = new HashMap<>();
             boolean anyFaceStillNeedsShrinking = false;
@@ -337,9 +384,10 @@ public final class WeightedVertexPlacement {
                 List<Point2D> original = new ArrayList<>();
                 List<Point2D> candidate = new ArrayList<>();
                 for (int vertexIndex : vertexIndices) {
-                    Point2D basePosition = mesh.vertices().get(vertexIndex);
+                    Point2D committed = committedVertexPositions.get(vertexIndex);
+                    Point2D basePosition = committed != null ? committed : mesh.vertices().get(vertexIndex);
                     original.add(basePosition);
-                    candidate.add(current.getOrDefault(vertexIndex, basePosition));
+                    candidate.add(committed != null ? committed : current.getOrDefault(vertexIndex, basePosition));
                 }
                 double minAreaBlocks2 = Math.min(
                     targetAreaByFace.getOrDefault(faceIndex, 0.0) * MIN_REALIZED_AREA_FRACTION_OF_TARGET, baselineAreaBlocks2
@@ -349,7 +397,7 @@ public final class WeightedVertexPlacement {
                     anyFaceStillNeedsShrinking = true;
                 }
                 for (int vertexIndex : vertexIndices) {
-                    if (current.containsKey(vertexIndex)) {
+                    if (current.containsKey(vertexIndex) && !committedVertexPositions.containsKey(vertexIndex)) {
                         minScaleByVertex.merge(vertexIndex, furtherScale, Math::min);
                     }
                 }
@@ -358,6 +406,10 @@ public final class WeightedVertexPlacement {
             Map<Integer, Point2D> next = new HashMap<>();
             for (Map.Entry<Integer, Point2D> entry : current.entrySet()) {
                 int vertexIndex = entry.getKey();
+                if (committedVertexPositions.containsKey(vertexIndex)) {
+                    next.put(vertexIndex, entry.getValue());
+                    continue;
+                }
                 double scale = minScaleByVertex.getOrDefault(vertexIndex, 1.0);
                 next.put(vertexIndex, lerp(mesh.vertices().get(vertexIndex), entry.getValue(), scale));
             }
@@ -552,14 +604,29 @@ public final class WeightedVertexPlacement {
         return new Point2D(sumX / cornerCount, sumZ / cornerCount);
     }
 
+    /**
+     * A face with a real {@code assignments} entry (freshly CSP-solved this batch) always
+     * wins; otherwise a real, already-committed width (from {@code DecidedFaceStore}, an
+     * earlier batch's own decision for this same physical face) wins over the generic
+     * {@code baselineCircumradiusBlocks} placeholder — the fix for the seam bug documented
+     * on the store-aware {@code displacedVertexPositions} overload above. A face with
+     * neither (a true hull-touching face with no context at all) still falls back to
+     * baseline, unchanged from before this class became store-aware.
+     */
     private static Map<Integer, Double> weightsOf(
-        HexMeshBuilder.HexMesh mesh, Map<Integer, TriangleIdentitySizeAssignment.Assignment> assignments, double baselineCircumradiusBlocks
+        HexMeshBuilder.HexMesh mesh, Map<Integer, TriangleIdentitySizeAssignment.Assignment> assignments,
+        Map<Integer, Integer> committedWidthBlocksByFace, double baselineCircumradiusBlocks
     ) {
         double baselineWeight = baselineCircumradiusBlocks * baselineCircumradiusBlocks;
         Map<Integer, Double> weights = new HashMap<>();
         for (int faceIndex = 0; faceIndex < mesh.faces().size(); faceIndex++) {
             TriangleIdentitySizeAssignment.Assignment assignment = assignments.get(faceIndex);
-            weights.put(faceIndex, assignment != null ? powerWeight(assignment.widthBlocks()) : baselineWeight);
+            if (assignment != null) {
+                weights.put(faceIndex, powerWeight(assignment.widthBlocks()));
+                continue;
+            }
+            Integer committedWidth = committedWidthBlocksByFace.get(faceIndex);
+            weights.put(faceIndex, committedWidth != null ? powerWeight(committedWidth) : baselineWeight);
         }
         return weights;
     }
@@ -574,20 +641,6 @@ public final class WeightedVertexPlacement {
     private static double powerWeight(int widthBlocks) {
         double circumradius = widthBlocks / 2.0;
         return circumradius * circumradius;
-    }
-
-    /** The one mesh-vertex index shared by all 3 faces in a real vertex-triangle — guaranteed to exist and be unique by the hex mesh's own vertex-degree-3 property. */
-    private static int sharedVertexOf(HexMeshBuilder.HexMesh mesh, int[] triangle) {
-        Set<Integer> shared = new HashSet<>(mesh.faces().get(triangle[0]).vertexIndices());
-        shared.retainAll(mesh.faces().get(triangle[1]).vertexIndices());
-        shared.retainAll(mesh.faces().get(triangle[2]).vertexIndices());
-        if (shared.size() != 1) {
-            throw new IllegalStateException(
-                "WeightedVertexPlacement: 3 mutually-adjacent faces " + Arrays.toString(triangle) + " share "
-                    + shared.size() + " vertice(s), expected exactly 1 - not a valid hex mesh vertex triple"
-            );
-        }
-        return shared.iterator().next();
     }
 
     /**

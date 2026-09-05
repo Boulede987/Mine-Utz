@@ -10,9 +10,11 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class HexFaceTest {
 
+    private static final HexGrid.AxialPos ORIGIN = new HexGrid.AxialPos(0, 0);
+
     @Test
     void edgesAreTheSixConsecutiveCornerPairsWrappingAround() {
-        HexFace face = new HexFace(0, List.of(10, 11, 12, 13, 14, 15));
+        HexFace face = new HexFace(ORIGIN, List.of(10, 11, 12, 13, 14, 15));
         List<NodeEdge> edges = face.edges();
         assertEquals(6, edges.size());
         assertEquals(
@@ -23,7 +25,7 @@ class HexFaceTest {
 
     @Test
     void rejectsAnythingOtherThanExactlySixCorners() {
-        assertThrows(IllegalArgumentException.class, () -> new HexFace(0, List.of(1, 2, 3, 4, 5)));
-        assertThrows(IllegalArgumentException.class, () -> new HexFace(0, List.of(1, 2, 3, 4, 5, 6, 7)));
+        assertThrows(IllegalArgumentException.class, () -> new HexFace(ORIGIN, List.of(1, 2, 3, 4, 5)));
+        assertThrows(IllegalArgumentException.class, () -> new HexFace(ORIGIN, List.of(1, 2, 3, 4, 5, 6, 7)));
     }
 }

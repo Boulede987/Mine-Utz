@@ -102,4 +102,48 @@ class HexMeshBuilderTest {
         HexMeshBuilder.HexMesh second = HexMeshBuilder.build(SIZE, 0, 0, 3000, 3000);
         assertEquals(first, second);
     }
+
+    /**
+     * The property a global face-keyed cache depends on: a face's {@code axialPos} is a
+     * stable, bounding-box-independent identity, and its own corner GEOMETRY (not just its
+     * key) must also come out the SAME physical point regardless of which of two different,
+     * only partially-overlapping windows built it - two independent solve batches touching
+     * the same physical face must agree on it, not merely reference "the same index."
+     *
+     * <p>Tolerance, not exact equality: which of two mathematically-identical but
+     * independently-computed corner candidates becomes the pooled canonical entry (see
+     * {@code HexMeshBuilder.vertexIndexFor}'s own {@code DEDUP_PRECISION}) depends on scan
+     * ORDER, which differs between these two bounding boxes - same floating-point-noise
+     * ceiling {@code DEDUP_PRECISION} (1e-6 blocks) already establishes as "identical" for
+     * this exact reason, confirmed directly here (~1e-13, many orders of magnitude under
+     * it) rather than assumed.
+     */
+    @Test
+    void sameAxialPosAcrossDifferentBoundingBoxesIsTheSamePhysicalFace() {
+        HexMeshBuilder.HexMesh small = HexMeshBuilder.build(SIZE, 0, 0, 2000, 2000);
+        HexMeshBuilder.HexMesh large = HexMeshBuilder.build(SIZE, -1000, -1000, 3000, 3000);
+
+        Map<HexGrid.AxialPos, HexFace> facesInSmall = new HashMap<>();
+        for (HexFace face : small.faces()) {
+            facesInSmall.put(face.axialPos(), face);
+        }
+
+        boolean checkedAny = false;
+        for (HexFace largeFace : large.faces()) {
+            HexFace smallFace = facesInSmall.get(largeFace.axialPos());
+            if (smallFace == null) {
+                continue;
+            }
+            checkedAny = true;
+            List<Point2D> smallCorners = smallFace.vertexIndices().stream().map(small.vertices()::get).toList();
+            List<Point2D> largeCorners = largeFace.vertexIndices().stream().map(large.vertices()::get).toList();
+            for (int i = 0; i < smallCorners.size(); i++) {
+                Point2D a = smallCorners.get(i);
+                Point2D b = largeCorners.get(i);
+                double distance = Math.hypot(a.x() - b.x(), a.z() - b.z());
+                assertTrue(distance < 1.0e-6, "face " + largeFace.axialPos() + " corner " + i + " differs by " + distance + " blocks depending on which bounding box built it");
+            }
+        }
+        assertTrue(checkedAny, "expected at least one face shared between both bounding boxes");
+    }
 }

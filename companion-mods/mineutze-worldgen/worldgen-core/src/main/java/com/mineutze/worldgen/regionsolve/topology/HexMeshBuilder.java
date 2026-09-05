@@ -40,14 +40,14 @@ public final class HexMeshBuilder {
         List<Point2D> vertices = new ArrayList<>();
         List<HexFace> faces = new ArrayList<>(positions.size());
 
-        for (int seedIndex = 0; seedIndex < positions.size(); seedIndex++) {
-            Point2D center = HexGrid.centerOf(positions.get(seedIndex), sizeBlocks);
+        for (HexGrid.AxialPos axialPos : positions) {
+            Point2D center = HexGrid.centerOf(axialPos, sizeBlocks);
             List<Integer> vertexIndices = new ArrayList<>(6);
             for (int corner = 0; corner < 6; corner++) {
                 Point2D cornerPoint = cornerOf(center, sizeBlocks, corner);
                 vertexIndices.add(vertexIndexFor(cornerPoint, vertexIndexByKey, vertices));
             }
-            faces.add(new HexFace(seedIndex, vertexIndices));
+            faces.add(new HexFace(axialPos, vertexIndices));
         }
 
         return new HexMesh(List.copyOf(faces), List.copyOf(vertices));

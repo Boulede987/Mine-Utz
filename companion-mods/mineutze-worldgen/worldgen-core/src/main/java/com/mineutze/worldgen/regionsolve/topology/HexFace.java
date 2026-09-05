@@ -9,8 +9,16 @@ import java.util.List;
  * its own copy of corner positions, so two faces sharing a corner reference
  * the exact same {@code vertices} list entry (see {@link HexMeshBuilder}'s
  * own doc for why that's what makes edge-displacement watertightness free).
+ *
+ * <p>{@code axialPos} is this face's stable, GLOBAL identity — the same
+ * physical face gets the same {@code axialPos} regardless of which bounding
+ * box {@link HexMeshBuilder#build} was called with (see {@link HexGrid}'s own
+ * window-independence doc), unlike a plain build-local array index, which
+ * depended on that one call's own {@code positions} scan order. This is what
+ * lets a face be looked up in a global decided-face cache across independent
+ * solve batches instead of only within the one mesh it was built into.
  */
-public record HexFace(int seedIndex, List<Integer> vertexIndices) implements MeshFace {
+public record HexFace(HexGrid.AxialPos axialPos, List<Integer> vertexIndices) implements MeshFace {
 
     public HexFace {
         vertexIndices = List.copyOf(vertexIndices);
