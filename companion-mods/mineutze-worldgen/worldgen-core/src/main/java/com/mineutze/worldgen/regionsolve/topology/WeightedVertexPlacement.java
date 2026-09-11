@@ -134,6 +134,39 @@ public final class WeightedVertexPlacement {
     private static final double MIN_REALIZED_AREA_FRACTION_OF_TARGET = 0.7;
 
     /**
+     * Ceiling on a face's own realized area, as a fraction of ITS OWN target area - the
+     * symmetric counterpart to {@link #MIN_REALIZED_AREA_FRACTION_OF_TARGET} that never
+     * existed (2026-09-11): nothing stopped a face's own realized area from exceeding its
+     * target by 3x or more, only the flat, target-INDEPENDENT {@link
+     * #MAX_VERTEX_DISPLACEMENT_FRACTION} wall. Found via the real live in-game path
+     * (`SizeFidelityLivePathMeasurement`): a face pinned tight on ONE side by an
+     * already-committed neighbor (which correctly, provably, cannot be moved - see
+     * {@link #geometricallyValidPositions}'s own doc on committed vertices) still gets its
+     * weight pushed up by calibration trying to reach its own target, and balloons out on
+     * its OTHER, still-open sides well past what its target justifies, since nothing on
+     * the top end was ever tied to the target the way the floor already is.
+     *
+     * <p><b>Mirrors the floor's own inversion-prevention logic, flipped.</b> The floor is
+     * capped with {@code Math.min(target x 0.7, baselineArea)} so an OVERSIZED target's own
+     * floor can never exceed even the undisplaced baseline hexagon's own area (which would
+     * break "t=0 is always valid"). This ceiling is capped the mirror way, with {@code
+     * Math.max(target x THIS, baselineArea)} — an UNDERSIZED target's own ceiling can never
+     * fall BELOW baseline area, preserving the already-established, deliberate behavior
+     * that small-tier biomes commonly land near baseline size from real surrounding
+     * competition (see {@code TriangleIdentitySizeAssignment.pickWidth}'s own tier-bias
+     * doc) - this ceiling exists to stop genuine runaway (3x+), not to fight that already-
+     * accepted baseline-ward pull. The same guarantee this preserves for the floor
+     * (t=0/undisplaced baseline area always satisfies both conditions, since {@code
+     * baselineArea <= Math.max(target x THIS, baselineArea)} always) holds here too.
+     *
+     * <p>1.3 is the starting value one of the three outside AIs consulted for this whole
+     * investigation proposed (`doc/IDEAS.txt`) - not re-derived from scratch, tuned from
+     * real measurement if this helps at all, same discipline as every other constant this
+     * session.
+     */
+    private static final double MAX_REALIZED_AREA_FRACTION_OF_TARGET = 1.3;
+
+    /**
      * A FOURTH, absolute condition: no vertex may ever move farther than this fraction of
      * the mesh's own baseline circumradius from its own undisplaced lattice position - a
      * global safety net the other three conditions don't provide, since each of them only
@@ -392,7 +425,10 @@ public final class WeightedVertexPlacement {
                 double minAreaBlocks2 = Math.min(
                     targetAreaByFace.getOrDefault(faceIndex, 0.0) * MIN_REALIZED_AREA_FRACTION_OF_TARGET, baselineAreaBlocks2
                 );
-                double furtherScale = maxSafeScale(original, candidate, minEdgeLengthBlocks, minAreaBlocks2, maxDisplacementBlocks);
+                double maxAreaBlocks2 = Math.max(
+                    targetAreaByFace.getOrDefault(faceIndex, Double.MAX_VALUE) * MAX_REALIZED_AREA_FRACTION_OF_TARGET, baselineAreaBlocks2
+                );
+                double furtherScale = maxSafeScale(original, candidate, minEdgeLengthBlocks, minAreaBlocks2, maxAreaBlocks2, maxDisplacementBlocks);
                 if (furtherScale < 1.0) {
                     anyFaceStillNeedsShrinking = true;
                 }
@@ -437,16 +473,16 @@ public final class WeightedVertexPlacement {
      * same as {@code MAX_VERTEX_DISPLACEMENT_FRACTION} was before it.
      */
     private static double maxSafeScale(
-        List<Point2D> original, List<Point2D> candidate, double minEdgeLengthBlocks, double minAreaBlocks2, double maxDisplacementBlocks
+        List<Point2D> original, List<Point2D> candidate, double minEdgeLengthBlocks, double minAreaBlocks2, double maxAreaBlocks2, double maxDisplacementBlocks
     ) {
-        if (isGeometricallyValid(original, lerpAll(original, candidate, 1.0), minEdgeLengthBlocks, minAreaBlocks2, maxDisplacementBlocks)) {
+        if (isGeometricallyValid(original, lerpAll(original, candidate, 1.0), minEdgeLengthBlocks, minAreaBlocks2, maxAreaBlocks2, maxDisplacementBlocks)) {
             return 1.0;
         }
         double lowSafe = 0.0;
         double highUnsafe = 1.0;
         for (int iteration = 0; iteration < BISECTION_ITERATIONS; iteration++) {
             double mid = (lowSafe + highUnsafe) / 2.0;
-            if (isGeometricallyValid(original, lerpAll(original, candidate, mid), minEdgeLengthBlocks, minAreaBlocks2, maxDisplacementBlocks)) {
+            if (isGeometricallyValid(original, lerpAll(original, candidate, mid), minEdgeLengthBlocks, minAreaBlocks2, maxAreaBlocks2, maxDisplacementBlocks)) {
                 lowSafe = mid;
             } else {
                 highUnsafe = mid;
@@ -456,10 +492,10 @@ public final class WeightedVertexPlacement {
     }
 
     private static boolean isGeometricallyValid(
-        List<Point2D> original, List<Point2D> corners, double minEdgeLengthBlocks, double minAreaBlocks2, double maxDisplacementBlocks
+        List<Point2D> original, List<Point2D> corners, double minEdgeLengthBlocks, double minAreaBlocks2, double maxAreaBlocks2, double maxDisplacementBlocks
     ) {
         return isSimplePolygon(corners) && hasMinimumEdgeLength(corners, minEdgeLengthBlocks) && hasMinimumArea(corners, minAreaBlocks2)
-            && hasBoundedDisplacement(original, corners, maxDisplacementBlocks);
+            && hasMaximumArea(corners, maxAreaBlocks2) && hasBoundedDisplacement(original, corners, maxDisplacementBlocks);
     }
 
     /** Each corner checked against its OWN original position - a global cap independent of the other 5 corners' own behavior, see {@link #MAX_VERTEX_DISPLACEMENT_FRACTION}'s own doc for why the other three conditions can't provide this on their own. */
@@ -486,6 +522,15 @@ public final class WeightedVertexPlacement {
 
     /** Shoelace area of this candidate hexagon against {@code minAreaBlocks2} - see {@link #MIN_REALIZED_AREA_FRACTION_OF_TARGET}'s own doc for why this is a per-face RELATIVE floor, not an absolute one like the other two conditions. */
     private static boolean hasMinimumArea(List<Point2D> corners, double minAreaBlocks2) {
+        return shoelaceArea(corners) >= minAreaBlocks2;
+    }
+
+    /** The symmetric ceiling - see {@link #MAX_REALIZED_AREA_FRACTION_OF_TARGET}'s own doc. */
+    private static boolean hasMaximumArea(List<Point2D> corners, double maxAreaBlocks2) {
+        return shoelaceArea(corners) <= maxAreaBlocks2;
+    }
+
+    private static double shoelaceArea(List<Point2D> corners) {
         int cornerCount = corners.size();
         double sum = 0;
         for (int i = 0; i < cornerCount; i++) {
@@ -493,7 +538,7 @@ public final class WeightedVertexPlacement {
             Point2D next = corners.get((i + 1) % cornerCount);
             sum += current.x() * next.z() - next.x() * current.z();
         }
-        return Math.abs(sum) / 2.0 >= minAreaBlocks2;
+        return Math.abs(sum) / 2.0;
     }
 
     private static List<Point2D> lerpAll(List<Point2D> original, List<Point2D> candidate, double t) {

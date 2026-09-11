@@ -207,6 +207,49 @@ class WeightedVertexPlacementTest {
     }
 
     /**
+     * The direct fix for the real live-path finding (2026-09-11,
+     * `SizeFidelityLivePathMeasurement`): a face pinned tight by ONE already-committed
+     * neighbor still had its weight pushed up by calibration trying to reach its own
+     * target, and ballooned on its OTHER, open sides well past what its own target
+     * justified, since nothing on the top end was ever tied to the target the way {@code
+     * MIN_REALIZED_AREA_FRACTION_OF_TARGET} already is on the bottom end. One neighbor
+     * committed to a small width (real, immovable resistance); the other 5 deliberately
+     * left unassigned (today's baseline placeholder - the "open side"). The center wants
+     * noticeably more than baseline; without the ceiling this would run well past it on
+     * the open sides - with it, realized width must stay within the same {@code
+     * MAX_REALIZED_AREA_FRACTION_OF_TARGET} bound (recomputed here from the same formula,
+     * since that constant is private to the production class).
+     */
+    @Test
+    void aFaceWithOneTightCommittedNeighborStaysWithinItsOwnRealizedAreaCeiling() {
+        HexMeshBuilder.HexMesh mesh = HexMeshBuilder.build(SIZE, 0, 0, 3000, 3000);
+        TriangleAdjacency.Adjacency adjacency = TriangleAdjacency.of(mesh.faces());
+        int center = aFaceWithSixFullyInteriorNeighbors(mesh, adjacency);
+
+        int baselineWidth = (int) (2 * SIZE);
+        int targetWidth = (int) (baselineWidth * 1.5); // wants noticeably more than baseline
+        List<Integer> neighbors = new ArrayList<>(adjacency.neighborFaceIndices().get(center));
+        int tightNeighbor = neighbors.get(0);
+
+        Map<Integer, TriangleIdentitySizeAssignment.Assignment> assignments = new HashMap<>();
+        assignments.put(center, new TriangleIdentitySizeAssignment.Assignment(BIOME, targetWidth));
+        Map<Integer, Integer> committedWidthBlocksByFace = new HashMap<>();
+        committedWidthBlocksByFace.put(tightNeighbor, (int) (baselineWidth * 0.3)); // tight, real, immovable resistance
+
+        Map<Integer, Point2D> displaced = WeightedVertexPlacement.displacedVertexPositions(
+            mesh, adjacency, assignments, SIZE, 0.0, committedWidthBlocksByFace, Map.of()
+        );
+        double realizedWidth = realizedWidthOf(mesh, displaced, center);
+
+        double targetArea = (3.0 * Math.sqrt(3.0) / 2.0) * (targetWidth / 2.0) * (targetWidth / 2.0);
+        double baselineArea = (3.0 * Math.sqrt(3.0) / 2.0) * SIZE * SIZE;
+        double ceilingArea = Math.max(targetArea * 1.3, baselineArea); // mirrors MAX_REALIZED_AREA_FRACTION_OF_TARGET
+        double ceilingWidth = 2.0 * Math.sqrt(ceilingArea / (3.0 * Math.sqrt(3.0) / 2.0));
+
+        assertTrue(realizedWidth <= ceilingWidth + 1.0, "expected the ceiling to cap realized width near " + ceilingWidth + ", got " + realizedWidth);
+    }
+
+    /**
      * The other half of the seam fix: a vertex already present in {@code
      * committedVertexPositions} must come back EXACTLY as given, completely unaffected by
      * an otherwise-extreme surrounding weight mismatch that would normally clamp/reshrink
