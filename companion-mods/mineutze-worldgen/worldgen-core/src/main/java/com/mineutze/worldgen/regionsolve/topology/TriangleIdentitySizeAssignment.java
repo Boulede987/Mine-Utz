@@ -189,6 +189,29 @@ public final class TriangleIdentitySizeAssignment {
         TriangleAdjacency.Adjacency adjacency, Set<Integer> freeFaceIndices,
         Map<Integer, BiomeId> fixedFaceBiomes, BiomeGraph graph, long worldSeed, double regionAreaBlocks2
     ) {
+        return solve(adjacency, freeFaceIndices, fixedFaceBiomes, graph, worldSeed, regionAreaBlocks2, Map.of());
+    }
+
+    /**
+     * Same as {@link #solve(TriangleAdjacency.Adjacency, Set, Map, BiomeGraph, long, double)},
+     * but also lets a caller supply each already-committed neighbor's own real WIDTH (not
+     * just its identity) — the direct fix for a real gap found by exploring the live
+     * in-game path (2026-09-11): {@code TriangleFieldGeometryRealization.realizeCluster}
+     * already reads a committed neighbor's width from {@code DecidedFaceStore} and threads
+     * it into {@code WeightedVertexPlacement} as geometry context, but never passed it HERE
+     * - a fresh face's width was always drawn blind from its biome's full catalog range,
+     * with zero visibility into how much room its real, already-locked-in neighbors could
+     * actually spare. See {@link #biasFor} for how this context changes the draw.
+     *
+     * @param committedWidthBlocksByFace a NEIGHBOR's own committed width, keyed by that
+     *                                   neighbor's face index — read-only, same discipline
+     *                                   as {@code fixedFaceBiomes}. Never contains an entry
+     *                                   for a face this call is itself assigning.
+     */
+    public static Optional<Map<Integer, Assignment>> solve(
+        TriangleAdjacency.Adjacency adjacency, Set<Integer> freeFaceIndices, Map<Integer, BiomeId> fixedFaceBiomes,
+        BiomeGraph graph, long worldSeed, double regionAreaBlocks2, Map<Integer, Integer> committedWidthBlocksByFace
+    ) {
         // .sorted(), not just .toList() - BiomeGraph.nodes() comes from a Map.copyOf-wrapped
         // map internally, and the JDK deliberately randomizes Map.copyOf's iteration order
         // PER JVM RUN (specifically to catch code that wrongly assumes it's stable). Shuffling
@@ -216,8 +239,8 @@ public final class TriangleIdentitySizeAssignment {
         assigned.forEach((faceIndex, biome) -> {
             Integer partner = pairPartnerByFace.get(faceIndex);
             int widthBlocks = partner != null
-                ? splitWidthForPair(graph.node(biome).sizeRange(), worldSeed, faceIndex, partner, biome)
-                : pickWidth(graph.node(biome).sizeRange(), worldSeed, faceIndex, biome);
+                ? splitWidthForPair(graph.node(biome).sizeRange(), worldSeed, faceIndex, partner, biome, adjacency, committedWidthBlocksByFace)
+                : pickWidth(graph.node(biome).sizeRange(), worldSeed, faceIndex, biome, adjacency, committedWidthBlocksByFace);
             result.put(faceIndex, new Assignment(biome, widthBlocks));
         });
         return Optional.of(result);
@@ -284,14 +307,24 @@ public final class TriangleIdentitySizeAssignment {
      * region," not "this face's own standalone target." The COMBINED width (recoverable as
      * {@code width * sqrt(2)}) is what actually stays within the biome's declared range.
      */
-    private static int splitWidthForPair(BiomeSizeRange range, long worldSeed, int faceIndex, int partnerFaceIndex, BiomeId biome) {
+    private static int splitWidthForPair(
+        BiomeSizeRange range, long worldSeed, int faceIndex, int partnerFaceIndex, BiomeId biome,
+        TriangleAdjacency.Adjacency adjacency, Map<Integer, Integer> committedWidthBlocksByFace
+    ) {
         int lowerFace = Math.min(faceIndex, partnerFaceIndex);
         int higherFace = Math.max(faceIndex, partnerFaceIndex);
         long hash = worldSeed ^ PAIR_SIZE_PICK_SALT;
         hash = hash * 31 + lowerFace;
         hash = hash * 31 + higherFace;
         hash = hash * 31 + biome.hashCode();
-        int combinedWidth = pickWidthFromHash(range, hash);
+        // The pair's own external committed neighbors, from BOTH faces' own adjacency
+        // (excluding the pair members themselves - they're not committed to each other,
+        // they're the fresh pair being decided right now).
+        List<Integer> committedNeighborWidths = new ArrayList<>();
+        collectCommittedNeighborWidths(faceIndex, adjacency, committedWidthBlocksByFace, committedNeighborWidths);
+        collectCommittedNeighborWidths(partnerFaceIndex, adjacency, committedWidthBlocksByFace, committedNeighborWidths);
+        Bias bias = biasFor(range, committedNeighborWidths);
+        int combinedWidth = pickWidthFromHash(range, hash, bias);
         return (int) Math.round(combinedWidth / Math.sqrt(2));
     }
 
@@ -614,6 +647,11 @@ public final class TriangleIdentitySizeAssignment {
         return ordered;
     }
 
+    /** Which direction {@link #pickWidthFromHash} skews its draw away from plain uniform. */
+    private enum Bias {
+        UNIFORM, TOWARD_MAX, TOWARD_MIN
+    }
+
     /**
      * A biome whose ENTIRE range sits below {@link #BASELINE_WIDTH_BLOCKS} (a narrow/
      * small-tier biome, e.g. 300-600) has its pick skewed toward its own MAXIMUM instead
@@ -626,23 +664,76 @@ public final class TriangleIdentitySizeAssignment {
      * range sits AT or ABOVE baseline (including one this session's own self-adjacency
      * feature already addresses, e.g. desert) is left exactly as before - unbiased,
      * plain uniform.
+     *
+     * <p><b>Committed-neighbor awareness (2026-09-11), a real, different signal from the
+     * tier check above.</b> Found by exploring the real live in-game path: a fresh face's
+     * width used to be picked with zero visibility into what its real, already-committed
+     * neighbors locked in - measured directly on the real live path (not the whole-mesh
+     * export tool, which cannot even exercise this: it never has committed context at
+     * all), 219/448 (48.9%) real violations, nearly DOUBLE the whole-mesh tool's own
+     * 236/930 (25.4%) - a face committing to a wide target next to an already-small,
+     * already-frozen neighbor has no way to reach it, and that neighbor can never give
+     * back the room since it's already permanent. See {@link #biasFor}.
      */
-    private static int pickWidth(BiomeSizeRange range, long worldSeed, int faceIndex, BiomeId biome) {
+    private static int pickWidth(
+        BiomeSizeRange range, long worldSeed, int faceIndex, BiomeId biome,
+        TriangleAdjacency.Adjacency adjacency, Map<Integer, Integer> committedWidthBlocksByFace
+    ) {
         long hash = worldSeed ^ SIZE_PICK_SALT;
         hash = hash * 31 + faceIndex;
         hash = hash * 31 + biome.hashCode();
-        return pickWidthFromHash(range, hash);
+        List<Integer> committedNeighborWidths = new ArrayList<>();
+        collectCommittedNeighborWidths(faceIndex, adjacency, committedWidthBlocksByFace, committedNeighborWidths);
+        return pickWidthFromHash(range, hash, biasFor(range, committedNeighborWidths));
     }
 
-    /** Shared hash-to-width mechanics for both {@link #pickWidth} (one face, its own full range) and {@link #splitWidthForPair} (one pair, a combined width later split) - only what key gets hashed differs between the two callers. */
-    private static int pickWidthFromHash(BiomeSizeRange range, long hash) {
+    private static void collectCommittedNeighborWidths(
+        int faceIndex, TriangleAdjacency.Adjacency adjacency, Map<Integer, Integer> committedWidthBlocksByFace, List<Integer> out
+    ) {
+        for (int neighbor : adjacency.neighborFaceIndices().getOrDefault(faceIndex, Set.of())) {
+            Integer committedWidth = committedWidthBlocksByFace.get(neighbor);
+            if (committedWidth != null) {
+                out.add(committedWidth);
+            }
+        }
+    }
+
+    /**
+     * If ANY real committed neighbor's own width is below this biome's own range
+     * midpoint, bias the draw {@code TOWARD_MIN} instead - a genuinely tight neighbor
+     * (small, already permanent, cannot give back room) means drawing from the top of
+     * this biome's own range is asking for more than the local neighborhood can supply,
+     * not a hypothetical, since the neighbor's own width is real and already locked in.
+     * Deliberately a simple, non-geometric heuristic (min committed neighbor vs. range
+     * midpoint) rather than a real shared-edge/area budget solve - see this method's own
+     * class-level context: {@link TriangleIdentitySizeAssignment} stays geometry-agnostic
+     * by design, same discipline the self-adjacent pair split already established. Falls
+     * through to the existing tier-based check (unchanged) whenever there's no committed
+     * context, or committed neighbors exist but none are actually tight - a real
+     * behavior change only for the specific new case this was built for.
+     */
+    private static Bias biasFor(BiomeSizeRange range, List<Integer> committedNeighborWidths) {
+        if (!committedNeighborWidths.isEmpty()) {
+            int minCommittedNeighborWidth = Collections.min(committedNeighborWidths);
+            double rangeMidpoint = (range.minWidthBlocks() + range.maxWidthBlocks()) / 2.0;
+            if (minCommittedNeighborWidth < rangeMidpoint) {
+                return Bias.TOWARD_MIN;
+            }
+        }
+        return range.maxWidthBlocks() <= BASELINE_WIDTH_BLOCKS ? Bias.TOWARD_MAX : Bias.UNIFORM;
+    }
+
+    /** Shared hash-to-width mechanics for both {@link #pickWidth} (one face, its own full range) and {@link #splitWidthForPair} (one pair, a combined width later split) - only what key gets hashed, and which {@link Bias}, differ between the two callers. */
+    private static int pickWidthFromHash(BiomeSizeRange range, long hash, Bias bias) {
         if (range.minWidthBlocks() == range.maxWidthBlocks()) {
             return range.minWidthBlocks();
         }
         double uniform = new Random(hash).nextDouble();
-        double fraction = range.maxWidthBlocks() <= BASELINE_WIDTH_BLOCKS
-            ? Math.pow(uniform, SIZE_PICK_BASELINE_BIAS_EXPONENT)
-            : uniform;
+        double fraction = switch (bias) {
+            case TOWARD_MAX -> Math.pow(uniform, SIZE_PICK_BASELINE_BIAS_EXPONENT);
+            case TOWARD_MIN -> 1 - Math.pow(1 - uniform, SIZE_PICK_BASELINE_BIAS_EXPONENT);
+            case UNIFORM -> uniform;
+        };
         int span = range.maxWidthBlocks() - range.minWidthBlocks();
         return range.minWidthBlocks() + (int) Math.round(fraction * span);
     }

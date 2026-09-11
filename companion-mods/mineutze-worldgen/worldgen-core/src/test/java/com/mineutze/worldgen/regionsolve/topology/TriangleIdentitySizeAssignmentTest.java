@@ -301,6 +301,70 @@ class TriangleIdentitySizeAssignmentTest {
         assertEquals(first, second);
     }
 
+    /**
+     * The actual behavior the committed-width overload exists for: found by exploring
+     * the real live path (2026-09-11), a fresh face's width used to be picked with zero
+     * visibility into what its real, already-committed neighbors locked in. A tight
+     * (well below its own biome's range midpoint) committed neighbor must bias the draw
+     * toward the LOW end of the face's own range, not plain uniform. This is a real,
+     * deterministic guarantee for the SAME underlying hash draw (see {@code
+     * TriangleIdentitySizeAssignment.Bias}'s own doc: {@code TOWARD_MIN}'s fraction is
+     * provably {@code <=} plain uniform's, for the same draw), not just an average-case
+     * claim - so a direct {@code <=} comparison against the exact same (worldSeed,
+     * faceIndex, biome) with no committed context is a strong, non-flaky assertion.
+     */
+    @Test
+    void aCommittedTightNeighborBiasesTheDrawTowardTheLowEndOfItsOwnRange() {
+        TriangleAdjacency.Adjacency adjacency = new TriangleAdjacency.Adjacency(Map.of(0, Set.of(99)), Set.of());
+        Set<Integer> free = Set.of(0);
+        Map<Integer, BiomeId> fixed = Map.of(99, id("desert"));
+        BiomeGraph graph = new BiomeGraph(List.of(node("desert", 900, 1500, 1)), List.of());
+
+        int widthWithoutCommittedContext = TriangleIdentitySizeAssignment.solve(
+            adjacency, free, fixed, graph, 7L, Double.POSITIVE_INFINITY, Map.of()
+        ).orElseThrow().get(0).widthBlocks();
+        int widthWithTightCommittedNeighbor = TriangleIdentitySizeAssignment.solve(
+            adjacency, free, fixed, graph, 7L, Double.POSITIVE_INFINITY, Map.of(99, 950) // well below the 1200 midpoint
+        ).orElseThrow().get(0).widthBlocks();
+
+        assertTrue(widthWithTightCommittedNeighbor <= widthWithoutCommittedContext,
+            "expected a tight committed neighbor to bias the draw toward the low end: without=" + widthWithoutCommittedContext
+                + ", with=" + widthWithTightCommittedNeighbor);
+    }
+
+    /** Regression guard: a committed neighbor that ISN'T actually tight (well above the range midpoint) must not change the draw at all - the bias only ever fires for the specific case it was built for. */
+    @Test
+    void aCommittedNeighborThatIsNotTightDoesNotChangeTheDraw() {
+        TriangleAdjacency.Adjacency adjacency = new TriangleAdjacency.Adjacency(Map.of(0, Set.of(99)), Set.of());
+        Set<Integer> free = Set.of(0);
+        Map<Integer, BiomeId> fixed = Map.of(99, id("desert"));
+        BiomeGraph graph = new BiomeGraph(List.of(node("desert", 900, 1500, 1)), List.of());
+
+        int widthWithoutCommittedContext = TriangleIdentitySizeAssignment.solve(
+            adjacency, free, fixed, graph, 7L, Double.POSITIVE_INFINITY, Map.of()
+        ).orElseThrow().get(0).widthBlocks();
+        int widthWithRoomyCommittedNeighbor = TriangleIdentitySizeAssignment.solve(
+            adjacency, free, fixed, graph, 7L, Double.POSITIVE_INFINITY, Map.of(99, 1400) // well above the 1200 midpoint
+        ).orElseThrow().get(0).widthBlocks();
+
+        assertEquals(widthWithoutCommittedContext, widthWithRoomyCommittedNeighbor);
+    }
+
+    /** Regression guard for the overload chain itself: no committed context at all must produce a BYTE-IDENTICAL result to the pre-existing overloads, not just a similar one. */
+    @Test
+    void noCommittedContextBehavesExactlyAsBeforeThisChange() {
+        TriangleAdjacency.Adjacency adjacency = realAdjacency(21L, 350, 4000);
+        Set<Integer> free = interiorFaceIndices(adjacency);
+        BiomeGraph graph = threeBiomeChainGraph();
+
+        Map<Integer, TriangleIdentitySizeAssignment.Assignment> withNewOverload =
+            TriangleIdentitySizeAssignment.solve(adjacency, free, Map.of(), graph, 21L, Double.POSITIVE_INFINITY, Map.of()).orElseThrow();
+        Map<Integer, TriangleIdentitySizeAssignment.Assignment> withOldOverload =
+            TriangleIdentitySizeAssignment.solve(adjacency, free, Map.of(), graph, 21L).orElseThrow();
+
+        assertEquals(withOldOverload, withNewOverload);
+    }
+
     private static TriangleAdjacency.Adjacency realAdjacency(long worldSeed, int spacingBlocks, int span) {
         List<Point2D> points = SeedGrid.seedsIn(worldSeed, spacingBlocks, 0, 0, span, span);
         List<IndexedTriangle> faces = DelaunayTriangulation.triangulateFaces(points);

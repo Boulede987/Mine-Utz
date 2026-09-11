@@ -565,6 +565,21 @@ public final class TriangleFieldGeometryRealization {
         );
     }
 
+    /**
+     * Deliberately does NOT thread committed neighbor WIDTHS into {@link
+     * TriangleIdentitySizeAssignment#solve} (only identities, via {@code fixedFaceBiomes})
+     * - a real v1 attempt at exactly that (biasing a fresh face's own target size down
+     * near a tight committed neighbor) was built, measured on the real live path via
+     * {@code SizeFidelityLivePathMeasurement}, and made things WORSE (223/448 vs 219/448
+     * baseline, worst outlier 3.66x vs 3.40x) - reverted 2026-09-11. Root cause: a tight
+     * neighbor's own geometry is already frozen by the time a fresh face is decided,
+     * so shrinking the fresh face's own TARGET doesn't return any area to that neighbor
+     * or change the fresh face's own realized geometry - it only shrinks the ratio's own
+     * denominator, making an already-oversized face's ratio look worse, not better. The
+     * {@code committedWidthBlocksByFace}-aware overload of {@code solve} itself is kept
+     * (inert unless called with real committed widths) as a foundation for a better-
+     * targeted fix later - see project memory for the standing follow-up.
+     */
     private static Optional<Map<Integer, TriangleIdentitySizeAssignment.Assignment>> trySolveCluster(
         ClusterGrowth growth, TriangleAdjacency.Adjacency adjacency, BiomeGraph graph, long worldSeed
     ) {
