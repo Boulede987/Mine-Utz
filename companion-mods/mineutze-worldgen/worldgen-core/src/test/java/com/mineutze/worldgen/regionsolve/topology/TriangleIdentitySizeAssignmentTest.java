@@ -7,6 +7,7 @@ import com.mineutze.worldgen.biomegraph.BiomeNode;
 import com.mineutze.worldgen.biomegraph.BiomeSizeRange;
 import org.junit.jupiter.api.Test;
 
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -363,6 +364,71 @@ class TriangleIdentitySizeAssignmentTest {
             TriangleIdentitySizeAssignment.solve(adjacency, free, Map.of(), graph, 21L).orElseThrow();
 
         assertEquals(withOldOverload, withNewOverload);
+    }
+
+    /**
+     * The actual behavior the mesh-aware overload exists for (2026-09-11, "compute
+     * achievable range first, decide second"): a candidate biome whose ENTIRE catalog
+     * range is geometrically unreachable given real, already-committed neighbors must be
+     * HARD-EXCLUDED, leaving only a genuinely achievable candidate - a real, structural
+     * fix, not another tuning pass on top of the existing solver machinery.
+     */
+    @Test
+    void aCandidateBiomeFullyOutsideTheAchievableRangeIsExcludedFromTheDomain() {
+        HexMeshBuilder.HexMesh mesh = HexMeshBuilder.build(300, 0, 0, 3000, 3000);
+        TriangleAdjacency.Adjacency adjacency = TriangleAdjacency.of(mesh.faces());
+        int center = aFaceWithSixFullyInteriorNeighbors(mesh, adjacency);
+
+        Map<Integer, BiomeId> fixedFaceBiomes = new HashMap<>();
+        Map<Integer, Integer> committedWidthBlocksByFace = new HashMap<>();
+        for (int neighbor : adjacency.neighborFaceIndices().get(center)) {
+            fixedFaceBiomes.put(neighbor, id("anchor"));
+            committedWidthBlocksByFace.put(neighbor, 600);
+        }
+        Set<Integer> free = Set.of(center);
+
+        BiomeGraph graph = new BiomeGraph(
+            List.of(node("anchor", 400, 800), node("achievable", 400, 800), node("huge", 4000, 6000)),
+            List.of(AdjacencyRule.allow(id("anchor"), id("achievable"), 10), AdjacencyRule.allow(id("anchor"), id("huge"), 10))
+        );
+
+        Map<Integer, TriangleIdentitySizeAssignment.Assignment> assignment = TriangleIdentitySizeAssignment.solve(
+            adjacency, free, fixedFaceBiomes, graph, 7L, Double.POSITIVE_INFINITY, committedWidthBlocksByFace, mesh, 300, 0.0
+        ).orElseThrow();
+
+        assertEquals(id("achievable"), assignment.get(center).biome(),
+            "expected the geometrically-unreachable 'huge' candidate to be hard-excluded, leaving only 'achievable'");
+    }
+
+    /** Regression guard for the overload chain itself: a face with no committed neighbor context must behave BYTE-IDENTICAL whether it goes through the mesh-aware overload or not. */
+    @Test
+    void meshAwareOverloadBehavesExactlyAsBeforeWhenNoFaceHasAnyCommittedNeighbor() {
+        HexMeshBuilder.HexMesh mesh = HexMeshBuilder.build(300, 0, 0, 3000, 3000);
+        TriangleAdjacency.Adjacency adjacency = TriangleAdjacency.of(mesh.faces());
+        Set<Integer> free = interiorFaceIndices(adjacency);
+        BiomeGraph graph = threeBiomeChainGraph();
+
+        Map<Integer, TriangleIdentitySizeAssignment.Assignment> withoutMesh =
+            TriangleIdentitySizeAssignment.solve(adjacency, free, Map.of(), graph, 21L, Double.POSITIVE_INFINITY, Map.of()).orElseThrow();
+        Map<Integer, TriangleIdentitySizeAssignment.Assignment> withMesh =
+            TriangleIdentitySizeAssignment.solve(adjacency, free, Map.of(), graph, 21L, Double.POSITIVE_INFINITY, Map.of(), mesh, 300, 0.0).orElseThrow();
+
+        assertEquals(withoutMesh, withMesh);
+    }
+
+    /** A real interior face all 6 of whose own neighbors are ALSO non-hull-touching - matches {@code WeightedVertexPlacementTest}'s own identically-named helper (deliberately not shared, same convention this codebase's tests already use). */
+    private static int aFaceWithSixFullyInteriorNeighbors(HexMeshBuilder.HexMesh mesh, TriangleAdjacency.Adjacency adjacency) {
+        for (Map.Entry<Integer, Set<Integer>> entry : adjacency.neighborFaceIndices().entrySet()) {
+            int faceIndex = entry.getKey();
+            if (adjacency.hullTouchingFaceIndices().contains(faceIndex)) {
+                continue;
+            }
+            Set<Integer> neighbors = entry.getValue();
+            if (neighbors.size() == 6 && neighbors.stream().noneMatch(n -> adjacency.hullTouchingFaceIndices().contains(n))) {
+                return faceIndex;
+            }
+        }
+        throw new IllegalStateException("expected at least one fully-interior 6-neighbor face in a real-sized mesh");
     }
 
     private static TriangleAdjacency.Adjacency realAdjacency(long worldSeed, int spacingBlocks, int span) {

@@ -1,9 +1,13 @@
 package com.mineutze.worldgen.regionsolve.topology;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Random;
 import java.util.Set;
 
 /**
@@ -283,6 +287,306 @@ public final class WeightedVertexPlacement {
         );
     }
 
+    // Never a fixed/alphabetical order - same standing convention as every other seeded
+    // hash in this codebase (see TriangleIdentitySizeAssignment.CANDIDATE_ORDER_SALT's own
+    // doc for the real bug this class of mistake caused once already).
+    private static final long SEQUENTIAL_ORDER_SALT = 0x3E27_9ACD_1F84_B650L;
+
+    // How far above targetArea the weight search bound reaches - not a probe VALUE being
+    // trusted as an estimate (see achievableAreaRangeFor's own doc for why that pattern is
+    // wrong), just a generous SEARCH INTERVAL edge for bisection to converge within. Weight
+    // and area are both O(radius^2), so a bound this far above target comfortably contains
+    // any real weight that could ever be needed to reach it.
+    private static final double SEQUENTIAL_SEARCH_HIGH_MULTIPLIER = 1000.0;
+
+    /**
+     * The "no tug-of-war, ever" mechanism (2026-09-11) - replaces {@link #calibratedWeights}'s
+     * JOINT, simultaneous multi-face iteration with genuinely SEQUENTIAL, one-face-at-a-time
+     * commitment: every free face's own weight is resolved via direct binary search against
+     * ONLY what's already fixed at that exact moment (external {@code committedWidthBlocksByFace}/
+     * {@code committedVertexPositions}, plus every cluster-mate already processed earlier in
+     * THIS SAME call) - never against another face still being decided. Once a face's weight
+     * is resolved, it is added to that same "already fixed" context for everyone processed
+     * after it, and is never revisited for the rest of this call.
+     *
+     * <p><b>Why this is correct without needing calibration's own iteration</b>: with every
+     * OTHER input held fixed, a face's own realized area is a well-defined, MONOTONIC
+     * function of its own weight alone (increasing weight strictly increases its own area,
+     * holding others fixed - the same documented power-diagram property {@link
+     * #calibratedWeights} itself already relies on) - a single binary search converges
+     * directly to the weight whose area is closest to target, no repeated correction rounds
+     * needed, because there is no coupling left to iterate against.
+     *
+     * <p><b>Real, deliberate simplification found while building this, not glossed over</b>:
+     * the binary search runs against the RAW (unclamped) radicalCenter area, not the safety-
+     * clamped one - clamping is applied exactly ONCE, after the search converges, via {@link
+     * #maxSafeScale} scoped to THIS FACE'S OWN 6 corners only (not the whole-mesh
+     * reconciliation {@link #geometricallyValidPositions} does, which was found - during
+     * design, before this was ever implemented wrong - to be the WRONG tool here: it
+     * validates every face in the mesh each round, including faces that haven't been
+     * decided yet, whose "shape" at that point is a meaningless mix of one real corner and
+     * five placeholder-lattice ones - reusing it here would let a not-yet-real neighbor's
+     * fake shape spuriously constrain a real, already-being-decided face). Raw radicalCenter
+     * area is monotonic in weight regardless (a more fundamental, already-established fact
+     * than "clamped area stays monotonic," which this design deliberately avoids needing to
+     * assume at all).
+     *
+     * <p>Processing order: the free face with the MOST already-solved neighbors goes next -
+     * directly reusing {@link TriangleIdentitySizeAssignment}'s own {@code
+     * mostConstrainedUnassignedFace} principle one level down (geometry instead of
+     * identity), maximizing how much real context every face gets before its own turn.
+     *
+     * <p>A shared vertex is only added to the returned/growing "locked" context once ALL 3
+     * of its owning faces have been processed (the exact same rule {@code
+     * TriangleFieldGeometryRealization.commitClusterVerticesTentatively} already uses one
+     * level up, applied here within a single pass) - a face's own WEIGHT is genuinely locked
+     * forever the moment it's processed (the real "no tug-of-war" guarantee), but the exact
+     * final POSITION of a shared corner can still see a small last-mile refinement from a
+     * not-yet-processed co-owner's own later turn - the same tentative-until-truly-final
+     * property the real live path already has today, just true one level finer here.
+     */
+    public static Map<Integer, Point2D> sequentiallyRealizedVertexPositions(
+        HexMeshBuilder.HexMesh mesh, TriangleAdjacency.Adjacency adjacency,
+        Map<Integer, TriangleIdentitySizeAssignment.Assignment> assignments, double baselineCircumradiusBlocks,
+        double minEdgeLengthBlocks, Map<Integer, Integer> committedWidthBlocksByFace, Map<Integer, Point2D> committedVertexPositions,
+        long worldSeed
+    ) {
+        Map<Integer, Point2D> centers = centersOf(mesh);
+        Map<Integer, Double> targetAreaByFace = targetAreasOf(assignments);
+        Set<Integer> freeFaces = assignments.keySet();
+        double baselineWeight = baselineCircumradiusBlocks * baselineCircumradiusBlocks;
+
+        Map<Integer, Double> weightByFace = new HashMap<>();
+        for (int faceIndex = 0; faceIndex < mesh.faces().size(); faceIndex++) {
+            Integer committedWidth = committedWidthBlocksByFace.get(faceIndex);
+            weightByFace.put(faceIndex, committedWidth != null ? powerWeight(committedWidth) : baselineWeight);
+        }
+
+        Set<Integer> solved = new HashSet<>();
+        for (int faceIndex = 0; faceIndex < mesh.faces().size(); faceIndex++) {
+            if (!freeFaces.contains(faceIndex)) {
+                solved.add(faceIndex);
+            }
+        }
+
+        Map<Integer, Point2D> displaced = new HashMap<>(committedVertexPositions);
+        List<Integer> processingOrder = processingOrderFor(freeFaces, adjacency, solved, worldSeed);
+
+        for (int faceIndex : processingOrder) {
+            List<int[]> localTriangles = localTrianglesOf(mesh, adjacency, faceIndex);
+            double resolvedWeight = resolveWeightFor(mesh, centers, faceIndex, localTriangles, weightByFace, targetAreaByFace.get(faceIndex), displaced);
+            weightByFace.put(faceIndex, resolvedWeight);
+
+            Map<Integer, Point2D> finalCorners = finalizedCornersOf(
+                mesh, centers, faceIndex, localTriangles, weightByFace, minEdgeLengthBlocks, targetAreaByFace.get(faceIndex),
+                baselineCircumradiusBlocks, displaced
+            );
+            solved.add(faceIndex);
+            for (int[] triangle : localTriangles) {
+                int vertexIndex = TriangleAdjacency.sharedVertexOf(mesh, triangle);
+                if (displaced.containsKey(vertexIndex)) {
+                    continue;
+                }
+                if (solved.contains(triangle[0]) && solved.contains(triangle[1]) && solved.contains(triangle[2])) {
+                    displaced.put(vertexIndex, finalCorners.get(vertexIndex));
+                }
+            }
+        }
+
+        // A real, found-via-crash gap: a mesh-vertex triple whose all 3 owners are
+        // EXTERNALLY fixed (none of them ever in freeFaces at all) is never touched by the
+        // loop above - it only ever visits FREE faces' own local rings. Yet
+        // TriangleFieldGeometryRealization.commitClusterVerticesTentatively unconditionally
+        // expects an entry for every triple where all 3 owners have "some value" (free-or-
+        // fixed), same condition as here - a real NullPointerException, not hypothetical,
+        // the first time a real cluster solve hit this exact case (a vertex touching 3
+        // already-committed neighbors, never yet jointly computed by any earlier solve -
+        // the same gap promoteFaceToPermanent's own doc already names and tolerates one
+        // level up). No safety clamp needed here - all 3 owners' own weights are already
+        // final, decided elsewhere; this is filling in known geometry, not deciding size.
+        for (int[] triangle : adjacency.mutuallyAdjacentTriples(centers.keySet())) {
+            if (freeFaces.contains(triangle[0]) || freeFaces.contains(triangle[1]) || freeFaces.contains(triangle[2])) {
+                continue;
+            }
+            int vertexIndex = TriangleAdjacency.sharedVertexOf(mesh, triangle);
+            if (displaced.containsKey(vertexIndex)) {
+                continue;
+            }
+            displaced.put(vertexIndex, radicalCenter(
+                centers.get(triangle[0]), weightByFace.get(triangle[0]),
+                centers.get(triangle[1]), weightByFace.get(triangle[1]),
+                centers.get(triangle[2]), weightByFace.get(triangle[2])
+            ));
+        }
+        return displaced;
+    }
+
+    /** Every real mesh-vertex triple touching {@code faceIndex}'s own 6 corners - {@code faceIndex} plus its own neighbors is exactly enough for {@link TriangleAdjacency.Adjacency#mutuallyAdjacentTriples} to find all of them, same ring-restriction trick {@link #achievableAreaRangeFor} already uses. */
+    private static List<int[]> localTrianglesOf(HexMeshBuilder.HexMesh mesh, TriangleAdjacency.Adjacency adjacency, int faceIndex) {
+        Set<Integer> ring = new LinkedHashSet<>();
+        ring.add(faceIndex);
+        ring.addAll(adjacency.neighborFaceIndices().getOrDefault(faceIndex, Set.of()));
+        return adjacency.mutuallyAdjacentTriples(ring).stream()
+            .filter(triangle -> triangle[0] == faceIndex || triangle[1] == faceIndex || triangle[2] == faceIndex)
+            .toList();
+    }
+
+    /**
+     * Greedy, adaptive "most already-solved neighbors next" order - recomputing the
+     * solved-neighbor count after each pick, same {@code mostConstrainedUnassignedFace}-
+     * style greedy principle {@link TriangleIdentitySizeAssignment} already uses for
+     * identity, one level down. Package-private (not private) specifically so a real test
+     * can determine the actual order directly rather than trying to predict/force it via
+     * indirect construction - found, while building exactly such a test, that the
+     * adaptive recomputation can let a face's own solved-neighbor count catch up
+     * mid-pass (processing a THIRD face can retroactively raise a SECOND face's own
+     * count), so a naive "give A one more fixed neighbor than B" trick does not reliably
+     * guarantee A processes before B on its own.
+     */
+    static List<Integer> processingOrderFor(Set<Integer> freeFaces, TriangleAdjacency.Adjacency adjacency, Set<Integer> initiallySolved, long worldSeed) {
+        List<Integer> order = new ArrayList<>();
+        Set<Integer> remaining = new HashSet<>(freeFaces);
+        Set<Integer> solvedSoFar = new HashSet<>(initiallySolved);
+        while (!remaining.isEmpty()) {
+            int next = remaining.stream()
+                .max(Comparator.<Integer>comparingInt(faceIndex -> countSolvedNeighbors(faceIndex, adjacency, solvedSoFar))
+                    .thenComparingLong(faceIndex -> orderTieBreakHash(worldSeed, faceIndex)))
+                .orElseThrow();
+            order.add(next);
+            remaining.remove(next);
+            solvedSoFar.add(next);
+        }
+        return order;
+    }
+
+    private static int countSolvedNeighbors(int faceIndex, TriangleAdjacency.Adjacency adjacency, Set<Integer> solved) {
+        int count = 0;
+        for (int neighbor : adjacency.neighborFaceIndices().getOrDefault(faceIndex, Set.of())) {
+            if (solved.contains(neighbor)) {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    private static long orderTieBreakHash(long worldSeed, int faceIndex) {
+        long hash = worldSeed ^ SEQUENTIAL_ORDER_SALT;
+        hash = hash * 31 + faceIndex;
+        return new Random(hash).nextLong();
+    }
+
+    /** Direct binary search for the weight whose RAW (unclamped) realized area is closest to {@code targetArea} - see this class's own {@link #sequentiallyRealizedVertexPositions} doc for why raw, not clamped. */
+    private static double resolveWeightFor(
+        HexMeshBuilder.HexMesh mesh, Map<Integer, Point2D> centers, int faceIndex, List<int[]> localTriangles,
+        Map<Integer, Double> weightByFace, double targetArea, Map<Integer, Point2D> displaced
+    ) {
+        double lowWeight = powerWeight(1);
+        double highWeight = targetArea * SEQUENTIAL_SEARCH_HIGH_MULTIPLIER;
+        double lowArea = rawAreaAt(mesh, centers, faceIndex, localTriangles, weightByFace, lowWeight, displaced);
+        double highArea = rawAreaAt(mesh, centers, faceIndex, localTriangles, weightByFace, highWeight, displaced);
+        if (targetArea <= lowArea) {
+            return lowWeight;
+        }
+        if (targetArea >= highArea) {
+            return highWeight;
+        }
+        for (int iteration = 0; iteration < BISECTION_ITERATIONS; iteration++) {
+            double midWeight = (lowWeight + highWeight) / 2.0;
+            double midArea = rawAreaAt(mesh, centers, faceIndex, localTriangles, weightByFace, midWeight, displaced);
+            if (midArea < targetArea) {
+                lowWeight = midWeight;
+            } else {
+                highWeight = midWeight;
+            }
+        }
+        return (lowWeight + highWeight) / 2.0;
+    }
+
+    private static double rawAreaAt(
+        HexMeshBuilder.HexMesh mesh, Map<Integer, Point2D> centers, int faceIndex, List<int[]> localTriangles,
+        Map<Integer, Double> weightByFace, double candidateWeight, Map<Integer, Point2D> displaced
+    ) {
+        Map<Integer, Point2D> positions = cornerPositionsFor(mesh, centers, faceIndex, localTriangles, weightByFace, candidateWeight, displaced);
+        return shoelaceAreaOfFace(mesh, faceIndex, positions);
+    }
+
+    /** {@code faceIndex}'s own RAW (unclamped) corner positions for a candidate weight - an already-locked corner (from {@code displaced}) is used as-is, matching every other immovable-anchor rule in this class. */
+    private static Map<Integer, Point2D> cornerPositionsFor(
+        HexMeshBuilder.HexMesh mesh, Map<Integer, Point2D> centers, int faceIndex, List<int[]> localTriangles,
+        Map<Integer, Double> weightByFace, double candidateWeight, Map<Integer, Point2D> displaced
+    ) {
+        Map<Integer, Point2D> positions = new HashMap<>();
+        for (int[] triangle : localTriangles) {
+            int vertexIndex = TriangleAdjacency.sharedVertexOf(mesh, triangle);
+            Point2D locked = displaced.get(vertexIndex);
+            if (locked != null) {
+                positions.put(vertexIndex, locked);
+                continue;
+            }
+            double weightA = triangle[0] == faceIndex ? candidateWeight : weightByFace.get(triangle[0]);
+            double weightB = triangle[1] == faceIndex ? candidateWeight : weightByFace.get(triangle[1]);
+            double weightC = triangle[2] == faceIndex ? candidateWeight : weightByFace.get(triangle[2]);
+            positions.put(vertexIndex, radicalCenter(centers.get(triangle[0]), weightA, centers.get(triangle[1]), weightB, centers.get(triangle[2]), weightC));
+        }
+        return positions;
+    }
+
+    /** A vertex with no real mesh-vertex triple this session (rare - a face near the local mesh's own outer margin, whose ring reaches a hull-touching neighbor) falls back to its raw undisplaced lattice position, same convention every other corner-lookup in this class already uses. */
+    private static double shoelaceAreaOfFace(HexMeshBuilder.HexMesh mesh, int faceIndex, Map<Integer, Point2D> positions) {
+        List<Integer> vertexIndices = mesh.faces().get(faceIndex).vertexIndices();
+        int cornerCount = vertexIndices.size();
+        double sum = 0;
+        for (int i = 0; i < cornerCount; i++) {
+            Point2D current = positions.getOrDefault(vertexIndices.get(i), mesh.vertices().get(vertexIndices.get(i)));
+            Point2D next = positions.getOrDefault(vertexIndices.get((i + 1) % cornerCount), mesh.vertices().get(vertexIndices.get((i + 1) % cornerCount)));
+            sum += current.x() * next.z() - next.x() * current.z();
+        }
+        return Math.abs(sum) / 2.0;
+    }
+
+    /**
+     * {@code faceIndex}'s own FINAL, safety-clamped corner positions, once its weight is
+     * resolved - reuses {@link #maxSafeScale} directly, scoped to only this face's own 6
+     * corners (never the whole-mesh {@link #geometricallyValidPositions} reconciliation -
+     * see {@link #sequentiallyRealizedVertexPositions}'s own doc for why that would be
+     * wrong here). No already-locked corner can exist among this face's own 6 at this
+     * point - proof: a vertex only locks once ALL 3 owners are solved, and {@code
+     * faceIndex} itself, one of its own corners' 3 owners, is not yet solved until THIS
+     * call finishes - {@code displaced.get(vertexIndex)} is still consulted defensively
+     * for clarity/robustness, but is provably a no-op for any of this face's own corners.
+     */
+    private static Map<Integer, Point2D> finalizedCornersOf(
+        HexMeshBuilder.HexMesh mesh, Map<Integer, Point2D> centers, int faceIndex, List<int[]> localTriangles,
+        Map<Integer, Double> weightByFace, double minEdgeLengthBlocks, double targetArea, double baselineCircumradiusBlocks,
+        Map<Integer, Point2D> displaced
+    ) {
+        Map<Integer, Point2D> rawPositions = cornerPositionsFor(mesh, centers, faceIndex, localTriangles, weightByFace, weightByFace.get(faceIndex), displaced);
+
+        List<Integer> vertexIndices = mesh.faces().get(faceIndex).vertexIndices();
+        List<Point2D> original = new ArrayList<>();
+        List<Point2D> candidate = new ArrayList<>();
+        for (int vertexIndex : vertexIndices) {
+            Point2D locked = displaced.get(vertexIndex);
+            Point2D basePosition = locked != null ? locked : mesh.vertices().get(vertexIndex);
+            original.add(basePosition);
+            candidate.add(locked != null ? locked : rawPositions.getOrDefault(vertexIndex, basePosition));
+        }
+
+        double baselineAreaBlocks2 = (3.0 * Math.sqrt(3.0) / 2.0) * baselineCircumradiusBlocks * baselineCircumradiusBlocks;
+        double maxDisplacementBlocks = MAX_VERTEX_DISPLACEMENT_FRACTION * baselineCircumradiusBlocks;
+        double minAreaBlocks2 = Math.min(targetArea * MIN_REALIZED_AREA_FRACTION_OF_TARGET, baselineAreaBlocks2);
+        double maxAreaBlocks2 = Math.max(targetArea * MAX_REALIZED_AREA_FRACTION_OF_TARGET, baselineAreaBlocks2);
+
+        double scale = maxSafeScale(original, candidate, minEdgeLengthBlocks, minAreaBlocks2, maxAreaBlocks2, maxDisplacementBlocks);
+        List<Point2D> finalCorners = lerpAll(original, candidate, scale);
+
+        Map<Integer, Point2D> result = new HashMap<>();
+        for (int i = 0; i < vertexIndices.size(); i++) {
+            result.put(vertexIndices.get(i), finalCorners.get(i));
+        }
+        return result;
+    }
+
     /**
      * Runs {@link #CALIBRATION_ROUNDS} rounds of proportional weight correction - see
      * class doc for why this converges in principle (the semi-discrete optimal transport
@@ -311,6 +615,86 @@ public final class WeightedVertexPlacement {
             displaced = vertexPositionsFor(mesh, centers, weights, triangles, minEdgeLengthBlocks, targetAreaByFace, baselineCircumradiusBlocks, committedVertexPositions);
         }
         return displaced;
+    }
+
+    /** A face's real, achievable realized-area range - see {@link #achievableAreaRangeFor}'s own doc. */
+    record AreaRange(double minAreaBlocks2, double maxAreaBlocks2) {
+    }
+
+    /**
+     * The real, achievable realized-area range for ONE face, given its neighbors' REAL
+     * fixed/committed context (2026-09-11, the "compute achievable range before deciding
+     * what goes here" design) - deliberately WITHOUT any target-relative clamp (no target
+     * exists yet at this point in the pipeline; {@link #MIN_REALIZED_AREA_FRACTION_OF_TARGET}/
+     * {@link #MAX_REALIZED_AREA_FRACTION_OF_TARGET} are both no-ops for a face absent from
+     * {@code targetAreaByFace} - confirmed directly from {@link #geometricallyValidPositions}'s
+     * own call site), leaving only the ABSOLUTE clamps (simplicity, minimum edge length,
+     * {@link #MAX_VERTEX_DISPLACEMENT_FRACTION}) active.
+     *
+     * <p><b>{@code probeMinWidthBlocks}/{@code probeMaxWidthBlocks} must be REAL, catalog-
+     * derived bounds (e.g. the smallest/largest width across every biome the caller could
+     * possibly assign here), not arbitrary extremes.</b> Found and fixed BEFORE this method
+     * was ever tested against real data: an earlier version of this probed at an
+     * astronomically large weight (intended to find the absolute physical ceiling) - but
+     * once a probe weight is large enough, it wins the weight-DIFFERENCE comparison against
+     * ANY real, finite neighbor weight by a near-identical margin, so the result collapses
+     * to the SAME value (the absolute displacement cap) regardless of whether the real
+     * neighbors were tight or generous - silently re-deriving a constant instead of
+     * reflecting real context, the exact opposite of this method's whole purpose. Probing at
+     * REAL catalog-scale widths instead keeps the comparison meaningful: a genuinely tight
+     * neighbor's real weight can still noticeably resist a probe weight of the same rough
+     * order of magnitude, a generous one concedes more - real, context-sensitive answers.
+     *
+     * <p>Two single-shot evaluations, not a full {@link #CALIBRATION_ROUNDS} loop - there is
+     * no target to iterate toward yet, only "how far can this face's own weight push its
+     * boundary before the absolute clamps (or real neighbor resistance) stop it." Real, not
+     * guessed: increasing one site's weight, holding every other site's fixed, strictly
+     * increases its own realized area (a documented, already-relied-upon monotonicity
+     * property of this power diagram - see class doc) - so the two probe extremes genuinely
+     * bound everything achievable between them, no sweep needed.
+     *
+     * <p>Deliberately does NOT consult already-committed VERTEX positions (only committed
+     * WIDTHS) - a real, accepted simplification: the true final geometry would additionally
+     * pin any already-decided corner, which can only make the true achievable range
+     * NARROWER than this estimate, never wider. A slightly loose bound here is safe (the
+     * real downstream clamps still apply when actual geometry gets computed later); a wrong
+     * or missing bound would not be.
+     */
+    static AreaRange achievableAreaRangeFor(
+        HexMeshBuilder.HexMesh mesh, TriangleAdjacency.Adjacency adjacency, int faceIndex,
+        Map<Integer, Integer> committedWidthBlocksByFace, double baselineCircumradiusBlocks, double minEdgeLengthBlocks,
+        int probeMinWidthBlocks, int probeMaxWidthBlocks
+    ) {
+        Map<Integer, Point2D> centers = centersOf(mesh);
+        List<int[]> triangles = adjacency.mutuallyAdjacentTriples(centers.keySet());
+        double baselineWeight = baselineCircumradiusBlocks * baselineCircumradiusBlocks;
+
+        double probeLowWeight = powerWeight(probeMinWidthBlocks);
+        double probeHighWeight = powerWeight(probeMaxWidthBlocks);
+
+        double minArea = probedAreaOf(mesh, centers, triangles, faceIndex, committedWidthBlocksByFace, baselineWeight, baselineCircumradiusBlocks, minEdgeLengthBlocks, probeLowWeight);
+        double maxArea = probedAreaOf(mesh, centers, triangles, faceIndex, committedWidthBlocksByFace, baselineWeight, baselineCircumradiusBlocks, minEdgeLengthBlocks, probeHighWeight);
+        return new AreaRange(minArea, maxArea);
+    }
+
+    private static double probedAreaOf(
+        HexMeshBuilder.HexMesh mesh, Map<Integer, Point2D> centers, List<int[]> triangles, int faceIndex,
+        Map<Integer, Integer> committedWidthBlocksByFace, double baselineWeight, double baselineCircumradiusBlocks,
+        double minEdgeLengthBlocks, double probeWeight
+    ) {
+        Map<Integer, Double> weightByFace = new HashMap<>();
+        for (int otherFace : centers.keySet()) {
+            if (otherFace == faceIndex) {
+                weightByFace.put(otherFace, probeWeight);
+                continue;
+            }
+            Integer committedWidth = committedWidthBlocksByFace.get(otherFace);
+            weightByFace.put(otherFace, committedWidth != null ? powerWeight(committedWidth) : baselineWeight);
+        }
+        Map<Integer, Point2D> displaced = vertexPositionsFor(
+            mesh, centers, weightByFace, triangles, minEdgeLengthBlocks, Map.of(), baselineCircumradiusBlocks, Map.of()
+        );
+        return realizedAreasOf(mesh, displaced, Set.of(faceIndex)).get(faceIndex);
     }
 
     /**

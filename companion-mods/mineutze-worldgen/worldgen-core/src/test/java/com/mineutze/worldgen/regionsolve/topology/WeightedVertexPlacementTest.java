@@ -250,6 +250,161 @@ class WeightedVertexPlacementTest {
     }
 
     /**
+     * The direct capability the "compute achievable range first, decide second" design
+     * (2026-09-11) needs. A real, important correction found BEFORE this was ever tested
+     * against real data: an earlier version of {@code achievableAreaRangeFor} probed at an
+     * astronomically large weight (looking for the absolute physical ceiling) - but once a
+     * probe weight is large enough, it wins the weight-DIFFERENCE comparison against ANY
+     * real, finite neighbor weight by nearly the same margin, so the result silently
+     * collapsed to the SAME constant (the absolute displacement cap) regardless of whether
+     * neighbors were tight or generous - the opposite of what an "achievable range" is
+     * supposed to capture. Fixed by probing at REAL, catalog-scale widths instead - this
+     * test proves the fix actually works: neighbors committed to the SAME width as the
+     * probe's own high end (a real, equal-strength competitor) must produce a meaningfully
+     * LOWER achievable ceiling than fully-open (baseline-weighted) neighbors, since an
+     * equal-weight competitor concedes nothing (radicalCenter reduces to the plain
+     * circumcenter, i.e. no growth) while a weaker baseline neighbor concedes real
+     * territory.
+     */
+    @Test
+    void achievableAreaRangeReflectsRealNeighborResistanceNotAnArbitraryConstant() {
+        HexMeshBuilder.HexMesh mesh = HexMeshBuilder.build(SIZE, 0, 0, 3000, 3000);
+        TriangleAdjacency.Adjacency adjacency = TriangleAdjacency.of(mesh.faces());
+        int center = aFaceWithSixFullyInteriorNeighbors(mesh, adjacency);
+
+        int probeMinWidth = 100;
+        int probeMaxWidth = 800; // well above baselineWidth (2*SIZE=400), so it's a real, distinguishing probe
+        Map<Integer, Integer> strongNeighbors = new HashMap<>();
+        for (int neighbor : adjacency.neighborFaceIndices().get(center)) {
+            strongNeighbors.put(neighbor, probeMaxWidth); // an equal-strength competitor on every side
+        }
+
+        WeightedVertexPlacement.AreaRange constrained = WeightedVertexPlacement.achievableAreaRangeFor(
+            mesh, adjacency, center, strongNeighbors, SIZE, 0.0, probeMinWidth, probeMaxWidth
+        );
+        WeightedVertexPlacement.AreaRange open = WeightedVertexPlacement.achievableAreaRangeFor(
+            mesh, adjacency, center, Map.of(), SIZE, 0.0, probeMinWidth, probeMaxWidth
+        );
+
+        assertTrue(constrained.minAreaBlocks2() <= constrained.maxAreaBlocks2(), "expected a real, non-inverted range");
+        assertTrue(constrained.maxAreaBlocks2() < open.maxAreaBlocks2(),
+            "expected real, equal-strength neighbor resistance to produce a meaningfully lower ceiling than fully-open baseline neighbors - "
+                + "constrained=" + constrained.maxAreaBlocks2() + ", open=" + open.maxAreaBlocks2());
+    }
+
+    /**
+     * The real precision gain the sequential mechanism (2026-09-11) exists for: a direct
+     * binary search against fully-known, fixed context should land MUCH closer to target
+     * than the old joint calibration's own established 5% tolerance ({@link
+     * #calibrationConvergesCloseToTargetForAModerateMismatch}) - same moderate-mismatch
+     * scenario, same numbers, different mechanism.
+     */
+    @Test
+    void sequentialResolutionConvergesTighterThanCalibration() {
+        HexMeshBuilder.HexMesh mesh = HexMeshBuilder.build(SIZE, 0, 0, 3000, 3000);
+        TriangleAdjacency.Adjacency adjacency = TriangleAdjacency.of(mesh.faces());
+        int center = aFaceWithSixFullyInteriorNeighbors(mesh, adjacency);
+
+        int baselineWidth = (int) (2 * SIZE);
+        int targetWidth = (int) (baselineWidth * 0.7);
+        Map<Integer, TriangleIdentitySizeAssignment.Assignment> assignments = new HashMap<>();
+        assignments.put(center, new TriangleIdentitySizeAssignment.Assignment(BIOME, targetWidth));
+        Map<Integer, Integer> committedWidthBlocksByFace = new HashMap<>();
+        for (int neighbor : adjacency.neighborFaceIndices().get(center)) {
+            committedWidthBlocksByFace.put(neighbor, baselineWidth);
+        }
+
+        Map<Integer, Point2D> displaced = WeightedVertexPlacement.sequentiallyRealizedVertexPositions(
+            mesh, adjacency, assignments, SIZE, 0.0, committedWidthBlocksByFace, Map.of(), 7L
+        );
+        double realizedWidth = realizedWidthOf(mesh, displaced, center);
+
+        assertEquals(targetWidth, realizedWidth, targetWidth * 0.01,
+            "expected sequential resolution to converge within 1% of target - much tighter than calibration's own 5%");
+    }
+
+    /**
+     * The actual "no tug-of-war" guarantee, checked directly rather than just asserted in
+     * prose. A real, important subtlety found WHILE building this test, not assumed: a
+     * face's own resolved WEIGHT is a single scalar governing ALL 6 of its corners at
+     * once - if a "later" face happens to actually process BEFORE an "earlier" one, the
+     * "earlier" face's own weight legitimately, correctly incorporates the "later" one -
+     * that is NOT a bug, it's exactly how a strictly-ordered (never circular) dependency
+     * is supposed to behave. An earlier attempt at this test tried to FORCE a specific
+     * face to process first via an indirect "give it one more fixed neighbor" trick - that
+     * broke, because the greedy order is ADAPTIVE: processing a third face can
+     * retroactively raise a second face's own solved-neighbor count mid-pass, silently
+     * erasing the intended margin. Fixed by not predicting order at all - {@link
+     * WeightedVertexPlacement#processingOrderFor} is called DIRECTLY (package-visible for
+     * exactly this reason) to find the REAL first-processed face, then a corner of THAT
+     * face not shared with the second one (checked to avoid the OTHER real, documented
+     * property - a SHARED corner can still see a legitimate last-mile refinement from
+     * whichever of its 3 owners processes last) must be byte-identical whether the
+     * second face's own target is 300 or 900.
+     */
+    @Test
+    void aFacesOwnCornerIsCompletelyIndependentOfALaterProcessedFacesOwnTarget() {
+        HexMeshBuilder.HexMesh mesh = HexMeshBuilder.build(SIZE, 0, 0, 3000, 3000);
+        TriangleAdjacency.Adjacency adjacency = TriangleAdjacency.of(mesh.faces());
+        int faceA = aFaceWithSixFullyInteriorNeighbors(mesh, adjacency);
+        // .sorted(), not just new ArrayList<> - TriangleAdjacency.of's own Adjacency wraps
+        // neighborFaceIndices in Map.copyOf/Set.copyOf, whose iteration order is
+        // deliberately randomized PER JVM RUN (same established codebase-wide gotcha
+        // documented elsewhere, e.g. BiomeGraph.nodes()) - an unsorted pick here would
+        // choose a DIFFERENT actual face between separate JVM launches.
+        int faceB = adjacency.neighborFaceIndices().get(faceA).stream().sorted().toList().get(0);
+
+        int baselineWidth = (int) (2 * SIZE);
+        Map<Integer, Integer> committedWidthBlocksByFace = new HashMap<>();
+        for (int neighbor : adjacency.neighborFaceIndices().get(faceA)) {
+            if (neighbor != faceB) {
+                committedWidthBlocksByFace.put(neighbor, baselineWidth);
+            }
+        }
+        for (int neighbor : adjacency.neighborFaceIndices().get(faceB)) {
+            if (neighbor != faceA) {
+                committedWidthBlocksByFace.put(neighbor, baselineWidth);
+            }
+        }
+
+        Set<Integer> freeFaces = Set.of(faceA, faceB);
+        Set<Integer> initiallySolved = new HashSet<>();
+        for (int faceIndex = 0; faceIndex < mesh.faces().size(); faceIndex++) {
+            if (!freeFaces.contains(faceIndex)) {
+                initiallySolved.add(faceIndex);
+            }
+        }
+        List<Integer> order = WeightedVertexPlacement.processingOrderFor(freeFaces, adjacency, initiallySolved, 7L);
+        int first = order.get(0);
+        int second = order.get(1);
+
+        Set<Integer> firstOnlyCorners = new HashSet<>(mesh.faces().get(first).vertexIndices());
+        firstOnlyCorners.removeAll(mesh.faces().get(second).vertexIndices());
+        assertTrue(!firstOnlyCorners.isEmpty(), "expected the first-processed face to have at least one corner not shared with the second");
+        int independentVertex = firstOnlyCorners.iterator().next();
+
+        Map<Integer, TriangleIdentitySizeAssignment.Assignment> assignmentsRun1 = new HashMap<>();
+        assignmentsRun1.put(first, new TriangleIdentitySizeAssignment.Assignment(BIOME, (int) (baselineWidth * 1.3)));
+        assignmentsRun1.put(second, new TriangleIdentitySizeAssignment.Assignment(BIOME, 300));
+
+        Map<Integer, TriangleIdentitySizeAssignment.Assignment> assignmentsRun2 = new HashMap<>();
+        assignmentsRun2.put(first, new TriangleIdentitySizeAssignment.Assignment(BIOME, (int) (baselineWidth * 1.3)));
+        assignmentsRun2.put(second, new TriangleIdentitySizeAssignment.Assignment(BIOME, 900));
+
+        Map<Integer, Point2D> displacedRun1 = WeightedVertexPlacement.sequentiallyRealizedVertexPositions(
+            mesh, adjacency, assignmentsRun1, SIZE, 0.0, committedWidthBlocksByFace, Map.of(), 7L
+        );
+        Map<Integer, Point2D> displacedRun2 = WeightedVertexPlacement.sequentiallyRealizedVertexPositions(
+            mesh, adjacency, assignmentsRun2, SIZE, 0.0, committedWidthBlocksByFace, Map.of(), 7L
+        );
+
+        Point2D positionRun1 = displacedRun1.get(independentVertex);
+        Point2D positionRun2 = displacedRun2.get(independentVertex);
+        assertEquals(positionRun1.x(), positionRun2.x(), 1e-9, "expected the first-processed face's own non-shared corner x to be untouched by the second face's target");
+        assertEquals(positionRun1.z(), positionRun2.z(), 1e-9, "expected the first-processed face's own non-shared corner z to be untouched by the second face's target");
+    }
+
+    /**
      * The other half of the seam fix: a vertex already present in {@code
      * committedVertexPositions} must come back EXACTLY as given, completely unaffected by
      * an otherwise-extreme surrounding weight mismatch that would normally clamp/reshrink

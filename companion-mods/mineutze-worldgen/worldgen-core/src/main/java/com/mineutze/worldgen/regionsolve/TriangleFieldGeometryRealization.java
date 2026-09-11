@@ -510,11 +510,12 @@ public final class TriangleFieldGeometryRealization {
             );
         }
 
-        Optional<Map<Integer, TriangleIdentitySizeAssignment.Assignment>> solved = trySolveCluster(attempt1, adjacency, graph, worldSeed);
+        double minEdgeLengthBlocks = MIN_EDGE_LENGTH_MACRO_CELLS * gridConfig.macroCellSizeBlocks();
+        Optional<Map<Integer, TriangleIdentitySizeAssignment.Assignment>> solved = trySolveCluster(attempt1, adjacency, graph, worldSeed, mesh, minEdgeLengthBlocks);
         ClusterGrowth used = attempt1;
         if (solved.isEmpty()) {
             ClusterGrowth attempt2 = growCluster(mesh, adjacency, seedIndex, faceStore, false);
-            solved = trySolveCluster(attempt2, adjacency, graph, worldSeed);
+            solved = trySolveCluster(attempt2, adjacency, graph, worldSeed, mesh, minEdgeLengthBlocks);
             if (solved.isEmpty()) {
                 throw new IllegalStateException(
                     "TriangleFieldGeometryRealization.realizeCluster: no legal identity assignment exists for the cluster seeded at "
@@ -536,9 +537,27 @@ public final class TriangleFieldGeometryRealization {
             committedWidthBlocksByFace.put(faceIndex, decided.widthBlocks());
         });
 
-        double minEdgeLengthBlocks = MIN_EDGE_LENGTH_MACRO_CELLS * gridConfig.macroCellSizeBlocks();
-        Map<Integer, Point2D> displacedVertices = WeightedVertexPlacement.displacedVertexPositions(
-            mesh, adjacency, assignments, HEX_SIZE_BLOCKS, minEdgeLengthBlocks, committedWidthBlocksByFace, alreadyDecidedVertices
+        // Sequential, one-face-at-a-time geometry commitment (2026-09-11) - a DELIBERATE
+        // design-principle choice, not a pure numbers call: no two faces ever negotiate
+        // their size simultaneously, full stop. Real, measured, honestly-accepted cost:
+        // the old joint calibration's own real live-path number (219/448, 48.9%) was
+        // BETTER in aggregate than this mechanism's (295/448, 65.8%) - joint calibration's
+        // value was never just resolving coupling, it was giving every face 15 ROUNDS of
+        // repeated correction toward its own target, an iterative-refinement property this
+        // mechanism does not have (a face decided early, when most neighbors are still
+        // baseline placeholders, never gets to revise once real neighbors are actually
+        // decided later). Kept anyway, per explicit user direction: eliminating the tug-
+        // of-war is a real, confirmed property of this mechanism (the single worst outlier
+        // improved, 2.71x vs 3.24x) and a real design-principle requirement for this
+        // project, not just a numbers optimization - a noisy, coupled foundation makes
+        // every FUTURE fix harder to reason about, even when it wins on the current
+        // measurement. See WeightedVertexPlacement.sequentiallyRealizedVertexPositions's
+        // own doc for the full mechanism, and project memory's 5th standing reminder: the
+        // real path back to a better aggregate number is adding BOUNDED REVISION on top of
+        // this sequential foundation (a face gets refined a few times as more real
+        // neighbors resolve, never simultaneously) - not reverting to joint calibration.
+        Map<Integer, Point2D> displacedVertices = WeightedVertexPlacement.sequentiallyRealizedVertexPositions(
+            mesh, adjacency, assignments, HEX_SIZE_BLOCKS, minEdgeLengthBlocks, committedWidthBlocksByFace, alreadyDecidedVertices, worldSeed
         );
 
         commitClusterFacesTentatively(mesh, assignments, used.cluster(), faceStore);
@@ -566,27 +585,32 @@ public final class TriangleFieldGeometryRealization {
     }
 
     /**
-     * Deliberately does NOT thread committed neighbor WIDTHS into {@link
-     * TriangleIdentitySizeAssignment#solve} (only identities, via {@code fixedFaceBiomes})
-     * - a real v1 attempt at exactly that (biasing a fresh face's own target size down
-     * near a tight committed neighbor) was built, measured on the real live path via
-     * {@code SizeFidelityLivePathMeasurement}, and made things WORSE (223/448 vs 219/448
-     * baseline, worst outlier 3.66x vs 3.40x) - reverted 2026-09-11. Root cause: a tight
-     * neighbor's own geometry is already frozen by the time a fresh face is decided,
-     * so shrinking the fresh face's own TARGET doesn't return any area to that neighbor
-     * or change the fresh face's own realized geometry - it only shrinks the ratio's own
-     * denominator, making an already-oversized face's ratio look worse, not better. The
-     * {@code committedWidthBlocksByFace}-aware overload of {@code solve} itself is kept
-     * (inert unless called with real committed widths) as a foundation for a better-
-     * targeted fix later - see project memory for the standing follow-up.
+     * Threads real committed neighbor WIDTHS into {@link TriangleIdentitySizeAssignment#solve}'s
+     * mesh-aware, achievable-range-computing overload (2026-09-11 - "compute achievable
+     * range first, decide second"). An EARLIER attempt at threading committed widths
+     * through (biasing a fresh face's own target size down near a tight committed
+     * neighbor) was built, measured on the real live path, and made things WORSE (223/448
+     * vs 219/448 baseline) - reverted the same day. This is a completely different
+     * consumption mechanism, not a retry of that one: the earlier attempt tried to
+     * influence WHAT TARGET gets picked; this one computes WHAT'S ACTUALLY ACHIEVABLE
+     * first and hard-excludes/narrows from there - see {@code TriangleIdentitySizeAssignment}'s
+     * own doc on its mesh-aware {@code solve} overload for the full mechanism.
      */
     private static Optional<Map<Integer, TriangleIdentitySizeAssignment.Assignment>> trySolveCluster(
-        ClusterGrowth growth, TriangleAdjacency.Adjacency adjacency, BiomeGraph graph, long worldSeed
+        ClusterGrowth growth, TriangleAdjacency.Adjacency adjacency, BiomeGraph graph, long worldSeed,
+        HexMeshBuilder.HexMesh mesh, double minEdgeLengthBlocks
     ) {
         Map<Integer, BiomeId> fixedFaceBiomes = new LinkedHashMap<>();
-        growth.fixedContext().forEach((faceIndex, decided) -> fixedFaceBiomes.put(faceIndex, decided.biomeId()));
+        Map<Integer, Integer> committedWidthBlocksByFace = new LinkedHashMap<>();
+        growth.fixedContext().forEach((faceIndex, decided) -> {
+            fixedFaceBiomes.put(faceIndex, decided.biomeId());
+            committedWidthBlocksByFace.put(faceIndex, decided.widthBlocks());
+        });
         double clusterAreaBlocks2 = growth.cluster().size() * baselineFaceAreaBlocks2();
-        return TriangleIdentitySizeAssignment.solve(adjacency, growth.cluster(), fixedFaceBiomes, graph, worldSeed, clusterAreaBlocks2);
+        return TriangleIdentitySizeAssignment.solve(
+            adjacency, growth.cluster(), fixedFaceBiomes, graph, worldSeed, clusterAreaBlocks2, committedWidthBlocksByFace,
+            mesh, HEX_SIZE_BLOCKS, minEdgeLengthBlocks
+        );
     }
 
     private static Map<Integer, BiomeId> biomesOf(Map<Integer, DecidedFaceStore.DecidedFace> fixedContext) {

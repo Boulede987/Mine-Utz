@@ -212,6 +212,74 @@ public final class TriangleIdentitySizeAssignment {
         TriangleAdjacency.Adjacency adjacency, Set<Integer> freeFaceIndices, Map<Integer, BiomeId> fixedFaceBiomes,
         BiomeGraph graph, long worldSeed, double regionAreaBlocks2, Map<Integer, Integer> committedWidthBlocksByFace
     ) {
+        return solve(adjacency, freeFaceIndices, fixedFaceBiomes, graph, worldSeed, regionAreaBlocks2, committedWidthBlocksByFace, Map.of());
+    }
+
+    /**
+     * Same as {@link #solve(TriangleAdjacency.Adjacency, Set, Map, BiomeGraph, long, double, Map)},
+     * but also computes each free face's REAL, achievable size range from its
+     * already-committed neighbors BEFORE deciding what goes there (2026-09-11 - "compute
+     * achievable range first, decide second", the direct answer to why every earlier fix
+     * this session capped out at a small improvement: they all tuned WHAT gets decided,
+     * never checked WHETHER it was achievable before deciding it). {@code
+     * TriangleIdentitySizeAssignment} otherwise has zero geometry input at all - this is
+     * the one, explicit, narrow crossing into {@link WeightedVertexPlacement}'s own real
+     * geometry math, done through {@link WeightedVertexPlacement#achievableAreaRangeFor}
+     * rather than merging the two classes.
+     *
+     * <p>A candidate biome whose ENTIRE {@link BiomeSizeRange} falls outside a face's own
+     * achievable range is HARD-EXCLUDED from its domain, the same standing as a graph-
+     * illegal candidate (an explicit, deliberate choice, not soft preference - accepted
+     * consequence: a genuine "no legal assignment" can now be caused by SIZE alone, not
+     * just identity, where today only identity can). This composes for free with the
+     * existing AC-3/ternary propagation and the two-attempt tentative-recovery strategy
+     * already in {@code TriangleFieldGeometryRealization.realizeCluster} - attempt 2 has
+     * strictly fewer truly-fixed neighbors than attempt 1, so a size dead end on attempt 1
+     * gets a real second chance with a WIDER achievable range on attempt 2, no new
+     * recovery mechanism needed. Once a face's identity is chosen, its width is drawn from
+     * the INTERSECTION of the biome's own catalog range and its achievable range, not the
+     * raw catalog range alone.
+     *
+     * @param mesh                       the real mesh this solve's faces belong to - only
+     *                                   ever used to compute achievable ranges, never for
+     *                                   anything else in this class.
+     */
+    public static Optional<Map<Integer, Assignment>> solve(
+        TriangleAdjacency.Adjacency adjacency, Set<Integer> freeFaceIndices, Map<Integer, BiomeId> fixedFaceBiomes,
+        BiomeGraph graph, long worldSeed, double regionAreaBlocks2, Map<Integer, Integer> committedWidthBlocksByFace,
+        HexMeshBuilder.HexMesh mesh, double baselineCircumradiusBlocks, double minEdgeLengthBlocks
+    ) {
+        // Real catalog-wide bounds, not an arbitrary extreme - see achievableAreaRangeFor's
+        // own doc for why an astronomically large probe weight silently collapses to the
+        // same constant regardless of real neighbor context (a real bug found and fixed
+        // before this was ever tested). Every biome in this graph is a real candidate
+        // somewhere, so its own catalog-wide min/max width is the real, meaningful probe
+        // range - "if this face tried to claim anywhere from the smallest to the largest
+        // real biome size, what could it actually get given its real neighbors."
+        int probeMinWidthBlocks = graph.nodes().stream().mapToInt(node -> node.sizeRange().minWidthBlocks()).min().orElseThrow();
+        int probeMaxWidthBlocks = graph.nodes().stream().mapToInt(node -> node.sizeRange().maxWidthBlocks()).max().orElseThrow();
+
+        Map<Integer, WidthRange> achievableRangeByFace = new HashMap<>();
+        for (int faceIndex : freeFaceIndices) {
+            boolean hasCommittedNeighbor = adjacency.neighborFaceIndices().getOrDefault(faceIndex, Set.of()).stream()
+                .anyMatch(committedWidthBlocksByFace::containsKey);
+            if (!hasCommittedNeighbor) {
+                continue;
+            }
+            WeightedVertexPlacement.AreaRange areaRange = WeightedVertexPlacement.achievableAreaRangeFor(
+                mesh, adjacency, faceIndex, committedWidthBlocksByFace, baselineCircumradiusBlocks, minEdgeLengthBlocks,
+                probeMinWidthBlocks, probeMaxWidthBlocks
+            );
+            achievableRangeByFace.put(faceIndex, widthRangeFromArea(areaRange));
+        }
+        return solve(adjacency, freeFaceIndices, fixedFaceBiomes, graph, worldSeed, regionAreaBlocks2, committedWidthBlocksByFace, achievableRangeByFace);
+    }
+
+    private static Optional<Map<Integer, Assignment>> solve(
+        TriangleAdjacency.Adjacency adjacency, Set<Integer> freeFaceIndices, Map<Integer, BiomeId> fixedFaceBiomes,
+        BiomeGraph graph, long worldSeed, double regionAreaBlocks2, Map<Integer, Integer> committedWidthBlocksByFace,
+        Map<Integer, WidthRange> achievableRangeByFace
+    ) {
         // .sorted(), not just .toList() - BiomeGraph.nodes() comes from a Map.copyOf-wrapped
         // map internally, and the JDK deliberately randomizes Map.copyOf's iteration order
         // PER JVM RUN (specifically to catch code that wrongly assumes it's stable). Shuffling
@@ -221,8 +289,10 @@ public final class TriangleIdentitySizeAssignment {
         List<BiomeId> allBiomes = graph.nodes().stream().map(BiomeNode::id).sorted().toList();
         Map<Integer, List<BiomeId>> domains = new HashMap<>();
         for (int faceIndex : freeFaceIndices) {
+            WidthRange achievable = achievableRangeByFace.get(faceIndex);
             List<BiomeId> domain = new ArrayList<>(allBiomes);
-            domain.removeIf(candidate -> !legalAgainstFixedNeighbors(faceIndex, candidate, adjacency, fixedFaceBiomes, graph));
+            domain.removeIf(candidate -> !legalAgainstFixedNeighbors(faceIndex, candidate, adjacency, fixedFaceBiomes, graph)
+                || !fitsAchievableRange(candidate, achievable, graph));
             domains.put(faceIndex, domain);
         }
 
@@ -238,12 +308,63 @@ public final class TriangleIdentitySizeAssignment {
         Map<Integer, Assignment> result = new LinkedHashMap<>();
         assigned.forEach((faceIndex, biome) -> {
             Integer partner = pairPartnerByFace.get(faceIndex);
+            BiomeSizeRange effectiveRange = intersectWithAchievable(graph.node(biome).sizeRange(), achievableRangeByFace.get(faceIndex));
             int widthBlocks = partner != null
                 ? splitWidthForPair(graph.node(biome).sizeRange(), worldSeed, faceIndex, partner, biome, adjacency, committedWidthBlocksByFace)
-                : pickWidth(graph.node(biome).sizeRange(), worldSeed, faceIndex, biome, adjacency, committedWidthBlocksByFace);
+                : pickWidth(effectiveRange, worldSeed, faceIndex, biome, adjacency, committedWidthBlocksByFace);
             result.put(faceIndex, new Assignment(biome, widthBlocks));
         });
         return Optional.of(result);
+    }
+
+    /** A face's real, achievable WIDTH range - {@link WeightedVertexPlacement.AreaRange} converted once so domain filtering and width picking both work in the same natural unit {@link BiomeSizeRange} already uses. */
+    private record WidthRange(int minWidthBlocks, int maxWidthBlocks) {
+    }
+
+    /**
+     * The one, explicit, narrow place this class ever computes a real hexagon area from a
+     * width - deliberately confined to this achievable-range mechanism, not the class's
+     * ordinary geometry-agnostic width picking (see {@link #BASELINE_WIDTH_BLOCKS}'s own
+     * doc for why that stays geometry-agnostic elsewhere).
+     */
+    private static int widthRangeEndpointFromArea(double areaBlocks2) {
+        double circumradius = Math.sqrt(areaBlocks2 / (3.0 * Math.sqrt(3.0) / 2.0));
+        return (int) Math.round(2 * circumradius);
+    }
+
+    private static WidthRange widthRangeFromArea(WeightedVertexPlacement.AreaRange areaRange) {
+        return new WidthRange(widthRangeEndpointFromArea(areaRange.minAreaBlocks2()), widthRangeEndpointFromArea(areaRange.maxAreaBlocks2()));
+    }
+
+    /** {@code true} if {@code achievable} is absent (no committed neighbor context, today's exact behavior) or the candidate's own declared range overlaps it at all. */
+    private static boolean fitsAchievableRange(BiomeId candidate, WidthRange achievable, BiomeGraph graph) {
+        if (achievable == null) {
+            return true;
+        }
+        BiomeSizeRange range = graph.node(candidate).sizeRange();
+        return range.maxWidthBlocks() >= achievable.minWidthBlocks() && range.minWidthBlocks() <= achievable.maxWidthBlocks();
+    }
+
+    /**
+     * The width range width-picking actually draws from once a biome is chosen - the
+     * intersection of its own catalog range and the face's real achievable range, not the
+     * raw catalog range alone. Guaranteed non-empty by construction: {@link #fitsAchievableRange}
+     * already required real overlap before this biome could ever have been chosen - an
+     * empty intersection here is a real bug, not a case to silently paper over.
+     */
+    private static BiomeSizeRange intersectWithAchievable(BiomeSizeRange biomeRange, WidthRange achievable) {
+        if (achievable == null) {
+            return biomeRange;
+        }
+        int min = Math.max(biomeRange.minWidthBlocks(), achievable.minWidthBlocks());
+        int max = Math.min(biomeRange.maxWidthBlocks(), achievable.maxWidthBlocks());
+        if (min > max) {
+            throw new IllegalStateException(
+                "TriangleIdentitySizeAssignment: intersectWithAchievable found an empty intersection (biomeRange=" + biomeRange
+                    + ", achievable=" + achievable + ") for an already-chosen biome - fitsAchievableRange should have excluded this candidate, real bug"
+            );
+        }
+        return new BiomeSizeRange(min, max);
     }
 
     /**
