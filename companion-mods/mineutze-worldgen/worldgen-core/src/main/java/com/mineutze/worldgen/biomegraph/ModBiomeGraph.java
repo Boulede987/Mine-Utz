@@ -126,11 +126,20 @@ public final class ModBiomeGraph {
         new BiomeNode(CHERRY_GROVE, new BiomeSizeRange(500, 800)),
         new BiomeNode(COLD_OCEAN, new BiomeSizeRange(700, 1000)),
         new BiomeNode(DARK_FOREST, new BiomeSizeRange(500, 800)),
-        new BiomeNode(DEEP_COLD_OCEAN, new BiomeSizeRange(700, 1000)),
-        new BiomeNode(DEEP_FROZEN_OCEAN, new BiomeSizeRange(700, 1000)),
-        new BiomeNode(DEEP_LUKEWARM_OCEAN, new BiomeSizeRange(700, 1000)),
-        new BiomeNode(DEEP_OCEAN, new BiomeSizeRange(700, 1000)),
-        new BiomeNode(DESERT, new BiomeSizeRange(700, 1000)),
+        // selfAdjacencyLimit=1 on these 5 (deep-ocean family + desert) - lets each span 2
+        // ordinary hexes as one felt region instead of stretching a single hex's own
+        // geometry further (see SizeFidelityMeasurement: raising the target alone
+        // (700-1000 -> 900-1500) did NOT fix their undersized realized/target ratio -
+        // that's a neighbor-competition problem, not a magnitude one; each hex still
+        // measures the same ratio, but two adjacent same-biome hexes together cover
+        // roughly double the ground). Each deep-ocean variant is self-adjacent to ITSELF
+        // only for now, not to the OTHER deep-ocean variants - a distinct "self-adjacency
+        // GROUP" extension, deliberately out of scope here (per the design write-up).
+        new BiomeNode(DEEP_COLD_OCEAN, new BiomeSizeRange(900, 1500), 1),
+        new BiomeNode(DEEP_FROZEN_OCEAN, new BiomeSizeRange(900, 1500), 1),
+        new BiomeNode(DEEP_LUKEWARM_OCEAN, new BiomeSizeRange(900, 1500), 1),
+        new BiomeNode(DEEP_OCEAN, new BiomeSizeRange(900, 1500), 1),
+        new BiomeNode(DESERT, new BiomeSizeRange(900, 1500), 1),
         new BiomeNode(ERODED_BADLANDS, new BiomeSizeRange(500, 800)),
         new BiomeNode(FLOWER_FOREST, new BiomeSizeRange(500, 800)),
         new BiomeNode(FOREST, new BiomeSizeRange(500, 800)),

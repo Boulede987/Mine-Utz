@@ -207,6 +207,99 @@ class ModBiomeGraphTest {
         assertEquals(0, totalIllegal, "expected zero illegal adjacencies across worldSeed 5000..5029 - a real regression on the exact range that found this bug in the first place");
     }
 
+    /**
+     * User's own explicit standard (2026-09-06): "under or oversizing by over 10% is as
+     * illegal as illegal adjacency" - same severity, same style of test as {@link
+     * #overworldHasZeroIllegalAdjacenciesAcrossEveryStarvationRangeSeed} (accumulate real
+     * violations across many independent solves, assert zero at the end), just checking
+     * REALIZED AREA vs TARGET AREA per face instead of adjacency legality. Reuses the
+     * exact same 10-seed, fresh-unconstrained-solve methodology as {@code
+     * SizeFidelityMeasurement} (same seeds, same mesh box) - directly comparable to the
+     * numbers already reported from that tool, not a new sample.
+     *
+     * <p><b>Expected to currently FAIL, deliberately</b> - same convention this file
+     * already uses for a real, tracked, not-yet-fixed defect (see the historical
+     * face-polygon-overlap bug this exact file's own git history closed the same way):
+     * measured directly, {@code deep_lukewarm_ocean} realizes as low as ~0.31x its own
+     * target and {@code jagged_peaks} as high as ~1.55x - both real, both already known,
+     * neither fixed yet. This test exists so that gap is enforced in the suite, not just
+     * remembered in a diagnostic tool's own printed output - replace the {@code
+     * assertTrue(violations.isEmpty(), ...)} expectation with a real zero once the fix
+     * (self-adjacency prevalence and/or a predictive "would this hex actually fall short"
+     * check) lands, never widen the 10% tolerance to make it pass instead.
+     */
+    private static final double SIZE_FIDELITY_TOLERANCE = 0.10;
+    private static final int SIZE_FIDELITY_TRIAL_COUNT = 10;
+    private static final long SIZE_FIDELITY_SEED_BASE = 2026L;
+    private static final int SIZE_FIDELITY_HALF_WIDTH_BLOCKS = 3000;
+
+    private record SizeFidelityViolation(long worldSeed, BiomeId biome, double ratio) {
+    }
+
+    @Test
+    void overworldHasNoFaceOversizedOrUndersizedByMoreThanTenPercent() {
+        double sizeBlocks = 325; // matches TriangleFieldGeometryRealization.HEX_SIZE_BLOCKS
+        int minEdgeLengthBlocks = 24; // matches MIN_EDGE_LENGTH_MACRO_CELLS(6) * macroCellSizeBlocks(4)
+        List<SizeFidelityViolation> violations = new ArrayList<>();
+        int facesChecked = 0;
+
+        for (int trial = 0; trial < SIZE_FIDELITY_TRIAL_COUNT; trial++) {
+            long worldSeed = SIZE_FIDELITY_SEED_BASE + trial;
+            HexMeshBuilder.HexMesh mesh = HexMeshBuilder.build(
+                sizeBlocks, -SIZE_FIDELITY_HALF_WIDTH_BLOCKS, -SIZE_FIDELITY_HALF_WIDTH_BLOCKS,
+                SIZE_FIDELITY_HALF_WIDTH_BLOCKS, SIZE_FIDELITY_HALF_WIDTH_BLOCKS
+            );
+            TriangleAdjacency.Adjacency adjacency = TriangleAdjacency.of(mesh.faces());
+            Set<Integer> freeFaceIndices = nonHullTouchingFaceIndices(mesh, adjacency);
+
+            double areaBlocks2 = (double) (2 * SIZE_FIDELITY_HALF_WIDTH_BLOCKS) * (2 * SIZE_FIDELITY_HALF_WIDTH_BLOCKS);
+            Map<Integer, TriangleIdentitySizeAssignment.Assignment> assignments = TriangleIdentitySizeAssignment.solve(
+                adjacency, freeFaceIndices, Map.of(), ModBiomeGraph.OVERWORLD, worldSeed, areaBlocks2
+            ).orElseThrow(() -> new AssertionError("expected a real hex mesh at this scale to be solvable against ModBiomeGraph.OVERWORLD (worldSeed=" + worldSeed + ")"));
+            Map<Integer, Point2D> displaced = WeightedVertexPlacement.displacedVertexPositions(mesh, adjacency, assignments, sizeBlocks, minEdgeLengthBlocks);
+
+            for (int faceIndex : freeFaceIndices) {
+                TriangleIdentitySizeAssignment.Assignment assignment = assignments.get(faceIndex);
+                double realizedArea = shoelaceArea(mesh.faces().get(faceIndex).vertexIndices(), displaced);
+                double targetArea = hexagonAreaForWidth(assignment.widthBlocks());
+                double ratio = realizedArea / targetArea;
+                facesChecked++;
+                if (Math.abs(ratio - 1.0) > SIZE_FIDELITY_TOLERANCE) {
+                    violations.add(new SizeFidelityViolation(worldSeed, assignment.biome(), ratio));
+                }
+            }
+        }
+
+        assertTrue(facesChecked > 500, "expected a real number of faces actually checked, got " + facesChecked);
+        assertTrue(
+            violations.isEmpty(),
+            violations.size() + "/" + facesChecked + " faces violated the +/-" + (int) (SIZE_FIDELITY_TOLERANCE * 100)
+                + "% size-fidelity bound - real, tracked, not-yet-fixed (see this test's own doc). Worst 10: "
+                + violations.stream()
+                    .sorted((a, b) -> Double.compare(Math.abs(a.ratio() - 1.0), Math.abs(b.ratio() - 1.0)) * -1)
+                    .limit(10)
+                    .map(v -> v.biome() + " ratio=" + String.format("%.2f", v.ratio()) + " (worldSeed=" + v.worldSeed() + ")")
+                    .toList()
+        );
+    }
+
+    private static double shoelaceArea(List<Integer> vertexIndices, Map<Integer, Point2D> positions) {
+        double sum = 0;
+        int n = vertexIndices.size();
+        for (int i = 0; i < n; i++) {
+            Point2D a = positions.get(vertexIndices.get(i));
+            Point2D b = positions.get(vertexIndices.get((i + 1) % n));
+            sum += a.x() * b.z() - b.x() * a.z();
+        }
+        return Math.abs(sum) / 2.0;
+    }
+
+    /** Same convention {@code WeightedVertexPlacement.powerWeight}/{@code targetAreaBlocks2} use: width is a regular hexagon's own corner-to-corner span, circumradius = width/2. */
+    private static double hexagonAreaForWidth(int widthBlocks) {
+        double circumradius = widthBlocks / 2.0;
+        return (3.0 * Math.sqrt(3.0) / 2.0) * circumradius * circumradius;
+    }
+
     private static Map<MacroCellPos, BiomeId> solveAndRasterizeOverworld(long worldSeed) {
         double sizeBlocks = 325; // matches TriangleFieldGeometryRealization.HEX_SIZE_BLOCKS - kept in sync manually, see that constant's own doc
         int meshBoxMax = 9000;

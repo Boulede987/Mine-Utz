@@ -161,7 +161,7 @@ public final class WeightedVertexPlacement {
      * simplicity, minimum edge length, or minimum area - each was found as its own real,
      * separate bug with its own separate fix).
      */
-    private static final double MAX_VERTEX_DISPLACEMENT_FRACTION = 0.8;
+    private static final double MAX_VERTEX_DISPLACEMENT_FRACTION = 0.8; // Tried raising to 0.9 (2026-09-06): alone it's safe (measured real improvement, 384->349 size-fidelity violations, no illegal-adjacency/starvation regression) - but COMBINED with pickWidth's baseline-bias (see TriangleIdentitySizeAssignment.SIZE_PICK_BASELINE_BIAS_EXPONENT), it breaks TriangleFieldGeometryRealizationTest.clustersAgreeRegardlessOfWhichQueryPointIsSolvedFirst - a real order-dependence regression neither change causes alone. Reverted to the historically-proven-safe 0.8 pending further investigation of that interaction - do not raise this again without re-testing that exact combination.
 
     /** Rounds of additive weight correction - linear (not Newton's-method quadratic) convergence, so a real iteration count, not 2-3 steps; cheap enough at real region scale (a full vertex-placement pass is sub-100ms) that this stays well under any performance concern. */
     private static final int CALIBRATION_ROUNDS = 15;

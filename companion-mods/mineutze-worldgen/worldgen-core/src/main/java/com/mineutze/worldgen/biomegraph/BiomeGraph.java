@@ -304,18 +304,23 @@ public final class BiomeGraph {
     }
 
     /**
-     * Default-deny - including a biome next to itself. Deliberately NOT a free pass
-     * anymore: under the hex mesh (see doc/decisions/2026-08-29-hex-mesh-edge-
-     * displacement.md), a face's own corners are what carry its own assigned size via
-     * {@link com.mineutze.worldgen.regionsolve.topology.WeightedVertexPlacement} - two same-biome
-     * neighbors merging into one undifferentiated blob was never the intended shape (one
-     * hex face is meant to BE one biome patch), and self-adjacency was the mechanism
-     * silently allowing that merge. Removing it was measured directly, at real 48-biome
-     * production scale, against both the dead-end-reachability and the (now uniformly-
-     * weighted, see {@link com.mineutze.worldgen.regionsolve.topology.FaceFairnessQuota})
-     * starvation stress tests - both still pass with self-adjacency gone.
+     * Default-deny for a biome next to itself, same as always - EXCEPT a biome whose own
+     * {@link BiomeNode#selfAdjacencyLimit} is raised above 0 (see that field's own doc:
+     * lets a biome span multiple ordinary hexes as one felt region, without any of the
+     * old growth/merge pipeline's mechanism coming back - each hex still gets its own
+     * fully independent identity+size CSP assignment and its own independent {@link
+     * com.mineutze.worldgen.regionsolve.topology.WeightedVertexPlacement} geometry).
+     * This only makes self-adjacency TOPOLOGICALLY possible - the actual COUNT is a
+     * separate, stateful check in {@link
+     * com.mineutze.worldgen.regionsolve.topology.TriangleIdentitySizeAssignment} (this
+     * method is a pure, state-free pairwise predicate, and cardinality inherently depends
+     * on how many neighbors are ALREADY assigned, not just whether the pair is allowed at
+     * all).
      */
     public boolean isAllowed(BiomeId a, BiomeId b) {
+        if (a.equals(b)) {
+            return node(a).selfAdjacencyLimit() > 0;
+        }
         return rulesByPair.containsKey(UnorderedBiomePair.of(a, b));
     }
 

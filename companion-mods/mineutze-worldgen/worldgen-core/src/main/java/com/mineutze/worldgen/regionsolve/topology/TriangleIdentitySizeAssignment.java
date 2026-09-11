@@ -126,6 +126,19 @@ public final class TriangleIdentitySizeAssignment {
     private static final long CANDIDATE_ORDER_SALT = 0x7A4C_3D1F_8B02_66E5L;
     private static final long SIZE_PICK_SALT = 0x1F5E_9C7A_44D0_B3A6L;
 
+    // Matches WeightedVertexPlacement's own baseline circumradius (HEX_SIZE_BLOCKS=325,
+    // see TriangleFieldGeometryRealization's own doc for why 650 specifically) - the real
+    // reference point a face's chosen width is implicitly measured against once geometry
+    // runs. Duplicated here (not imported - this class stays geometry-agnostic otherwise)
+    // purely so pickWidth can tell whether a biome's WHOLE range sits below it.
+    private static final double BASELINE_WIDTH_BLOCKS = 650;
+    // Skews a uniform [0,1) draw toward 1 via Math.pow(uniform, BIAS_EXPONENT) - 0.5 moves
+    // the median from 0.5 to ~0.71, a real but not total skew (still real variance, not
+    // "always pick the max"). Tune from real SizeFidelityMeasurement/fail-loud-test
+    // before/after numbers, not guessed further here - same discipline as every other
+    // size/geometry constant this session.
+    private static final double SIZE_PICK_BASELINE_BIAS_EXPONENT = 0.5;
+
     public record Assignment(BiomeId biome, int widthBlocks) {
     }
 
@@ -434,7 +447,7 @@ public final class TriangleIdentitySizeAssignment {
                 return false;
             }
         }
-        return true;
+        return respectsSelfAdjacencyLimit(faceIndex, candidate, adjacency, fixedFaceBiomes::get, graph);
     }
 
     private static boolean legalAgainstAssignedNeighbors(int faceIndex, BiomeId candidate, TriangleAdjacency.Adjacency adjacency, Map<Integer, BiomeId> assigned, BiomeGraph graph) {
@@ -444,7 +457,59 @@ public final class TriangleIdentitySizeAssignment {
                 return false;
             }
         }
+        return respectsSelfAdjacencyLimit(faceIndex, candidate, adjacency, assigned::get, graph);
+    }
+
+    /**
+     * Whether assigning {@code faceIndex = candidate} respects {@code candidate}'s own
+     * {@link com.mineutze.worldgen.biomegraph.BiomeNode#selfAdjacencyLimit} — a no-op
+     * (always true) when that limit is 0, today's default. Checks BOTH sides of every
+     * same-candidate neighbor pair: {@code faceIndex}'s own resulting same-biome-neighbor
+     * count must stay within the limit, AND for each already-decided neighbor N that is
+     * ALSO {@code candidate}, adding {@code faceIndex} as one more same-biome neighbor of
+     * N must not retroactively push N over ITS OWN limit — N's legality was only checked
+     * against what existed at N's own decision time, so a later, newly-arriving same-biome
+     * neighbor has to be re-verified against N's cap too, not just faceIndex's own.
+     *
+     * @param neighborBiomeOf reads a neighbor's currently-decided biome (assigned or
+     *                        fixed), or {@code null} if undecided - lets this one method
+     *                        serve both {@link #legalAgainstFixedNeighbors} and {@link
+     *                        #legalAgainstAssignedNeighbors} without duplicating the logic.
+     */
+    private static boolean respectsSelfAdjacencyLimit(
+        int faceIndex, BiomeId candidate, TriangleAdjacency.Adjacency adjacency,
+        java.util.function.IntFunction<BiomeId> neighborBiomeOf, BiomeGraph graph
+    ) {
+        int limit = graph.node(candidate).selfAdjacencyLimit();
+        if (limit <= 0) {
+            return true;
+        }
+        int ownCount = countNeighborsWithBiome(faceIndex, candidate, adjacency, neighborBiomeOf);
+        if (ownCount > limit) {
+            return false;
+        }
+        for (int neighbor : adjacency.neighborFaceIndices().getOrDefault(faceIndex, Set.of())) {
+            if (candidate.equals(neighborBiomeOf.apply(neighbor))) {
+                int neighborCountExcludingFaceIndex = countNeighborsWithBiome(neighbor, candidate, adjacency, neighborBiomeOf);
+                if (neighborCountExcludingFaceIndex + 1 > limit) {
+                    return false;
+                }
+            }
+        }
         return true;
+    }
+
+    /** How many of {@code faceIndex}'s own neighbors currently hold {@code biome}, per {@code neighborBiomeOf}. */
+    private static int countNeighborsWithBiome(
+        int faceIndex, BiomeId biome, TriangleAdjacency.Adjacency adjacency, java.util.function.IntFunction<BiomeId> neighborBiomeOf
+    ) {
+        int count = 0;
+        for (int neighbor : adjacency.neighborFaceIndices().getOrDefault(faceIndex, Set.of())) {
+            if (biome.equals(neighborBiomeOf.apply(neighbor))) {
+                count++;
+            }
+        }
+        return count;
     }
 
     /** Deterministic per-(worldSeed, faceIndex) shuffle — never a fixed (e.g. alphabetical) order, see class doc for the real bug this prevents. */
@@ -457,13 +522,26 @@ public final class TriangleIdentitySizeAssignment {
         return shuffled;
     }
 
-    /** Jittered order, then stable-sorted by current fairness deficit descending — see class doc's fairness section. Sort is stable so equal-deficit candidates keep the jittered tie-break. */
+    /** Jittered order, stable-sorted by current fairness deficit descending (so fairness/jitter still break ties within a shared deficit level). */
     private static List<BiomeId> candidatesInFairnessOrder(List<BiomeId> domain, long worldSeed, int faceIndex, FaceFairnessQuota fairness) {
         List<BiomeId> ordered = candidatesInDeterministicOrder(domain, worldSeed, faceIndex);
         ordered.sort(Comparator.comparingDouble(fairness::deficit).reversed());
         return ordered;
     }
 
+    /**
+     * A biome whose ENTIRE range sits below {@link #BASELINE_WIDTH_BLOCKS} (a narrow/
+     * small-tier biome, e.g. 300-600) has its pick skewed toward its own MAXIMUM instead
+     * of plain uniform - real, measured driver of this session's own "oversized small-
+     * target biome" plateau (e.g. windswept_hills up to 2.81x its own target): realized
+     * area is set mostly by surrounding baseline-ish neighbor competition, largely
+     * insensitive to exactly which width THIS face itself picked, so a SMALLER chosen
+     * target only widens the mismatch (worse ratio) while a target closer to baseline
+     * narrows it - see {@code WeightedVertexPlacement}'s own doc for why. A biome whose
+     * range sits AT or ABOVE baseline (including one this session's own self-adjacency
+     * feature already addresses, e.g. desert) is left exactly as before - unbiased,
+     * plain uniform.
+     */
     private static int pickWidth(BiomeSizeRange range, long worldSeed, int faceIndex, BiomeId biome) {
         if (range.minWidthBlocks() == range.maxWidthBlocks()) {
             return range.minWidthBlocks();
@@ -471,8 +549,12 @@ public final class TriangleIdentitySizeAssignment {
         long hash = worldSeed ^ SIZE_PICK_SALT;
         hash = hash * 31 + faceIndex;
         hash = hash * 31 + biome.hashCode();
-        int span = range.maxWidthBlocks() - range.minWidthBlocks() + 1;
-        return range.minWidthBlocks() + new Random(hash).nextInt(span);
+        double uniform = new Random(hash).nextDouble();
+        double fraction = range.maxWidthBlocks() <= BASELINE_WIDTH_BLOCKS
+            ? Math.pow(uniform, SIZE_PICK_BASELINE_BIAS_EXPONENT)
+            : uniform;
+        int span = range.maxWidthBlocks() - range.minWidthBlocks();
+        return range.minWidthBlocks() + (int) Math.round(fraction * span);
     }
 
     /**

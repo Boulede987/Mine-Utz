@@ -27,6 +27,10 @@ class TriangleIdentitySizeAssignmentTest {
         return new BiomeNode(id(path), new BiomeSizeRange(minWidthBlocks, maxWidthBlocks));
     }
 
+    private static BiomeNode node(String path, int minWidthBlocks, int maxWidthBlocks, int selfAdjacencyLimit) {
+        return new BiomeNode(id(path), new BiomeSizeRange(minWidthBlocks, maxWidthBlocks), selfAdjacencyLimit);
+    }
+
     /**
      * The real bug this regression-tests for: {@code BiomeGraph.nodes()} comes from a
      * {@code Map.copyOf}-wrapped map, and the JDK deliberately randomizes {@code
@@ -183,6 +187,57 @@ class TriangleIdentitySizeAssignmentTest {
         Set<BiomeId> distinctBiomes = new HashSet<>();
         assignment.values().forEach(value -> distinctBiomes.add(value.biome()));
         assertTrue(distinctBiomes.size() > 1, "collapsed to a single biome (" + distinctBiomes + ") across " + assignment.size() + " faces");
+    }
+
+    /**
+     * {@code selfAdjacencyLimit} regression coverage - see {@link
+     * com.mineutze.worldgen.biomegraph.BiomeNode#selfAdjacencyLimit}'s own doc for why
+     * this exists (lets a biome span multiple ordinary hexes as one felt region, chosen
+     * over a reactive geometry "claim a neighbor's territory" mechanism specifically
+     * because it needs zero changes here or in WeightedVertexPlacement - only this
+     * class's own legality checks).
+     */
+    @Test
+    void selfAdjacentPairIsLegalUpToItsOwnLimit() {
+        // Two mutually-adjacent free faces, ONE biome in the whole graph (limit=1) - the
+        // only way this solves at all is if both faces are allowed to be the same biome.
+        TriangleAdjacency.Adjacency adjacency = new TriangleAdjacency.Adjacency(Map.of(0, Set.of(1), 1, Set.of(0)), Set.of());
+        Set<Integer> free = Set.of(0, 1);
+        BiomeGraph graph = new BiomeGraph(List.of(node("desert", 200, 300, 1)), List.of());
+
+        Map<Integer, TriangleIdentitySizeAssignment.Assignment> assignment =
+            TriangleIdentitySizeAssignment.solve(adjacency, free, Map.of(), graph, 7L).orElseThrow();
+        assertEquals(id("desert"), assignment.get(0).biome());
+        assertEquals(id("desert"), assignment.get(1).biome());
+    }
+
+    @Test
+    void selfAdjacencyLimitRejectsAThirdMutuallyAdjacentFace() {
+        // A real mesh-vertex triple (0-1, 1-2, 0-2 all adjacent - exactly the shape a hex
+        // mesh's vertex-degree-3 property guarantees exists). Same single-biome,
+        // limit=1 graph as above: assigning "desert" to all 3 would give EACH face 2
+        // desert-neighbors (its other two triple members), exceeding the cap of 1, and
+        // there's no second biome to escape to - must report no legal assignment, not
+        // silently over-cap.
+        TriangleAdjacency.Adjacency adjacency = new TriangleAdjacency.Adjacency(
+            Map.of(0, Set.of(1, 2), 1, Set.of(0, 2), 2, Set.of(0, 1)), Set.of()
+        );
+        Set<Integer> free = Set.of(0, 1, 2);
+        BiomeGraph graph = new BiomeGraph(List.of(node("desert", 200, 300, 1)), List.of());
+
+        assertEquals(Optional.empty(), TriangleIdentitySizeAssignment.solve(adjacency, free, Map.of(), graph, 7L));
+    }
+
+    @Test
+    void selfAdjacencyLimitDefaultsToZeroBanningItLikeToday() {
+        // Same 2-face mesh as selfAdjacentPairIsLegalUpToItsOwnLimit, but the DEFAULT
+        // (2-arg node(), selfAdjacencyLimit=0) - must still report no legal assignment,
+        // proving the new mechanism changes nothing unless a biome explicitly opts in.
+        TriangleAdjacency.Adjacency adjacency = new TriangleAdjacency.Adjacency(Map.of(0, Set.of(1), 1, Set.of(0)), Set.of());
+        Set<Integer> free = Set.of(0, 1);
+        BiomeGraph graph = new BiomeGraph(List.of(node("desert", 200, 300)), List.of());
+
+        assertEquals(Optional.empty(), TriangleIdentitySizeAssignment.solve(adjacency, free, Map.of(), graph, 7L));
     }
 
     private static TriangleAdjacency.Adjacency realAdjacency(long worldSeed, int spacingBlocks, int span) {
