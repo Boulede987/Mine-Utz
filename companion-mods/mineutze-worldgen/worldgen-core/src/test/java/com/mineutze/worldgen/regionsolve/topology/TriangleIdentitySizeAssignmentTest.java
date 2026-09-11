@@ -240,6 +240,67 @@ class TriangleIdentitySizeAssignmentTest {
         assertEquals(Optional.empty(), TriangleIdentitySizeAssignment.solve(adjacency, free, Map.of(), graph, 7L));
     }
 
+    /**
+     * The actual behavior this whole change exists for: two self-adjacent free faces
+     * are meant to read as ONE felt region split across two hexes, not two
+     * independently-full-target instances of the same biome. Both faces must land on
+     * the SAME (even-split) width, strictly below the range's own max (proving
+     * neither drew an independent full-range value), and the COMBINED felt value
+     * (recoverable via {@code width * sqrt(2)}, area scaling as width-squared) must
+     * itself fall within the biome's declared range - the per-face number no longer
+     * does, by design.
+     */
+    @Test
+    void selfAdjacentPairSplitsOneCombinedTargetInsteadOfEachDrawingItsOwnFullWidth() {
+        TriangleAdjacency.Adjacency adjacency = new TriangleAdjacency.Adjacency(Map.of(0, Set.of(1), 1, Set.of(0)), Set.of());
+        Set<Integer> free = Set.of(0, 1);
+        BiomeGraph graph = new BiomeGraph(List.of(node("desert", 900, 1500, 1)), List.of());
+
+        Map<Integer, TriangleIdentitySizeAssignment.Assignment> assignment =
+            TriangleIdentitySizeAssignment.solve(adjacency, free, Map.of(), graph, 7L).orElseThrow();
+
+        int widthA = assignment.get(0).widthBlocks();
+        int widthB = assignment.get(1).widthBlocks();
+        assertEquals(widthA, widthB, "expected an even split between the two paired faces");
+        assertTrue(widthA < 1500, "expected a paired face's own width to be well below the biome's full max, got " + widthA);
+
+        double recoveredCombinedWidth = widthA * Math.sqrt(2);
+        assertTrue(recoveredCombinedWidth >= 898 && recoveredCombinedWidth <= 1502,
+            "expected the recovered COMBINED width to fall within the biome's own declared range (900-1500, +-rounding), got " + recoveredCombinedWidth);
+    }
+
+    /**
+     * Regression guard for the common case: a self-adjacency-ENABLED biome with no
+     * actual same-biome FREE neighbor this instance must draw its own full-range
+     * width exactly as before - pairing only ever applies between two FREE faces, a
+     * same-biome FIXED neighbor (already decided elsewhere) never triggers a split.
+     */
+    @Test
+    void singletonSelfAdjacencyEnabledFaceDrawsItsOwnFullWidthUnaffected() {
+        TriangleAdjacency.Adjacency adjacency = new TriangleAdjacency.Adjacency(Map.of(0, Set.of(99)), Set.of());
+        Set<Integer> free = Set.of(0);
+        Map<Integer, BiomeId> fixed = Map.of(99, id("desert"));
+        BiomeGraph graph = new BiomeGraph(List.of(node("desert", 900, 1500, 1)), List.of());
+
+        Map<Integer, TriangleIdentitySizeAssignment.Assignment> assignment =
+            TriangleIdentitySizeAssignment.solve(adjacency, free, fixed, graph, 7L).orElseThrow();
+
+        assertEquals(id("desert"), assignment.get(0).biome());
+        int width = assignment.get(0).widthBlocks();
+        assertTrue(width >= 900 && width <= 1500, "expected the unpaired face's own width to stay within its full declared range, got " + width);
+    }
+
+    @Test
+    void pairedWidthAssignmentIsDeterministic() {
+        TriangleAdjacency.Adjacency adjacency = new TriangleAdjacency.Adjacency(Map.of(0, Set.of(1), 1, Set.of(0)), Set.of());
+        Set<Integer> free = Set.of(0, 1);
+        BiomeGraph graph = new BiomeGraph(List.of(node("desert", 900, 1500, 1)), List.of());
+
+        Map<Integer, TriangleIdentitySizeAssignment.Assignment> first = TriangleIdentitySizeAssignment.solve(adjacency, free, Map.of(), graph, 7L).orElseThrow();
+        Map<Integer, TriangleIdentitySizeAssignment.Assignment> second = TriangleIdentitySizeAssignment.solve(adjacency, free, Map.of(), graph, 7L).orElseThrow();
+        assertEquals(first, second);
+    }
+
     private static TriangleAdjacency.Adjacency realAdjacency(long worldSeed, int spacingBlocks, int span) {
         List<Point2D> points = SeedGrid.seedsIn(worldSeed, spacingBlocks, 0, 0, span, span);
         List<IndexedTriangle> faces = DelaunayTriangulation.triangulateFaces(points);

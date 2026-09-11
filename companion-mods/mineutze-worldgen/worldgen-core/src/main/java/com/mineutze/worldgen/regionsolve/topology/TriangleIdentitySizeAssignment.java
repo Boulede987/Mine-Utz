@@ -125,6 +125,12 @@ public final class TriangleIdentitySizeAssignment {
 
     private static final long CANDIDATE_ORDER_SALT = 0x7A4C_3D1F_8B02_66E5L;
     private static final long SIZE_PICK_SALT = 0x1F5E_9C7A_44D0_B3A6L;
+    // Separate key space from SIZE_PICK_SALT on purpose - a self-adjacent pair's combined
+    // width is drawn once, keyed by BOTH faces canonically (see pairedFaces/pairWidthKey),
+    // never by a single faceIndex the way an independent pick is - reusing SIZE_PICK_SALT
+    // would risk a paired face's split width silently correlating with what its own
+    // independent pick would have been, which isn't a meaningful relationship to preserve.
+    private static final long PAIR_SIZE_PICK_SALT = 0x6B91_2E4D_A730_C5F8L;
 
     // Matches WeightedVertexPlacement's own baseline circumradius (HEX_SIZE_BLOCKS=325,
     // see TriangleFieldGeometryRealization's own doc for why 650 specifically) - the real
@@ -205,9 +211,88 @@ public final class TriangleIdentitySizeAssignment {
             return Optional.empty();
         }
 
+        Map<Integer, Integer> pairPartnerByFace = pairedFaces(assigned, adjacency, graph);
         Map<Integer, Assignment> result = new LinkedHashMap<>();
-        assigned.forEach((faceIndex, biome) -> result.put(faceIndex, new Assignment(biome, pickWidth(graph.node(biome).sizeRange(), worldSeed, faceIndex, biome))));
+        assigned.forEach((faceIndex, biome) -> {
+            Integer partner = pairPartnerByFace.get(faceIndex);
+            int widthBlocks = partner != null
+                ? splitWidthForPair(graph.node(biome).sizeRange(), worldSeed, faceIndex, partner, biome)
+                : pickWidth(graph.node(biome).sizeRange(), worldSeed, faceIndex, biome);
+            result.put(faceIndex, new Assignment(biome, widthBlocks));
+        });
         return Optional.of(result);
+    }
+
+    /**
+     * Pairs up mutually-adjacent, same-biome free faces whose biome has {@link
+     * com.mineutze.worldgen.biomegraph.BiomeNode#selfAdjacencyLimit} {@code > 0} - see
+     * {@link #splitWidthForPair} for why a pair matters (one shared felt-region target,
+     * split, instead of each face independently drawing its own full-range target). The
+     * CSP's own {@link #respectsSelfAdjacencyLimit} already guarantees, by construction,
+     * that no face ends up with more same-biome neighbors than its limit allows - for
+     * every real graph today (limit=1 everywhere it's used) that means at most ONE partner
+     * per face, so this only ever needs to find pairs, never general N-way clusters.
+     *
+     * @return a symmetric map (both directions present for every pair) from face index to
+     * its one paired partner's face index - a face with no self-adjacency-enabled biome,
+     * or one whose biome IS self-adjacency-enabled but landed with no actual same-biome
+     * neighbor this instance, simply has no entry.
+     */
+    private static Map<Integer, Integer> pairedFaces(Map<Integer, BiomeId> assigned, TriangleAdjacency.Adjacency adjacency, BiomeGraph graph) {
+        Map<Integer, Integer> pairPartnerByFace = new HashMap<>();
+        for (Map.Entry<Integer, BiomeId> entry : assigned.entrySet()) {
+            int faceIndex = entry.getKey();
+            if (pairPartnerByFace.containsKey(faceIndex)) {
+                continue;
+            }
+            BiomeId biome = entry.getValue();
+            if (graph.node(biome).selfAdjacencyLimit() <= 0) {
+                continue;
+            }
+            List<Integer> neighbors = new ArrayList<>(adjacency.neighborFaceIndices().getOrDefault(faceIndex, Set.of()));
+            Collections.sort(neighbors);
+            for (int neighbor : neighbors) {
+                if (pairPartnerByFace.containsKey(neighbor)) {
+                    continue;
+                }
+                if (biome.equals(assigned.get(neighbor))) {
+                    pairPartnerByFace.put(faceIndex, neighbor);
+                    pairPartnerByFace.put(neighbor, faceIndex);
+                    break;
+                }
+            }
+        }
+        return pairPartnerByFace;
+    }
+
+    /**
+     * Draws ONE combined width for a self-adjacent pair (same mechanism as {@link
+     * #pickWidth}, from the SAME biome {@code range}, keyed canonically over both faces so
+     * it's identical regardless of which face is visited first) and splits it evenly
+     * between the two - see this class's own doc: two self-adjacent faces are meant to
+     * read as ONE felt region across two hexes, not two independently-full-target
+     * instances of the same biome (which would be strictly worse than a single instance -
+     * two full demands on the local neighborhood instead of one).
+     *
+     * <p>Split is even by AREA, not by width - area scales as the SQUARE of width for any
+     * uniformly-scaled 2D shape (true regardless of the real hexagon area formula, which
+     * this class deliberately never imports - see {@link #BASELINE_WIDTH_BLOCKS}'s own
+     * doc), so halving the felt area means each face's own width is the combined width
+     * divided by {@code sqrt(2)}, not divided by 2. A paired face's own width will
+     * therefore typically land BELOW its biome's official {@code minWidthBlocks} - expected
+     * and intentional: the per-face number now means "this face's share of a shared felt
+     * region," not "this face's own standalone target." The COMBINED width (recoverable as
+     * {@code width * sqrt(2)}) is what actually stays within the biome's declared range.
+     */
+    private static int splitWidthForPair(BiomeSizeRange range, long worldSeed, int faceIndex, int partnerFaceIndex, BiomeId biome) {
+        int lowerFace = Math.min(faceIndex, partnerFaceIndex);
+        int higherFace = Math.max(faceIndex, partnerFaceIndex);
+        long hash = worldSeed ^ PAIR_SIZE_PICK_SALT;
+        hash = hash * 31 + lowerFace;
+        hash = hash * 31 + higherFace;
+        hash = hash * 31 + biome.hashCode();
+        int combinedWidth = pickWidthFromHash(range, hash);
+        return (int) Math.round(combinedWidth / Math.sqrt(2));
     }
 
     private static boolean backtrack(
@@ -543,12 +628,17 @@ public final class TriangleIdentitySizeAssignment {
      * plain uniform.
      */
     private static int pickWidth(BiomeSizeRange range, long worldSeed, int faceIndex, BiomeId biome) {
-        if (range.minWidthBlocks() == range.maxWidthBlocks()) {
-            return range.minWidthBlocks();
-        }
         long hash = worldSeed ^ SIZE_PICK_SALT;
         hash = hash * 31 + faceIndex;
         hash = hash * 31 + biome.hashCode();
+        return pickWidthFromHash(range, hash);
+    }
+
+    /** Shared hash-to-width mechanics for both {@link #pickWidth} (one face, its own full range) and {@link #splitWidthForPair} (one pair, a combined width later split) - only what key gets hashed differs between the two callers. */
+    private static int pickWidthFromHash(BiomeSizeRange range, long hash) {
+        if (range.minWidthBlocks() == range.maxWidthBlocks()) {
+            return range.minWidthBlocks();
+        }
         double uniform = new Random(hash).nextDouble();
         double fraction = range.maxWidthBlocks() <= BASELINE_WIDTH_BLOCKS
             ? Math.pow(uniform, SIZE_PICK_BASELINE_BIAS_EXPONENT)
