@@ -90,6 +90,29 @@ public final class TriangleAdjacency {
         return shared.iterator().next();
     }
 
+    /**
+     * The 2 mesh-vertex indices shared by two adjacent faces (the endpoints of their
+     * common edge) — guaranteed to exist and be exactly 2 by the same hex-mesh structure
+     * {@link #sharedVertexOf} relies on for triples. Used wherever a shared edge's real
+     * (possibly displaced) length is needed between two specific neighboring faces.
+     */
+    public static int[] sharedVertexIndicesOf(HexMeshBuilder.HexMesh mesh, int faceA, int faceB) {
+        Set<Integer> shared = new HashSet<>(mesh.faces().get(faceA).vertexIndices());
+        shared.retainAll(mesh.faces().get(faceB).vertexIndices());
+        if (shared.size() != 2) {
+            throw new IllegalStateException(
+                "TriangleAdjacency.sharedVertexIndicesOf: faces " + faceA + " and " + faceB + " share "
+                    + shared.size() + " vertice(s), expected exactly 2 - not a valid adjacent face pair"
+            );
+        }
+        int[] result = new int[2];
+        int i = 0;
+        for (int vertexIndex : shared) {
+            result[i++] = vertexIndex;
+        }
+        return result;
+    }
+
     public static Adjacency of(List<? extends MeshFace> faces) {
         Map<NodeEdge, List<Integer>> facesByEdge = groupFacesByEdge(faces);
         Map<Integer, Set<Integer>> neighbors = emptyNeighborSets(faces.size());

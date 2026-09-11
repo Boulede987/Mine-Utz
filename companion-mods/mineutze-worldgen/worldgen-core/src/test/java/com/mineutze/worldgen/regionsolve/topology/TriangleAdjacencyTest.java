@@ -7,6 +7,7 @@ import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class TriangleAdjacencyTest {
@@ -89,5 +90,51 @@ class TriangleAdjacencyTest {
             assertTrue(neighbors.size() <= 6, "face " + faceIndex + " has " + neighbors.size() + " neighbors, expected at most 6");
             assertFalse(neighbors.contains(faceIndex));
         }
+    }
+
+    @Test
+    void sharedVertexIndicesOfReturnsExactlyTheTwoRealSharedVertices() {
+        HexMeshBuilder.HexMesh mesh = HexMeshBuilder.build(200, 0, 0, 6000, 6000);
+        TriangleAdjacency.Adjacency adjacency = TriangleAdjacency.of(mesh.faces());
+
+        int faceA = -1;
+        int faceB = -1;
+        outer:
+        for (int candidateA = 0; candidateA < mesh.faces().size(); candidateA++) {
+            for (int candidateB : adjacency.neighborFaceIndices().get(candidateA)) {
+                faceA = candidateA;
+                faceB = candidateB;
+                break outer;
+            }
+        }
+        assertTrue(faceA >= 0, "expected a real-sized lattice to have at least one adjacent face pair");
+
+        int[] shared = TriangleAdjacency.sharedVertexIndicesOf(mesh, faceA, faceB);
+        assertEquals(2, shared.length);
+        Set<Integer> verticesA = Set.copyOf(mesh.faces().get(faceA).vertexIndices());
+        Set<Integer> verticesB = Set.copyOf(mesh.faces().get(faceB).vertexIndices());
+        for (int vertexIndex : shared) {
+            assertTrue(verticesA.contains(vertexIndex), "returned vertex " + vertexIndex + " isn't even one of face " + faceA + "'s own corners");
+            assertTrue(verticesB.contains(vertexIndex), "returned vertex " + vertexIndex + " isn't even one of face " + faceB + "'s own corners");
+        }
+    }
+
+    @Test
+    void sharedVertexIndicesOfThrowsForNonAdjacentFaces() {
+        HexMeshBuilder.HexMesh mesh = HexMeshBuilder.build(200, 0, 0, 6000, 6000);
+        TriangleAdjacency.Adjacency adjacency = TriangleAdjacency.of(mesh.faces());
+
+        int faceA = 0;
+        int faceB = -1;
+        for (int candidate = 0; candidate < mesh.faces().size(); candidate++) {
+            if (candidate != faceA && !adjacency.neighborFaceIndices().get(faceA).contains(candidate)) {
+                faceB = candidate;
+                break;
+            }
+        }
+        assertTrue(faceB >= 0, "expected a real-sized lattice to have at least one non-adjacent face pair");
+
+        int finalFaceB = faceB;
+        assertThrows(IllegalStateException.class, () -> TriangleAdjacency.sharedVertexIndicesOf(mesh, faceA, finalFaceB));
     }
 }

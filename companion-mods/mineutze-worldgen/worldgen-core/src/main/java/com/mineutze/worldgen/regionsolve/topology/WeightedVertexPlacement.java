@@ -286,7 +286,7 @@ public final class WeightedVertexPlacement {
      * concerns kept separate: this method computes what the SIZE math wants, the validity
      * pass decides how much of that the GEOMETRY can actually tolerate.
      */
-    private static Map<Integer, Point2D> vertexPositionsFor(
+    static Map<Integer, Point2D> vertexPositionsFor(
         HexMeshBuilder.HexMesh mesh, Map<Integer, Point2D> centers, Map<Integer, Double> weightByFace,
         List<int[]> triangles, double minEdgeLengthBlocks, Map<Integer, Double> targetAreaByFace, double baselineCircumradiusBlocks,
         Map<Integer, Point2D> committedVertexPositions
@@ -368,7 +368,7 @@ public final class WeightedVertexPlacement {
      * in. This is what makes a vertex committed once, by one batch, reproduced identically
      * by every later batch that touches it — see {@link DecidedVertexStore}'s own doc.
      */
-    private static Map<Integer, Point2D> geometricallyValidPositions(
+    static Map<Integer, Point2D> geometricallyValidPositions(
         HexMeshBuilder.HexMesh mesh, Map<Integer, Point2D> rawPositions, double minEdgeLengthBlocks,
         Map<Integer, Double> targetAreaByFace, double baselineCircumradiusBlocks, Map<Integer, Point2D> committedVertexPositions
     ) {
@@ -546,7 +546,7 @@ public final class WeightedVertexPlacement {
         return (b.x() - a.x()) * (c.z() - a.z()) - (b.z() - a.z()) * (c.x() - a.x());
     }
 
-    private static Map<Integer, Double> targetAreasOf(Map<Integer, TriangleIdentitySizeAssignment.Assignment> assignments) {
+    static Map<Integer, Double> targetAreasOf(Map<Integer, TriangleIdentitySizeAssignment.Assignment> assignments) {
         Map<Integer, Double> targetAreas = new HashMap<>();
         assignments.forEach((faceIndex, assignment) -> targetAreas.put(faceIndex, targetAreaBlocks2(assignment.widthBlocks())));
         return targetAreas;
@@ -563,7 +563,7 @@ public final class WeightedVertexPlacement {
     }
 
     /** Shoelace area of each face's own displaced boundary (straight corner-to-corner, no wiggle - wiggle is a separate, later, cosmetic-only step with zero net area effect, not this class's concern). */
-    private static Map<Integer, Double> realizedAreasOf(HexMeshBuilder.HexMesh mesh, Map<Integer, Point2D> displaced, Set<Integer> faceIndices) {
+    static Map<Integer, Double> realizedAreasOf(HexMeshBuilder.HexMesh mesh, Map<Integer, Point2D> displaced, Set<Integer> faceIndices) {
         Map<Integer, Double> areas = new HashMap<>();
         for (int faceIndex : faceIndices) {
             List<Integer> vertexIndices = mesh.faces().get(faceIndex).vertexIndices();
@@ -583,7 +583,7 @@ public final class WeightedVertexPlacement {
         return displaced.getOrDefault(vertexIndex, mesh.vertices().get(vertexIndex));
     }
 
-    private static Map<Integer, Point2D> centersOf(HexMeshBuilder.HexMesh mesh) {
+    static Map<Integer, Point2D> centersOf(HexMeshBuilder.HexMesh mesh) {
         Map<Integer, Point2D> centers = new HashMap<>();
         for (int faceIndex = 0; faceIndex < mesh.faces().size(); faceIndex++) {
             centers.put(faceIndex, centroidOf(mesh.faces().get(faceIndex), mesh.vertices()));
