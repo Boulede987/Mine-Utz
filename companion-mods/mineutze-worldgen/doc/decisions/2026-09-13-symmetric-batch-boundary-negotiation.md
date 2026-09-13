@@ -3,10 +3,18 @@
 Status: **Phase 1 (isolated seam prototype) VERIFIED** - `SeamResolution`/
 `SeamResolutionTest` (commit `15d04460`) directly confirmed identity+size+
 geometry are byte-identical regardless of seam-resolution order, against
-the real 48-biome catalog. **Phase 2 (live persistence mechanism) LOCKED** -
-see "Phase 2, LOCKED" section below - designed, not yet implemented.
-**Phase 3 (canonical batch-extent boundary) is a separate, real, newly-found
-follow-up, NOT yet designed** - see its own section at the end. Branch
+the real 48-biome catalog. **Phase 2 (live persistence mechanism) design
+LOCKED, but its first TWO implementation attempts both REGRESSED and were
+REVERTED** - see "ATTEMPT 1"/"ATTEMPT 2" entries below for what was tried,
+measured, and why. Real, load-bearing finding: `growCluster` unboundedly
+pulling ALL reachable tentative territory into one joint solve is likely
+too aggressive regardless of promotion criterion - a third attempt needs
+an INPUT-side bound (not yet designed), not another guess at the
+promotion criterion alone. **Phase 3 (canonical batch-extent boundary) is
+a separate, real, newly-found follow-up, NOT yet designed** - see its own
+section at the end; confirmed by direct measurement (not just prediction)
+to be the dominant cause of at least one of the two originally-targeted
+test failures. Branch
 `worldgen/symmetric-batch-boundary-solve`, forked from the
 `worldgen/mesh-geometry-realization` checkpoint commit (`6a10972d`).
 Supersedes nothing in `2026-08-29-remove-region-stitching.md` — that doc's
@@ -261,17 +269,58 @@ SECOND promotion trigger on the two tiers that already exist.
    `TriangleFieldGeometryRealization`, checking every newly-decided face's
    own neighbor-completeness), not a store-schema change.
 
-**Not yet implemented** - this section locks in the DESIGN (superseding
-Candidates A/B/C below as abstract alternatives - C's own shape is what
-this formalizes), not the code. Next step is building it against
-`realizeCluster`/`growCluster` directly, with the same measure-first
-discipline as every other step this session (regression suite, plus a real
-adversarial order-dependence test at the live-path level, not just
-`SeamResolutionTest`'s isolated one).
+### ATTEMPT 1 (2026-09-13) — "neighbor must be PERMANENT" — TRIED, REGRESSED, REVERTED
 
-## Candidate mechanisms (historical - A/B were real alternatives considered before C/the Phase-2 lock-in above, kept for the record, not live options anymore)
+Implemented item 1's promotion rule literally as written: a face promotes
+once every mesh-neighbor is already PERMANENT. Compiled clean. **Real
+regression on the very first test run** - `clustersAgreeRegardlessOfWhichQueryPointIsSolvedFirst`
+and `permanentResultsAgreeRegardlessOfExplorationOrderEvenWithTentativeGeometryRevision`
+(the exact 2 tests this whole effort targets) went from "wrong answer" to a
+NEW `IllegalStateException` dead end - worse, not better.
 
-**A. Wider solve, narrower commit.** Grow the batch one ring larger than
+**Root cause, found by direct reasoning**: this criterion is UNSOUND. On a
+freshly-solved cluster (the common case - nothing nearby was ever permanent
+before), almost NOTHING satisfies "neighbor is permanent" except possibly
+the one literal query-covering face - so a fresh cluster stays ~100%
+tentative after its own solve, contrary to this section's own item 1
+("interior commits PERMANENT immediately"). Consequence: a SECOND, nearby
+query's `growCluster` finds almost none of the first query's territory
+permanent, so (correctly, per item 2's new rule) it pulls the FIRST
+QUERY'S ENTIRE REACHABLE CLUSTER back into one giant joint free-set instead
+of a thin seam - not what was intended. For the test's own deliberately
+narrow, tightly-tuned 4-biome graph fixture, re-solving that much bigger,
+more constrained combined problem genuinely has no solution.
+
+**The other obvious fix, considered and rejected on paper, not even
+built**: "neighbor merely has ANY decision" (tentative counts too) is
+ALSO wrong, in the opposite direction - since a fresh cluster's own
+boundary is trivially ALWAYS permanent-or-hull by `growCluster`'s own
+definition, this would promote an ENTIRE cluster to permanent the instant
+it's solved, every time - which achieves nothing new at all: it's
+functionally identical to today's existing `treatTentativeAsFixed=true`
+asymmetric behavior (whichever query runs first locks everything,
+instantly, unconditionally), just relabeled. Reverted (`git checkout --`
+on `TriangleFieldGeometryRealization.java`), confirmed back to the known
+2-failure baseline.
+
+**Real, important caveat found by tracing the FAILING TESTS' OWN geometry,
+not assumed**: `clustersAgreeRegardlessOfWhichQueryPointIsSolvedFirst`
+queries two points 900 blocks apart against `CLUSTER_GROWTH_CAP_RADIUS_BLOCKS
+=2500`. A disk of radius 2500 centered at EITHER point comfortably contains
+the OTHER point - meaning whichever query runs first doesn't grow a
+"cluster that meets a seam," it grows ONE cluster that already covers BOTH
+points entirely, unconstrained, on totally fresh territory. This is NOT a
+seam-asymmetry case at all - it's a `Phase 3` case (the query-point-
+anchored disk shape itself, not who negotiates a boundary). **Neither this
+failed attempt NOR a correctly-built Candidate A can be expected to fully
+fix these 2 specific tests** - their own scenario is dominated by Phase 3,
+a separate, not-yet-designed problem. Worth remembering before declaring
+any Phase-2-only implementation "done" against these two tests specifically
+- they may need Phase 3 too, not just a better Phase 2.
+
+### Candidate A - chosen as the real eligibility criterion, replacing "neighbor tier" entirely
+
+**Wider solve, narrower commit.** Grow the batch one ring larger than
 what it actually commits; only the CORE ever becomes tentative/permanent,
 the outer ring's decisions are used for accuracy context and then
 discarded, left fully open for whichever batch later claims it as core.
@@ -283,6 +332,68 @@ order-independence, only shrinks how much of a batch's own edge is exposed
 to the asymmetry (the new edge, one ring out, still has it). Weakest fix,
 cheapest to try first as a real measurement of how much of the gap is
 sheer boundary exposure vs. something deeper.
+
+### ATTEMPT 2 (2026-09-13) — Candidate A ("core = doesn't touch this call's own mesh hull") — TRIED, PARTIALLY WORKED, STILL REGRESSED ELSEWHERE, REVERTED
+
+Implemented Candidate A as a one-shot topological split (no cascading BFS
+needed, unlike Attempt 1): after every solve, `coreFacesOf` marks any
+cluster face with zero hull-touching neighbors as CORE (promotes
+immediately via the existing `promoteFaceToPermanent`, vertex cascading
+included for free); everything else (touching this call's own mesh edge)
+stays EDGE/tentative. Reasoned through carefully before building - a CORE
+face's IDENTITY/WIDTH never needs revision once legal (legality, once
+true, stays true regardless of what's decided elsewhere); a shared CORNER
+touching a still-open EDGE face correctly stays un-promoted until ALL 3 of
+its own owners are permanent too, per `DecidedVertexStore`'s ALREADY-
+EXISTING rule - so geometry is never prematurely locked even where
+identity is. This reasoning held up: no NEW dead end on the narrow 4-biome
+test's OWN targeted assertion pattern.
+
+**Real, mixed result - checked the FULL suite, not just the 2 targeted
+tests, and a real second regression surfaced:**
+- `permanentResultsAgreeRegardlessOfExplorationOrderEvenWithTentativeGeometryRevision`
+  genuinely improved - back to its ORIGINAL non-crash "wrong answer"
+  failure mode (no longer a NEW dead end, matching Attempt 1's own
+  regression being fixed here).
+- `clustersAgreeRegardlessOfWhichQueryPointIsSolvedFirst` STILL threw the
+  SAME dead end as Attempt 1 - confirms the Phase-3 caveat above by direct
+  measurement, not just prediction: this test's own 900-blocks-vs-2500-cap
+  geometry is dominated by the disk-anchor problem, not fixable by a
+  better Phase 2 alone.
+- **NEW, real regression against the REAL 48-biome catalog** (not just the
+  narrow synthetic fixture): `ModBiomeGraphTest.overworldLivePathRealizedWidthNeverBreachesItsOwnBiomesLegalSizeRange`
+  (already a known-red test) changed from its own established assertion
+  failure to a NEW `IllegalStateException` dead end - a real regression on
+  production-representative data, not explainable away as "test fixture
+  too narrow."
+- **NEW, real regression against an EXISTING, deliberate design
+  invariant**: `SeedMeshCacheTest.queryingOneCellLeavesMostOfItsOwnClusterMerelyTentative`
+  explicitly asserts "most of a fresh cluster stays tentative after only
+  one cell was actually queried" (`tentativeCount() > permanentCount()`) -
+  a direct encoding of `DecidedFaceStore`'s own original design intent
+  ("every OTHER face... stays tentative" - only the literal query target
+  ever promotes). Candidate A's whole mechanism deliberately promotes the
+  CORE of a fresh cluster immediately - a genuine, large-scale
+  architectural contradiction of this existing invariant, not a small
+  side effect (measured: tentative=28, permanent=31 - MORE permanent than
+  tentative on a single-cell query).
+
+**Reverted** (`git checkout --`, confirmed back to the known 5-failure
+full-suite baseline).
+
+**Real, load-bearing finding across BOTH attempts, worth stating plainly**:
+the common piece in both - `growCluster` ALWAYS pulling every reachable
+TENTATIVE neighbor into the free set, unboundedly, following the flood-
+fill however deep it goes - is very possibly too aggressive regardless of
+which promotion/eligibility criterion sits downstream of it. Both attempts
+changed WHAT gets promoted after the fact; neither bounded HOW MUCH
+territory gets pulled INTO one joint solve in the first place. A future
+attempt likely needs to bound the INPUT side too (e.g., only pull in
+tentative faces within some small ring of the NEW query's own growth,
+not unboundedly deep into old, already-tentatively-decided territory) -
+not yet designed. Two real implementation attempts now measured worse in
+some real way; a third blind attempt at the same shape isn't recommended
+without first designing this input-side bound.
 
 **B. Canonical ownership tie-break.** Before solving, decide who "owns" a
 contested boundary face via a fixed, precomputable rule (e.g. a symmetric
