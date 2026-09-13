@@ -1,20 +1,17 @@
 package com.mineutze.worldgen.biomegraph;
 
 /**
- * One biome family in the graph. No node is privileged — every biome,
- * including whichever one plays a filler-like role in a given graph, is
- * just as restrictable as any other (see {@link BiomeGraph}'s own doc for
- * why the earlier "universal filler" concept was removed).
+ * One biome family in the graph. No node privileged - every biome (even a
+ * filler-like one) equally restrictable (see {@link BiomeGraph}'s own doc:
+ * "universal filler" concept removed).
  *
- * @param selfAdjacencyLimit how many of this biome's own ≤6 mesh neighbors may ALSO be
- *                           this same biome — default 0 (today's exact behavior: self-
- *                           adjacency banned, see {@link BiomeGraph#isAllowed}'s own doc
- *                           for why). Raising this for a specific biome (e.g. desert=1)
- *                           lets it span multiple ordinary hexes as one felt region
- *                           instead of trying to stretch a single hex's own geometry
- *                           further — the actual COUNT is enforced by {@link
- *                           com.mineutze.worldgen.regionsolve.topology.TriangleIdentitySizeAssignment},
- *                           not here; this is just the per-biome cap it reads.
+ * @param selfAdjacencyLimit how many of this biome's own ≤6 mesh neighbors may also be
+ *                           same biome - default 0 (self-adjacency banned, see {@link
+ *                           BiomeGraph#isAllowed}). Raising it (e.g. desert=1) lets biome
+ *                           span multiple hexes as one felt region instead of stretching
+ *                           one hex's geometry. Count enforced by {@link
+ *                           com.mineutze.worldgen.regionsolve.topology.identity.TriangleIdentitySizeAssignment},
+ *                           not here - this is just the cap it reads.
  */
 public record BiomeNode(
     BiomeId id,

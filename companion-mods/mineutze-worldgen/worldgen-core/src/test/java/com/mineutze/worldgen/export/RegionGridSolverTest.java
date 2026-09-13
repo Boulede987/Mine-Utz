@@ -1,5 +1,9 @@
 package com.mineutze.worldgen.export;
 
+import com.mineutze.worldgen.regionsolve.pixelgrid.PatchSizeEnforcer;
+
+import com.mineutze.worldgen.regionsolve.pixelgrid.PixelFragmentRepair;
+
 import com.mineutze.worldgen.biomegraph.AdjacencyRule;
 import com.mineutze.worldgen.biomegraph.BiomeGraph;
 import com.mineutze.worldgen.biomegraph.BiomeId;
@@ -18,20 +22,18 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Direct test - flagged by this session's test-coverage audit as having zero dedicated
- * tests despite being the exact solve path the standalone export CLI drives, and this
- * session's own repeated manual verification target. Same 4-biome fixture already proven
- * safe for a full growth run in TriangleFieldGeometryRealizationTest (needs a diagonal
- * hub to avoid a genuine 4-way dead end - see that test's own doc).
+ * Direct test - flagged by test-coverage audit as having zero dedicated tests despite
+ * being the exact solve path the standalone export CLI drives. Same 4-biome fixture
+ * already proven safe for full growth run in TriangleFieldGeometryRealizationTest (needs
+ * a diagonal hub to avoid a genuine 4-way dead end - see that test's own doc).
  *
  * <p>Deliberately regionSpan=1 throughout, not a real multi-region swath: a 2x2 swath at
- * this fixture's grid size was measured to push the full suite from ~6s to ~2.5 minutes
+ * this fixture's grid size measured to push full suite from ~6s to ~2.5 minutes
  * (PatchSizeEnforcer/PixelFragmentRepair's whole-swath passes scale badly across multiple
- * regions - matches this codebase's own documented RegionSolveStageTimingSpikeTest
- * finding). Cross-region boundary-stitching correctness is already SeedRegionCache's own
- * dedicated test suite's job; this class only needs to prove its own driver loop, the
- * whole-swath cleanup call, and ExportSnapshot assembly work - none of which need more
- * than one region to exercise.
+ * regions - matches RegionSolveStageTimingSpikeTest finding). Cross-region boundary-
+ * stitching correctness is SeedRegionCache's own test suite's job; this class only needs
+ * to prove its driver loop, whole-swath cleanup call, and ExportSnapshot assembly work -
+ * none need more than one region.
  */
 class RegionGridSolverTest {
 

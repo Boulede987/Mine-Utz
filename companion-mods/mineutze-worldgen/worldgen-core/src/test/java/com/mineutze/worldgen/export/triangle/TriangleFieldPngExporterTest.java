@@ -21,7 +21,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-/** Direct test - flagged by this session's test-coverage audit as having zero dedicated tests for the extracted rendering helper split out of TriangleFieldRegionExportCli earlier this session. */
+/** Direct test - flagged by test-coverage audit as having zero dedicated tests for the rendering helper extracted out of TriangleFieldRegionExportCli. */
 class TriangleFieldPngExporterTest {
 
     private static final BiomeId DESERT = new BiomeId("test", "desert");

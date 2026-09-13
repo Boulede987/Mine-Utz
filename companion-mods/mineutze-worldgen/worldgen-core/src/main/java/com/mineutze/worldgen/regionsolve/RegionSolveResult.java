@@ -8,11 +8,9 @@ import java.util.Map;
 /**
  * @param assignment          biome-id per macro-cell, this region's cells only
  * @param warnings             always empty via {@link TriangleFieldGeometryRealization}'s
- *                             current {@link SeamGrowthRasterizer}-based path — kept for
- *                             a possible future warning source, not actively populated
- *                             by anything today
- * @param droppedDemandCount  always 0 via the current path, same reasoning as
- *                            {@code warnings} above
+ *                             current hex-mesh + {@link EdgeDisplacementRasterizer} path -
+ *                             kept for a possible future warning source, unused today
+ * @param droppedDemandCount  always 0 today, same reason as {@code warnings}
  */
 public record RegionSolveResult(Map<MacroCellPos, BiomeId> assignment, List<String> warnings, int droppedDemandCount) {
 }

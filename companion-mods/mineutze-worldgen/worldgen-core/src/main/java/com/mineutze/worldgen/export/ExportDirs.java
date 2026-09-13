@@ -5,7 +5,7 @@ import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
-/** Shared by every export CLI's own main() - was independently duplicated verbatim in each before this. */
+/** Shared by every export CLI's own main() - was duplicated verbatim in each before this. */
 public final class ExportDirs {
 
     private ExportDirs() {

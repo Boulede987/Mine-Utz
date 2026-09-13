@@ -19,7 +19,7 @@ class MacroGridConfigTest {
         assertEquals(61, grid.cellCountForWidthBlocks(1000));
     }
 
-    /** Warping means the region is no longer a perfect 16x16 square, so size is only asserted "close," not exact — the real invariant is the round-trip. */
+    /** Warping means region no longer perfect 16x16 square, so size only asserted "close," not exact - real invariant is round-trip. */
     @Test
     void regionOfAndCellsInRegionRoundTrip() {
         MacroGridConfig grid = new MacroGridConfig(128, 16);
@@ -35,21 +35,21 @@ class MacroGridConfigTest {
     void regionOfHandlesNegativeCoordinatesCorrectly() {
         MacroGridConfig grid = new MacroGridConfig(128, 16);
 
-        // Interior cells, far from any warp-affected boundary, land in the same region the
-        // unwarped floor-division would predict - the warp amplitude (a few cells) can't
-        // reach this far from a boundary. -16 sits exactly ON the region-16 boundary
-        // itself (not interior at all), so it's excluded here - use -8 on both axes instead.
+        // Interior cells, far from any warp-affected boundary, land in same region unwarped
+        // floor-division would predict - warp amplitude (few cells) can't reach this far
+        // from boundary. -16 sits exactly ON region-16 boundary (not interior at all), so
+        // excluded here - use -8 on both axes instead.
         assertEquals(new RegionPos(-1, -1), grid.regionOf(new MacroCellPos(-8, -8), WORLD_SEED));
         assertEquals(new RegionPos(-1, 0), grid.regionOf(new MacroCellPos(-8, 8), WORLD_SEED));
     }
 
     /**
-     * The rest of this codebase (RegionBoundaryCollector.neighborsOf's 8-neighbor Moore
-     * set, SeedRegionCache's concurrent-race locking) depends on a region's true
-     * geometric neighbors never reaching past its immediate 8 neighbors — this only
-     * holds if the warp amplitude stays small relative to regionSizeCellsPerSide. Regression
-     * guard: for a wide span of cells, the warped region must never differ from the
-     * UNWARPED (plain floor-division) region by more than 1 step on either axis.
+     * Rest of codebase (RegionBoundaryCollector.neighborsOf's 8-neighbor Moore set,
+     * SeedRegionCache's concurrent-race locking) depends on region's true geometric
+     * neighbors never reaching past its immediate 8 neighbors - only holds if warp
+     * amplitude stays small relative to regionSizeCellsPerSide. Regression guard: for wide
+     * span of cells, warped region must never differ from UNWARPED (plain floor-division)
+     * region by more than 1 step on either axis.
      */
     @Test
     void warpNeverBleedsPastTheImmediateNeighborRegion() {

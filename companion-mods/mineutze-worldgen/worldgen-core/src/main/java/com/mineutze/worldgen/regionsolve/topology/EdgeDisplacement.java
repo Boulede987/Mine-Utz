@@ -6,74 +6,58 @@ import java.util.List;
 import java.util.Random;
 
 /**
- * Displaces a mesh edge's straight chord into a wavy polyline: several
- * independently-hashed interior points, each offset perpendicular to the
- * chord, rather than one single midpoint bump — reuses {@link
- * com.mineutze.worldgen.regionsolve.MacroGridConfig}'s already-proven lesson
- * that a single bump/sine reads as unnatural no matter how tuned (its own
- * warp field doc makes this exact argument for the region-boundary case;
- * same reasoning applies here at the per-edge scale).
+ * Displaces mesh edge's straight chord into wavy polyline: several independently-hashed
+ * interior points, offset perpendicular to chord, not one midpoint bump — reuses {@link
+ * com.mineutze.worldgen.regionsolve.MacroGridConfig}'s lesson that single bump/sine reads
+ * unnatural no matter how tuned (its warp field doc argues this for region-boundary case,
+ * same reasoning here per-edge).
  *
- * <p><b>Hashed by ENDPOINT COORDINATES, not by any index identity.</b> Two
- * independently-built meshes (e.g. two neighboring regions' own separate
- * {@link HexMeshBuilder#build} calls, each starting its own vertex pool from
- * index 0) can never agree on an index-based edge identity — but {@link
- * HexGrid}'s closed-form geometry guarantees the SAME physical corner point
- * gets the SAME cartesian coordinate regardless of which window generated
- * it. Hashing the two endpoints' own positions (canonically ordered so
- * either call direction agrees) is what makes two independently-built
- * meshes compute the bit-identical curve for a shared physical edge with no
- * live coordination between them — this is the actual mechanism watertight
- * cross-mesh seams depend on, not a property of {@link NodeEdge} indices.
- * Still true when the endpoints are {@link WeightedVertexPlacement}'s own
- * computed positions, not raw hex vertices — both regions independently
- * compute the identical radical-center point for a shared vertex from the
- * same face weights, so the coordinates still agree with no coordination.
+ * <p><b>Hashed by ENDPOINT COORDINATES, not index identity.</b> Two independently-built
+ * meshes (e.g. two neighboring regions' own {@link HexMeshBuilder#build} calls, each
+ * starting its own vertex pool from index 0) can't agree on index-based edge identity —
+ * but {@link HexGrid}'s closed-form geometry guarantees SAME physical corner point gets
+ * SAME cartesian coordinate regardless of which window generated it. Hashing the two
+ * endpoints' positions (canonically ordered so either call direction agrees) is what makes
+ * two independently-built meshes compute bit-identical curve for a shared edge with no
+ * live coordination — the actual mechanism watertight cross-mesh seams depend on, not a
+ * property of {@link NodeEdge} indices. Still true when endpoints are {@link
+ * WeightedVertexPlacement}'s computed positions, not raw hex vertices — both regions
+ * independently compute the identical radical-center point for a shared vertex from the
+ * same face weights, so coordinates agree with no coordination.
  *
- * <p><b>Wiggle only, no separate bias knob</b> — macro-scale sizing lives
- * entirely in WHERE the two endpoints are ({@link WeightedVertexPlacement}),
- * not in a mid-edge additive term.
+ * <p><b>Wiggle only, no separate bias knob</b> — macro-scale sizing lives entirely in
+ * WHERE the two endpoints are ({@link WeightedVertexPlacement}), not a mid-edge additive
+ * term.
  *
- * <p><b>Amplitude is derived from geometry, not a tuned fraction — a
- * by-construction safety guarantee, not a checked one (2026-09-04
- * redesign).</b> The original version pushed each interior point
- * perpendicular to the chord by a flat {@code amplitude} parameter (a fixed
- * fraction of edge length), with nothing verifying the result stayed
- * simple — a large enough amplitude could fold a face's own boundary onto
- * itself, producing exactly the disconnected-sliver/isolated-patch symptom
- * this redesign exists to prevent by construction, not by checking
- * afterward (checking the full wavy boundary for self-intersection would
- * need an O(n²) segment scan plus a search for how far to back off — real
- * cost and real complexity this design avoids entirely).
+ * <p><b>Amplitude derived from geometry, not a tuned fraction — by-construction safety
+ * guarantee, not a checked one (2026-09-04 redesign).</b> Original version pushed each
+ * interior point perpendicular to the chord by a flat {@code amplitude} parameter (fixed
+ * fraction of edge length), nothing verifying the result stayed simple — large enough
+ * amplitude could fold a face's boundary onto itself, producing the disconnected-
+ * sliver/isolated-patch symptom this redesign prevents by construction, not checking
+ * afterward (checking the full wavy boundary for self-intersection needs an O(n²) segment
+ * scan plus a search for how far to back off — real cost this design avoids).
  *
- * <p>The core idea: a polygon is star-shaped with respect to a point when
- * every boundary point's ANGLE around that point is strictly increasing
- * while walking the boundary once — star-shaped implies both simple (no
- * self-crossing) and unified (one connected blob, no holes or pinched-off
- * islands), the same guarantee covering both properties at once. This class
- * NEVER perturbs a point's angle from either of its two owning faces' own
- * centers — only its RADIUS (via the existing perpendicular-to-chord
- * offset, decomposed into an angle component that stays fixed and a radius
- * component that moves). Each interior point's safe offset range is solved
- * in closed form (one linear equation per boundary — see {@link
- * #crossingOffset}), not searched for: the point at which moving further
- * perpendicular would cross the angular bisector toward its own static
- * neighbor (previous or next point on the SAME edge, using their
- * UNPERTURBED positions, known in full before any point moves — so no
- * ordering/coordination between points is needed at all). A shared edge's
- * two owning faces each compute this bound from their own center
- * independently and take the smaller of the two — both faces derive it
- * from the same shared inputs (same edge, same hash), so they agree with no
- * coordination, the same trick this class's own endpoint-hashing already
- * relies on for cross-mesh watertightness.
+ * <p>Core idea: a polygon is star-shaped w.r.t. a point when every boundary point's ANGLE
+ * around that point strictly increases walking the boundary once — star-shaped implies
+ * both simple (no self-crossing) and unified (one connected blob, no holes/pinched-off
+ * islands), same guarantee covering both at once. This class NEVER perturbs a point's
+ * angle from either owning face's center — only its RADIUS (via the perpendicular-to-chord
+ * offset, decomposed into a fixed angle component and a moving radius component). Each
+ * interior point's safe offset range is solved in closed form (one linear equation per
+ * boundary — see {@link #crossingOffset}), not searched: the point where moving further
+ * perpendicular crosses the angular bisector toward its own static neighbor (previous/next
+ * point on the SAME edge, using UNPERTURBED positions, known before any point moves — no
+ * ordering/coordination needed). A shared edge's two owning faces each compute this bound
+ * from their own center independently, take the smaller — both derive it from the same
+ * shared inputs (same edge, same hash), so they agree with no coordination, same trick as
+ * this class's endpoint-hashing for cross-mesh watertightness.
  *
- * <p><b>Open assumption, not yet independently verified:</b> this
- * construction requires each owning face's own STRAIGHT hexagon to already
- * be star-shaped with respect to its own center — true by construction for
- * a raw, unclamped power-diagram cell (those are provably convex), but
- * {@link WeightedVertexPlacement}'s adaptive clamp has only ever proven its
- * output SIMPLE, not star-shaped, after scaling. The two are not
- * automatically the same property.
+ * <p><b>Open assumption, not yet independently verified:</b> construction requires each
+ * owning face's own STRAIGHT hexagon already star-shaped w.r.t. its own center — true by
+ * construction for a raw, unclamped power-diagram cell (provably convex), but {@link
+ * WeightedVertexPlacement}'s adaptive clamp has only ever proven its output SIMPLE, not
+ * star-shaped, after scaling. Not automatically the same property.
  */
 public final class EdgeDisplacement {
 
@@ -81,76 +65,71 @@ public final class EdgeDisplacement {
     private static final long INTENSITY_SALT = Salt.of("EdgeDisplacement.edgeIntensity");
 
     /**
-     * Floor on {@link #edgeIntensity}'s own [MIN_EDGE_INTENSITY, 1.0) range - every edge
-     * keeps at least SOME wiggle (never perfectly straight), but how much of its own
-     * available safe room it actually uses varies edge to edge. Raised from 0.25 - that
-     * floor let an unlucky edge draw down near a quarter of its own room, reading as
-     * flat/calm rather than genuinely wavy; 0.6 keeps real edge-to-edge variety (still a
-     * ~1.7x spread between the calmest and boldest draw) while making sure "calm" never
-     * means "basically straight."
+     * Floor on {@link #edgeIntensity}'s [MIN_EDGE_INTENSITY, 1.0) range - every edge keeps
+     * SOME wiggle, but how much of its safe room it uses varies. Raised from 0.25 - that let
+     * an unlucky edge draw near a quarter of its room, reading flat/calm not wavy; 0.6 keeps
+     * real variety (~1.7x spread calmest to boldest) while "calm" never means "straight."
      */
     private static final double MIN_EDGE_INTENSITY = 0.6;
     private static final int INTERIOR_POINT_COUNT = 6;
 
     /**
-     * Chaikin corner-cutting rounds applied to the finished polyline (see {@link
-     * #chaikinSmooth}) — 2 is enough to turn a visibly sharp zigzag into a gentle curve
-     * without exploding the point count per edge (each round roughly doubles it: 5 points
-     * become 10, then 19-ish after two rounds, still cheap for a 6-edge hex face).
+     * Chaikin corner-cutting rounds on the finished polyline (see {@link #chaikinSmooth}) —
+     * 2 turns a sharp zigzag into a gentle curve without exploding point count (each round
+     * roughly doubles it: 5 points become 10, then ~19 after two rounds, cheap for a 6-edge
+     * hex face).
      */
     private static final int SMOOTHING_ITERATIONS = 3;
 
+    /** Standard open-curve Chaikin cut points - each segment replaced by two points at these fractions, endpoints kept exact (see {@link #chaikinSmooth} for why provably safe). */
+    private static final double FIRST_CUT_T = 0.25;
+    private static final double SECOND_CUT_T = 0.75;
+
     /**
-     * Shrinks every closed-form safe range before using it, so a point never lands
-     * EXACTLY on its own angular boundary (where floating-point error could tip it
-     * across) and two neighbors approaching the same bisector from opposite sides never
-     * both reach it at once. Deliberately close to 1 — the closed-form range is already
-     * the real geometric limit, not a heuristic guess that needed headroom baked in.
+     * Shrinks every closed-form safe range before use, so a point never lands EXACTLY on
+     * its angular boundary (float error could tip it across) and two neighbors approaching
+     * the same bisector from opposite sides never both reach it. Close to 1 on purpose —
+     * closed-form range is already the real geometric limit, no heuristic headroom needed.
      */
     private static final double SAFETY_MARGIN = 0.9;
 
     /**
-     * Universal supplementary cap: a point may never move closer than this fraction of
-     * its OWN current distance to a pole - regardless of what the bisector-crossing
-     * formula says. Found as a real bug, not a defensive guess added out of caution: when
-     * the perpendicular direction happens to be exactly (anti)parallel to the direction
-     * from base to pole, the point's angle from that pole barely changes at all as it
-     * moves - right up until it passes through the pole itself, where angle is undefined
-     * and flips discontinuously. The bisector formula's own "same side of the ray" check
-     * (see {@link #crossingOffset}) rejects that crossing as invalid (its dot product
-     * lands at exactly zero), leaving the bisector-only computation with NO limit at all
-     * in that direction - measured directly: a synthetic test with the pole placed
-     * exactly above an edge's own midpoint produced an literal {@link
-     * Double#POSITIVE_INFINITY} safe range for that edge's middle interior point. This
-     * isn't a rare alignment either - a REGULAR hexagon's own center sits exactly on the
-     * perpendicular bisector of every one of its edges, by symmetry, so this hits the
-     * middle interior point of essentially every edge in a near-regular mesh, not an
-     * unlucky corner case. This cap catches it unconditionally, cheap to always apply,
-     * and in the normal (non-degenerate) case is generous enough to rarely be the
-     * tighter of the two bounds anyway (the bisector cap already came out to ~29% of
-     * radius in the hand-verified non-degenerate case this bug was found alongside).
+     * Supplementary cap: point never moves closer than this fraction of its OWN current
+     * distance to a pole, regardless of the bisector-crossing formula (see {@link
+     * #crossingOffset}'s "same side of the ray" check, which can leave NO limit at all in
+     * some degenerate directions). Cheap, always applied. See DECISIONS.md 2026-09-04
+     * "EdgeDisplacement.MAX_RADIUS_FRACTION" for the real bug this closes.
      */
     private static final double MAX_RADIUS_FRACTION = 0.5;
+
+    /** Below this vector length, direction treated as degenerate (pole coincides with measured point) not divided-by-near-zero. Shared everywhere this class turns a point pair into a unit direction. */
+    private static final double DEGENERATE_LENGTH_EPSILON_BLOCKS = 1e-9;
+
+    /** Below this cross-product magnitude, two directions treated as parallel in {@link #crossingOffset} - moving along one never reaches a ray in the other's direction. Tighter than {@link #DEGENERATE_LENGTH_EPSILON_BLOCKS}: bounds a cross product (length²-ish), different quantity. */
+    private static final double PARALLEL_EPSILON = 1e-12;
+
+    /** Classic hash-spreading multiplier (same convention as {@code java.util.Objects.hash}), shared by every per-coordinate hash here. */
+    private static final long HASH_MULTIPLIER = 31;
+
+    /** {@link Random#nextDouble()} returns {@code [0, 1)}; remaps into this class's {@code [-1, 1)} signed-offset convention (see {@link #signedUnitOffset}). */
+    private static final double UNIFORM_TO_SIGNED_SCALE = 2.0;
+    private static final double UNIFORM_TO_SIGNED_OFFSET = 1.0;
 
     private EdgeDisplacement() {
     }
 
     /**
-     * The chord from {@code a} to {@code b}, displaced into a
-     * {@code (2 + INTERIOR_POINT_COUNT)}-point polyline starting at {@code a} and ending
-     * at {@code b} (in that order, whichever physical endpoint either one is). Every
-     * interior point is offset perpendicular to the chord by an independently-hashed
-     * random amount, clamped in closed form (see this class's own doc) to whatever its
-     * two owning faces' own geometry can safely tolerate — {@code poleOne} and {@code
-     * poleTwo} are those two faces' own centers (their straight polygon's centroid, not
-     * necessarily {@link WeightedVertexPlacement}'s original lattice point); {@code
-     * poleTwo} is {@code null} for a hull-touching edge with only one real owning face.
+     * Chord from {@code a} to {@code b}, displaced into a {@code (2 + INTERIOR_POINT_COUNT)}
+     * -point polyline starting at {@code a}, ending at {@code b}. Every interior point
+     * offset perpendicular to the chord by an independently-hashed random amount, clamped
+     * in closed form (see class doc) to what its two owning faces' geometry can safely
+     * tolerate — {@code poleOne}/{@code poleTwo} are those faces' centers (straight
+     * polygon's centroid, not necessarily {@link WeightedVertexPlacement}'s original
+     * lattice point); {@code poleTwo} is {@code null} for a hull-touching edge (one owner).
      *
-     * <p>Order-independent: calling with {@code (a, b, poleOne, poleTwo)} or
-     * {@code (b, a, poleTwo, poleOne)} — either endpoint order, either pole order —
-     * produces the exact same set of interior point POSITIONS (walked in the matching
-     * direction for whichever endpoint order was requested) — see this class's own doc
-     * for why that is the actual mechanism cross-mesh watertightness depends on.
+     * <p>Order-independent: {@code (a, b, poleOne, poleTwo)} or {@code (b, a, poleTwo,
+     * poleOne)} produce the exact same interior point POSITIONS — see class doc for why
+     * this is the mechanism cross-mesh watertightness depends on.
      */
     public static List<Point2D> displacedPolyline(Point2D a, Point2D b, long worldSeed, Point2D poleOne, Point2D poleTwo) {
         if (a.equals(b)) {
@@ -175,91 +154,92 @@ public final class EdgeDisplacement {
     }
 
     private static List<Point2D> canonicalPolyline(Point2D lower, Point2D upper, long worldSeed, Point2D poleOne, Point2D poleTwo) {
-        double dx = upper.x() - lower.x();
-        double dz = upper.z() - lower.z();
-        double length = Math.hypot(dx, dz);
-        double perpX = -dz / length;
-        double perpZ = dx / length;
+        Point2D chord = vectorFrom(lower, upper);
+        double length = Math.hypot(chord.x(), chord.z());
+        Point2D perpendicular = new Point2D(-chord.z() / length, chord.x() / length);
         double intensity = edgeIntensity(lower, upper, worldSeed);
 
         List<Point2D> points = new ArrayList<>(INTERIOR_POINT_COUNT + 2);
         points.add(lower);
-        for (int i = 1; i <= INTERIOR_POINT_COUNT; i++) {
-            double t = (double) i / (INTERIOR_POINT_COUNT + 1);
-            Point2D base = lerp(lower, upper, t);
-            Point2D prevStatic = i == 1 ? lower : lerp(lower, upper, (double) (i - 1) / (INTERIOR_POINT_COUNT + 1));
-            Point2D nextStatic = i == INTERIOR_POINT_COUNT ? upper : lerp(lower, upper, (double) (i + 1) / (INTERIOR_POINT_COUNT + 1));
-
-            double[] range = safeOffsetRange(poleOne, base, prevStatic, nextStatic, perpX, perpZ);
-            if (poleTwo != null) {
-                double[] otherRange = safeOffsetRange(poleTwo, base, prevStatic, nextStatic, perpX, perpZ);
-                range[0] = Math.min(range[0], otherRange[0]);
-                range[1] = Math.min(range[1], otherRange[1]);
-            }
-            double dPositiveLimit = range[0] * SAFETY_MARGIN;
-            double dNegativeLimit = range[1] * SAFETY_MARGIN;
-
-            double raw = signedUnitOffset(lower, upper, worldSeed, i);
-            double offset = (raw >= 0 ? raw * dPositiveLimit : raw * dNegativeLimit) * intensity;
-            points.add(new Point2D(base.x() + perpX * offset, base.z() + perpZ * offset));
+        for (int pointIndex = 1; pointIndex <= INTERIOR_POINT_COUNT; pointIndex++) {
+            points.add(displacedInteriorPoint(lower, upper, poleOne, poleTwo, perpendicular, intensity, worldSeed, pointIndex));
         }
         points.add(upper);
         return chaikinSmooth(points, SMOOTHING_ITERATIONS);
     }
 
+    /** One interior point's final displaced position - base lerp position along chord, offset perpendicular by a signed, doubly-clamped (per-pole safe range, then {@link #SAFETY_MARGIN}) random amount. */
+    private static Point2D displacedInteriorPoint(
+        Point2D lower, Point2D upper, Point2D poleOne, Point2D poleTwo, Point2D perpendicular, double intensity, long worldSeed, int pointIndex
+    ) {
+        double t = (double) pointIndex / (INTERIOR_POINT_COUNT + 1);
+        Point2D base = lerp(lower, upper, t);
+        Point2D prevStatic = pointIndex == 1 ? lower : lerp(lower, upper, (double) (pointIndex - 1) / (INTERIOR_POINT_COUNT + 1));
+        Point2D nextStatic = pointIndex == INTERIOR_POINT_COUNT ? upper : lerp(lower, upper, (double) (pointIndex + 1) / (INTERIOR_POINT_COUNT + 1));
+
+        OffsetRange range = safeOffsetRange(poleOne, base, prevStatic, nextStatic, perpendicular);
+        if (poleTwo != null) {
+            OffsetRange otherRange = safeOffsetRange(poleTwo, base, prevStatic, nextStatic, perpendicular);
+            range = range.tightestOf(otherRange);
+        }
+        double safePositiveLimit = range.positiveLimit() * SAFETY_MARGIN;
+        double safeNegativeLimit = range.negativeLimit() * SAFETY_MARGIN;
+
+        double raw = signedUnitOffset(lower, upper, worldSeed, pointIndex);
+        double offset = (raw >= 0 ? raw * safePositiveLimit : raw * safeNegativeLimit) * intensity;
+        return new Point2D(base.x() + perpendicular.x() * offset, base.z() + perpendicular.z() * offset);
+    }
+
     /**
-     * Real variety, not just detail: without this, every edge uses close to its own full
-     * safe range, so every hex ends up with a similarly-sized bulge on all 6 of its own
-     * edges - a different kind of unwanted uniformity than a sharp corner (every patch
-     * reading as the same "6-lobed flower" silhouette, just smoother). Scales the whole
-     * edge's own offset by one extra, edge-level random factor - some edges stay calm
-     * (closer to their own straight chord), others use nearly all their available room,
-     * mimicking how a real coastline has wild capes AND quiet stretches, not a uniform
-     * wobble everywhere. Same hash idiom, a different salt so it doesn't correlate with
-     * the per-point offsets, and the same symmetric (lower, upper) inputs so both faces
-     * sharing this edge compute the identical intensity with no coordination.
+     * Without this, every edge uses close to its full safe range, so every hex gets a
+     * similarly-sized bulge on all 6 edges - unwanted uniformity (every patch reads as
+     * the same "6-lobed flower" silhouette, just smoother). Scales the whole edge's offset
+     * by one extra edge-level random factor - some edges stay calm, others use nearly all
+     * available room, like a coastline with wild capes AND quiet stretches, not uniform
+     * wobble. Same hash idiom, different salt (no correlation with per-point offsets),
+     * same symmetric (lower, upper) inputs so both faces sharing this edge compute the
+     * identical intensity with no coordination.
      */
     private static double edgeIntensity(Point2D lower, Point2D upper, long worldSeed) {
         long seed = worldSeed ^ INTENSITY_SALT;
-        seed = seed * 31 + Double.doubleToLongBits(lower.x());
-        seed = seed * 31 + Double.doubleToLongBits(lower.z());
-        seed = seed * 31 + Double.doubleToLongBits(upper.x());
-        seed = seed * 31 + Double.doubleToLongBits(upper.z());
+        seed = seed * HASH_MULTIPLIER + Double.doubleToLongBits(lower.x());
+        seed = seed * HASH_MULTIPLIER + Double.doubleToLongBits(lower.z());
+        seed = seed * HASH_MULTIPLIER + Double.doubleToLongBits(upper.x());
+        seed = seed * HASH_MULTIPLIER + Double.doubleToLongBits(upper.z());
         Random random = new Random(seed);
         random.nextDouble();
         return MIN_EDGE_INTENSITY + (1.0 - MIN_EDGE_INTENSITY) * random.nextDouble();
     }
 
     /**
-     * Rounds off the sharp zigzag between widely-swinging interior points into a gentle
-     * curve — {@link #INTERIOR_POINT_COUNT} independent points connected by straight
-     * segments reads as spiky/starburst whenever two neighbors swing to opposite sides,
-     * since a zigzag of straight lines has a real corner at every point, not a curve.
+     * Rounds the sharp zigzag between widely-swinging interior points into a gentle curve —
+     * {@link #INTERIOR_POINT_COUNT} independent points connected by straight segments reads
+     * spiky/starburst whenever two neighbors swing to opposite sides, since a zigzag of
+     * straight lines has a corner at every point, not a curve.
      *
-     * <p><b>Provably safe without any new verification</b> — this only ever needs to
-     * preserve the safety already established above, not re-derive it. Standard open-curve
-     * Chaikin corner-cutting: the two endpoints are kept EXACTLY (they're the real hex
-     * corners other edges connect to), and every other point is replaced by two points at
-     * 25% and 75% along its own original segment. Every point this ever produces, at any
-     * iteration depth, lies exactly ON a straight segment between two points that were
-     * already proven angularly safe (from both owning poles) - and a straight segment
-     * between two angularly-ordered-safe points is itself entirely safe, since none of our
-     * edges ever span close to half the full circle around either pole (a real, checkable
-     * fact for hex geometry, not assumed), so the radial view along that segment can't
-     * double back on itself. Recursion doesn't weaken this: each later iteration only ever
-     * interpolates between points from the previous iteration, which are themselves safe
-     * by the same argument, on strictly smaller sub-segments of the original safe ones.
+     * <p><b>Provably safe, no new verification needed</b> — only preserves safety already
+     * established above. Standard open-curve Chaikin corner-cutting: two endpoints kept
+     * EXACTLY (real hex corners other edges connect to), every other point replaced by two
+     * points at {@link #FIRST_CUT_T}/{@link #SECOND_CUT_T} along its original segment. Every
+     * point this produces, any iteration depth, lies exactly ON a straight segment between
+     * two points already proven angularly safe (from both owning poles) - a straight
+     * segment between two angularly-ordered-safe points is itself entirely safe, since no
+     * edge here spans close to half the full circle around either pole (checkable fact for
+     * hex geometry, not assumed), so the radial view along that segment can't double back.
+     * Recursion doesn't weaken this: each iteration only interpolates between points from
+     * the previous iteration, themselves safe by the same argument, on strictly smaller
+     * sub-segments of the original safe ones.
      */
     private static List<Point2D> chaikinSmooth(List<Point2D> points, int iterations) {
         List<Point2D> current = points;
         for (int iteration = 0; iteration < iterations; iteration++) {
             List<Point2D> next = new ArrayList<>();
             next.add(current.get(0));
-            for (int i = 0; i < current.size() - 1; i++) {
-                Point2D p = current.get(i);
-                Point2D q = current.get(i + 1);
-                next.add(lerp(p, q, 0.25));
-                next.add(lerp(p, q, 0.75));
+            for (int segmentIndex = 0; segmentIndex < current.size() - 1; segmentIndex++) {
+                Point2D segmentStart = current.get(segmentIndex);
+                Point2D segmentEnd = current.get(segmentIndex + 1);
+                next.add(lerp(segmentStart, segmentEnd, FIRST_CUT_T));
+                next.add(lerp(segmentStart, segmentEnd, SECOND_CUT_T));
             }
             next.add(current.get(current.size() - 1));
             current = next;
@@ -271,121 +251,110 @@ public final class EdgeDisplacement {
         return new Point2D(from.x() + (to.x() - from.x()) * t, from.z() + (to.z() - from.z()) * t);
     }
 
-    /**
-     * How far {@code base} can move along {@code (perpX, perpZ)} in each direction
-     * before it crosses the angular bisector toward its own static neighbor (as seen
-     * from {@code pole}) — {@code {dPositiveLimit, dNegativeLimitMagnitude}}, both
-     * non-negative, {@link Double#POSITIVE_INFINITY} where a boundary doesn't bind in
-     * that direction at all. The bisector (not the neighbor's own raw angle) is what
-     * gives BOTH this point and that neighbor real margin, approached from opposite
-     * sides of the same line — neither needs to know the other's actual (still
-     * unresolved) perturbation, only their shared UNPERTURBED positions.
-     */
-    private static double[] safeOffsetRange(Point2D pole, Point2D base, Point2D prevStatic, Point2D nextStatic, double perpX, double perpZ) {
-        double baseVx = base.x() - pole.x();
-        double baseVz = base.z() - pole.z();
-        double[] thisDir = unitDirection(base, pole);
-        double[] prevDir = unitDirection(prevStatic, pole);
-        double[] nextDir = unitDirection(nextStatic, pole);
-        double[] prevBisector = normalizedBisector(prevDir, thisDir);
-        double[] nextBisector = normalizedBisector(thisDir, nextDir);
+    /** {@code to - from}, as a {@link Point2D} used purely as a 2D vector (no separate vector type - {@link Point2D}'s shape already IS a vector, nothing else adds information). */
+    private static Point2D vectorFrom(Point2D from, Point2D to) {
+        return new Point2D(to.x() - from.x(), to.z() - from.z());
+    }
 
-        double radiusCap = MAX_RADIUS_FRACTION * Math.hypot(baseVx, baseVz);
-        double dPositive = radiusCap;
-        double dNegative = radiusCap;
-        for (double[] bisector : new double[][] {prevBisector, nextBisector}) {
-            double d = crossingOffset(baseVx, baseVz, perpX, perpZ, bisector[0], bisector[1]);
-            if (Double.isNaN(d)) {
+    /** One point's safe perpendicular-offset range against ONE pole - {@code positiveLimit}/{@code negativeLimit} both non-negative magnitudes (how far {@code base} may move each direction along the perpendicular before crossing an angular bisector), never signed. */
+    private record OffsetRange(double positiveLimit, double negativeLimit) {
+        /** Tighter (smaller) bound each direction between this range and {@code other} - used when a shared edge's two owning faces each compute their own bound and caller must respect the stricter. */
+        OffsetRange tightestOf(OffsetRange other) {
+            return new OffsetRange(Math.min(positiveLimit, other.positiveLimit), Math.min(negativeLimit, other.negativeLimit));
+        }
+    }
+
+    /**
+     * How far {@code base} can move along {@code perpendicular} each direction before
+     * crossing the angular bisector toward its static neighbor (as seen from {@code
+     * pole}) — the bisector (not the neighbor's raw angle) gives BOTH points real margin,
+     * approached from opposite sides of the same line — neither needs the other's actual
+     * (still unresolved) perturbation, only their shared UNPERTURBED positions.
+     */
+    private static OffsetRange safeOffsetRange(Point2D pole, Point2D base, Point2D prevStatic, Point2D nextStatic, Point2D perpendicular) {
+        Point2D baseVector = vectorFrom(pole, base);
+        Point2D thisDirection = unitDirection(base, pole);
+        Point2D prevDirection = unitDirection(prevStatic, pole);
+        Point2D nextDirection = unitDirection(nextStatic, pole);
+        Point2D prevBisector = normalizedBisector(prevDirection, thisDirection);
+        Point2D nextBisector = normalizedBisector(thisDirection, nextDirection);
+
+        double radiusCap = MAX_RADIUS_FRACTION * Math.hypot(baseVector.x(), baseVector.z());
+        double positiveLimit = radiusCap;
+        double negativeLimit = radiusCap;
+        for (Point2D bisector : List.of(prevBisector, nextBisector)) {
+            double crossingD = crossingOffset(baseVector, perpendicular, bisector);
+            if (Double.isNaN(crossingD)) {
                 continue;
             }
-            if (d > 0) {
-                dPositive = Math.min(dPositive, d);
+            if (crossingD > 0) {
+                positiveLimit = Math.min(positiveLimit, crossingD);
             } else {
-                dNegative = Math.min(dNegative, -d);
+                negativeLimit = Math.min(negativeLimit, -crossingD);
             }
         }
-        return new double[] {dPositive, dNegative};
+        return new OffsetRange(positiveLimit, negativeLimit);
     }
 
-    private static double[] unitDirection(Point2D point, Point2D pole) {
-        double vx = point.x() - pole.x();
-        double vz = point.z() - pole.z();
-        double length = Math.hypot(vx, vz);
-        if (length < 1e-9) {
+    private static Point2D unitDirection(Point2D point, Point2D pole) {
+        Point2D vector = vectorFrom(pole, point);
+        double length = Math.hypot(vector.x(), vector.z());
+        if (length < DEGENERATE_LENGTH_EPSILON_BLOCKS) {
             throw new IllegalStateException("EdgeDisplacement: pole " + pole + " coincides with boundary point " + point + " - degenerate face geometry");
         }
-        return new double[] {vx / length, vz / length};
+        return new Point2D(vector.x() / length, vector.z() / length);
     }
 
-    /** The angular bisector direction between two unit vectors, via normalized vector sum (robust across the wraparound issues raw angle averaging would have). Falls back to a perpendicular of {@code u} when {@code u} and {@code v} point in exactly opposite directions (sum is zero, bisector is genuinely undefined) - a measure-zero case for real mesh geometry, not one this construction depends on being exact. */
-    private static double[] normalizedBisector(double[] u, double[] v) {
-        double sumX = u[0] + v[0];
-        double sumZ = u[1] + v[1];
+    /** Angular bisector direction between two unit vectors, via normalized vector sum (robust vs. raw-angle-averaging wraparound issues). Falls back to a perpendicular of {@code firstDirection} when the two point exactly opposite (sum zero, bisector undefined) - measure-zero case for real mesh geometry, not depended on being exact. */
+    private static Point2D normalizedBisector(Point2D firstDirection, Point2D secondDirection) {
+        double sumX = firstDirection.x() + secondDirection.x();
+        double sumZ = firstDirection.z() + secondDirection.z();
         double length = Math.hypot(sumX, sumZ);
-        if (length < 1e-9) {
-            return new double[] {-u[1], u[0]};
+        if (length < DEGENERATE_LENGTH_EPSILON_BLOCKS) {
+            return new Point2D(-firstDirection.z(), firstDirection.x());
         }
-        return new double[] {sumX / length, sumZ / length};
+        return new Point2D(sumX / length, sumZ / length);
     }
 
     /**
-     * The signed {@code d} at which {@code (baseV + d*perp)} becomes collinear with
-     * {@code boundaryDir} FROM THE POLE (i.e. lands on the ray through the pole in that
-     * direction, not the opposite ray) — solved directly from the linear (in {@code d})
-     * 2D cross product {@code cross(boundaryDir, baseV + d*perp) = 0}, not searched for.
-     * {@link Double#NaN} when {@code perp} is parallel to {@code boundaryDir} (moving
-     * along {@code perp} never reaches that particular ray) or when the only collinear
-     * point lies on the OPPOSITE ray (checked via the dot product sign).
+     * Signed offset {@code d} where {@code (baseVector + d*perpendicular)} becomes
+     * collinear with {@code boundaryDirection} FROM THE POLE (lands on the ray through pole
+     * in that direction, not opposite ray) — solved directly from linear (in {@code d}) 2D
+     * cross product {@code cross(boundaryDirection, baseVector + d*perpendicular) = 0}, not
+     * searched. {@link Double#NaN} when {@code perpendicular} is parallel to {@code
+     * boundaryDirection} (never reaches that ray) or the only collinear point lies on the
+     * OPPOSITE ray (checked via dot product sign).
      */
-    private static double crossingOffset(double baseVx, double baseVz, double perpX, double perpZ, double boundaryDirX, double boundaryDirZ) {
-        double k = boundaryDirX * baseVz - boundaryDirZ * baseVx;
-        double m = boundaryDirX * perpZ - boundaryDirZ * perpX;
-        if (Math.abs(m) < 1e-12) {
+    private static double crossingOffset(Point2D baseVector, Point2D perpendicular, Point2D boundaryDirection) {
+        double crossBoundaryBase = boundaryDirection.x() * baseVector.z() - boundaryDirection.z() * baseVector.x();
+        double crossBoundaryPerp = boundaryDirection.x() * perpendicular.z() - boundaryDirection.z() * perpendicular.x();
+        if (Math.abs(crossBoundaryPerp) < PARALLEL_EPSILON) {
             return Double.NaN;
         }
-        double d = -k / m;
-        double crossVx = baseVx + d * perpX;
-        double crossVz = baseVz + d * perpZ;
-        if (crossVx * boundaryDirX + crossVz * boundaryDirZ <= 0) {
+        double crossingD = -crossBoundaryBase / crossBoundaryPerp;
+        double crossX = baseVector.x() + crossingD * perpendicular.x();
+        double crossZ = baseVector.z() + crossingD * perpendicular.z();
+        if (crossX * boundaryDirection.x() + crossZ * boundaryDirection.z() <= 0) {
             return Double.NaN;
         }
-        return d;
+        return crossingD;
     }
 
     /**
-     * Deterministic value in {@code [-1, 1)} for one interior point - a FRESH {@link
-     * Random} per call, never a persisted stream (matches {@link SeedGrid}'s own idiom).
-     *
-     * <p><b>Real bug, found and fixed 2026-09-04:</b> the original version folded {@code
-     * pointIndex} into the seed via one final {@code seed = seed * 31 + pointIndex} step,
-     * then read the result directly (XOR-folded, no further mixing) - since that's the
-     * LAST operation before reading, a change of just 1-3 in {@code pointIndex} only ever
-     * perturbs the seed's lowest few bits, with no subsequent avalanche step to spread
-     * that into the bits the final value actually reads from. Measured directly: the 3
-     * "independent" interior points on a real edge came out agreeing to 9 decimal places
-     * - not independent at all, just one offset value read 3 times, collapsing the whole
-     * multi-point design into a single smooth bow per edge (exactly the "one bump reads
-     * as fake no matter how tuned" failure {@link com.mineutze.worldgen.regionsolve.MacroGridConfig}'s
-     * own doc already diagnosed for a different mechanism).
-     *
-     * <p>Fixed by discarding {@link Random}'s own FIRST draw before using its second: one
-     * fresh {@code nextDouble()} call from a seed differing only in its lowest bits was
-     * measured to still be too similar (agreeing to ~3 decimal places, better but not
-     * genuinely independent) - {@link Random}'s LCG needs to actually run its
-     * multiply-and-add step at least once on already-mixed state before the tiny
-     * {@code pointIndex} perturbation has fully diffused into the high bits the returned
-     * value is read from. Verified directly: with one discarded draw, 5 consecutive
-     * {@code pointIndex} values scatter across the whole range, no longer clustering.
+     * Deterministic value in {@code [-1, 1)} for one interior point - FRESH {@link Random}
+     * per call, never a persisted stream (matches {@link SeedGrid}'s idiom). Discards
+     * {@link Random}'s FIRST draw before using second - see DECISIONS.md 2026-09-04
+     * "signedUnitOffset discards Random's first draw" for the hash-collapse bug this fixes.
      */
     private static double signedUnitOffset(Point2D lower, Point2D upper, long worldSeed, int pointIndex) {
         long seed = worldSeed ^ SALT;
-        seed = seed * 31 + Double.doubleToLongBits(lower.x());
-        seed = seed * 31 + Double.doubleToLongBits(lower.z());
-        seed = seed * 31 + Double.doubleToLongBits(upper.x());
-        seed = seed * 31 + Double.doubleToLongBits(upper.z());
-        seed = seed * 31 + pointIndex;
+        seed = seed * HASH_MULTIPLIER + Double.doubleToLongBits(lower.x());
+        seed = seed * HASH_MULTIPLIER + Double.doubleToLongBits(lower.z());
+        seed = seed * HASH_MULTIPLIER + Double.doubleToLongBits(upper.x());
+        seed = seed * HASH_MULTIPLIER + Double.doubleToLongBits(upper.z());
+        seed = seed * HASH_MULTIPLIER + pointIndex;
         Random random = new Random(seed);
-        random.nextDouble(); // discarded - see this method's own doc for why one draw isn't enough diffusion
-        return random.nextDouble() * 2.0 - 1.0;
+        random.nextDouble(); // discarded - see method doc
+        return random.nextDouble() * UNIFORM_TO_SIGNED_SCALE - UNIFORM_TO_SIGNED_OFFSET;
     }
 }

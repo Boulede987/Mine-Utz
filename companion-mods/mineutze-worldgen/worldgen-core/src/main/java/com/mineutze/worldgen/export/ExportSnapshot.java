@@ -11,22 +11,18 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Everything a writer ({@link JsonExporter}, {@link AsciiExporter},
- * {@link PngExporter}) needs to render one NxN swath of regions, bundled so
- * every writer sees the exact same run instead of each re-deriving
- * bounds/config independently.
+ * Everything a writer ({@link JsonExporter}, {@link AsciiExporter}, {@link PngExporter})
+ * needs to render one NxN swath of regions, bundled so every writer sees the exact same
+ * run instead of each re-deriving bounds/config independently.
  *
- * Deliberately just a flat cell map, not solver-specific — {@link
- * RegionGridSolver} builds one by driving {@code SeedRegionCache}, but the
- * exporters themselves have no idea (or need to know) whether a cell's
- * biome came from solving or from reading a real generated world, which is
- * exactly what lets the same three writer classes serve both the
- * standalone CLI and the in-game "export what actually generated" command.
+ * Deliberately just a flat cell map, not solver-specific - {@link RegionGridSolver}
+ * builds one via {@code SeedRegionCache}, but exporters don't know/care whether a cell's
+ * biome came from solving or reading a real generated world - lets the same 3 writers
+ * serve both the standalone CLI and the in-game "export what actually generated" command.
  *
- * @param warningsByRegion solver diagnostics, empty for any region with
- *                          none to report (e.g. every region, always, for a
- *                          real-world snapshot — there's no such thing as a
- *                          dropped demand once terrain already exists)
+ * @param warningsByRegion solver diagnostics, empty when none to report (always empty
+ *                          for a real-world snapshot - no dropped demand once terrain
+ *                          already exists)
  */
 public record ExportSnapshot(
     BiomeGraph graph,
@@ -43,7 +39,7 @@ public record ExportSnapshot(
         return regionSpan * gridConfig.regionSizeCellsPerSide();
     }
 
-    /** Every macro-cell in the swath, ordered x-major then z — the iteration order every writer uses, so outputs line up. */
+    /** Every macro-cell in swath, ordered x-major then z - iteration order every writer uses, so outputs line up. */
     public List<MacroCellPos> orderedCells() {
         List<MacroCellPos> result = new ArrayList<>(spanCells() * spanCells());
         for (int dx = 0; dx < regionSpan; dx++) {
@@ -56,10 +52,10 @@ public record ExportSnapshot(
     }
 
     /**
-     * The real macro-cell at a swath-local (x, z) offset — the one translation from
-     * {@code minRegion}/{@code gridConfig} every writer needs, so none has to re-derive
-     * {@code minCellX}/{@code minCellZ} independently (previously duplicated verbatim in
-     * both {@link AsciiExporter} and {@link PngExporter}).
+     * Real macro-cell at swath-local (x, z) offset - the one {@code minRegion}/{@code
+     * gridConfig} translation every writer needs, so none re-derives {@code minCellX}/
+     * {@code minCellZ} independently (previously duplicated in {@link AsciiExporter} and
+     * {@link PngExporter}).
      */
     public MacroCellPos cellAt(int localX, int localZ) {
         int regionSize = gridConfig.regionSizeCellsPerSide();

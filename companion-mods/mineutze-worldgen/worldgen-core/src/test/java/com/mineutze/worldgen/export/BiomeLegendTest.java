@@ -14,7 +14,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
-/** Direct test - flagged by this session's test-coverage audit as having zero dedicated tests despite a real glyph-collision-resolution algorithm shared by all 3 export writers. */
+/** Direct test - flagged by test-coverage audit as having zero dedicated tests despite a real glyph-collision-resolution algorithm shared by all 3 export writers. */
 class BiomeLegendTest {
 
     private static BiomeId id(String path) {

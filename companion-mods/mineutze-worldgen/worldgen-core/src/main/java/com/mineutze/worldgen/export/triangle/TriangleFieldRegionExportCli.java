@@ -1,18 +1,20 @@
 package com.mineutze.worldgen.export.triangle;
 
+import com.mineutze.worldgen.regionsolve.pixelgrid.ConnectedComponents;
+
+import com.mineutze.worldgen.regionsolve.windowcache.SeedRegionCache;
+
+import com.mineutze.worldgen.regionsolve.pixelgrid.RegionIntegrityValidator;
+
 import com.mineutze.worldgen.biomegraph.BiomeGraph;
 import com.mineutze.worldgen.biomegraph.BiomeId;
 import com.mineutze.worldgen.biomegraph.BiomeSizeRange;
 import com.mineutze.worldgen.biomegraph.ModBiomeGraph;
 import com.mineutze.worldgen.export.ExportDirs;
-import com.mineutze.worldgen.regionsolve.ConnectedComponents;
 import com.mineutze.worldgen.regionsolve.MacroCellPos;
 import com.mineutze.worldgen.regionsolve.MacroGridConfig;
 import com.mineutze.worldgen.regionsolve.RegionPos;
-import com.mineutze.worldgen.regionsolve.RegionIntegrityValidator;
 import com.mineutze.worldgen.regionsolve.RegionSolveResult;
-import com.mineutze.worldgen.regionsolve.SeedRegionCache;
-import com.mineutze.worldgen.regionsolve.TriangleFieldGeometryRealization;
 
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -23,19 +25,17 @@ import java.util.Set;
 
 /**
  * Visualizes {@link TriangleFieldGeometryRealization}'s real, live output against the
- * mod's actual {@link ModBiomeGraph#DEFAULT}, not a synthetic test graph — a PNG, a
- * legend, per-biome patch-size reporting, and an integrity check ({@link
- * RegionIntegrityValidator}), all against a real solve rather than needing to load a
- * world in-game to inspect the algorithm's own output.
+ * mod's actual {@link ModBiomeGraph#DEFAULT}, not a synthetic test graph - PNG, legend,
+ * per-biome patch-size reporting, integrity check ({@link RegionIntegrityValidator}), all
+ * against a real solve instead of needing to load a world in-game.
  *
- * <p>Usage: worldSeed outputDir regionsPerSide (all optional, positional) —
- * {@code regionsPerSide} solves an NxN grid of regions from (0,0) to (N-1,N-1) and merges
- * them into one combined image. Routed through a single shared {@link SeedRegionCache},
- * solved in row-major order (not parallel) — {@link TriangleFieldGeometryRealization}
- * consults already-solved neighbors' boundary context for identity, so a region needs its
- * earlier-in-order neighbors already solved for that to have any effect; solving
- * all-parallel with no ordering would show zero benefit from that, since every region
- * would see every neighbor as unsolved.
+ * <p>Usage: worldSeed outputDir regionsPerSide (all optional, positional) - {@code
+ * regionsPerSide} solves an NxN grid of regions from (0,0) to (N-1,N-1), merges into one
+ * combined image. Routed through single shared {@link SeedRegionCache}, solved row-major
+ * (not parallel) - {@link TriangleFieldGeometryRealization} consults already-solved
+ * neighbors' boundary context for identity, so a region needs earlier-in-order neighbors
+ * already solved for that to matter; all-parallel with no ordering would show zero
+ * benefit, since every region would see every neighbor as unsolved.
  */
 public final class TriangleFieldRegionExportCli {
 
@@ -154,7 +154,7 @@ public final class TriangleFieldRegionExportCli {
     }
 
     // Same exit-nonzero-on-violations behavior validate_biome_export.py had, only AFTER
-    // writing the images so a failing run still leaves something to look at.
+    // writing images so a failing run still leaves something to look at.
     private static void exitNonZeroIfUnclean(RegionIntegrityValidator.Report integrityReport) {
         if (!integrityReport.isClean()) {
             System.exit(1);

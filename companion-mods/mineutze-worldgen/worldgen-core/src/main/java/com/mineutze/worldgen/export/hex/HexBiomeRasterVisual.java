@@ -1,17 +1,24 @@
 package com.mineutze.worldgen.export.hex;
 
+import com.mineutze.worldgen.regionsolve.topology.mesh.HexMeshBuilder;
+
+import com.mineutze.worldgen.regionsolve.topology.placement.WeightedVertexPlacement;
+
+import com.mineutze.worldgen.regionsolve.topology.identity.TriangleIdentitySizeAssignment;
+
+import com.mineutze.worldgen.regionsolve.topology.mesh.FaceAdjacency;
+
+import com.mineutze.worldgen.regionsolve.livepath.EdgeDisplacementRasterizer;
+
+import com.mineutze.worldgen.regionsolve.livepath.TriangleFieldGeometryRealization;
+
 import com.mineutze.worldgen.biomegraph.BiomeGraph;
 import com.mineutze.worldgen.biomegraph.BiomeId;
 import com.mineutze.worldgen.biomegraph.BiomeNode;
 import com.mineutze.worldgen.biomegraph.ModBiomeGraph;
-import com.mineutze.worldgen.regionsolve.EdgeDisplacementRasterizer;
 import com.mineutze.worldgen.regionsolve.MacroCellPos;
 import com.mineutze.worldgen.regionsolve.MacroGridConfig;
-import com.mineutze.worldgen.regionsolve.topology.HexMeshBuilder;
 import com.mineutze.worldgen.regionsolve.topology.Point2D;
-import com.mineutze.worldgen.regionsolve.topology.TriangleAdjacency;
-import com.mineutze.worldgen.regionsolve.topology.TriangleIdentitySizeAssignment;
-import com.mineutze.worldgen.regionsolve.topology.WeightedVertexPlacement;
 
 import javax.imageio.ImageIO;
 import java.awt.Color;
@@ -32,17 +39,15 @@ import java.util.Optional;
 import java.util.Set;
 
 /**
- * Live-path gate visual: the actual rasterized biome output of the real pipeline (hex
- * mesh -> real CSP against {@link ModBiomeGraph#OVERWORLD} -> {@link
- * WeightedVertexPlacement} -> {@link EdgeDisplacementRasterizer}), colored per biome —
- * the real end result a player would see, at the real 48-biome catalog and the real
- * hex size this pipeline actually ships with.
+ * Live-path gate visual: actual rasterized biome output of real pipeline (hex mesh ->
+ * real CSP against {@link ModBiomeGraph#OVERWORLD} -> {@link WeightedVertexPlacement} ->
+ * {@link EdgeDisplacementRasterizer}), colored per biome - real end result a player would
+ * see, at real 48-biome catalog and real hex size this pipeline ships with.
  */
 public final class HexBiomeRasterVisual {
 
-    // Matches TriangleFieldGeometryRealization.HEX_SIZE_BLOCKS - kept in sync manually
-    // since worldgen-core's export/ tools are deliberately standalone from the live
-    // orchestrator, not a dependency on it.
+    // Matches TriangleFieldGeometryRealization.HEX_SIZE_BLOCKS - kept in sync manually,
+    // export/ tools deliberately standalone from live orchestrator, not a dependency on it.
     private static final double SIZE_BLOCKS = 325;
     private static final int MESH_BOX_MAX = 8000;
     private static final int REAL_MIN = 1600;
@@ -57,7 +62,7 @@ public final class HexBiomeRasterVisual {
         Path outputDir = Path.of(args.length > 0 ? args[0] : "hex-mesh-export");
 
         HexMeshBuilder.HexMesh mesh = HexMeshBuilder.build(SIZE_BLOCKS, 0, 0, MESH_BOX_MAX, MESH_BOX_MAX);
-        TriangleAdjacency.Adjacency adjacency = TriangleAdjacency.of(mesh.faces());
+        FaceAdjacency.Adjacency adjacency = FaceAdjacency.of(mesh.faces());
         Set<Integer> freeFaceIndices = new HashSet<>();
         for (int faceIndex = 0; faceIndex < mesh.faces().size(); faceIndex++) {
             if (!adjacency.hullTouchingFaceIndices().contains(faceIndex)) {
@@ -103,10 +108,10 @@ public final class HexBiomeRasterVisual {
     }
 
     /**
-     * Evenly-spaced hues at this small, known biome count - maximizes visual separation,
-     * same reasoning {@code TriangleFieldPngExporter} already uses for the old pipeline's
-     * own export. Package-visible (not private) so {@link HexRegionGridVisual} can reuse
-     * the exact same rendering pipeline for a multi-region view instead of duplicating it.
+     * Evenly-spaced hues at this small known biome count - maximizes visual separation, same
+     * reasoning {@code TriangleFieldPngExporter} uses for old pipeline's export.
+     * Package-visible (not private) so {@link HexRegionGridVisual} reuses the same rendering
+     * pipeline for multi-region view instead of duplicating it.
      */
     static Map<BiomeId, Integer> evenlySpacedPalette(BiomeGraph graph) {
         List<BiomeId> sortedIds = graph.nodes().stream().map(BiomeNode::id).sorted().toList();
@@ -133,7 +138,7 @@ public final class HexBiomeRasterVisual {
         return image;
     }
 
-    /** An actual color swatch per biome, own image - matches {@code TriangleFieldPngExporter}'s own established convention (a stacked/inline legend baked into the raster ran the label off the image once there were more than a handful of biomes). */
+    /** Actual color swatch per biome, own image - matches {@code TriangleFieldPngExporter}'s convention (stacked/inline legend baked into raster ran label off-image past a handful of biomes). */
     static BufferedImage renderLegend(BiomeGraph graph, Map<BiomeId, Integer> palette) {
         List<BiomeId> sortedIds = graph.nodes().stream().map(BiomeNode::id).sorted().toList();
 

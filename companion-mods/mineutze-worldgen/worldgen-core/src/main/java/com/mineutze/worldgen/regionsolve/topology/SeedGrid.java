@@ -1,41 +1,39 @@
 package com.mineutze.worldgen.regionsolve.topology;
 
+import com.mineutze.worldgen.regionsolve.topology.placement.WeightedVertexPlacement;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
 
 /**
- * Deterministic seed placement with NO notion of "region" or any other
- * batch/solve unit — a jittered grid anchored to a fixed global origin
- * (multiples of {@code spacingBlocks} from block (0,0)), same idea vanilla
- * structure placement and Worley noise both use: each grid cell owns at
- * most one point, jittered within its own cell, and that point's existence
- * and position depend only on {@code (worldSeed, spacingBlocks, that one
- * cell)} — never on which window a caller happens to be querying through.
+ * Deterministic seed placement with NO notion of "region"/batch/solve unit — jittered grid
+ * anchored to fixed global origin (multiples of {@code spacingBlocks} from block (0,0)),
+ * same idea vanilla structure placement and Worley noise use: each grid cell owns at most
+ * one point, jittered within its cell; point's existence/position depend only on {@code
+ * (worldSeed, spacingBlocks, that cell)} — never which window is querying.
  *
- * <p><b>This window-independence is the whole point, not an implementation
- * detail</b> — replaces the deleted {@code SeedGraphBuilder}'s dependency on
- * whole-region batch scatter ({@code SeedPlacer}, deleted alongside it,
- * anchored its own grid to each region's own corner, meaning the SAME
- * physical location could get different seed placement depending which
- * region "owned" it — see doc/DESIGN.md's "no reseeding, we make it work"
- * stance and this session's design discussion on why region-batch placement
- * was dropped). Querying any two overlapping windows must agree on every
- * seed both windows contain — see {@code SeedGridTest} for the assertion
- * that keeps this true.
+ * <p><b>Window-independence is the whole point, not implementation detail</b> — replaces
+ * deleted {@code SeedGraphBuilder}'s dependency on whole-region batch scatter ({@code
+ * SeedPlacer}, deleted alongside it, anchored its grid to each region's corner, so the
+ * SAME physical location could get different seed placement depending which region "owned"
+ * it — see doc/DESIGN.md's "no reseeding, we make it work" stance). Two overlapping windows
+ * must agree on every seed both contain — see {@code SeedGridTest}.
  */
 public final class SeedGrid {
 
     private static final long JITTER_SALT = 0x5EED_9A31L;
 
+    /** Classic hash-spreading multiplier (same convention as {@code java.util.Objects.hash}, and {@code EdgeDisplacement}/{@code WeightedVertexPlacement}'s own {@code HASH_MULTIPLIER}). */
+    private static final long HASH_MULTIPLIER = 31;
+
     private SeedGrid() {
     }
 
     /**
-     * Every seed whose jittered position falls in the half-open box
-     * {@code [minX, maxX) x [minZ, maxZ)} (block coordinates). Scans one
-     * extra cell of margin on every side so a grid cell just outside the
-     * box, whose jitter could still land inside it, is never missed.
+     * Every seed whose jittered position falls in half-open box {@code [minX, maxX) x
+     * [minZ, maxZ)} (block coords). Scans one extra cell margin every side so a grid cell
+     * just outside the box, whose jitter could still land inside, is never missed.
      */
     public static List<Point2D> seedsIn(long worldSeed, int spacingBlocks, int minX, int minZ, int maxX, int maxZ) {
         requireValidBox(spacingBlocks, minX, minZ, maxX, maxZ);
@@ -68,12 +66,7 @@ public final class SeedGrid {
         return Math.floorDiv(value, spacingBlocks) * spacingBlocks;
     }
 
-    /**
-     * The jittered point for one grid cell — the same {@code (worldSeed, gridX, gridZ,
-     * spacingBlocks)} always produces the exact same point, regardless of which window
-     * is querying (see this class's own doc for why that determinism is the whole point,
-     * not an implementation detail).
-     */
+    /** Jittered point for one grid cell — same {@code (worldSeed, gridX, gridZ, spacingBlocks)} always produces exact same point regardless of which window queries (see class doc). */
     private static Point2D jitteredPointForCell(long worldSeed, int gridX, int gridZ, int spacingBlocks) {
         Random jitterRandom = new Random(jitterSeed(worldSeed, gridX, gridZ));
         int jitteredX = gridX + jitterRandom.nextInt(spacingBlocks);
@@ -88,8 +81,8 @@ public final class SeedGrid {
     /** Same hash idiom the rest of this codebase uses for deterministic-per-input noise — never a persisted {@link Random} stream. */
     private static long jitterSeed(long worldSeed, int gridX, int gridZ) {
         long seed = worldSeed ^ JITTER_SALT;
-        seed = seed * 31 + gridX;
-        seed = seed * 31 + gridZ;
+        seed = seed * HASH_MULTIPLIER + gridX;
+        seed = seed * HASH_MULTIPLIER + gridZ;
         return seed;
     }
 }

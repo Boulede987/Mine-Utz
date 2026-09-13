@@ -20,9 +20,16 @@ application {
 
 tasks.register('triangleFieldExport', JavaExec) {
     group = 'application'
-    description = 'First visual of the glued-together triangle+growth region-solve path (SeedGrid -> Delaunay -> TriangleAdjacency -> fused CSP -> SeamGrowthRasterizer -> raster), against the real ModBiomeGraph.DEFAULT. Run with: ./gradlew :worldgen-core:triangleFieldExport --args="<worldSeed> <outputDir>"'
+    description = 'Visual of the live hex-mesh region-solve path (HexMeshBuilder -> FaceAdjacency -> fused CSP -> WeightedVertexPlacement -> EdgeDisplacementRasterizer -> raster), against the real ModBiomeGraph.DEFAULT. Run with: ./gradlew :worldgen-core:triangleFieldExport --args="<worldSeed> <outputDir>"'
     classpath = sourceSets.main.runtimeClasspath
     mainClass = 'com.mineutze.worldgen.export.triangle.TriangleFieldRegionExportCli'
+}
+
+tasks.register('biomeGraphCompletenessReport', JavaExec) {
+    group = 'verification'
+    description = 'Exhaustively checks every biome-neighbor combination against ModBiomeGraph.OVERWORLD for a universal legal candidate, caching against the rule set\'s own fingerprint (doc/biome-graph-completeness-cache.txt) - re-run after any real AdjacencyRule change via the Excel planner. Run with: ./gradlew :worldgen-core:biomeGraphCompletenessReport'
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'com.mineutze.worldgen.export.BiomeGraphCompletenessReport'
 }
 
 repositories {

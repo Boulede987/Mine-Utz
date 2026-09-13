@@ -43,17 +43,14 @@ class BiomeGraphTest {
     }
 
     /**
-     * No node is required to be universally legal anymore (see BiomeGraph's own
-     * doc) - every biome, including whichever one plays a filler-like role, can be
-     * restricted like any other. OCEAN here has only ONE rule (to DESERT, not
-     * SAVANNA) - far from universally legal - and the graph still builds fine.
-     * A node's overall reachability/connectivity is no longer checked at bare
-     * construction time at all (see this class's own git history: the
-     * BridgeHopReachability pre-check this comment used to describe was removed as
-     * providing little real signal beyond what {@link
-     * #requireEveryLocalNeighborhoodSolvable} already proves directly) - only
-     * {@code forProduction}'s opt-in checks (min-legal-neighbors,
-     * every-local-neighborhood-solvable) still validate a real production graph.
+     * No node required universally legal anymore (see BiomeGraph's doc) - every
+     * biome, even a filler-like one, restrictable like any other. OCEAN here has
+     * only ONE rule (to DESERT, not SAVANNA) - far from universal - graph still
+     * builds fine. Reachability/connectivity no longer checked at bare
+     * construction (git history: BridgeHopReachability pre-check removed, little
+     * signal beyond what {@link #requireEveryLocalNeighborhoodSolvable} already
+     * proves) - only {@code forProduction}'s opt-in checks (min-legal-neighbors,
+     * every-local-neighborhood-solvable) validate a real production graph.
      */
     @Test
     void graphWithNoNodeAllowedEverywhereStillBuildsFine() {
@@ -136,19 +133,17 @@ class BiomeGraphTest {
     }
 
     /**
-     * DESERT-SAVANNA-PLAINS is a full triangle (every pair mutually legal, not just a
-     * chain) and FOREST is a hub legal to all three but to nothing else. With only these
-     * 4 nodes total and ringLength capped at 3, every realizable 3-ring is exactly one of
-     * {DESERT,SAVANNA,PLAINS}, {DESERT,SAVANNA,FOREST}, {DESERT,PLAINS,FOREST}, or
-     * {SAVANNA,PLAINS,FOREST} - and since self-adjacency is banned, a ring member can never
-     * solve its OWN ring, so each of these 4 rings needs the one node NOT in it (the other
-     * clique member, or FOREST) to be legal against all 3 members simultaneously. Because
-     * DESERT/SAVANNA/PLAINS are pairwise legal AND each individually legal to FOREST, that
-     * always holds - a genuinely realizable "solvable only via a node outside the ring"
-     * case, not degenerate self-adjacency. (A 5th node like the old OCEAN would leave a
-     * 4-ring with zero nodes free to solve it at all once self-adjacency can't fill in -
-     * see this method's own doc on why maxNeighbors must stay below the total node count
-     * for a hub fixture to mean anything.)
+     * DESERT-SAVANNA-PLAINS = full triangle (every pair mutually legal, not just chain),
+     * FOREST = hub legal to all three, nothing else. 4 nodes total, ringLength capped at
+     * 3: every realizable 3-ring is exactly one of {DESERT,SAVANNA,PLAINS},
+     * {DESERT,SAVANNA,FOREST}, {DESERT,PLAINS,FOREST}, {SAVANNA,PLAINS,FOREST} - since
+     * self-adjacency banned, ring member can never solve its own ring, so each needs the
+     * one node NOT in it (other clique member, or FOREST) legal against all 3
+     * simultaneously. DESERT/SAVANNA/PLAINS pairwise legal AND each legal to FOREST, so
+     * always holds - real "solvable only via node outside ring" case, not degenerate
+     * self-adjacency. (5th node like old OCEAN would leave a 4-ring with zero free nodes
+     * once self-adjacency can't fill in - see this method's doc on why maxNeighbors must
+     * stay below total node count for a hub fixture to mean anything.)
      */
     @Test
     void requireEveryLocalNeighborhoodSolvablePassesWhenARingHasAnOutsideHub() {
@@ -168,12 +163,11 @@ class BiomeGraphTest {
     }
 
     /**
-     * A bare 4-cycle (no diagonal, no outside hub) - DESERT-SAVANNA-PLAINS-OCEAN-DESERT
-     * IS a real, legal ring (every consecutive pair allowed), but no biome is legal
-     * against all 4 ring members at once (DESERT isn't legal to PLAINS, its opposite
-     * corner, and neither ring member nor anything else bridges that): this is the
-     * exact real dead end {@code SeamGrowthRasterizer} would otherwise only discover
-     * mid-generation.
+     * Bare 4-cycle (no diagonal, no outside hub) - DESERT-SAVANNA-PLAINS-OCEAN-DESERT
+     * IS a real legal ring (every consecutive pair allowed), but no biome legal against
+     * all 4 members at once (DESERT not legal to PLAINS, its opposite corner, nothing
+     * bridges that): exact real dead end {@code SeamGrowthRasterizer} would otherwise
+     * only discover mid-generation.
      */
     @Test
     void requireEveryLocalNeighborhoodSolvableThrowsOnAGenuineDeadEnd() {
@@ -207,13 +201,12 @@ class BiomeGraphTest {
     }
 
     /**
-     * DESERT and OCEAN share one size range (700-1000), PLAINS has a different one
-     * (300-600). DESERT's own only legal neighbor is OCEAN, its own same tier - a real
-     * structural gap: DESERT can never legally border a differently-sized biome, so its
-     * own size correction has strictly less to work with than a biome with a real
-     * cross-tier option (see {@code BiomeGraph.requireEveryBiomeHasACrossTierNeighbor}'s
-     * own doc for the measured, current-mechanism consequence). OCEAN and PLAINS each
-     * have a real cross-tier neighbor and correctly pass.
+     * DESERT and OCEAN share one size range (700-1000), PLAINS a different one
+     * (300-600). DESERT's only legal neighbor is OCEAN, same tier - real structural
+     * gap: DESERT can never border a differently-sized biome, so its size correction
+     * has strictly less to work with than a biome with a real cross-tier option (see
+     * {@code BiomeGraph.requireEveryBiomeHasACrossTierNeighbor}'s doc for the measured
+     * consequence). OCEAN and PLAINS each have a real cross-tier neighbor, pass.
      */
     @Test
     void requireEveryBiomeHasACrossTierNeighborThrowsWhenANodeIsStuckInItsOwnTier() {

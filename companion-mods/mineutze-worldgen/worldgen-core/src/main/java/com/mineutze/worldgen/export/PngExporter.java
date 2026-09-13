@@ -11,18 +11,17 @@ import java.io.UncheckedIOException;
 import java.nio.file.Path;
 
 /**
- * One color block per macro-cell (see {@link BiomeLegend}), with a darker
- * grid line drawn at every region boundary — the whole point of exporting
- * an NxN swath instead of one region is to *see* whether a patch lines up
- * across that boundary, so the seam has to stay visible in the image.
+ * One color block per macro-cell (see {@link BiomeLegend}), darker grid line at every
+ * region boundary - point of exporting NxN swath instead of one region is to *see*
+ * whether a patch lines up across the boundary, so seam must stay visible.
  */
 public final class PngExporter {
 
     private static final int PIXELS_PER_CELL = 4;
     private static final Color REGION_BOUNDARY_COLOR = new Color(0, 0, 0, 160);
-    // A solved region never has a gap; a real-world scan can (an ungenerated chunk,
-    // world border, etc). Distinct mid-gray, unlikely to collide with a hashed biome
-    // color, so a gap reads as "no data" at a glance instead of a wrong biome.
+    // Solved region never has a gap; real-world scan can (ungenerated chunk, world
+    // border, etc). Distinct mid-gray, unlikely to collide with hashed biome color -
+    // gap reads as "no data" at a glance, not a wrong biome.
     private static final Color GAP_COLOR = new Color(128, 128, 128);
 
     private PngExporter() {

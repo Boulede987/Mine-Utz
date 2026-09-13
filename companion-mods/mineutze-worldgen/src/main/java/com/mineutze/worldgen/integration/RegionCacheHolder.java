@@ -50,39 +50,21 @@ import java.util.concurrent.TimeUnit;
 public final class RegionCacheHolder {
 
     private static final Logger LOGGER = LogUtils.getLogger();
-    private static final long READY_TIMEOUT_SECONDS = 30;
+    // See DECISIONS.md 2026-09-06 "READY_TIMEOUT_SECONDS raised 30->300" entry for the
+    // real production crash (worldSeed=42) that motivated raising this from 30.
+    private static final long READY_TIMEOUT_SECONDS = 300;
     // Bounds SeedMeshCache's own small per-cell answer cache - NOT the real, permanent
     // data (that's DecidedFaceStore/DecidedVertexStore, unbounded, persisted). An evicted
     // cell is just re-derived via the cheap fast-path lookup next time, never re-solved.
     // Tune from real deployment once one exists, not guessed further here.
     private static final int MAX_CACHED_CELLS = 2_000_000;
 
-    // Covers vanilla's OWN stronghold ring search (ConcentricRingsStructurePlacement,
-    // distance=32/spread=3/count=128) - simulated its exact placement formula directly
-    // (2026-09-05) and measured its outermost ring at ~24,192 blocks from spawn, reached
-    // via 8 concentric rings of increasingly many, increasingly distant candidate points.
-    // 25,000 gives a small safety margin above that measured max, not a round guess.
-    //
-    // WHY this exists at all: that search checks all 128 scattered candidate points in
-    // ONE burst (parallel, off-thread) the moment the very first chunk (spawn) is ever
-    // generated - before ANY of our own mesh territory has been jointly resolved. Each
-    // point, touched in isolation, independently locks in its own tiny neighborhood as
-    // PERMANENT; a later query landing in the gap between several of them can find itself
-    // boxed in by walls that were each individually fine but were never resolved TOGETHER -
-    // a real, observed crash this exact session (worldSeed=42, TriangleIdentitySizeAssignment
-    // SearchBudget exhausted, thrown from PlayerRespawnLogic during world creation itself).
-    // Pre-solving this whole radius as one CONTIGUOUS, step-connected sweep (see
-    // preGenerateSpawnArea) means every one of vanilla's 128 points lands inside territory
-    // that was already resolved as one internally-consistent blob, never as an isolated
-    // single-point commit.
+    // See DECISIONS.md 2026-09-05 "PRE_GENERATE_RADIUS_BLOCKS/spawn-area pre-generation
+    // sweep" entry for why this sweep exists at all (a real observed crash) and how both
+    // constants below were derived.
     private static final int PRE_GENERATE_RADIUS_BLOCKS = 25_000;
-    // Must stay comfortably under 2x TriangleFieldGeometryRealization's own
-    // CLUSTER_GROWTH_CAP_RADIUS_BLOCKS (2500) so adjacent grid points' own cluster-growth
-    // neighborhoods always overlap - guarantees the whole swept area ends up as one single
-    // connected region (mirrors why an ORGANIC_WALK, which takes small steps, empirically
-    // never dead-ends: each new step extends already-decided territory instead of starting
-    // fresh in isolation). NOT tuned finer than this margin - real measurement (timing the
-    // actual pre-generation pass) is the next step once this is verified working.
+    // NOT tuned finer than this margin - real measurement (timing the actual pre-
+    // generation pass) is the next step once this is verified working.
     private static final int PRE_GENERATE_STEP_BLOCKS = 2_000;
 
     private static final CountDownLatch READY = new CountDownLatch(1);

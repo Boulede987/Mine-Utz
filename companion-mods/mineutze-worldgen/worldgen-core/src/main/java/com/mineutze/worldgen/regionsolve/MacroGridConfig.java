@@ -4,67 +4,56 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * The macro-cell/solve-region grid the constraint solver operates on.
- * 4-block cells match vanilla's own biome resolution (Minecraft samples one
- * biome per 4x4x4-block quart volume — {@code getNoiseBiome} already
- * receives quart coordinates) — 2026-08-15, replacing the earlier 64-block
- * (4x4 chunk) placeholder. {@code regionSizeCellsPerSide} scaled up 16x
- * alongside it (32 → 512) to hold the real-world region footprint at the
- * same 2048 blocks: a single max-size biome patch (desert's 1000 block
- * width) needs real room to breathe relative to the region regardless of
- * how fine the cell grid measuring it is — that reasoning was always about
- * block width, not cell count, so it transfers unchanged.
+ * Macro-cell/solve-region grid the constraint solver operates on. 4-block cells match
+ * vanilla's biome resolution (Minecraft samples one biome per 4x4x4-block quart volume -
+ * {@code getNoiseBiome} already gets quart coords) - 2026-08-15, replacing earlier
+ * 64-block (4x4 chunk) placeholder. {@code regionSizeCellsPerSide} scaled up 16x with it
+ * (32 → 512) to keep the same 2048-block region footprint: max-size biome patch (desert,
+ * 1000 blocks) needs room relative to region regardless of cell grid fineness - always
+ * about block width not cell count, so unchanged.
  */
 public record MacroGridConfig(int macroCellSizeBlocks, int regionSizeCellsPerSide) {
 
     public static final MacroGridConfig DEFAULT = new MacroGridConfig(4, 512);
 
-    // Region-grid domain warp: straight region-solve
-    // boundaries read as a hard ruler-straight cut wherever a patch happens to reach one,
-    // no amount of patch-level organicizing can hide it (three different pixel-level
-    // cleanup passes tried and measured - PinchResolver, DiagonalCornerResolver,
-    // SeparatorWidthEnforcer, all deleted 2026-08-15 once this warp made them
-    // unnecessary - see this repo's own git history - none worked, because the STRAIGHT
-    // LINE is the region partition itself, not a patch shape). Real fix: the region
-    // boundary was never a real geometric feature worth being straight in the first
-    // place - warp it instead of forcing it straight.
+    // Region-grid domain warp: straight region-solve boundary reads as hard ruler-straight
+    // cut wherever a patch reaches it, no patch-level fix hides it (3 pixel-cleanup passes
+    // tried - PinchResolver, DiagonalCornerResolver, SeparatorWidthEnforcer, deleted
+    // 2026-08-15 once this warp made them unneeded, see git history - none worked, since
+    // STRAIGHT LINE is the region partition itself, not a patch shape). Real fix: warp the
+    // boundary instead of forcing it straight - it was never a real geometric feature worth
+    // straightness.
     //
-    // AMPLITUDE_CELLS must stay well under half of regionSizeCellsPerSide (32) - the whole
-    // rest of this codebase (RegionBoundaryCollector.neighborsOf, SeedRegionCache's
-    // concurrent-race locking) assumes a region's true geometric neighbors are only its
-    // immediate 8 (Moore) neighbors, never 2 regions away. Capped at region/4 (8 cells for
-    // DEFAULT), comfortably under that region/2 hard ceiling even with two axes' warps
-    // compounding at a corner.
+    // AMPLITUDE_CELLS must stay well under half regionSizeCellsPerSide (32) - rest of
+    // codebase (RegionBoundaryCollector.neighborsOf, SeedRegionCache's concurrent-race
+    // locking) assumes a region's true geometric neighbors are only its immediate 8
+    // (Moore), never 2 regions away. Capped at region/4 (8 cells for DEFAULT), well under
+    // that region/2 hard ceiling even with both axes' warps compounding at a corner.
     //
-    // AMPLITUDE and WAVELENGTH are coupled, not independent dials - the max per-cell slope
-    // is AMPLITUDE*(2*PI/WAVELENGTH). Real ceiling is the region/2 bound above, not any
-    // particular slope value: a single sine wave is provably too regular no matter how
-    // it's tuned (always exactly one bump, nothing a real coastline ever looks like), so
-    // this sums WARP_OCTAVE_COUNT independently-phased sine layers instead (classic
-    // fractional-Brownian-motion construction, the same idea Perlin/simplex noise is built
-    // from) - each shorter-wavelength and smaller-amplitude than the last, each with its
-    // own phase so the layers don't all cross zero at the same spot and cancel back into a
-    // disguised single bump. Octave amplitudes are normalized (divided by the geometric
-    // series sum in octaveAmplitudeNormalizer) so the TOTAL displacement across all octaves
-    // still respects WARP_AMPLITUDE_CELLS_CAP exactly regardless of how wavelength/
-    // persistence are tuned.
+    // AMPLITUDE and WAVELENGTH are coupled, not independent - max per-cell slope is
+    // AMPLITUDE*(2*PI/WAVELENGTH). Real ceiling is region/2 bound above, not any slope
+    // value: single sine wave always too regular (exactly one bump, no real coastline
+    // looks like that), so sums WARP_OCTAVE_COUNT independently-phased sine layers instead
+    // (fractional-Brownian-motion construction, same idea Perlin/simplex noise uses) - each
+    // shorter-wavelength/smaller-amplitude than last, own phase so layers don't all cross
+    // zero at same spot and cancel into a disguised single bump. Octave amplitudes
+    // normalized (divided by geometric series sum in octaveAmplitudeNormalizer) so TOTAL
+    // displacement across octaves still respects WARP_AMPLITUDE_CELLS_CAP exactly
+    // regardless of wavelength/persistence tuning.
     //
-    // WARP_WAVELENGTH_CELLS is deliberately comparable to (slightly under) the region side
-    // itself, not some larger "safe-looking" number: the dominant octave must complete a
-    // full cycle - genuine direction reversal, not just a bow - within one border's actual
-    // length, or the curve still reads as one monotonic bend no matter how much fine
-    // texture the higher octaves add on top. WARP_PERSISTENCE (0.55) is high enough that
-    // the next 1-2 octaves carry comparable weight instead of fading to barely-visible
-    // texture, since real irregularity needs several scales competing, not one dominant
-    // curve plus noise. A stricter "keep slope well under 1" rule was considered and
-    // rejected: cellsInRegion's brute-force scan + regionOf's direct per-cell test give
-    // every cell exactly one region unconditionally regardless of how sharply warpOffset
-    // changes between adjacent cells, so a rougher curve carries no actual gap/overlap
-    // risk - the only hard invariant left is the total amplitude bound (region/2, see
-    // above), which the normalizer still guarantees exactly. Verified empirically, not
-    // just reasoned about - see MacroGridConfigTest.warpNeverBleedsPastTheImmediateNeighborRegion,
-    // which sweeps real cells and checks the amplitude bound directly regardless of curve
-    // roughness.
+    // WARP_WAVELENGTH_CELLS deliberately comparable to (slightly under) region side
+    // itself, not a larger "safe-looking" number: dominant octave must complete full cycle
+    // - real direction reversal, not just a bow - within one border's length, else curve
+    // still reads as one monotonic bend regardless of higher-octave texture.
+    // WARP_PERSISTENCE (0.55) high enough next 1-2 octaves carry comparable weight instead
+    // of fading - real irregularity needs several competing scales, not one dominant curve
+    // plus noise. Stricter "keep slope well under 1" rule considered, rejected:
+    // cellsInRegion's brute-force scan + regionOf's per-cell test give every cell exactly
+    // one region unconditionally regardless of warpOffset's slope, so rougher curve carries
+    // no gap/overlap risk - only hard invariant is total amplitude bound (region/2 above),
+    // which normalizer still guarantees exactly. Verified empirically - see
+    // MacroGridConfigTest.warpNeverBleedsPastTheImmediateNeighborRegion, sweeps real cells,
+    // checks amplitude bound directly regardless of curve roughness.
     private static final double WARP_AMPLITUDE_CELLS_CAP = 8.0;
     private static final double WARP_AMPLITUDE_FRACTION = 0.25;
     private static final double WARP_WAVELENGTH_CELLS = 28.0;
@@ -74,16 +63,14 @@ public record MacroGridConfig(int macroCellSizeBlocks, int regionSizeCellsPerSid
     private static final double WARP_OCTAVE_AMPLITUDE_NORMALIZER = octaveAmplitudeNormalizer();
     private static final long WARP_SALT_X = 0x9E37_79B9_7F4A_7C15L;
     private static final long WARP_SALT_Z = 0xC2B2_AE3D_27D4_EB4FL;
-    // At or below this, regionSizeCellsPerSide is so small (only ever synthetic test grids
-    // - MacroGridConfig.DEFAULT is 32, and 8 itself is a common small-fixture size across
-    // this codebase's own tests) that EVERY cell boundary is already a region boundary;
-    // any nonzero warp there could flip a cell into a neighboring region with no
-    // "interior, far from any edge" cells left to stay stable - warp amplitude is 0 at or
-    // below this threshold instead of chasing an ever-smaller fraction toward it. Boundary
-    // is inclusive (<=, not <) on purpose - confirmed via real test breakage the first
-    // time WARP_WAVELENGTH_CELLS shrank: a size-8 grid sitting exactly AT this threshold
-    // still picked up real (if small) displacement under the shorter, rougher wavelength,
-    // flipping a cell count several small-fixture tests asserted exactly.
+    // At/below this, regionSizeCellsPerSide so small (only synthetic test grids -
+    // MacroGridConfig.DEFAULT is 32, 8 a common small-fixture size in tests) EVERY cell
+    // boundary is already a region boundary; any nonzero warp could flip a cell into a
+    // neighbor region with no stable "interior" cells left - warp amplitude 0 at/below
+    // this threshold instead of chasing an ever-smaller fraction. Inclusive (<=, not <) on
+    // purpose - confirmed via real test breakage: a size-8 grid exactly AT threshold still
+    // picked up real displacement once WARP_WAVELENGTH_CELLS shrank, flipping cell counts
+    // several small-fixture tests asserted exactly.
     private static final int WARP_MIN_REGION_SIZE = 8;
 
     public MacroGridConfig {
@@ -96,12 +83,11 @@ public record MacroGridConfig(int macroCellSizeBlocks, int regionSizeCellsPerSid
     }
 
     /**
-     * The vertical (constant-nominal-x) boundary lines wave as a smooth function of
-     * z, and the horizontal (constant-nominal-z) lines wave as a smooth function of
-     * x - each axis's warp depends only on the OTHER axis's coordinate, so along any
-     * fixed row/column the mapping is just a constant-shifted floor-division (still
-     * monotonic and gap-free), and the combined 2D partition stays a clean set of
-     * simply-connected, gently-bowed blobs instead of a rigid grid.
+     * Vertical (constant-nominal-x) boundaries wave as smooth function of z, horizontal
+     * (constant-nominal-z) wave as smooth function of x - each axis's warp depends only on
+     * the OTHER axis's coord, so along any fixed row/column the mapping is a
+     * constant-shifted floor-division (still monotonic, gap-free); combined 2D partition
+     * stays simply-connected, gently-bowed blobs instead of a rigid grid.
      */
     public RegionPos regionOf(MacroCellPos cell, long worldSeed) {
         double warpedX = cell.x() + warpOffset(cell.z(), worldSeed, WARP_SALT_X);
@@ -112,7 +98,7 @@ public record MacroGridConfig(int macroCellSizeBlocks, int regionSizeCellsPerSid
         );
     }
 
-    /** Caps at a fixed amplitude for any real-sized grid ({@code DEFAULT} included), but scales down for a small synthetic test grid instead of overwhelming it. */
+    /** Caps at fixed amplitude for real-sized grid ({@code DEFAULT} included), scales down for small synthetic test grid instead of overwhelming it. */
     private double warpAmplitudeCells() {
         if (regionSizeCellsPerSide <= WARP_MIN_REGION_SIZE) {
             return 0.0;
@@ -134,14 +120,14 @@ public record MacroGridConfig(int macroCellSizeBlocks, int regionSizeCellsPerSid
         return offset;
     }
 
-    /** Independent per-octave phase (not just per-axis) — without this every octave crosses zero at the same along-axis coordinate, which just re-composes into a single disguised bump instead of real fractal detail. */
+    /** Independent per-octave phase (not just per-axis) - without it every octave crosses zero at the same along-axis coord, re-composing into a single disguised bump instead of real fractal detail. */
     private static double octavePhase(long worldSeed, long axisSalt, int octave) {
         long seed = worldSeed ^ axisSalt;
         seed = seed * 31 + octave;
         return ((seed >>> 32) ^ seed) % 1000 / 1000.0 * 2.0 * Math.PI;
     }
 
-    /** Geometric series sum of {@code WARP_PERSISTENCE^octave} over {@link #WARP_OCTAVE_COUNT} octaves — dividing each octave's raw amplitude by this makes the octaves' amplitudes sum back to exactly {@link #warpAmplitudeCells()}, so adding fractal detail never grows the total displacement budget past what {@code WARP_AMPLITUDE_CELLS_CAP} already guarantees is region/2-safe. */
+    /** Geometric series sum of {@code WARP_PERSISTENCE^octave} over {@link #WARP_OCTAVE_COUNT} octaves - dividing each octave's raw amplitude by this makes amplitudes sum back to exactly {@link #warpAmplitudeCells()}, so fractal detail never grows total displacement past what {@code WARP_AMPLITUDE_CELLS_CAP} already guarantees region/2-safe. */
     private static double octaveAmplitudeNormalizer() {
         double sum = 0.0;
         double amplitude = 1.0;
@@ -158,12 +144,11 @@ public record MacroGridConfig(int macroCellSizeBlocks, int regionSizeCellsPerSid
     }
 
     /**
-     * Scans a bounding box padded by {@link #warpMarginCells()} on every side (instead
-     * of the nominal square directly) and keeps whichever candidate cells actually warp
-     * into this region - the only way to enumerate a warped region's true membership,
-     * since the warp isn't invertible in closed form. Still cheap: at
-     * {@code regionSizeCellsPerSide=32}, that's ~1600 candidates tested instead of 1024,
-     * not a real cost.
+     * Scans a bounding box padded by {@link #warpMarginCells()} on every side (not the
+     * nominal square directly), keeps candidates that actually warp into this region -
+     * only way to enumerate a warped region's true membership since the warp isn't
+     * invertible in closed form. Cheap: at {@code regionSizeCellsPerSide=32}, ~1600
+     * candidates tested vs 1024, not a real cost.
      */
     public List<MacroCellPos> cellsInRegion(RegionPos region, long worldSeed) {
         int margin = warpMarginCells();
@@ -190,7 +175,7 @@ public record MacroGridConfig(int macroCellSizeBlocks, int regionSizeCellsPerSid
         return Math.max(1, (int) Math.round(sideInCells * sideInCells));
     }
 
-    /** The macro cell containing a continuous block-space point — one authoritative home for this floorDiv-by-cell-size math, shared by every caller that needs to go from a real coordinate (a triangle centroid, a query point) to its cell. */
+    /** Macro cell containing a continuous block-space point - one authoritative home for this floorDiv-by-cell-size math, shared by every caller going from a real coordinate (triangle centroid, query point) to its cell. */
     public MacroCellPos cellContaining(double blockX, double blockZ) {
         return new MacroCellPos(
             Math.floorDiv((int) Math.floor(blockX), macroCellSizeBlocks),

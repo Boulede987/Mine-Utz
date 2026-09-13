@@ -1,170 +1,551 @@
-			DEEPSEEKS
+		Claude
 
-# Diagnosis: Two Structurally Distinct Causes of Under-Realization
+A quick note first: you're right about the IRLS formula, and it's a real error — I described the intent correctly ("weights that increase for persistent outliers") but wrote the majorizer backwards. Thanks for catching it against actual code instead of trusting the formula.
 
-Based on your description, the under-realization almost certainly comes from **two independent mechanisms that happen to look identical in aggregate statistics**. They need to be separated before either can be fixed.
+Now the more important thing. I think there's a specific, checkable explanation for why *every* resistance-reduction scheme produces the same monotonic trade, and it's not that the trade is fundamental to the problem class — it's that your feasible region has a structural asymmetry that none of the six approaches touched.
 
-## Cause A — Geometric clipping by the Voronoi/Delaunay stage (area loss, not width loss)
+## The likely mechanism
 
-If your geometry stage builds hex faces by clipping a *nominal* hexagon against neighbor constraints (Voronoi cells around irregular seed points, or Lloyd-relaxed Delaunay duals), then a hex's final area is:
+Look at your clamp list again: clamp #3 is a floor — `realizedArea ≥ 70% of target`, target-relative. Clamp #4 is a displacement cap — but it's expressed relative to the **undisplaced baseline hex**, not relative to the face's own target. There's no clamp anywhere that says "realizedArea ≤ some multiple of target." The ceiling that exists is purely geometric and target-*independent*.
 
-```
-A_final = A_target(w) − Σ (overlaps stolen by neighbors)
-```
+That matters because of what a face can reach *if nothing resists it*. For a roughly-regular hex, if all six vertices get pushed outward to the full 0.8× displacement cap, the effective radius grows to 1.8× baseline, and area scales with the square: (1.8)² ≈ 3.24×. Your observed outliers — 3.44x, 3.72x, 3.97x, 4.69x, 4.98x — sit right around and above that number (higher than 3.24 is plausible too, since a hex under one-sided pressure from a frozen neighbor won't displace radially-symmetrically; it'll stretch anisotropically toward the soft side, which can exceed the uniform-scaling estimate).
 
-The stolen area is **not** proportional to the victim's target. It's proportional to the *neighbors'* push. So a biome whose declared widths are small relative to its neighbors (e.g. badlands [500,800] next to desert [900,1500]) loses a roughly constant absolute area to each shared edge — and once `A_target` itself is small, that constant loss becomes a **large fractional loss**.
+That's a strong coincidence, not a proof, but it's cheap to check: for your worst outliers under masking, what's the aggressor's own `maxDisplacementFraction`? My prediction is it's sitting at or very near 1.0 — i.e., the beneficiary isn't being stopped by anything related to its *own* target, it's sailing straight to the global displacement ceiling because the one thing that used to stop it early (the frozen/throttled neighbor's own resistance) is gone.
 
-Concretely: if each shared edge steals ~15% of the smaller neighbor's target area, a biome with `w̄ ≈ 650` can easily land at 25–35% of its own target when it borders wide biomes on 4–5 sides.
+If that's confirmed, this explains the monotonic pattern cleanly without needing a "you can't get aggregate wins without tail cost" impossibility result: every scheme you tried changed *how hard faces push back*, but none of them changed *what a face is allowed to reach if it wins*. Remove resistance on one side and the winner doesn't converge toward "a bit more than target" — it runs to the only remaining wall, which is a wall that has nothing to do with its target.
 
-**Signature:** under-realization correlates with *neighbor width ratio*, not with the biome's own declared range. Isolated instances of the same biome (all neighbors narrow) hit target fine.
+## The fix this suggests
 
-**Fix direction:** make the clip symmetric — solve for face areas simultaneously (a small LP/QP over edge offsets with `Σ A_i = Σ A_target_i` as a constraint), or allocate the "stolen" area back via a post-pass that grows narrow faces into their wide neighbors' slack.
+Add a symmetric ceiling clamp, same priority tier as #3, same mechanism, inverted direction: `realizedArea ≤ 130%` (or whatever multiple you're comfortable with) of target, evaluated and enforced the same way the floor already is. This isn't a new kind of machinery — it's closing a gap in an existing one.
 
-## Cause B — Seed density / Poisson-disc mismatch (count loss, not per-hex loss)
+What I'd expect this to do: rerun hard masking (#3 in your list — your best aggregate result, 201/930) with the ceiling clamp active. The aggregate number should stay close to 201/930, because masking's benefit was never about letting winners overshoot — that was a side effect the aggregate metric didn't care about. But the tail should collapse back toward baseline's 1.98x or better, because the vertex that used to get pulled to the 3-5x extreme now gets pulled back the moment the aggressor's own ratio crosses the ceiling — and since that vertex is shared, pulling the aggressor's polygon back *also* gives territory back to the frozen face it was taking from. The frozen face doesn't need its own resistance restored; the aggressor just isn't allowed to keep what it took past a point.
 
-If the geometry stage places one seed per hex and the number of seeds of a given biome is derived from `Σ targetArea / worldArea`, then any biome whose declared range is **narrow** gets few seeds, and Poisson-disc rejection sampling (or blue-noise) systematically **removes** seeds that fall within `r_min` of an existing seed of *any* biome. Narrow-range biomes have small `r_min` per seed, so they should survive — *unless* `r_min` is set globally (e.g. from the largest biome's min width). In that case every narrow-biome seed near a wide-biome seed is culled, and the narrow biome loses **count**, not just area.
+## Your three questions directly
 
-**Signature:** under-realization correlates with the *biome's own declared range width* and with global `r_min`. The biome renders fine in regions where it's the only biome present.
+**Q1 — Pareto improvement possible, or fundamental trade?** I don't think it's fundamental. All six approaches changed the objective or the solving dynamics, but the feasible region itself — the actual set of geometrically-legal outcomes — was asymmetric the whole time (bounded below relative to target, bounded above only in an unrelated global sense). A scheme minimizing aggregate error will always drift toward the loosest part of the feasible region when you loosen resistance anywhere. Symmetrize the region first; then re-test whether the trade persists. My guess is it mostly won't.
 
-**Fix direction:** make `r_min` per-biome (`r_min_i = f(w_min_i)`), or use weighted Poisson-disc / variable-radius blue noise so culling probability depends on the culled seed's own biome.
+**Q2 — hard per-face bound instead of soft minimax:** yes, and I think this is actually the more important of the two, not a fallback. Add the ceiling as a real geometric clamp (like your existing four), not a term in the solver's objective. That gives you an actual guarantee independent of which solving strategy you run underneath it — masking, plain independent correction, IRLS, doesn't matter, because the worst case is bounded by construction rather than by hoping the optimizer behaves. And you get the fail-loud property for free: if a face can't simultaneously satisfy the new ceiling and, say, minimum edge length, that's a real infeasibility to log and inspect rather than a silent 5x face reaching the player.
 
-## Why they look the same in aggregate
-
-Both produce:
-- the same biome at 20–30% of target,
-- the same biomes (narrow-range ones) over-represented in the failure set,
-- the same "no fix found" because a fix targeting one cause doesn't move the other.
-
-If you only tune the CSP or only tune the width sampler, you're adjusting `A_target` — which changes *both* failure modes in the same direction, so neither gets isolated.
-
-## How to disambiguate in one experiment
-
-Instrument the geometry stage to log, per realized hex:
-
-| field | meaning |
-|---|---|
-| `A_target` | from `w` |
-| `A_before_clip` | nominal hex area before neighbor clipping |
-| `A_after_clip` | final rendered area |
-| `n_neighbors` and their `w̄` | for Cause A |
-| `seed_id`, `was_culled_by_rmin`, `r_min_used` | for Cause B |
-
-Then:
-- **Cause A** shows as `A_after_clip / A_before_clip` low, with `A_before_clip ≈ A_target`.
-- **Cause B** shows as `A_before_clip / A_target` low (the seed was placed with wrong nominal area) or as missing seeds entirely.
-
-The two ratios multiply to the observed 20–30%. If you plot them separately, the "unfixable" 20–30% splits cleanly into two populations.
-
-## Most likely primary culprit for "as low as 20–30%"
-
-If your geometry is Voronoi-based (most hex-grid MC mods are), **Cause A dominates**, because the fractional area loss scales as `1/A_target` — precisely the regime where narrow-range biomes live. Cause B adds a secondary hit that's harder to see because it removes instances rather than shrinking them.
-
-The single highest-leverage change is to stop clipping symmetrically and instead **solve face areas jointly** so that `Σ A_final = Σ A_target` per local neighborhood. That alone should recover most of the missing area for narrow biomes without touching the CSP or the width sampler.
+**Q3 — topology effect?** I'd bet against it being the primary driver of *this* symptom, mainly because the numbers line up so specifically with the displacement-cap geometry rather than anything adjacency-shaped — a topology-driven effect wouldn't obviously produce area ratios clustering near (1 + displacement_cap)². I wouldn't rule out topology mattering for some other part of the picture, but for the tail-blowup pattern specifically, I'd check the ceiling-clamp hypothesis first since it's a one-line test (pull maxDisplacementFraction on the worst offenders from your masking run) before reaching for anything topology-adjacent.
 
 
-		CHAT GPT
+	chatgpt
 
-Yes. Given what you've measured, I would **stop looking for a better scalar correction formula** and treat this as a **constrained, fairness-oriented optimization problem over the weights**.
+I read the follow-up carefully. The new measurements materially change my recommendation. In particular, **hard masking and soft resistance did not merely fail to find the right tuning—they exposed a real exchange mechanism**: making one face less able to resist a neighbor improves aggregate results while creating a larger individual oversize tail. Your source confirms that hard masking reached 201/930, but produced a 3.44× outlier, while the baseline is 293/930 with a 1.98× worst case. 
 
-The most promising direction is:
+I think there is a much cleaner answer to your three questions.
 
-> **lexicographic minimax / active-set weight solving, with the geometric safety clamps treated as hard constraints rather than post-hoc clipping.**
+## 1. A guaranteed Pareto improvement is possible — but only if you make "don't get worse" a hard constraint
 
-There is also one important conceptual point in your description that I think is worth emphasizing: **Mechanism B by itself is not a fundamental limitation of power diagrams.** If the target areas are feasible and the weights are unconstrained, semi-discrete optimal transport is specifically the theory for finding weights that realize prescribed individual cell masses. Damped Newton methods are routinely used for this purpose. ([Enlighten Publications][1])
+There is **no general theorem saying an aggregate improvement must cost a tail regression**. But there is also no theorem guaranteeing that an aggregate optimizer will find a Pareto improvement from your baseline.
 
-So your bad cases are telling you that **your additional constraints/topology/objective make the unconstrained OT solution unavailable or undesirable**, rather than that Laguerre geometry intrinsically cannot give those cells their target areas.
+The important distinction is:
 
-## 1. The solver I would try first: lexicographic minimax
+> **Don't optimize an aggregate objective and hope it behaves fairly. Put the baseline's per-face performance into the feasible set.**
 
-Don't solve
+This is a standard idea behind ε-constraint / lexicographic multiobjective optimization and equitable resource allocation: optimize one criterion while imposing explicit bounds on the competing criteria. Lexicographic minimax is also an established formulation for equitable allocation. ([PubsOnline][1])
+
+### Your baseline gives you an unusually nice reference point
+
+For every face \(i\), define
 
 $$
-\min_w \sum_i r_i(w)^2
+b_i = |r_i^{baseline}|
+       = \left|\frac{A_i^{baseline}-T_i}{T_i}\right|.
 $$
 
-where
+Now solve:
 
 $$
-r_i=\frac{A_i-T_i}{T_i}.
-$$
-
-That's exactly where your CG experiment gets its "sacrifice one face to improve the group" behavior.
-
-Instead solve approximately:
-
-$$
-\min_w \max_i |r_i(w)|.
-$$
-
-Even better, use **lexicographic minimax**:
-
-1. minimize the worst normalized error;
-2. freeze that optimum;
-3. among solutions having that minimum worst error, minimize the second-worst error;
-4. then the third-worst, etc.
-
-That objective is almost tailor-made for your requirement.
-
-A face at 0.25× target cannot be sacrificed merely because five neighbors can be moved from 0.99× to 1.01×. The 0.25 face dominates the objective until it has been brought substantially closer.
-
-### But don't implement the nonlinear minimax problem directly
-
-You already have the useful Jacobian:
-
-$$
-J_{ij}=\frac{\partial A_i}{\partial w_j}.
-$$
-
-At each iteration, linearize:
-
-$$
-r_i(w+\Delta w)
-\approx r_i + \frac{1}{T_i}\sum_jJ_{ij}\Delta w_j.
-$$
-
-Then solve the small **linear program**
-
-$$
-\min_{\Delta w,t} t
+\boxed{
+\min_w F(w)
+}
 $$
 
 subject to
 
 $$
--t \le
-r_i+\frac{1}{T_i}(J\Delta w)_i
-\le t
+\boxed{
+|r_i(w)| \le b_i
+\qquad\forall i
+}
+$$
+
+plus your existing geometric constraints.
+
+Where \(F\) can be:
+
+* number of faces outside ±10%;
+* sum of absolute normalized errors;
+* sum of squared normalized errors;
+* number of faces outside ±10%, then total error;
+* etc.
+
+**The baseline itself is feasible.**
+
+Therefore, if the optimizer returns a feasible solution, you have a mathematical guarantee:
+
+$$
+|r_i^{new}| \le |r_i^{baseline}|
+\qquad\forall i.
+$$
+
+No 3.44× surprise is possible if baseline was 1.98× for that face.
+
+This is the key technique I think you were missing.
+
+### It is stronger than minimax
+
+Minimax asks:
+
+> "What's the smallest possible worst error?"
+
+Your requirement is actually:
+
+> "Improve aggregate quality, but never make any individual face worse than the known-good baseline."
+
+Those aren't the same optimization problem.
+
+Your requirement is a **reference-point constrained multiobjective problem**.
+
+---
+
+# 2. Even better: don't use the baseline bound globally
+
+I'd make the constraint **per face and per seed**, because you already have a concrete baseline realization.
+
+For each actual face:
+
+$$
+L_i = \min(A_i^{base},T_i)
+$$
+
+$$
+U_i = \max(A_i^{base},T_i)
+$$
+
+would *not* be correct, because that allows crossing to the other side and becoming much worse.
+
+Instead use:
+
+$$
+T_i(1-b_i)
+\le A_i(w)\le
+T_i(1+b_i).
+$$
+
+So if baseline is:
+
+```text
+baseline = 0.31 × target
+```
+
+the new solver cannot produce:
+
+```text
+0.25 × target
+```
+
+or
+
+```text
+3.4 × target.
+```
+
+It can only move that face toward the interval bounded by its existing error.
+
+For a baseline face at 1.98× target:
+
+$$
+|r|=0.98
+$$
+
+so the constraint permits at most 1.98×.
+
+That directly encodes the product requirement.
+
+---
+
+# 3. There's a subtle but very useful refinement: use a *relaxed* baseline envelope
+
+If you make the constraint exactly
+
+$$
+|r_i|\le b_i,
+$$
+
+the solver may discover that **the baseline itself is locally isolated** because of the nonlinear clamps.
+
+So I would introduce a tiny tolerance:
+
+$$
+|r_i|
+\le
+b_i+\epsilon_i
+$$
+
+with something like 1–2 percentage points.
+
+But importantly:
+
+**do not make \(\epsilon\) large enough to hide your unacceptable tail.**
+
+For example:
+
+```text
+baseline worst = 1.98×
+allowed = 2.00×
+```
+
+is very different from:
+
+```text
+baseline worst = 1.98×
+allowed = 3.50×
+```
+
+The first is a genuine no-regression constraint.
+
+---
+
+# 4. Your solver then becomes a constrained QP/SQP, not CG
+
+You already have essentially everything necessary.
+
+At each iteration:
+
+$$
+r(w+\Delta w)
+\approx
+r(w)+J_r\Delta w.
+$$
+
+Solve:
+
+$$
+\min_{\Delta w} F_{\text{local}}(\Delta w)
+$$
+
+subject to
+
+$$
+-b_i
+\le
+r_i+J_{r,i}\Delta w
+\le b_i
+$$
+
+and your geometric constraints.
+
+This is now a **quadratic program / sequential quadratic programming problem**, depending on your local objective.
+
+You don't need to throw away your CG implementation. The Jacobian you derived is still useful.
+
+The major change is:
+
+> **CG is a solver for an unconstrained linear system. Your problem has inequality constraints.**
+
+That's exactly why the "push harder until somebody gets sacrificed" behavior keeps appearing.
+
+---
+
+# 5. There is an especially nice two-stage objective for your ±10% metric
+
+I would not minimize squared error first.
+
+Your actual metric is:
+
+> number of faces violating ±10%.
+
+So formulate the optimization lexicographically:
+
+### Stage 1
+
+Minimize:
+
+$$
+N_{bad}
+=
+\#\{i:|r_i|>0.10\}
+$$
+
+subject to:
+
+$$
+|r_i|\le b_i.
+$$
+
+### Stage 2
+
+Among solutions achieving the minimum \(N_{bad}\), minimize:
+
+$$
+\sum_i |r_i|.
+$$
+
+### Stage 3
+
+Among those, minimize:
+
+$$
+\max_i |r_i|.
+$$
+
+That is much closer to what you actually want than L2, IRLS, or \(L_p\).
+
+There are computational complications because the first objective is combinatorial, but you can approximate it with slack variables or solve it as a sequence of feasibility problems.
+
+---
+
+# 6. There is an even simpler version I would prototype first
+
+You don't necessarily need a full-blown optimizer.
+
+Keep your current independent scheme as the **incumbent**.
+
+Then let a joint solver propose a correction.
+
+Before accepting it:
+
+```text
+candidate geometry
+       ↓
+for every face:
+    if |candidateRatio - 1| > baselineAbsError:
+        reject candidate
+       ↓
+otherwise accept
+```
+
+Then among accepted candidates, choose one that reduces your violation count.
+
+This is basically **Pareto-filtered trust-region optimization**.
+
+It has an enormous advantage for your situation:
+
+### It cannot regress unless the acceptance test is buggy.
+
+That makes it much safer to experiment with sophisticated joint directions.
+
+---
+
+# 7. You can go one step further: accept only Pareto-improving moves
+
+For a candidate \(w'\), define:
+
+$$
+e_i(w)=|r_i(w)|.
+$$
+
+Accept only if
+
+$$
+e_i(w')\le e_i(w)
+\qquad\forall i
+$$
+
+and
+
+$$
+e_j(w')<e_j(w)
+$$
+
+for at least one \(j\).
+
+That's a **strict Pareto improvement**.
+
+However, I would *not* make this your only rule.
+
+It's probably too restrictive. You may have situations where temporarily making face A 0.5% worse enables ten faces to improve 20%.
+
+Instead use the **baseline as the hard outer envelope**, while allowing temporary internal regressions.
+
+That gives the optimizer room to work without permitting the catastrophic tail.
+
+---
+
+# 8. This also answers your "is it provably impossible?" question
+
+There is a very simple proof that a Pareto improvement can be impossible.
+
+Suppose the baseline error vector is
+
+$$
+e=(e_1,e_2,\ldots,e_n)
+$$
+
+and the feasible set contains only points satisfying
+
+$$
+e_1+e_2=C
+$$
+
+for some constant \(C\).
+
+If baseline has
+
+$$
+e_1=0.2,\qquad e_2=0.8,
+$$
+
+then improving \(e_1\) necessarily worsens \(e_2\).
+
+So if the baseline is already Pareto-efficient, **no strict Pareto improvement exists**.
+
+Your observations are consistent with precisely such local tradeoff surfaces.
+
+But here's the important part:
+
+> **You don't need to prove whether your baseline is globally Pareto-efficient before shipping a safe solver.**
+
+The baseline-constrained formulation simply searches for an improvement inside the region where regressions are forbidden.
+
+If that region contains no improvement:
+
+**return the baseline.**
+
+That's a completely acceptable result.
+
+---
+
+# 9. And this gives you the "fail loud" guarantee you asked for
+
+Yes: your second proposed idea is absolutely the right fallback.
+
+Suppose you want:
+
+$$
+|r_i|\le 0.10
+\qquad\forall i.
+$$
+
+Solve the feasibility problem:
+
+$$
+\boxed{
+\text{find }w
+\text{ such that }
+0.90T_i\le A_i(w)\le1.10T_i
+\quad\forall i.
+}
+$$
+
+If feasible:
+
+**ship it.**
+
+If infeasible:
+
+**do not silently return a solution with a 3.44× face.**
+
+Return:
+
+```text
+geometry target infeasible
+```
+
+or fall back to your baseline.
+
+This is fundamentally different from minimax.
+
+Minimax says:
+
+> "I'll give you the least-bad compromise."
+
+Your requirement is:
+
+> "10% is a contract. If the contract cannot be satisfied, don't pretend it was."
+
+That sounds much more aligned with a game-generation pipeline.
+
+Semi-discrete OT normally formulates the target condition precisely as
+
+$$
+\mu(L_i(w))=m_i
+$$
+
+for every cell; the dual optimization is constructed around those individual mass constraints rather than an aggregate approximation. ([ScienceDirect][2])
+
+So there is nothing theoretically strange about making individual mass bounds the primary constraints.
+
+---
+
+# 10. But there's an important catch with your ±10% constraint
+
+Your **total area must balance**.
+
+If the total available mesh area is fixed, then:
+
+$$
+\sum_i A_i = A_{world}.
+$$
+
+Therefore the target vector must satisfy the corresponding aggregate conservation condition.
+
+If
+
+$$
+\sum_i T_i \ne A_{world},
+$$
+
+you cannot have
+
+$$
+A_i=T_i
 $$
 
 for every face.
 
-And crucially, add your geometric constraints **to this optimization**, rather than letting them clip the answer afterward.
-
-For example:
+More generally, if you demand
 
 $$
-\Delta x_v \le 0.8R
+0.9T_i\le A_i\le1.1T_i,
 $$
 
-for every vertex-displacement constraint, plus whatever inequalities represent minimum edge lengths and simplicity/topology.
+a necessary condition is
 
-Then do a line search on the *actual recomputed polygons*.
+$$
+0.9\sum_iT_i
+\le A_{world}\le
+1.1\sum_iT_i.
+$$
 
-That gives you:
+That's only a necessary condition, not sufficient, because local topology and displacement constraints matter too.
 
-**linearize → minimax solve → trial weights → rebuild geometry → accept/reject → repeat.**
-
-This is much more appropriate than CG for your stated objective.
+But it gives you an immediate cheap infeasibility test.
 
 ---
 
-# 2. There's an even better version for your specific "deep-ocean cluster"
+# 11. Now to your topology question: yes, but not quite in the way you suggested
 
-Your instrumentation gives you a very useful clue:
+I think **fixed topology is absolutely relevant**, but I don't think the main issue is:
 
-> Several bad cells are simultaneously undersized, while their mutual displacement is tiny.
+> "the fair neighbor should disappear."
 
-That means you should explicitly look at **connected components of similarly bad cells**.
+The deeper issue is:
+
+> **Your weight optimization is happening inside one fixed combinatorial cell complex, whereas a genuine power diagram is allowed to change its active adjacency as weights move.**
+
+A true Laguerre cell is defined against *all* sites:
+
+$$
+L_i=
+\{x:
+\|x-x_i\|^2-w_i
+\le
+\|x-x_j\|^2-w_j,\ \forall j
+\}.
+$$
+
+The resulting cells are convex and the active neighbors emerge from those inequalities. ([Springer Nature Link][3])
+
+So your fixed six-neighbor mesh is an additional constraint.
+
+That doesn't necessarily make it wrong—your Minecraft mesh needs fixed adjacency—but it means you should not expect arbitrary prescribed cell areas to remain realizable inside that fixed combinatorial class.
+
+---
+
+# 12. There is a particularly important topology phenomenon to test
 
 Suppose:
 
@@ -174,670 +555,415 @@ Suppose:
        E
 ```
 
-and C/D/E are all at 0.3–0.5 target.
+and C is trying to grow.
 
-The important degree of freedom isn't necessarily:
+Your fixed topology says C must continue sharing boundaries with B, A, D and E.
 
-```text
-ΔwC
-ΔwD
-ΔwE
-```
-
-independently.
-
-It is the **collective mode**
-
-$$
-\Delta w_C=\Delta w_D=\Delta w_E.
-$$
-
-Internal boundaries barely move under that mode, but the **outer boundary of the entire cluster moves outward** against its smaller-weight neighbors.
-
-That suggests a very useful diagnostic/solver decomposition.
-
-### Build a bad-cell component
-
-For example:
+But after increasing C's weight, a true power diagram might produce:
 
 ```text
-bad = A_i < 0.8 T_i
+C dominates B/E
 ```
 
-then connected components under mesh adjacency.
+while another neighbor becomes inactive or an intermediate cell disappears.
 
-For each component \(C\), calculate its collective weight direction:
+Your implementation cannot do that.
 
-$$
-v_C(i)=
-\begin{cases}
-1&i\in C\\
-0&i\notin C.
-\end{cases}
-$$
+So the optimization is effectively saying:
 
-Evaluate:
+> "Give C more area, but it must continue paying territory to these same neighbors."
 
-$$
-Jv_C.
-$$
-
-If the component is genuinely suffering from collective contention, you should see something like:
-
-* \(Jv_C\) ≈ 0 on internal cells,
-* \(Jv_C>0\) on the component's boundary cells,
-* \(Jv_C<0\) on neighboring external cells.
-
-That's an extremely clean confirmation of what is happening.
-
-Then give these **component modes explicit priority**.
-
-Instead of asking the solver to discover this indirectly, say:
-
-> "This connected group is collectively 60% under target; first find the collective weight shift that gives the group territory, subject to individual fairness."
-
-That is basically turning the graph-Laplacian structure you already discovered into a useful solver basis.
+That can create exactly the sort of artificial tradeoff you're observing.
 
 ---
 
-# 3. A particularly attractive objective: worst *relative* error, not absolute area error
+# 13. However, I would NOT let topology float in production
 
-I would strongly recommend normalizing by target:
+You have a very good reason for fixing it:
+
+> the CSP has already committed to legal biome adjacency.
+
+Changing power-diagram adjacency would mean changing the semantic graph after the CSP has declared it legal.
+
+That's dangerous.
+
+Instead, use a **shadow global power diagram as a diagnostic only**.
+
+Take one pathological instance.
+
+Run:
+
+### A. Current system
+
+Fixed hex topology.
+
+### B. True global Laguerre diagram
+
+Same centers, same weights, no fixed adjacency.
+
+Compare:
+
+* cell areas;
+* active neighbors;
+* disappeared edges;
+* newly appearing edges;
+* which pathological face gets relieved.
+
+If the true diagram fixes the deep-ocean cluster while the fixed one doesn't, you've proven:
+
+> **the fixed topology is part of the infeasibility mechanism.**
+
+That is valuable even if you never allow topology changes.
+
+---
+
+# 14. There's another topology-related test I'd strongly recommend
+
+For every bad face, calculate its **non-neighbor competitors**.
+
+You currently only use the six legal mesh neighbors in the boundary construction.
+
+But in a true power diagram, site \(k\) can become relevant if its power bisector cuts into cell \(i\), even if \(k\) isn't one of the original six lattice neighbors.
+
+So for a bad face \(i\), ask:
 
 $$
-r_i=\frac{A_i-T_i}{T_i}.
-$$
-
-Then solve
-
-$$
-\min \max_i |r_i|.
-$$
-
-This matters because your desert/deep-ocean problem has very different absolute areas from smaller biomes.
-
-Otherwise a large target cell naturally dominates a least-squares objective.
-
-You can go one step further and make the lower side asymmetric if undersizing is the problem:
-
-$$
-\min \max_i
+\min_{k\notin N(i)}
 \left[
-\alpha\,\max(0,-r_i),
-\beta\,\max(0,r_i)
+\|x-x_k\|^2-w_k
+-
+(\|x-x_i\|^2-w_i)
 \right]
 $$
 
-with
+over points of the current cell.
 
-$$
-\alpha>\beta.
-$$
+If some non-neighbor is nearly competitive, your fixed topology is constraining a potentially important degree of freedom.
 
-For example, initially try:
-
-$$
-\alpha=2,\qquad\beta=1.
-$$
-
-That says:
-
-> "I'd rather tolerate a 5% oversize than a 5% undersize."
-
-It doesn't require changing CSP identity legality or self-adjacency.
+This is essentially an **inactive-constraint / reduced-cost test**.
 
 ---
 
-# 4. IRLS is worth trying — but use it as a *fairness* method, not ordinary weighted least squares
+# 15. One correction to my previous answer: your IRLS experiment is decisive
 
-Your suggested IRLS idea is good.
+Your new numbers are very useful here.
 
-Ordinary least squares effectively minimizes:
+You correctly caught my previous formula mistake.
 
-$$
-\sum_i r_i^2.
-$$
-
-Instead use weights that increase rapidly for persistent outliers:
+For standard IRLS approximating an \(L_p\) objective,
 
 $$
-\min_\Delta
-\sum_i q_i r_i^2
+|r|^p
 $$
 
-where, for example,
+the quadratic majorizer weight is proportional to
 
 $$
-q_i =
-\frac{1}{(|r_i|+\epsilon)^{p}}
+(|r|+\epsilon)^{p-2},
 $$
 
-with \(p=1\) or \(2\).
+not
 
-Or a simpler engineering version:
+$$
+\frac{1}{(|r|+\epsilon)^p}.
+$$
+
+Your \(p=4\) result of 644/930 therefore tells us something meaningful: **the problem isn't simply that we hadn't weighted the outliers strongly enough.** The entire family of smooth aggregate objectives is behaving badly on your production geometry. 
+
+That makes me substantially less interested in further variants of:
+
+* weighted L2;
+* IRLS;
+* \(L_p\);
+* CG damping;
+* "stronger bad-face weights."
+
+You've already explored enough of that space.
+
+---
+
+# 16. I also would not pursue "freeze the bad face" any further
+
+Your masking result is particularly diagnostic:
+
+> hard masking improves 293 → 201, but produces 3.44×.
+
+Then progressively reducing its resistance gives:
 
 ```text
-|r| < 0.10       weight = 1
-0.10–0.25        weight = 2
-0.25–0.40        weight = 5
-0.40–0.60        weight = 15
-> 0.60           weight = 50
+mult=5   → 214
+mult=50  → 205
+hard     → 201
 ```
 
-Then recompute the solve.
+while the tail monotonically approaches the hard-mask tail. 
 
-But I would rank this **below minimax**.
+That's a beautiful experiment because it strongly suggests that the phenomenon isn't an implementation artifact.
 
-IRLS still has the fundamental property that the optimizer can say:
+You've effectively measured a **resource-transfer mechanism**:
 
-> "I'll make this one awful cell worse because that improves several others enough."
+> removing a cell's ability to adjust allows another cell to appropriate its territory.
 
-The weights merely make that less attractive.
+So the right response isn't another clever resistance multiplier.
 
-Minimax makes it the primary objective.
+It's a **constraint preventing that appropriation**.
 
 ---
 
-# 5. The really interesting formulation: constrained minimax with slack
+# 17. The solver I would actually build now
 
-There is an especially nice formulation for your situation.
+I'd make the production algorithm look like this:
 
-Introduce one variable \(t\):
+### Phase 0 — baseline
+
+Run your existing 15-round independent solver.
+
+Record:
 
 $$
-\min t
+b_i=|r_i^{base}|.
+$$
+
+This is your safety envelope.
+
+### Phase 1 — candidate joint solve
+
+Use your existing sparse Jacobian to generate a proposed joint step.
+
+But solve:
+
+$$
+\min F(\Delta w)
 $$
 
 subject to
 
 $$
--T_i t
-\le
-A_i(w)-T_i
-\le
-T_i t.
+|r_i+J_i\Delta w|
+\le b_i+\epsilon
 $$
 
-Then add your geometry constraints.
+for every face.
 
-This means:
+Also retain your displacement constraints.
 
-> Find the weight configuration for which the **worst percentage error of any face is as small as possible.**
+### Phase 2 — actual geometry
 
-Now suppose the geometry clamp makes 100% fidelity impossible.
+Rebuild the actual polygons.
 
-The solver doesn't blindly push until the clamp explodes.
+### Phase 3 — hard acceptance
 
-It discovers something like:
+Reject if any face violates:
 
-```text
-minimum achievable worst error = 0.37
-```
+$$
+|r_i|>b_i+\epsilon.
+$$
 
-and you get a mathematically meaningful answer:
+Reject if any existing geometry invariant fails.
 
-```text
-best possible:
-    every face ∈ [0.63T, 1.37T]
-```
+### Phase 4 — objective
 
-rather than:
+Among candidates that pass, choose the one with fewer ±10% violations.
 
-```text
-CG happened to produce:
-    7 faces at 0.25T
-    400 faces at 1.01T
-```
+### Phase 5
 
-That distinction is extremely important for debugging your remaining Mechanism-A/B cases.
+Repeat.
+
+If no accepted step exists:
+
+**return the baseline.**
+
+That gives you a very strong engineering property:
+
+> **The new solver can improve the baseline or do nothing. It cannot make the shipped result worse.**
 
 ---
 
-# 6. I would make the displacement clamp an actual constraint
+# 18. You can make that even stronger with an explicit "baseline barrier"
 
-This is probably the biggest architectural change I'd recommend.
+For the worst-tail problem, I'd actually use a separate bound:
 
-Right now you effectively have:
+$$
+|r_i|\le
+\min(b_i+\epsilon,\ r_{\text{absolute-max}})
+$$
+
+where perhaps
+
+$$
+r_{\text{absolute-max}}=1.0
+$$
+
+if 2× target is the absolute maximum you're willing to tolerate.
+
+Then even if the baseline for some face was already awful, the new solver isn't allowed to make it arbitrarily worse.
+
+For example:
 
 ```text
-solve weights
-      ↓
-construct geometry
-      ↓
-clamp geometry
+baseline = 1.98×
+absolute safety cap = 2.10×
 ```
 
-That creates a mismatch:
+means:
 
-> The optimizer thinks it can buy area by changing weights, but the geometry stage subsequently refuses to realize some of those changes.
+> "This face is already bad; improvement is desirable, but under no circumstances may the new solver turn it into a 3× or 5× face."
 
-From the optimizer's perspective, its model is wrong.
-
-Instead, expose the constraint to the solver.
-
-At a linearized step:
-
-$$
-x_v(w+\Delta w)
-\approx
-x_v + K_v\Delta w
-$$
-
-where \(K_v\) is the vertex-position sensitivity to weights.
-
-Then enforce
-
-$$
-\|x_v+K_v\Delta w-x_v^0\|
-\le 0.8R.
-$$
-
-You don't necessarily need a full nonlinear constraint. A conservative linearized polygonal approximation is probably sufficient.
-
-Then the optimizer knows:
-
-> "This face cannot get more area through this vertex because that vertex is already at its displacement limit."
-
-That converts Mechanism A from a mysterious post-solver failure into an **active constraint**.
-
-This is very close in spirit to capacity-constrained variants of semi-discrete OT, where hard constraints can be incorporated into the optimization rather than treated as after-the-fact corrections. ([SIAM][2])
+That is an excellent guardrail for an experimental optimizer.
 
 ---
 
-# 7. There's a useful mathematical diagnostic hiding in your Jacobian
+# 19. One caveat: baseline envelopes can lock in existing bad faces
 
-You already have the key equation:
+There's a consequence.
 
-$$
-J_{ij}=-\frac{L_{ij}}{2D}
-$$
-
-for neighbors and
+If a desert face is already:
 
 $$
-J_{ii}=\sum_j\frac{L_{ij}}{2D}.
+A=0.30T,
 $$
 
-That's a weighted graph Laplacian.
+then your no-regression constraint permits another solution to remain at 0.30T forever.
 
-Therefore:
+That's intentional.
 
-$$
-J\mathbf{1}=0.
-$$
+The method answers:
 
-This isn't just a numerical nuisance.
+> "Can we improve the system without creating new disasters?"
 
-It gives you a powerful diagnostic.
+It does **not** guarantee that the existing disaster becomes fixed.
 
-For a connected graph, the uniform weight shift
+That's why I'd use the objective:
 
 $$
-w_i\rightarrow w_i+c
+\text{minimize number outside ±10%}
 $$
 
-doesn't change the diagram.
+inside the no-regression envelope.
 
-Now consider a group \(C\). Its indicator vector \(1_C\) is approximately a **low-frequency mode** when C is a large contiguous cluster.
-
-That's exactly your deep-ocean situation.
-
-### Measure the cluster boundary
-
-Define:
-
-$$
-\lambda(C)
-=
-\sum_{\substack{i\in C\\j\notin C}}
-\frac{L_{ij}}{2D}.
-$$
-
-This is essentially the weighted cut capacity of the cluster.
-
-Then the collective weight shift
-
-$$
-w_i\leftarrow w_i+\delta,\quad i\in C
-$$
-
-produces total first-order area transfer proportional to that cut.
-
-So you can quantify:
-
-> **How much "territorial leverage" does this bad cluster have against its surroundings?**
-
-A cluster with:
-
-* enormous total area deficit,
-* very small boundary cut,
-
-is inherently difficult to rescue individually.
-
-That gives you a much better explanation of your deep-ocean failures than simply saying "the neighbors are also large."
+Then the optimizer has a reason to improve the 0.30 face whenever it can do so without damaging anybody else.
 
 ---
 
-# 8. This also gives you a feasibility test before solving
+# 20. My ranking of the remaining ideas
 
-For a bad connected cluster \(C\), calculate:
+Given everything you've now tested:
 
-$$
-D_C=\sum_{i\in C}(T_i-A_i).
-$$
-
-Then estimate the maximum area that can be transferred through its boundary before the allowed displacement constraints activate.
-
-Call that \(F_C\).
-
-If
-
-$$
-D_C > F_C,
-$$
-
-then **the individual targets are geometrically infeasible under your current 0.8R constraint**, regardless of how clever the weight solver is.
-
-That's an enormously valuable distinction.
-
-You'd then have three classes:
-
-### Class 1 — feasible + solver failure
-
-```text
-D_C <= F_C
-```
-
-but solver doesn't achieve targets.
-
-→ Algorithm problem.
-
-### Class 2 — infeasible because displacement constraints bind
-
-```text
-D_C > F_C
-```
-
-→ Mechanism A / geometry constraint.
-
-### Class 3 — infeasible because the desired cells don't have enough external territory
-
-e.g. a cluster nearly fills its local neighborhood with cells that themselves require area.
-
-→ Genuine local capacity conflict.
-
-That would let you stop tuning algorithms for cases that mathematically cannot be solved.
+| Approach                                 |    I'd pursue? | Reason                                                                |
+| ---------------------------------------- | -------------: | --------------------------------------------------------------------- |
+| **Baseline-envelope constrained solver** | **Yes, first** | Directly guarantees no tail regression                                |
+| **Hard per-face ±10% feasibility solve** |        **Yes** | Fail-loud semantics exactly match requirement                         |
+| **Baseline-preserving SQP/QP**           |        **Yes** | Natural use of your existing Jacobian                                 |
+| **True global power diagram diagnostic** |        **Yes** | Determines whether fixed topology is a hidden bottleneck              |
+| **Non-neighbor reduced-cost test**       |        **Yes** | Cheap topology diagnostic                                             |
+| Lexicographic minimax                    |          Maybe | Good fairness objective, but doesn't guarantee baseline preservation  |
+| More IRLS variants                       |         **No** | You've now falsified the whole aggregate-Lp direction experimentally  |
+| More damping/resistance tuning           |         **No** | Your masking sweep already exposes the structural trade               |
+| More Gauss-Seidel variants               |         **No** | 282 vs 293 isn't enough and tail worsens                              |
+| More self-adjacency heuristics           |    Probably no | You're changing the semantic problem rather than solving the geometry |
 
 ---
 
-# 9. One thing I would *not* conclude from the desert example
+## The most important conclusion
 
-I agree with your observation:
+I don't think your next step should be:
 
-> desert's legal neighbors all have ranges [500,800], while desert is [900,1500].
+> **"Find a better joint objective."**
 
-But I wouldn't describe that alone as proof that a power-diagram solver cannot give desert its target.
+It should be:
 
-The declared **width ranges are not the same thing as weight constraints**.
+> **"Turn the acceptable behavior of the existing solver into hard constraints, then optimize inside that safe region."**
 
-Once you start your correction loop,
+You have something unusually valuable that most optimization problems don't: **a known production baseline that already satisfies all correctness invariants and has a measured per-instance error vector.**
 
-$$
-w_i \leftarrow w_i+\Delta w_i,
-$$
+Exploit that.
 
-the resulting weight need not correspond to a width that was originally legal.
-
-And standard semi-discrete OT precisely exploits the freedom of the dual weights to produce prescribed cell masses. ([Optimal Transport][3])
-
-So the stronger statement is:
-
-> Desert's legal-width neighborhood structure makes the *initial target weights* structurally disadvantaged, but it only becomes a fundamental impossibility if your actual geometry/weight constraints prevent the required relative weight shift.
-
-That's an important distinction because it tells you where to look.
-
----
-
-# 10. I would also test whether your fixed adjacency is silently imposing an extra constraint
-
-This jumped out at me from your description.
-
-You say:
-
-> "For 3 mutually-adjacent hex faces meeting at one mesh vertex..."
-
-and vertices are recomputed from those fixed triples.
-
-But a true power diagram isn't obligated to preserve your original hex-grid adjacency graph as weights change.
-
-Increasing weights can cause:
-
-* an edge to disappear,
-* a new neighbor relation to appear,
-* a cell to become nonempty/empty,
-* a triple to cease being the active triple at a vertex.
-
-The power diagram itself is defined globally by all weighted sites, not by a permanently frozen adjacency list. ([Wikipédia][4])
-
-If your implementation keeps the original six neighbors and original triples forever, then you're not actually giving the OT solver the full feasible set of Laguerre diagrams.
-
-You're solving:
-
-> **"Find weights for this particular combinatorial polygon mesh whose vertices are radical centers of these predetermined triples."**
-
-That's a substantially more constrained problem.
-
-And it could absolutely explain why the textbook OT existence theorem doesn't seem to save some cases.
-
-This is the first implementation detail I would audit before concluding that the power-diagram formulation itself is at fault.
-
----
-
-# 11. A very practical experiment
-
-Before implementing a whole minimax solver, I would run one extremely informative experiment on your existing production data.
-
-For every bad face/component:
-
-### Experiment A — remove the width semantics entirely
-
-Keep the sites fixed.
-
-Give every site a completely unconstrained scalar weight.
-
-Do **not** restrict weights to correspond to declared biome widths.
-
-Then solve:
-
-$$
-\min \max_i |A_i/T_i-1|
-$$
-
-with only the actual geometric safety constraints.
-
-If the bad desert/deep-ocean cells become healthy:
-
-**→ your biome width/weight mapping is the problem.**
-
-If they remain bad:
-
-**→ the geometry/topology/displacement constraints are the problem.**
-
-Then:
-
-### Experiment B — remove only the 0.8R constraint
-
-Don't ship it. Just diagnostic.
-
-If the bad cluster suddenly reaches approximately the targets:
-
-**→ Mechanism A is the binding constraint.**
-
-If it remains at 0.3–0.5× despite unlimited displacement:
-
-**→ you have a genuine local capacity/topology problem.**
-
-And:
-
-### Experiment C — allow topology changes
-
-Run a true global power diagram from all sites/weights rather than reconstructing the predetermined mesh triples.
-
-If the bad cluster becomes solvable:
-
-**→ fixed adjacency is the hidden constraint.**
-
-Those three experiments would probably tell you more than another 20 tuning runs of the existing correction loop.
-
----
-
-# 12. My recommended implementation hierarchy
-
-I'd attack it in this order:
-
-### Tier 1 — diagnostic
-
-1. Compute normalized residual \(r_i\).
-2. Find connected bad components.
-3. Compute component deficits \(D_C\).
-4. Compute weighted boundary cut \(\lambda(C)\).
-5. Track which displacement constraints become active.
-6. Check whether your fixed adjacency differs from the actual power-diagram adjacency.
-
-### Tier 2 — solver
-
-Replace independent correction with:
-
-$$
-\boxed{\text{sequential/lexicographic minimax}}
-$$
-
-using your exact Jacobian.
-
-Something like:
-
-```text
-repeat:
-    build actual geometry
-    compute normalized residuals r
-
-    identify active geometric constraints
-
-    linearize:
-        r_new ≈ r + J_normalized Δw
-
-    solve:
-        minimize t
-
-        subject to:
-            -t <= r_new[i] <= t
-            geometric constraints
-            step-size / trust-region constraints
-
-    line-search Δw against actual geometry
-
-    accept if actual worst residual decreases
-```
-
-### Tier 3 — cluster acceleration
-
-Add collective bad-component directions:
-
-```text
-Δw = ordinary face modes
-   + cluster collective modes
-```
-
-This should make the deep-ocean case much easier for the optimizer.
-
-### Tier 4 — topology
-
-If experiments show fixed adjacency is the bottleneck, switch from your fixed-triple construction to a genuine global power-diagram rebuild.
-
----
-
-# 13. One more alternative worth knowing: \(L_p\) continuation
-
-If a full LP/minimax solver is inconvenient, there's a surprisingly good intermediate approach.
-
-Solve a sequence:
-
-$$
-\min_w\sum_i |r_i|^p
-$$
-
-with
-
-```text
-p = 2
-p = 4
-p = 8
-p = 16
-p → ∞
-```
-
-using each solution to initialize the next.
-
-As \(p\) grows, the objective increasingly approximates minimax.
-
-This gives you most of the behavior you want from minimax without introducing an LP.
-
-And because your Jacobian is already available, the implementation is relatively straightforward.
-
-I would still prefer the explicit minimax formulation because it gives you a directly interpretable guarantee.
-
----
-
-## Bottom line
-
-Your Newton/CG result doesn't convince me that "joint solving doesn't work." It convinces me that **the objective was wrong for your product requirement**.
-
-Classical semi-discrete OT is fundamentally about satisfying prescribed cell masses with Laguerre weights, and damped Newton is a standard way of doing it. ([Enlighten Publications][1]) Your requirement is stronger:
-
-> **Don't minimize total error. Make the worst individual biome as good as possible, subject to hard geometric constraints.**
-
-That's a **minimax constrained Laguerre-weight problem**.
-
-So my strongest recommendation is:
+Mathematically:
 
 $$
 \boxed{
-\textbf{constrained lexicographic minimax on normalized per-face area residuals}
-}
+\begin{aligned}
+\text{minimize}\quad&
+\text{aggregate size violations}\\
+\text{subject to}\quad&
+|r_i(w)|\le |r_i(w_{\rm baseline})|+\epsilon
+&&\forall i\\
+&
+\text{all geometric safety constraints}\\
+&
+\text{fixed CSP topology}\\
+\end{aligned}}
 $$
 
-with your displacement/edge/topology restrictions incorporated as **solver constraints**, plus a **cluster collective mode** for the joint-contention cases.
+If feasible, you get an aggregate improvement with a formal **no-regression guarantee**.
 
-And before implementing it, I would run the three diagnostic experiments above—especially the **"unconstrained weights + true global power diagram"** experiment. If that suddenly makes the 0.24–0.5 faces healthy, you'll know that you're fighting your implementation's constraints rather than a limitation of power diagrams themselves.
+If infeasible, retain the baseline.
 
-[1]: https://eprints.gla.ac.uk/288006/?utm_source=chatgpt.com "Geometric modelling of polycrystalline materials: Laguerre tessellations and periodic semi-discrete optimal transport"
-[2]: https://epubs.siam.org/doi/abs/10.1137/20M1357226?utm_source=chatgpt.com "A Newton Algorithm for Semidiscrete Optimal Transport with Storage Fees | SIAM Journal on Optimization"
-[3]: https://optimaltransport.github.io/pdf/ComputationalOT.pdf?utm_source=chatgpt.com "Computational Optimal Transport"
-[4]: https://en.wikipedia.org/wiki/Power_diagram?utm_source=chatgpt.com "Power diagram"
+And separately, run a **true global Laguerre diagram diagnostically** on the pathological instances. If that changes the feasible area allocation dramatically, then you have evidence that the fixed hex topology—not CG, not IRLS, and not the correction schedule—is the remaining structural bottleneck. The mathematical literature indeed treats prescribed Laguerre-cell masses as individual constraints through the dual weights; it does not require minimizing an aggregate area error. ([ScienceDirect][2])
+
+That is the direction I'd bet engineering time on now.
+
+[1]: https://pubsonline.informs.org/doi/10.1287/opre.47.3.361?utm_source=chatgpt.com "On Equitable Resource Allocation Problems: A Lexicographic Minimax Approach | Operations Research"
+[2]: https://www.sciencedirect.com/science/article/pii/S0010448519301770?utm_source=chatgpt.com "Initialization Procedures for Discrete and Semi-Discrete Optimal Transport - ScienceDirect"
+[3]: https://link.springer.com/article/10.1007/s00526-021-02133-z?utm_source=chatgpt.com "Semi-discrete optimal transport methods for the semi-geostrophic equations | Calculus of Variations and Partial Differential Equations | Springer Nature Link"
 
 
+	deepseek
 
-		CLAUDE
+Here's the English version.
 
+## Bottom line
 
-This is a sharp writeup — the instrumentation you did to separate Mechanism A/B (not just theorize them) is exactly what makes this tractable. Here's what I think is going on with the CG/Newton attempt, and why I'd point you somewhere adjacent to what you tried rather than away from it.
+What you're seeing — "any aggregate improvement comes with a worse tail" — is very likely a real structural property of the objective you're optimizing. But your problem isn't that Pareto improvement is impossible. It's that every method so far has been optimizing the **wrong quantity**. The fix is to stop minimizing aggregate area error and instead enforce per-face constraints, and to treat desert and the deep-ocean family as two structurally different failures rather than one.
 
-## Why the joint solve made outliers worse — a specific hypothesis
+## Question 1: Is Pareto improvement possible, or provably impossible?
 
-You said the CG solve "correctly, provably minimizes aggregate error." I'd push on that a bit. A least-squares objective weighted by squared residual actually *should* push harder on your worst offenders — a face at 0.3 ratio contributes far more to the sum-of-squares than one at 0.95, so a true unconstrained minimizer would spend disproportionate correction budget there, not less.
+**Partially impossible — but you are not in the regime where it's impossible.**
 
-The more likely explanation: your Jacobian (∂Area_i/∂weight_j from the radical-center formula) models the *unclamped* system. But clamp #4 (the 0.8× displacement cap) is a hard, nonsmooth constraint that the solver has no idea exists. So on a face that's already at maxDisplacementFraction = 1.0, the solver's linear model says "increasing weight_i by X will grow area by Y" — and it allocates correction budget accordingly, discounting the *other* faces in the same linear system to balance the equations. Then the clamp gets applied post-hoc, vetoes the move on the saturated face entirely, and the "savings" the solver assumed it was getting there never materialize. You end up with faces that used to be fine now slightly worse, and the clamp-saturated faces unchanged — which matches "293→310-325" almost exactly: a few formerly-healthy faces tip over the tolerance line to pay for corrections that got clawed back by a clamp the optimizer didn't know about.
+The trade-off you keep observing has a precise mathematical source. Your Jacobian is a **graph Laplacian** (diagonal = sum of shared-edge contributions, off-diagonal = negative shared-edge terms). Every "correction" you've tried — IRLS reweighting, masking, L_p continuation — is essentially a change to the **diagonal scaling** of that Laplacian. When a face's diagonal is reduced (frozen or throttled), it acts as a *softer* constraint in the system; the neighbors' equations are unchanged, so in the next CG round the neighbors can push that face more freely.
 
-If that's right, the fix isn't a different loss function first — it's making the clamps visible to the solver. That's a real, known category: **constrained least-squares / active-set projected Newton**, where clamp #4 becomes an explicit inequality constraint in the QP rather than a post-hoc projection. Concretely: each round, before solving, mark faces already at or near their displacement cap as *fixed* (zero degrees of freedom, not part of the linear system at all — same for structurally-infeasible faces like desert, which you can detect in advance from the static range check you already have). Solve the reduced system only over the remaining free faces. This is cheap to try incrementally on top of the CG code you already have (branch preserved, per your note) — it's a masking change to which variables enter the solve, not a new algorithm.
+This is not an implementation bug. It's an incompatibility between a **local modification operator** and a **globally coupled system**. The pseudoinverse of a graph Laplacian, applied to a residual, produces displacements that are weighted sums of neighbors' residuals. Weakening one face's diagonal is equivalent to introducing an asymmetric preconditioner into the pseudoinverse — it redistributes that face's error energy to its neighbors, and the direction of redistribution follows the neighbors' residual gradient, not a fairness criterion.
 
-## For the pure joint-contention case (same-tier neighbors pushing together)
+**But Pareto improvement is not theoretically impossible here.** What you're missing isn't an algorithm — it's a **constraint**. Every method so far solves an unconstrained problem (modulo displacement clamps) and then checks afterward who violated tolerance. Once you make "every face's |r_i| must stay below some bound" a **hard inequality constraint** in the system, the feasible region itself is clipped. Projected gradient or active-set methods on that clipped region can, in principle, reduce total violations without worsening any already-compliant face — because worsening a compliant face is blocked by the constraint.
 
-Once Mechanism A and C faces are excluded from the solve as above, what's left is genuinely the individual-vs-aggregate tension you named. Two concrete options, in order of how much they reuse your existing code:
+**Key distinction:** your masking modified the *equations* (changed the diagonal). It did not add an *inequality* (bounding the final r_i). Changing the diagonal creates no feasible-region boundary; adding a constraint does.
 
-**1. IRLS on the existing CG solve (smallest change).** Reweight each face's residual by something like `1/max(current_ratio, ε)` before each CG pass, so faces further from target get proportionally more say in the objective — this pushes the aggregate L2 solve toward an L∞ (minimax) solve as iterations progress. This is literally what you flagged as untried; I'd just note it slots directly into your existing matrix-free CG without restructuring anything, so it's a cheap experiment to run before the more invasive options.
+## Question 2: Is a hard worst-case constraint feasible, and how?
 
-**2. Max-min water-filling (more principled, more work).** This is the standard technique from network rate-allocation / fair-share auctions for exactly "some agents are structurally capped, don't let that block fairness among the rest": each round, solve the joint system, find whichever face(s) hit a hard constraint (clamp, or zero relative headroom against all neighbors, per the weight-difference math), *freeze* them at their best achievable value, remove them from the free-variable set, and re-solve the remainder. It's your convergence-stall detector (#4 in your list) done with a real infeasibility test instead of a symptom threshold — the reason #4 misfired ("froze faces still genuinely converging") is it used round-over-round delta as a proxy for "stuck," which is noisy; testing directly against the clamp state or the Jacobian's actual null-space is not.
+**Feasible, but it requires a different solver framework.** Your system is sparse symmetric positive definite (a graph Laplacian) — that's good news. Projecting onto box constraints |r_i| ≤ τ keeps the problem convex (provided the objective stays convex). Recommended routes:
 
-**3. Gauss-Seidel-style sequential ordering (cheapest to test as a diagnostic, not necessarily a shipped fix).** Since the boundary only moves on weight *differences*, and your current correction is Jacobi-style (everyone updates off last round's state simultaneously), same-tier neighbors updating in lockstep is almost definitionally why they can't gain ground on each other. Processing faces sequentially within a round — worst-ratio-first — and using each face's already-updated weight when computing its neighbor's correction in the same round would inject exactly the asymmetry that's currently absent. This won't fix desert (Mechanism C, no legal neighbor is even in range), but for something like the deep-ocean cluster it directly targets the "nobody moves relative to anyone else" failure mode, and it's a small enough change that it's worth running just to confirm the diagnosis before building the heavier machinery.
+**Option A (most direct): constrained least squares with an active set.**
 
-I'd try #1 or #3 first since they're near-zero-cost against your existing pipeline and would tell you quickly whether the diagnosis holds before you invest in a real active-set solver.
+Formulate as
+min Σ r_i²  subject to  |r_i| ≤ τ  for all i
+where r_i = target_i − realized_i(w), and realized_i comes from your power diagram. Each iteration, for faces that have hit the bound, fix their residual at ±τ (equivalently, fix their effective target at target_i ∓ τ), then solve unconstrained CG on the remaining free faces. This draws a hard boundary between "compliant" and "struggling" faces: a struggling face cannot improve itself by sacrificing a compliant one.
+
+**Note:** your earlier masking failed because it *weakened* the struggling faces. This does the opposite — it *pins the violation magnitude* of the struggling face and lets compliant faces absorb the remaining adjustment. The direction is reversed.
+
+**Option B (if you want "fail loud" rather than "must solve"): a feasibility problem.**
+
+Rewrite the objective as
+min ε  subject to  |r_i| ≤ τ + ε  for all i
+If ε* comes out significantly positive, no solution exists under the current topology that brings every face into tolerance. That's your fail-loud signal. This LP / second-order-cone form can be solved efficiently on your graph Laplacian because the constraints are per-face box constraints.
+
+**Your masking numbers support this direction:** 201/930 was the best aggregate result, but the tail blew up. If you take that 201 as a starting point and add "no face's |r_i| may exceed 1.2× the baseline worst case" as a hard constraint, the active set will block those 3.44× blowups — at the cost of the aggregate count possibly returning to ~250, but with the tail clamped. That is the Pareto improvement you actually want (relative to the baseline's tail, not relative to masking's aggregate count).
+
+## Question 3: The desert vs. deep-ocean topological distinction
+
+**This is the most production-valuable finding in your entire investigation, and it directly answers "where does the tail come from."**
+
+The fact you discovered in the masking analysis — desert has **zero range overlap** with every legal neighbor, while the four deep-ocean variants have **at least one overlapping legal neighbor** (each other, or the marginal shallow-ocean sliver) — means these two groups fail for fundamentally different reasons:
+
+- **Desert's failure is an "infeasible" failure.** If desert's target is not within the same order of magnitude as any neighbor's target, the power diagram boundary simply does not permit desert to shrink to its target area without invading a neighbor's target area. No amount of weight tuning fixes this. This is the classic **mass-mismatch** signature in discrete optimal transport. Your CSP allowed desert to be adjacent to those neighbors, but their size declarations are geometrically incompatible.
+- **Deep-ocean's failure is a "weight-competition" failure.** They are legal relative to each other and their ranges overlap, so in principle a weight configuration exists that brings them all near target. They fail because of same-tier synchronous updates — all deep-ocean faces push their weights up together and cancel each other. Your Gauss-Seidel test (282 vs. 293) only improved 11 violations, which suggests synchronization is a secondary factor. The primary factor is likely that deep-ocean faces have an unusually large **shared-edge-to-area ratio** in the power diagram (small target area → large perimeter/area → higher sensitivity to neighbor weights).
+
+**On the topology-adjacency question:** your suspicion is correct. If the power diagram's **topology** were allowed to float (i.e., desert could "eat" some neighbors' edges and share no boundary with them at all), desert's problem might disappear. You can't float the topology, because the CSP guarantees legal adjacency. **Compromise:** in the weight solve, allow desert's shared edge with a given neighbor to **degenerate toward zero length** (rather than floating topology freely). This is equivalent, under a fixed adjacency graph, to desert "effectively not sharing a boundary" with that neighbor. This is achievable in a power diagram: when two faces' weight difference is large enough, the radical edge between them degenerates. In your Jacobian, the term ∂Area_i/∂w_j contains sharedEdgeLength_ij; when that length goes to zero, the coupling vanishes automatically. **The current solver probably never reaches this regime, because your damping is too small to move weights far enough.** Try a **large initial weight offset** (not incremental damping — directly give desert a large negative weight offset) and see whether it "releases" its edges from incompatible neighbors.
+
+## Final recommendations
+
+1. **Stop tuning the objective.** IRLS, L_p, and diagonal masking have all been tried; they're structurally wrong.
+2. **Switch to constrained least squares:** hard constraint |r_i| ≤ τ, active set handling compliant faces, so struggling faces cannot sacrifice them.
+3. **Handle desert separately:** when a "zero-range-overlap neighbor pair" is detected, allow the shared edge to degenerate (large-weight-difference regime) rather than damping gradually.
+4. **Handle deep-ocean separately:** what they need is a **coordinated weight** (do multiple deep-ocean faces share a single joint weight variable?) rather than independent updates. If they are supposed to form a contiguous region in the power diagram, independent weights are the wrong parameterization.
+
+Real Pareto improvement probably only exists **after** you stop treating desert and deep-ocean as the same kind of failure to fix.

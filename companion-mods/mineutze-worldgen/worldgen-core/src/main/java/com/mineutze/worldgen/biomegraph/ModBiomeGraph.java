@@ -3,15 +3,14 @@ package com.mineutze.worldgen.biomegraph;
 import java.util.List;
 
 /**
- * First real BiomeGraph, matching DESIGN.md's worked example. Everything here
- * (widths, blend width) is a placeholder to tune from logged solve output,
- * same as the grid constants in {@link com.mineutze.worldgen.regionsolve.MacroGridConfig}.
+ * First real BiomeGraph, matching DESIGN.md's worked example. Widths/blend width here
+ * are placeholders to tune from logged solve output, same as grid constants in {@link
+ * com.mineutze.worldgen.regionsolve.MacroGridConfig}.
  *
- * Lives in worldgen-core (not the mod module) despite the "Mod" name —
- * {@link BiomeId} is deliberately not Minecraft's ResourceLocation, so this
- * class has no Minecraft/NeoForge dependency either, and both the mod and
- * the standalone export CLI ({@code com.mineutze.worldgen.export}) need the
- * same graph instance.
+ * Lives in worldgen-core (not the mod module) despite the "Mod" name - {@link BiomeId}
+ * deliberately not Minecraft's ResourceLocation, so no Minecraft/NeoForge dependency
+ * here either, and both mod + standalone export CLI ({@code com.mineutze.worldgen.export})
+ * need the same graph instance.
  */
 public final class ModBiomeGraph {
 
@@ -44,36 +43,19 @@ public final class ModBiomeGraph {
             AdjacencyRule.allow(BADLANDS, SAVANNA, DEFAULT_BLEND_WIDTH_BLOCKS),
             AdjacencyRule.allow(BADLANDS, OCEAN, DEFAULT_BLEND_WIDTH_BLOCKS),
             AdjacencyRule.allow(FOREST, SAVANNA, DEFAULT_BLEND_WIDTH_BLOCKS),
-            // Closes the LAST real gap in this graph, found via a real production crash (the
-            // geometry-realization rasterizer of the time - since replaced by
-            // SeamGrowthRasterizer - hit a genuine dead end on worldSeed=42): badlands and
-            // ocean are legal to EACH OTHER but, before this rule, shared no THIRD common
-            // neighbor at all (badlands' other neighbors are desert/savanna; ocean's other
-            // neighbors are forest/plains - disjoint sets), so any cell whose neighbors
-            // included both badlands and ocean plus two more biomes had NO legal placement.
-            // Verified exhaustively (not just this one pair, every combination up to 6 - the
-            // maximum possible, since this graph only has 6 biomes): with this rule added,
-            // BiomeGraphTest.modBiomeGraphDefaultPassesItsOwnValidationBound directly proves
-            // zero unsolvable combinations exist at ANY size, not just reduces how often one
-            // is hit (see BiomeGraph.requireEveryLocalNeighborhoodSolvable's own doc for why
-            // that check is no longer part of forProduction's automatic chain, and stays sound
-            // as an explicit, non-blocking check at this graph's own small scale). Savanna
-            // was chosen over the alternatives that were also checked (ocean-desert only
-            // closed 3 of 4 gaps; badlands-forest only closed 3 of 4 gaps, a DIFFERENT one
-            // left over) because it's the only single addition that closes all of them, and
-            // coastal savanna is a normal, common real-world pairing.
+            // see DECISIONS.md 2026-08-23
             AdjacencyRule.allow(OCEAN, SAVANNA, DEFAULT_BLEND_WIDTH_BLOCKS)
         )
     );
 
-    // --- OVERWORLD: real, near-complete vanilla biome set (48 biomes, 260 hand-designed
+    // --- OVERWORLD: real near-complete vanilla biome set (48 biomes, 260 hand-designed
     // symmetric adjacency rules), generated from biome_adjency_planner.xlsx's "Overworld
-    // Adjacency" sheet - supersedes scratch_bfs.txt/scratch_bfs2.txt's earlier, smaller
-    // 12-biome bridge-hop-reachability pass. That workbook also has stub rows (all-denied,
+    // Adjacency" sheet - supersedes scratch_bfs.txt/scratch_bfs2.txt's earlier smaller
+    // 12-biome bridge-hop-reachability pass. Workbook also has stub rows (all-denied,
     // degree 0) for modded biomes (Biomes O' Plenty, Biome's We've Gone, Underground
-    // Worlds) and a few vanilla ones (river, frozen_river, the cave biomes) - none of
-    // those are real rules yet, so they're not included here. DESERT/SAVANNA/BADLANDS/
-    // OCEAN/FOREST/PLAINS above are reused as-is (same BiomeId values either way).
+    // Worlds) and a few vanilla ones (river, frozen_river, cave biomes) - not real rules
+    // yet, not included here. DESERT/SAVANNA/BADLANDS/OCEAN/FOREST/PLAINS above reused
+    // as-is (same BiomeId values either way).
 
     private static final BiomeId BAMBOO_JUNGLE = new BiomeId("minecraft", "bamboo_jungle");
     private static final BiomeId BEACH = new BiomeId("minecraft", "beach");
@@ -126,15 +108,9 @@ public final class ModBiomeGraph {
         new BiomeNode(CHERRY_GROVE, new BiomeSizeRange(500, 800)),
         new BiomeNode(COLD_OCEAN, new BiomeSizeRange(700, 1000)),
         new BiomeNode(DARK_FOREST, new BiomeSizeRange(500, 800)),
-        // selfAdjacencyLimit=1 on these 5 (deep-ocean family + desert) - lets each span 2
-        // ordinary hexes as one felt region instead of stretching a single hex's own
-        // geometry further (see SizeFidelityMeasurement: raising the target alone
-        // (700-1000 -> 900-1500) did NOT fix their undersized realized/target ratio -
-        // that's a neighbor-competition problem, not a magnitude one; each hex still
-        // measures the same ratio, but two adjacent same-biome hexes together cover
-        // roughly double the ground). Each deep-ocean variant is self-adjacent to ITSELF
-        // only for now, not to the OTHER deep-ocean variants - a distinct "self-adjacency
-        // GROUP" extension, deliberately out of scope here (per the design write-up).
+        // selfAdjacencyLimit=1 on these 5 (deep-ocean family + desert) - each spans up to 2
+        // hexes as one felt region. Each deep-ocean variant self-adjacent to ITSELF only,
+        // not OTHER deep-ocean variants. See DECISIONS.md 2026-09-11.
         new BiomeNode(DEEP_COLD_OCEAN, new BiomeSizeRange(900, 1500), 1),
         new BiomeNode(DEEP_FROZEN_OCEAN, new BiomeSizeRange(900, 1500), 1),
         new BiomeNode(DEEP_LUKEWARM_OCEAN, new BiomeSizeRange(900, 1500), 1),
@@ -313,12 +289,7 @@ public final class ModBiomeGraph {
         AdjacencyRule.allow(FROZEN_OCEAN, GROVE, DEFAULT_BLEND_WIDTH_BLOCKS),
         AdjacencyRule.allow(FROZEN_OCEAN, ICE_SPIKES, DEFAULT_BLEND_WIDTH_BLOCKS),
         AdjacencyRule.allow(FROZEN_OCEAN, OCEAN, DEFAULT_BLEND_WIDTH_BLOCKS),
-        // Added 2026-08-30: SNOWY_BEACH sat at degree 3 (the bare structural minimum) and
-        // was measured genuinely starved - zero cells across 10 independent real hex-mesh
-        // solves (ModBiomeGraphTest.overworldNoBiomeIsStarvedAcrossManyIndependentRealSolves),
-        // the same failure pattern this codebase's own history already saw for badlands at
-        // degree 1. FROZEN_OCEAN and ICE_SPIKES are both thematically adjacent snow/coast
-        // biomes it wasn't yet connected to.
+        // see DECISIONS.md 2026-08-30
         AdjacencyRule.allow(FROZEN_OCEAN, SNOWY_BEACH, DEFAULT_BLEND_WIDTH_BLOCKS),
         AdjacencyRule.allow(FROZEN_OCEAN, SNOWY_PLAINS, DEFAULT_BLEND_WIDTH_BLOCKS),
         AdjacencyRule.allow(FROZEN_OCEAN, SNOWY_SLOPES, DEFAULT_BLEND_WIDTH_BLOCKS),

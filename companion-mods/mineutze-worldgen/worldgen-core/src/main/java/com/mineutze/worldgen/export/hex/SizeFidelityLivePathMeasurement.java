@@ -1,17 +1,24 @@
 package com.mineutze.worldgen.export.hex;
 
+import com.mineutze.worldgen.regionsolve.topology.mesh.HexGrid;
+
+import com.mineutze.worldgen.regionsolve.topology.mesh.HexMeshBuilder;
+
+import com.mineutze.worldgen.regionsolve.topology.mesh.VertexKey;
+
+import com.mineutze.worldgen.regionsolve.topology.mesh.FaceAdjacency;
+
+import com.mineutze.worldgen.regionsolve.livepath.DecidedFaceStore;
+
+import com.mineutze.worldgen.regionsolve.livepath.DecidedVertexStore;
+
+import com.mineutze.worldgen.regionsolve.livepath.SeedMeshCache;
+
 import com.mineutze.worldgen.biomegraph.BiomeGraph;
 import com.mineutze.worldgen.biomegraph.BiomeId;
 import com.mineutze.worldgen.biomegraph.ModBiomeGraph;
-import com.mineutze.worldgen.regionsolve.DecidedFaceStore;
-import com.mineutze.worldgen.regionsolve.DecidedVertexStore;
 import com.mineutze.worldgen.regionsolve.MacroGridConfig;
-import com.mineutze.worldgen.regionsolve.SeedMeshCache;
-import com.mineutze.worldgen.regionsolve.topology.HexGrid;
-import com.mineutze.worldgen.regionsolve.topology.HexMeshBuilder;
 import com.mineutze.worldgen.regionsolve.topology.Point2D;
-import com.mineutze.worldgen.regionsolve.topology.TriangleAdjacency;
-import com.mineutze.worldgen.regionsolve.topology.VertexKey;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -25,44 +32,43 @@ import java.util.Set;
 import java.util.TreeMap;
 
 /**
- * Real, live-PATH size-fidelity measurement — the honest counterpart to {@link
- * SizeFidelityMeasurement}, which (found via direct exploration, not assumed) measures
- * a code path ({@code TriangleFieldGeometryRealization.realize}, one whole-mesh CSP +
- * calibration pass) that is DEAD in production. Nothing in the shipped mod calls it
- * anymore — every real {@code /locate biome} query goes through {@link SeedMeshCache}
- * -> {@code TriangleFieldGeometryRealization.realizeCluster}, an organically-grown,
- * incrementally-committed cluster solve using already-decided (tentative or permanent)
- * neighbors as FIXED context via {@link DecidedFaceStore}/{@link DecidedVertexStore}.
+ * Real, live-PATH size-fidelity measurement - honest counterpart to {@link
+ * SizeFidelityMeasurement}, which measures a code path ({@code
+ * TriangleFieldGeometryRealization.realize}, one whole-mesh CSP + calibration pass) that
+ * is DEAD in production (found via direct exploration, not assumed). Nothing in shipped
+ * mod calls it - every real {@code /locate biome} query goes through {@link
+ * SeedMeshCache} -> {@code TriangleFieldGeometryRealization.realizeCluster}, an
+ * organically-grown, incrementally-committed cluster solve using already-decided
+ * (tentative or permanent) neighbors as FIXED context via {@link DecidedFaceStore}/
+ * {@link DecidedVertexStore}.
  *
- * <p>This tool drives the REAL {@link SeedMeshCache} with a real grid of queries (same
- * public entry point Minecraft itself calls), then measures each queried face's
- * realized-vs-target area ratio directly from the real, committed
- * {@link DecidedFaceStore}/{@link DecidedVertexStore} state — not from a fresh,
- * unconstrained solve. Same {@code ±10%} metric, same per-biome/worst-10 report shape
- * as {@link SizeFidelityMeasurement}, so before/after comparisons stay legible, but the
- * NUMBER itself may legitimately differ from the whole-mesh tool's, since the two
- * exercise genuinely different code paths.
+ * <p>This tool drives the REAL {@link SeedMeshCache} with a grid of queries (same public
+ * entry point Minecraft calls), measures each queried face's realized-vs-target area
+ * ratio directly from the real, committed {@link DecidedFaceStore}/{@link
+ * DecidedVertexStore} state, not a fresh unconstrained solve. Same {@code ±10%} metric,
+ * same per-biome/worst-10 report shape as {@link SizeFidelityMeasurement} for legible
+ * before/after comparisons, but the NUMBER may legitimately differ since the two exercise
+ * different code paths.
  */
 public final class SizeFidelityLivePathMeasurement {
 
     // Matches TriangleFieldGeometryRealization.HEX_SIZE_BLOCKS - kept in sync manually,
-    // same established convention as SizeFidelityMeasurement/DeadEndFrequencySimulation's
-    // own local copies (that constant is private, this class stays a pure outside caller).
+    // same convention as SizeFidelityMeasurement/DeadEndFrequencySimulation's local copies
+    // (constant is private, this class stays a pure outside caller).
     private static final double HEX_SIZE_BLOCKS = 325;
     private static final MacroGridConfig GRID_CONFIG = MacroGridConfig.DEFAULT;
     private static final int SEED_COUNT = 10;
     private static final long SEED_BASE = 2026L;
-    // Bounded, modest area per seed - real cluster solves (up to a 2500-block first-touch
-    // growth cap each) are genuinely more expensive than the whole-mesh tool's one big
-    // batch, so this starts smaller than SizeFidelityMeasurement's own 3000-block half-width
-    // and can be widened once real runtime is known.
+    // Bounded, modest area per seed - real cluster solves (up to 2500-block first-touch
+    // growth cap each) cost more than the whole-mesh tool's one big batch, so starts smaller
+    // than SizeFidelityMeasurement's 3000-block half-width - widen once real runtime known.
     private static final double AREA_HALF_WIDTH_BLOCKS = 1500;
     // Dense enough that most hexes across the swept area get queried directly, not just
     // touched as incidental cluster context.
     private static final double QUERY_SPACING_BLOCKS = HEX_SIZE_BLOCKS * 0.9;
-    // Matches TriangleFieldGeometryRealization.FAST_PATH_LOOKUP_PAD_BLOCKS - generous
-    // enough to comfortably contain one face's own 6-neighbor ring for measurement, no CSP
-    // involved here (pure read against the already-committed stores).
+    // Matches TriangleFieldGeometryRealization.FAST_PATH_LOOKUP_PAD_BLOCKS - generous enough
+    // to contain one face's own 6-neighbor ring for measurement, no CSP here (pure read
+    // against already-committed stores).
     private static final double MEASUREMENT_MESH_PAD_BLOCKS = 3 * HEX_SIZE_BLOCKS;
 
     private record FaceResult(BiomeId biome, long worldSeed, double ratio) {
@@ -122,12 +128,11 @@ public final class SizeFidelityLivePathMeasurement {
     }
 
     /**
-     * Reads this face's REAL committed state directly - empty if this axial position has
-     * no decided biome yet, or its own 6 corners aren't all committed yet (a real,
-     * ordinary possibility even for a just-queried face: a corner only commits once ALL
-     * of its 3 owning faces have some value, which can lag behind the covering face's own
-     * promotion - see {@code TriangleFieldGeometryRealization.promoteFaceToPermanent}'s
-     * own doc).
+     * Reads this face's REAL committed state directly - empty if axial position has no
+     * decided biome yet, or its own 6 corners aren't all committed yet (ordinary even for a
+     * just-queried face: a corner only commits once ALL 3 owning faces have some value,
+     * which can lag behind the covering face's own promotion - see {@code
+     * TriangleFieldGeometryRealization.promoteFaceToPermanent}'s own doc).
      */
     private static Optional<FaceResult> measureFace(HexGrid.AxialPos axialPos, long worldSeed, DecidedFaceStore faceStore, DecidedVertexStore vertexStore) {
         Optional<DecidedFaceStore.DecidedFace> decided = faceStore.get(axialPos);
@@ -141,10 +146,10 @@ public final class SizeFidelityLivePathMeasurement {
             HEX_SIZE_BLOCKS, (int) Math.floor(center.x() - pad), (int) Math.floor(center.z() - pad),
             (int) Math.ceil(center.x() + pad), (int) Math.ceil(center.z() + pad)
         );
-        TriangleAdjacency.Adjacency adjacency = TriangleAdjacency.of(mesh.faces());
+        FaceAdjacency.Adjacency adjacency = FaceAdjacency.of(mesh.faces());
         Optional<Integer> faceIndex = findFaceIndex(mesh, axialPos);
         if (faceIndex.isEmpty() || adjacency.hullTouchingFaceIndices().contains(faceIndex.get())) {
-            return Optional.empty(); // measurement pad too tight for this face - shouldn't happen given the generous pad, skip rather than crash
+            return Optional.empty(); // measurement pad too tight - shouldn't happen given generous pad, skip rather than crash
         }
 
         List<Point2D> corners = committedCornersOf(mesh, adjacency, faceIndex.get(), vertexStore);
@@ -157,18 +162,18 @@ public final class SizeFidelityLivePathMeasurement {
         return Optional.of(new FaceResult(decided.get().biomeId(), worldSeed, realizedArea / targetArea));
     }
 
-    /** This face's own 6 corners, in the face's real cyclic order, read from {@code vertexStore} - {@code null} if any of the 6 isn't committed yet. */
-    private static List<Point2D> committedCornersOf(HexMeshBuilder.HexMesh mesh, TriangleAdjacency.Adjacency adjacency, int faceIndex, DecidedVertexStore vertexStore) {
+    /** This face's own 6 corners, real cyclic order, read from {@code vertexStore} - {@code null} if any of the 6 isn't committed yet. */
+    private static List<Point2D> committedCornersOf(HexMeshBuilder.HexMesh mesh, FaceAdjacency.Adjacency adjacency, int faceIndex, DecidedVertexStore vertexStore) {
         Set<Integer> ring = new LinkedHashSet<>();
         ring.add(faceIndex);
         ring.addAll(adjacency.neighborFaceIndices().getOrDefault(faceIndex, Set.of()));
 
         Map<Integer, Point2D> positionByVertexIndex = new HashMap<>();
-        for (int[] triangle : adjacency.mutuallyAdjacentTriples(ring)) {
+        for (int[] triangle : adjacency.mutuallyAdjacentFaceTriples(ring)) {
             if (triangle[0] != faceIndex && triangle[1] != faceIndex && triangle[2] != faceIndex) {
                 continue;
             }
-            int vertexIndex = TriangleAdjacency.sharedVertexOf(mesh, triangle);
+            int vertexIndex = FaceAdjacency.sharedVertexOf(mesh, triangle);
             VertexKey key = VertexKey.of(mesh.faces().get(triangle[0]), mesh.faces().get(triangle[1]), mesh.faces().get(triangle[2]));
             Optional<Point2D> position = vertexStore.get(key);
             if (position.isEmpty()) {

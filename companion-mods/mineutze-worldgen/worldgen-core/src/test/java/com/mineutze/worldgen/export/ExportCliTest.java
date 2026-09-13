@@ -7,11 +7,11 @@ import java.nio.file.Path;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /**
- * Direct test for arg parsing only - flagged by this session's test-coverage audit.
- * {@code main()} itself drives a real production-scale solve (ModBiomeGraph.DEFAULT +
- * MacroGridConfig.DEFAULT, ~262k cells per region) and is deliberately never invoked
- * here - see RegionGridSolverTest's own doc on why that's too slow for a unit test.
- * parseArgs was promoted from private to package-private specifically for this.
+ * Direct test for arg parsing only - flagged by test-coverage audit. {@code main()}
+ * itself drives a real production-scale solve (ModBiomeGraph.DEFAULT +
+ * MacroGridConfig.DEFAULT, ~262k cells per region), deliberately never invoked here - see
+ * RegionGridSolverTest's own doc: too slow for a unit test. parseArgs promoted from
+ * private to package-private specifically for this.
  */
 class ExportCliTest {
 

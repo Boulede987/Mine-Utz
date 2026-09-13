@@ -20,9 +20,9 @@ class EdgeDisplacementTest {
     /**
      * The actual mechanism cross-mesh watertightness depends on: two independently-built
      * meshes (e.g. two neighboring regions) must compute the identical curve for a shared
-     * physical edge with no live coordination - calling with endpoints AND poles reversed
-     * (matching how the OTHER owning face would call this for the same physical edge)
-     * must produce the exact same set of point POSITIONS, just walked backwards.
+     * edge with no live coordination - calling with endpoints AND poles reversed (matching
+     * how the OTHER owning face would call this for the same edge) must produce the exact
+     * same point POSITIONS, just walked backwards.
      */
     @Test
     void reversingEndpointsAndPolesReversesTheSamePolyline() {
@@ -62,12 +62,11 @@ class EdgeDisplacementTest {
     }
 
     /**
-     * The exact regression this test exists to prevent: an EARLIER version of {@code
+     * The exact regression this test prevents: an EARLIER version of {@code
      * EdgeDisplacement.signedUnitOffset} folded {@code pointIndex} into the hash as its
-     * very last step with no further mixing, so the 3 "independent" interior points came
-     * out agreeing to 9 decimal places - not independent at all, just one offset value
-     * read 3 times. Real interior points must genuinely scatter, not cluster near one
-     * value.
+     * last step with no further mixing, so the 3 "independent" interior points agreed to
+     * 9 decimal places - not independent at all, just one offset value read 3 times. Real
+     * interior points must genuinely scatter, not cluster near one value.
      */
     @Test
     void interiorPointsAreGenuinelyIndependentNotAllNearlyTheSameOffset() {
@@ -98,12 +97,12 @@ class EdgeDisplacementTest {
     }
 
     /**
-     * The actual by-construction safety guarantee, checked directly rather than trusted:
-     * every interior point's angle around EACH of its two owning poles must stay strictly
-     * between its own two immediate static neighbors' angles from that SAME pole - this is
-     * exactly what "star-shaped, hence simple and connected" means, verified independently
-     * of the production implementation (a fresh angle computation here, not a call into
-     * {@code EdgeDisplacement}'s own private geometry).
+     * The actual by-construction safety guarantee, checked directly not trusted: every
+     * interior point's angle around EACH of its two owning poles must stay strictly
+     * between its two immediate static neighbors' angles from that SAME pole - exactly
+     * what "star-shaped, hence simple and connected" means, verified independently of the
+     * production implementation (fresh angle computation here, not a call into {@code
+     * EdgeDisplacement}'s private geometry).
      */
     @Test
     void everyInteriorPointStaysAngularlyBetweenItsOwnStaticNeighborsFromBothPoles() {

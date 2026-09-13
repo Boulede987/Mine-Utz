@@ -5,12 +5,7 @@ import com.mineutze.worldgen.biomegraph.BiomeId;
 
 import java.util.Map;
 
-/**
- * @param fixedBoundaryCells edge cells from whichever neighbor regions are
- *                           already solved (any of the 4 directions —
- *                           direction-agnostic), fixed and never claimed
- *                           by this solve
- */
+/** @param fixedBoundaryCells edge cells from already-solved neighbor regions (any of the 4 directions, direction-agnostic), fixed, never claimed by this solve */
 public record RegionSolveInput(
     BiomeGraph graph,
     MacroGridConfig gridConfig,

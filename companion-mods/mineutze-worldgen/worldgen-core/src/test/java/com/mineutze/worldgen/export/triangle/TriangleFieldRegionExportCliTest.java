@@ -9,11 +9,11 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /**
- * Direct test for arg parsing and region-grid construction only - flagged by this
- * session's test-coverage audit. {@code main()} itself drives a real production-scale
- * solve against ModBiomeGraph.DEFAULT and is deliberately never invoked here - see
- * RegionGridSolverTest's own doc on why that's too slow for a unit test. parseArgs and
- * buildRegionGrid were promoted from private to package-private specifically for this.
+ * Direct test for arg parsing and region-grid construction only - flagged by
+ * test-coverage audit. {@code main()} itself drives a real production-scale solve
+ * against ModBiomeGraph.DEFAULT, deliberately never invoked here - see
+ * RegionGridSolverTest's own doc: too slow for a unit test. parseArgs and
+ * buildRegionGrid promoted from private to package-private specifically for this.
  */
 class TriangleFieldRegionExportCliTest {
 

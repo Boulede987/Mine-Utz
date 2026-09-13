@@ -7,11 +7,7 @@ import com.mineutze.worldgen.biomegraph.BiomeNode;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
-/**
- * One color and one ASCII glyph per biome, assigned once and shared by
- * {@link PngExporter}, {@link AsciiExporter} and {@link JsonExporter} so
- * all three outputs agree on what a given biome looks like.
- */
+/** One color + one ASCII glyph per biome, assigned once, shared by {@link PngExporter}, {@link AsciiExporter}, {@link JsonExporter} - all 3 outputs agree on how a biome looks. */
 public final class BiomeLegend {
 
     private final Map<BiomeId, Integer> rgbByBiome = new LinkedHashMap<>();
@@ -44,14 +40,14 @@ public final class BiomeLegend {
         return Map.copyOf(glyphByBiome);
     }
 
-    /** Deterministic hash of the biome id into a fixed-saturation, fixed-brightness hue — distinct, readable colors regardless of graph size. */
+    /** Deterministic hash of biome id into fixed-saturation, fixed-brightness hue - distinct, readable colors regardless of graph size. */
     private static int colorFor(BiomeId id) {
         int hash = id.toString().hashCode();
         float hue = (hash & 0xFFFF) / (float) 0xFFFF;
         return java.awt.Color.HSBtoRGB(hue, 0.65f, 0.9f) & 0xFFFFFF;
     }
 
-    /** First unused letter of the biome's own path, falling back to digits/other letters on collision — keeps glyphs recognizable, not arbitrary. */
+    /** First unused letter of biome's own path, falls back to digits/other letters on collision - keeps glyphs recognizable, not arbitrary. */
     private static char glyphFor(BiomeId id, java.util.Collection<Character> alreadyUsed) {
         String candidates = id.path().toUpperCase() + "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
         for (char candidate : candidates.toCharArray()) {

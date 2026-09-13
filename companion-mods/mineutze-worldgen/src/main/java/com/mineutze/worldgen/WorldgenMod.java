@@ -1,5 +1,6 @@
 package com.mineutze.worldgen;
 
+import com.mineutze.worldgen.integration.LocateBiomeOverride;
 import com.mineutze.worldgen.integration.ModBiomeSources;
 import com.mineutze.worldgen.integration.RegionCacheHolder;
 import com.mineutze.worldgen.integration.RegionDebugCommand;
@@ -16,5 +17,6 @@ public class WorldgenMod {
         modEventBus.addListener(ModBiomeSources::register);
         NeoForge.EVENT_BUS.addListener(RegionCacheHolder::onLevelLoad);
         NeoForge.EVENT_BUS.addListener(RegionDebugCommand::register);
+        NeoForge.EVENT_BUS.addListener(LocateBiomeOverride::register);
     }
 }

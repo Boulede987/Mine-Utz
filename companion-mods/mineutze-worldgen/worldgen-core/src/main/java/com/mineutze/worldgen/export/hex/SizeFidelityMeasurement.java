@@ -1,13 +1,17 @@
 package com.mineutze.worldgen.export.hex;
 
+import com.mineutze.worldgen.regionsolve.topology.mesh.HexMeshBuilder;
+
+import com.mineutze.worldgen.regionsolve.topology.placement.WeightedVertexPlacement;
+
+import com.mineutze.worldgen.regionsolve.topology.identity.TriangleIdentitySizeAssignment;
+
+import com.mineutze.worldgen.regionsolve.topology.mesh.FaceAdjacency;
+
 import com.mineutze.worldgen.biomegraph.BiomeGraph;
 import com.mineutze.worldgen.biomegraph.BiomeId;
 import com.mineutze.worldgen.biomegraph.ModBiomeGraph;
-import com.mineutze.worldgen.regionsolve.topology.HexMeshBuilder;
 import com.mineutze.worldgen.regionsolve.topology.Point2D;
-import com.mineutze.worldgen.regionsolve.topology.TriangleAdjacency;
-import com.mineutze.worldgen.regionsolve.topology.TriangleIdentitySizeAssignment;
-import com.mineutze.worldgen.regionsolve.topology.WeightedVertexPlacement;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -19,11 +23,11 @@ import java.util.Optional;
 import java.util.TreeMap;
 
 /**
- * Real realized-vs-target area ratio per biome, 10-seed sample against the real catalog
- * (fresh, unconstrained solve - no fixed context, matches this session's own established
- * measurement methodology). Rerun after any geometry/size-fidelity change to confirm real
- * before/after numbers, same role {@link DeadEndFrequencySimulation} plays for dead-end
- * frequency - a repeatable diagnostic, not a one-off script.
+ * Real realized-vs-target area ratio per biome, 10-seed sample against real catalog
+ * (fresh, unconstrained solve - no fixed context). Rerun after any geometry/size-fidelity
+ * change to confirm real before/after numbers - same role {@link
+ * DeadEndFrequencySimulation} plays for dead-end frequency, a repeatable diagnostic, not
+ * a one-off script.
  */
 public final class SizeFidelityMeasurement {
 
@@ -33,29 +37,28 @@ public final class SizeFidelityMeasurement {
     private static final int SEED_COUNT = 10;
     private static final long SEED_BASE = 2026L;
     // Mirrors WeightedVertexPlacement.MAX_VERTEX_DISPLACEMENT_FRACTION - duplicated here
-    // (that constant is private) purely to diagnose, from the OUTSIDE via public API only,
-    // whether the displacement clamp is actually binding for an oversized face, per the
-    // Direction 2 investigation in the size-fidelity plan: a maxDisplacementFraction near
-    // 1.0 means the clamp IS the limiting factor (a real geometry problem); well below 1.0
-    // means the clamp never engaged at all and the oversizing comes from calibration's own
-    // convergence instead (a different problem, different fix).
+    // (private there) to diagnose, from OUTSIDE via public API only, whether displacement
+    // clamp actually binds for an oversized face (Direction 2 investigation, size-fidelity
+    // plan): maxDisplacementFraction near 1.0 = clamp IS the limiting factor (real geometry
+    // problem); well below 1.0 = clamp never engaged, oversizing comes from calibration's
+    // own convergence instead (different problem, different fix).
     private static final double MAX_VERTEX_DISPLACEMENT_FRACTION = 0.8; // keep in sync with WeightedVertexPlacement's own value
     private static final double OVERSIZED_RATIO_THRESHOLD_FOR_DIAGNOSTIC = 1.3;
 
-    /** One connected same-biome cluster (flood-filled over mutually-adjacent free faces holding the identical biome) - {@code size == 1} is the ordinary, no-self-adjacency case already covered by the per-hex ratio above. */
+    /** One connected same-biome cluster (flood-filled over mutually-adjacent free faces holding identical biome) - {@code size == 1} is ordinary no-self-adjacency case, already covered by per-hex ratio above. */
     private record Cluster(BiomeId biome, int size, double totalRealizedArea, double averageOwnTargetArea) {
         double totalVsSingleTargetRatio() {
             return totalRealizedArea / averageOwnTargetArea;
         }
     }
 
-    /** Direction 2 diagnostic: is the displacement clamp actually binding for this oversized face, or did the geometry layer never even try to constrain it? */
+    /** Direction 2 diagnostic: does displacement clamp actually bind for this oversized face, or did geometry layer never even try to constrain it? */
     private record OversizedFaceDiagnostic(BiomeId biome, long worldSeed, int faceIndex, double ratio, double maxDisplacementFraction) {
     }
 
     private static final double UNDERSIZED_RATIO_THRESHOLD_FOR_DIAGNOSTIC = 0.5;
 
-    /** Symmetric to {@link OversizedFaceDiagnostic} - is the clamp binding for a badly UNDERsized face too, or is undersizing purely a calibration-convergence story? */
+    /** Symmetric to {@link OversizedFaceDiagnostic} - does clamp bind for a badly UNDERsized face too, or is undersizing purely calibration-convergence? */
     private record UndersizedFaceDiagnostic(BiomeId biome, long worldSeed, int faceIndex, double ratio, double maxDisplacementFraction) {
     }
 
@@ -69,7 +72,7 @@ public final class SizeFidelityMeasurement {
         for (int seedOffset = 0; seedOffset < SEED_COUNT; seedOffset++) {
             long worldSeed = SEED_BASE + seedOffset;
             HexMeshBuilder.HexMesh mesh = HexMeshBuilder.build(HEX_SIZE_BLOCKS, -HALF_WIDTH_BLOCKS, -HALF_WIDTH_BLOCKS, HALF_WIDTH_BLOCKS, HALF_WIDTH_BLOCKS);
-            TriangleAdjacency.Adjacency adjacency = TriangleAdjacency.of(mesh.faces());
+            FaceAdjacency.Adjacency adjacency = FaceAdjacency.of(mesh.faces());
 
             java.util.Set<Integer> freeFaces = new java.util.LinkedHashSet<>();
             for (int i = 0; i < mesh.faces().size(); i++) {
@@ -172,9 +175,9 @@ public final class SizeFidelityMeasurement {
         System.out.printf("average maxDisplacementFraction across %d undersized faces: %.3f%n", undersizedDiagnostics.size(), avgMaxDisplacementFractionUndersized);
     }
 
-    /** Flood-fills mutually-adjacent free faces sharing an identity into clusters, keeping only clusters bigger than 1 face - the ordinary size==1 case is already covered by the per-hex ratio above. */
+    /** Flood-fills mutually-adjacent free faces sharing an identity into clusters, keeps only clusters bigger than 1 face - ordinary size==1 case already covered by per-hex ratio above. */
     private static List<Cluster> sameBiomeClusters(
-        HexMeshBuilder.HexMesh mesh, TriangleAdjacency.Adjacency adjacency, java.util.Set<Integer> freeFaces,
+        HexMeshBuilder.HexMesh mesh, FaceAdjacency.Adjacency adjacency, java.util.Set<Integer> freeFaces,
         Map<Integer, TriangleIdentitySizeAssignment.Assignment> assignments, Map<Integer, Point2D> displaced
     ) {
         List<Cluster> clusters = new ArrayList<>();
@@ -213,7 +216,7 @@ public final class SizeFidelityMeasurement {
         return clusters;
     }
 
-    /** Largest per-vertex displacement (from the raw undisplaced hex lattice position) among this face's own 6 corners, as a fraction of the maximum the clamp would ever allow - near 1.0 means the clamp is actively binding, well below means it never engaged. */
+    /** Largest per-vertex displacement (from raw undisplaced hex lattice position) among this face's own 6 corners, as fraction of max clamp would allow - near 1.0 = clamp actively binding, well below = never engaged. */
     private static double maxDisplacementFraction(HexMeshBuilder.HexMesh mesh, int faceIndex, Map<Integer, Point2D> displaced) {
         double maxAllowedDisplacementBlocks = MAX_VERTEX_DISPLACEMENT_FRACTION * HEX_SIZE_BLOCKS;
         double maxFraction = 0;

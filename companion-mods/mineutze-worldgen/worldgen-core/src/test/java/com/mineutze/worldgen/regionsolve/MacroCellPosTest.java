@@ -8,7 +8,7 @@ import java.util.Set;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-/** Direct small-fixture tests - flagged by this session's test-coverage audit as having zero dedicated tests despite real neighbor/hashCode logic beyond a plain data holder. */
+/** Direct small-fixture tests - flagged by test-coverage audit as having zero dedicated tests despite real neighbor/hashCode logic beyond plain data holder. */
 class MacroCellPosTest {
 
     @Test

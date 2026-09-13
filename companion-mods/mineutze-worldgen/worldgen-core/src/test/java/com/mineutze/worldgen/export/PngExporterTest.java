@@ -22,7 +22,7 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
-/** Direct test against a small hand-built {@link ExportSnapshot} - flagged by this session's test-coverage audit as having zero dedicated tests. Reads the written PNG back to check real pixel colors. */
+/** Direct test against small hand-built {@link ExportSnapshot} - flagged by test-coverage audit as having zero dedicated tests. Reads written PNG back to check real pixel colors. */
 class PngExporterTest {
 
     private static final int PIXELS_PER_CELL = 4; // matches PngExporter's own private constant

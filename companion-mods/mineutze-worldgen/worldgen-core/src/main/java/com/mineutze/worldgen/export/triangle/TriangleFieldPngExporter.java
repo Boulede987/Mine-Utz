@@ -24,11 +24,11 @@ final class TriangleFieldPngExporter {
     }
 
     /**
-     * Evenly-spaced hues, not {@code BiomeLegend}'s hash-based color (which put two of
-     * {@code ModBiomeGraph.DEFAULT}'s 6 real biomes close enough in hue to look identical) —
-     * at a small, known biome count, maximizing visual separation matters more than
-     * {@code BiomeLegend}'s own goal (a stable color regardless of which subset of a much
-     * larger graph is present).
+     * Evenly-spaced hues, not {@code BiomeLegend}'s hash-based color (put two of {@code
+     * ModBiomeGraph.DEFAULT}'s 6 real biomes close enough in hue to look identical) - at
+     * this small known biome count, maximizing visual separation matters more than {@code
+     * BiomeLegend}'s own goal (stable color regardless of which subset of a much larger
+     * graph is present).
      */
     static Map<BiomeId, Integer> evenlySpacedPalette(BiomeGraph graph) {
         List<BiomeId> sortedIds = graph.nodes().stream().map(BiomeNode::id).sorted().toList();
@@ -58,7 +58,7 @@ final class TriangleFieldPngExporter {
         writePng(image, file);
     }
 
-    /** An actual color swatch per biome, not just a hex code — reading a hex code back into a color isn't something most people can do by eye. */
+    /** Actual color swatch per biome, not just a hex code - most people can't read a hex code back into a color by eye. */
     static void writeLegendImage(BiomeGraph graph, Map<BiomeId, Integer> palette, Path file) {
         List<BiomeId> sortedIds = graph.nodes().stream().map(BiomeNode::id).sorted().toList();
 

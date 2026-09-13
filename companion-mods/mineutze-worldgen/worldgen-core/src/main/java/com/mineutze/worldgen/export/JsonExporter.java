@@ -16,15 +16,12 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Structured dump for a program (or an LLM) to reason over: the graph that
- * produced the result (nodes + adjacency rules, so illegal-looking
- * adjacencies in the cell data can be checked against the actual rules
- * instead of guessed at) plus every region's cell assignment and warnings.
+ * Structured dump for program/LLM to reason over: graph that produced result (nodes +
+ * adjacency rules, so illegal-looking adjacencies in cell data can be checked against
+ * actual rules, not guessed) + every region's cell assignment and warnings.
  *
- * Hand-rolled rather than pulling in a JSON library — worldgen-core is
- * deliberately dependency-free (see build.gradle), and the value shapes
- * here are all primitives/strings, nothing a library would meaningfully
- * simplify.
+ * Hand-rolled, no JSON library - worldgen-core deliberately dependency-free (see
+ * build.gradle), value shapes here are all primitives/strings anyway.
  */
 public final class JsonExporter {
 
@@ -77,7 +74,6 @@ public final class JsonExporter {
             AdjacencyRule rule = rules.get(i);
             out.append("      { \"a\": \"").append(escape(rule.biomeA().toString())).append("\"")
                 .append(", \"b\": \"").append(escape(rule.biomeB().toString())).append("\"")
-                .append(", \"weight\": ").append(rule.weight())
                 .append(", \"blendWidthBlocks\": ").append(rule.blendWidthBlocks())
                 .append(" }").append(i + 1 < rules.size() ? "," : "").append('\n');
         }
@@ -110,7 +106,7 @@ public final class JsonExporter {
         out.append("  ]");
     }
 
-    /** Only cells the snapshot actually has a biome for - a real-world scan can have gaps (e.g. an ungenerated chunk) a solved region never does. */
+    /** Only cells snapshot has a biome for - real-world scan can have gaps (e.g. ungenerated chunk) a solved region never does. */
     private static void writeCells(StringBuilder out, ExportSnapshot snapshot, RegionPos region) {
         List<Map.Entry<MacroCellPos, BiomeId>> present = snapshot.gridConfig().cellsInRegion(region, snapshot.worldSeed()).stream()
             .sorted(java.util.Comparator.comparingInt(MacroCellPos::x).thenComparingInt(MacroCellPos::z))

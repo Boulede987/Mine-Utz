@@ -9,12 +9,10 @@ import java.nio.file.Path;
 import java.util.List;
 
 /**
- * Runs the region solver standalone — no Minecraft, no world, no ServerLevel
- * — and dumps the result as PNG (visual), ASCII (text), and JSON (structured,
- * for a program or an LLM to check adjacency/size claims against the actual
- * graph). Exists so the solver's own correctness (region shapes, seam
- * behavior, budget drops) can be inspected directly instead of only by
- * loading a world in-game.
+ * Runs region solver standalone - no Minecraft, no world, no ServerLevel - dumps result
+ * as PNG (visual), ASCII (text), JSON (structured, for program/LLM to check
+ * adjacency/size claims). Lets solver correctness (region shapes, seam behavior, budget
+ * drops) be inspected directly instead of only via loading a world in-game.
  *
  * Usage: worldSeed regionSpan outputDir (all optional, positional).
  */

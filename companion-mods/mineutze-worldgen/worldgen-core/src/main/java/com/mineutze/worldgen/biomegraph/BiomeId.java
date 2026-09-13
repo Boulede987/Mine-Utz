@@ -1,11 +1,10 @@
 package com.mineutze.worldgen.biomegraph;
 
 /**
- * Identifies a biome family. Deliberately not Minecraft's ResourceLocation —
- * this module has no Minecraft/NeoForge dependency (see build.gradle
- * comment), so its algorithms can be unit tested as plain JUnit with no
- * game bootstrap. Conversion to/from ResourceLocation happens at the
- * integration boundary in the main mod module.
+ * Identifies a biome family. Not Minecraft's ResourceLocation - this module
+ * has no Minecraft/NeoForge dependency (see build.gradle), so algorithms
+ * unit-test as plain JUnit, no game bootstrap. ResourceLocation conversion
+ * happens at integration boundary in main mod module.
  */
 public record BiomeId(String namespace, String path) implements Comparable<BiomeId> {
 

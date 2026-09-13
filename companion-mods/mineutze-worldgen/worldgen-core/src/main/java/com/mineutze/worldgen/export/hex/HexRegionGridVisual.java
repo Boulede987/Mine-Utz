@@ -1,11 +1,12 @@
 package com.mineutze.worldgen.export.hex;
 
+import com.mineutze.worldgen.regionsolve.livepath.SeedMeshCache;
+
 import com.mineutze.worldgen.biomegraph.BiomeGraph;
 import com.mineutze.worldgen.biomegraph.BiomeId;
 import com.mineutze.worldgen.biomegraph.ModBiomeGraph;
 import com.mineutze.worldgen.regionsolve.MacroCellPos;
 import com.mineutze.worldgen.regionsolve.MacroGridConfig;
-import com.mineutze.worldgen.regionsolve.SeedMeshCache;
 
 import java.nio.file.Path;
 import java.util.LinkedHashMap;
@@ -13,25 +14,23 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * A real neighborhood of cells, queried one at a time through {@link SeedMeshCache}'s own
- * public API — exactly the same grid-free, organic-cluster path real terrain generation
- * uses (unlike {@link HexBiomeRasterVisual}, which renders one raw mesh window directly,
- * with no caching/batching concept at all). This is the direct visual regression check
- * for the straight-seam bug the region-partition removal fixed (see
- * doc/decisions/2026-08-29-remove-region-stitching.md and this whole redesign's own plan
- * doc): since there is no fixed window or partition left anywhere in the mechanism, any
- * remaining straight line in the render would mean a real bug in the cluster/store
- * mechanism itself, not an expected limitation.
+ * Real neighborhood of cells, queried one at a time through {@link SeedMeshCache}'s own
+ * public API - exact grid-free, organic-cluster path real terrain generation uses
+ * (unlike {@link HexBiomeRasterVisual}, which renders one raw mesh window directly, no
+ * caching/batching). Direct visual regression check for the straight-seam bug the
+ * region-partition removal fixed (see doc/decisions/2026-08-29-remove-region-stitching.md
+ * + redesign's own plan doc): no fixed window/partition left anywhere in the mechanism,
+ * so any remaining straight line in render means a real bug in cluster/store mechanism,
+ * not an expected limitation.
  */
 public final class HexRegionGridVisual {
 
     private static final long WORLD_SEED = 2026L;
     private static final MacroGridConfig GRID_CONFIG = MacroGridConfig.DEFAULT;
-    // Several multiples of one cluster's own worst-case footprint
-    // (2*CLUSTER_GROWTH_CAP_RADIUS_BLOCKS=5000 blocks=1250 cells) so many real biome
-    // patches and several cluster boundaries show up in one render - each individual
-    // biomeAt call is a real, if small, cost (see this class's own doc; a bulk-friendly
-    // debug API is a real possible follow-up, not built here), so this is a genuine
+    // Several multiples of one cluster's worst-case footprint
+    // (2*CLUSTER_GROWTH_CAP_RADIUS_BLOCKS=5000 blocks=1250 cells) so many biome patches +
+    // several cluster boundaries show up per render - each biomeAt call has real, small cost
+    // (bulk-friendly debug API a possible follow-up, not built here) - genuine
     // multi-million-call export, not instant.
     private static final int HALF_WIDTH_CELLS = 900;
 

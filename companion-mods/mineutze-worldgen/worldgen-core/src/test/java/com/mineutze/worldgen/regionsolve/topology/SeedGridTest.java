@@ -28,11 +28,11 @@ class SeedGridTest {
     }
 
     /**
-     * The whole point of this class: a seed's existence and position must never depend on
-     * which window happened to be queried. Querying a big box and querying a smaller
-     * sub-box inside it must agree exactly on every seed the sub-box contains — this is
-     * what makes the placement genuinely stateless (no "region" batch unit deciding which
-     * window a point belongs to, unlike the deleted SeedPlacer this replaces).
+     * The whole point of this class: a seed's existence/position must never depend on
+     * which window was queried. Querying a big box and a smaller sub-box inside it must
+     * agree exactly on every seed the sub-box contains — what makes placement genuinely
+     * stateless (no "region" batch unit deciding which window a point belongs to, unlike
+     * the deleted SeedPlacer this replaces).
      */
     @Test
     void queryingASubWindowAgreesExactlyWithFilteringTheBiggerWindow() {

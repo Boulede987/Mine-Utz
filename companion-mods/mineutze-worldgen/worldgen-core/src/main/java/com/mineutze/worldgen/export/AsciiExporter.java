@@ -9,12 +9,7 @@ import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
-/**
- * Plain-text render: a legend (one glyph per biome) followed by the grid,
- * '|' and '-' dividers marking region boundaries so a seam bug (like the
- * border-size-blindness one in PatchSizeEnforcer) is visible without an
- * image viewer.
- */
+/** Plain-text render: legend (one glyph/biome) + grid, '|'/'-' dividers mark region boundaries - shows seam bugs (e.g. PatchSizeEnforcer border-size-blindness) without image viewer. */
 public final class AsciiExporter {
 
     private AsciiExporter() {

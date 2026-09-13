@@ -21,10 +21,10 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Direct test against a small hand-built {@link ExportSnapshot} - flagged by this
- * session's test-coverage audit as having zero dedicated tests. No real solve involved
- * (see RegionGridSolverTest's own doc on why a real multi-region solve is too slow for a
- * unit test); the snapshot's cell map is populated by hand instead.
+ * Direct test against small hand-built {@link ExportSnapshot} - flagged by test-coverage
+ * audit as having zero dedicated tests. No real solve involved (see RegionGridSolverTest's
+ * own doc: real multi-region solve too slow for a unit test); snapshot's cell map
+ * populated by hand instead.
  */
 class AsciiExporterTest {
 
@@ -77,7 +77,7 @@ class AsciiExporterTest {
 
     @Test
     void marksRegionBoundariesWithDividers(@TempDir Path tempDir) throws IOException {
-        // 2x2 regions of 2x2 cells each - a real boundary sits between local rows/columns 1 and 2.
+        // 2x2 regions of 2x2 cells each - real boundary sits between local rows/columns 1 and 2.
         ExportSnapshot snapshot = snapshotWithOneGapCell();
         BiomeLegend legend = new BiomeLegend(snapshot.graph());
         Path file = tempDir.resolve("out.txt");
