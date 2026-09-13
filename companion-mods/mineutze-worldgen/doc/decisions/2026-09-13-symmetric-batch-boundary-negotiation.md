@@ -1,10 +1,17 @@
 # 2026-09-13 — Symmetric batch-boundary negotiation (no new grid, no new shape — organic batches stay organic, only WHO decides first changes)
 
-Status: proposed, not built. Branch `worldgen/symmetric-batch-boundary-solve`,
-forked from the `worldgen/mesh-geometry-realization` checkpoint commit
-(`6a10972d`). Supersedes nothing in `2026-08-29-remove-region-stitching.md` —
-that doc's diagnosis was correct and this design keeps its actual fix (see
-"What this keeps" below). It extends that doc's own unfinished half.
+Status: **Phase 1 (isolated seam prototype) VERIFIED** - `SeamResolution`/
+`SeamResolutionTest` (commit `15d04460`) directly confirmed identity+size+
+geometry are byte-identical regardless of seam-resolution order, against
+the real 48-biome catalog. **Phase 2 (live persistence mechanism) LOCKED** -
+see "Phase 2, LOCKED" section below - designed, not yet implemented.
+**Phase 3 (canonical batch-extent boundary) is a separate, real, newly-found
+follow-up, NOT yet designed** - see its own section at the end. Branch
+`worldgen/symmetric-batch-boundary-solve`, forked from the
+`worldgen/mesh-geometry-realization` checkpoint commit (`6a10972d`).
+Supersedes nothing in `2026-08-29-remove-region-stitching.md` — that doc's
+diagnosis was correct and this design keeps its actual fix (see "What this
+keeps" below). It extends that doc's own unfinished half.
 
 ## Why this exists
 
@@ -208,7 +215,61 @@ plus, now, one seam strip at a time — worth a direct, explicit "does this
 supersede the no-tug-of-war principle, or just add one narrow, bounded
 exception to it" confirmation, not an assumption either way.
 
-## Candidate mechanisms (unproven, need a real prototype + measurement before committing to one)
+## Phase 2, LOCKED (2026-09-13) — the persistence mechanism `DecidedFaceStore`/`DecidedVertexStore` need for the live path
+
+Concrete answer to "how does step 2 above ('boundary faces stay tentative')
+actually work against real, persisted state" — not a new third tier, a
+SECOND promotion trigger on the two tiers that already exist.
+
+1. **New auto-promotion rule.** Today a face/vertex only ever promotes to
+   PERMANENT when it's the literal target of a real query
+   (`promoteFaceToPermanent`, unmodified, stays exactly as-is for that
+   case). New, ADDITIONAL trigger: after any cluster solve, for each of
+   that cluster's own newly-decided faces, check whether every one of its
+   mesh-neighbors ALSO already has a real PERMANENT decision. If so,
+   promote it too, immediately - cascading, since promoting one face can
+   make an adjacent one newly-eligible (same fixed-point shape
+   `promoteVertexIfAllOwnersPermanent` already uses one level down for
+   vertices, generalized to faces here). Safe by construction: a face
+   whose ENTIRE local neighborhood is already known has, by definition, no
+   remaining seam exposure - nothing can ever legitimately need to revise
+   it again, so locking it early costs nothing and closes the window
+   before anything CAN revise it.
+2. **`growCluster`'s stop rule changes.** PERMANENT stays a true hard wall,
+   completely unchanged. TENTATIVE (not permanent) stops being an
+   unconditional wall - it becomes the seam trigger: pull it into THIS
+   solve's own free set and resolve jointly (today's rare, CSP-failure-only
+   `treatTentativeAsFixed=false` fallback becomes the NORMAL path, not an
+   edge case).
+3. **Why this doesn't reopen the ALREADY-REJECTED Option 2** ("tentative
+   geometry revision", 317/448, worse - see project memory 2026-09-11).
+   Option 2's real flaw: a tentative face could be revised an UNBOUNDED
+   number of times, by any later touching query, forever, with nothing
+   ever closing that window - real, measured thrashing. THIS design closes
+   the window the moment a face's neighborhood first becomes fully known
+   (rule 1) - a face can be pulled into a joint seam resolve AT MOST ONCE
+   (the one event that finally completes its neighborhood), never
+   indefinitely. Same underlying idea Option 2 tried, with the one missing
+   piece (a real closing/locking rule) that made Option 2 unsafe now
+   present.
+4. **What does NOT change**: `DecidedFaceStore`/`DecidedVertexStore`'s own
+   public shape (`get`/`getPermanent`/`commitTentative`/`commitPermanent`)
+   - `commitPermanent` already accepts an arbitrary map of newly-permanent
+   entries and already fails loud on a real disagreement, exactly what the
+   new auto-promotion rule needs, unmodified. The only new code is WHERE/
+   WHEN `commitPermanent` gets called from (a new post-solve sweep in
+   `TriangleFieldGeometryRealization`, checking every newly-decided face's
+   own neighbor-completeness), not a store-schema change.
+
+**Not yet implemented** - this section locks in the DESIGN (superseding
+Candidates A/B/C below as abstract alternatives - C's own shape is what
+this formalizes), not the code. Next step is building it against
+`realizeCluster`/`growCluster` directly, with the same measure-first
+discipline as every other step this session (regression suite, plus a real
+adversarial order-dependence test at the live-path level, not just
+`SeamResolutionTest`'s isolated one).
+
+## Candidate mechanisms (historical - A/B were real alternatives considered before C/the Phase-2 lock-in above, kept for the record, not live options anymore)
 
 **A. Wider solve, narrower commit.** Grow the batch one ring larger than
 what it actually commits; only the CORE ever becomes tentative/permanent,
@@ -234,8 +295,7 @@ from the neighbor's side too — more expensive, and getting two independent
 BFS growths to agree on a clean partition without gaps or double-claims is
 a real correctness risk, not just a performance one.
 
-**C. Deferred, symmetric seam solve over the existing organic batches
-(recommended starting point) — no new grid, no new shape, ever.** This is
+**C. Deferred, symmetric seam solve over the existing organic batches — LOCKED, see the "Phase 2, LOCKED" section above for the concrete mechanism.** This is
 the "Identity needs the same treatment as size" mechanism above, stated as
 one candidate: a batch's own interior gets a real fused
 identity+size+geometry joint solve the moment it resolves (permanent
@@ -250,15 +310,18 @@ shapeless as `realizeCluster` already grows them — this candidate changes
 WHEN a boundary face's identity+size gets permanently decided and WHETHER
 that decision is joint or unilateral, nothing about biome shape.
 
-## Open questions, not yet answered — a prototype needs to answer these before this is a real plan, not a sketch
+## Open questions, not yet answered — for the LOCKED Phase 2 mechanism
 
-- What happens to a query that lands in cell R before cell R's own joint
-  solve has ever run? (Today's "solve on first touch" behavior — does the
-  WHOLE cell need solving eagerly, or can it still be organic/lazy within
-  the cell, just with joint-not-sequential internal resolution?)
-- How big should a canonical cell be? Too small reintroduces frequent
-  boundary friction (more seams, more often); too big reintroduces the old
-  region design's own "first-touch cost" and defeats laziness.
+- ~~What happens to a query that lands in cell R before cell R's own joint
+  solve has ever run?~~ Answered by the lock-in's own step 5 above: a
+  single-sided tentative guess, promoted permanent the instant Minecraft
+  actually uses it via the existing `promoteFaceToPermanent` - no new
+  mechanism needed for this case.
+- ~~How big should a canonical cell be?~~ Doesn't apply to the LOCKED
+  mechanism at all - there's no canonical cell/grid in it, batches stay
+  exactly as organically-shaped as `realizeCluster` already grows them.
+  (A related but DIFFERENT sizing question resurfaces for the separate
+  Phase 3 follow-up below, about batch EXTENT, not this mechanism.)
 - `FaceFairnessQuota`'s fairness math needs reframing over a batch's own
   real (variable, non-square) area — already flagged by 2026-08-29's own
   doc for the organic-batch design in general, not new to this doc.
@@ -309,3 +372,43 @@ methodology `TriangleFieldGeometryRealizationTest
 .permanentResultsAgreeRegardlessOfExplorationOrderEvenWithTentativeGeometryRevision`
 already uses to catch this exact class of bug, just aimed at the new
 mechanism before it ships instead of after.
+
+## Phase 3, on the list, NOT yet designed — canonical batch-EXTENT boundary (separate root cause, found while locking in Phase 2)
+
+Found while stress-testing the Phase 2 lock-in above, before writing any
+code for it. Real, and likely BIGGER than the seam asymmetry Phase 2 fixes.
+
+**The problem**: `realizeCluster`'s cluster-growth radius
+(`CLUSTER_GROWTH_CAP_RADIUS_BLOCKS=2500`) is a fixed-radius disk anchored
+on the LITERAL QUERY POINT, not anything canonical. Two different query
+points close together each become a BFS seed for a DIFFERENTLY-POSITIONED
+disk - even on completely fresh, uncontested territory, with ZERO
+cross-batch negotiation involved at all (Phase 2's whole mechanism doesn't
+even apply yet at this point - there's nothing tentative nearby to
+negotiate with). This means the actual SET of faces fed to one CSP call
+(not just their processing order) genuinely differs depending on which
+point got there first, and different free-face-SETS can have different
+valid CSP solutions even where they overlap on specific shared faces. The
+already-measured 99.07%/20,000-trial order-dependence bug (3 close
+together points, forward vs. reverse exploration) is most likely dominated
+by THIS, not by seam asymmetry - Phase 2 fixes a real, separate problem,
+but probably isn't sufficient on its own to close that specific
+already-measured number.
+
+**Why this needs its own careful design, not a quick patch**: the obvious
+fix (some canonical, position-independent boundary on how far one solve
+batch extends) sounds exactly like the "canonical grid" idea already
+correctly rejected earlier this session (2026-09-13, "there was never
+question of re-adding square regions that completely ruin our natural
+looks") - but it is NOT the same proposal. That rejection was specifically
+about a grid constraining the RENDERED BIOME SHAPE (a real, correctly-
+avoided regression to the 2026-08-29 straight-seam bug). A grid used ONLY
+to bound which faces get grouped into ONE joint CSP-solve call - never
+touching the weighted-Voronoi/edge-displacement pipeline that actually
+draws a biome's polygon - is a narrower, different thing: biome shape
+stays exactly as organic either way, only the invisible bookkeeping of
+"which call decided this face's identity+size TARGET" would be
+grid-keyed. Needs its own dedicated design pass (a real risk of repeating
+the same "sounds like squares" scare if not explained carefully up front,
+per the lesson from this exact session) before any implementation -
+explicitly on the list, not started.
