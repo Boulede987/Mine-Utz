@@ -50,14 +50,15 @@ public final class TriangleIdentitySizeAssignment {
     /**
      * @param legalMinWidthBlocks this face's absolute legal floor - {@code biome}'s
      *                            declared {@link BiomeSizeRange} directly for a singleton
-     *                            face, or that range's width divided by {@code sqrt(2)} for
-     *                            a self-adjacent pair member (see {@link
-     *                            FaceWidthPicker#pairShareOf}: pair's felt patch split
-     *                            evenly BY AREA, so each half's legal share is combined
-     *                            range's width scaled by {@code 1/sqrt(2)}, not the full
-     *                            range - checking a split half against FULL range would be
+     *                            face, or {@link FaceWidthPicker#pairedMemberLegalMinWidthBlocks}
+     *                            for a self-adjacent pair member: the two members' widths
+     *                            merely need to SUM into the biome's declared range (real
+     *                            user decision, 2026-09-13 - an asymmetric (10, 1000) split
+     *                            is legal for a (900,1500) range as long as 1010 fits),
+     *                            not each independently occupy an equal share - checking a
+     *                            member against the FULL combined range would still be
      *                            wrong, a real bug an earlier live-path legal-size test had,
-     *                            caught by the user).
+     *                            caught by the user.
      * @param legalMaxWidthBlocks symmetric ceiling, same reasoning
      * @param pairedWithFaceIndex the OTHER face this one jointly forms one felt region with
      *                            (see {@link SelfAdjacentPairing}), or {@link #NOT_PAIRED}
@@ -293,10 +294,16 @@ public final class TriangleIdentitySizeAssignment {
             AchievableWidthRange achievable = achievableRangeByFace.get(faceIndex);
             BiomeSizeRange effectiveRange = achievable == null ? fullRange : achievable.intersect(fullRange);
             int widthBlocks = partner != null
-                ? FaceWidthPicker.splitWidthForPair(fullRange, worldSeed, faceIndex, partner, biome, adjacency, committedWidthBlocksByFace)
+                ? FaceWidthPicker.splitWidthForPair(
+                    fullRange, worldSeed, faceIndex, partner, biome, adjacency, committedWidthBlocksByFace,
+                    achievable, achievableRangeByFace.get(partner))
                 : FaceWidthPicker.pickWidth(effectiveRange, worldSeed, faceIndex, biome, adjacency, committedWidthBlocksByFace);
-            int legalMinWidthBlocks = partner != null ? FaceWidthPicker.pairShareOf(fullRange.minWidthBlocks()) : fullRange.minWidthBlocks();
-            int legalMaxWidthBlocks = partner != null ? FaceWidthPicker.pairShareOf(fullRange.maxWidthBlocks()) : fullRange.maxWidthBlocks();
+            int legalMinWidthBlocks = partner != null
+                ? FaceWidthPicker.pairedMemberLegalMinWidthBlocks(fullRange.minWidthBlocks(), fullRange.maxWidthBlocks())
+                : fullRange.minWidthBlocks();
+            int legalMaxWidthBlocks = partner != null
+                ? FaceWidthPicker.pairedMemberLegalMaxWidthBlocks(fullRange.maxWidthBlocks())
+                : fullRange.maxWidthBlocks();
             int pairedWithFaceIndex = partner != null ? partner : Assignment.NOT_PAIRED;
             result.put(faceIndex, new Assignment(biome, widthBlocks, legalMinWidthBlocks, legalMaxWidthBlocks, pairedWithFaceIndex));
         });

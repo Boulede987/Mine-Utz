@@ -253,11 +253,13 @@ class TriangleIdentitySizeAssignmentTest {
     /**
      * The actual behavior this whole change exists for: two self-adjacent free faces read
      * as ONE felt region split across two hexes, not two independently-full-target
-     * instances of the same biome. Both faces must land on the SAME (even-split) width,
-     * strictly below the range's max (proving neither drew an independent full-range
-     * value), and the COMBINED felt value (recoverable via {@code width * sqrt(2)}, area
-     * scaling as width-squared) must itself fall within the biome's declared range - the
-     * per-face number no longer does, by design.
+     * instances of the same biome - their widths merely need to SUM into the biome's
+     * declared range (real user decision, 2026-09-13, refined 2026-09-13: needs-driven, not
+     * random - see {@code FaceWidthPicker#splitByAchievableCapacity}). With no external
+     * committed neighbor on either side (this test's exact scenario), neither face has any
+     * real achievable-range signal, so the split has no reason to be asymmetric and falls
+     * back to an even one - same outcome a real geometric squeeze would deviate from, see
+     * {@link #pairSplitsAsymmetricallyWhenOneMemberIsGenuinelyRoomConstrained} for that case.
      */
     @Test
     void selfAdjacentPairSplitsOneCombinedTargetInsteadOfEachDrawingItsOwnFullWidth() {
@@ -270,12 +272,73 @@ class TriangleIdentitySizeAssignmentTest {
 
         int widthA = assignment.get(0).widthBlocks();
         int widthB = assignment.get(1).widthBlocks();
-        assertEquals(widthA, widthB, "expected an even split between the two paired faces");
+        assertTrue(Math.abs(widthA - widthB) <= 1,
+            "expected an even split (+-1 block, integer-division rounding when the combined width is odd) when neither paired "
+                + "face has any real achievable-range squeeze - got " + widthA + " vs " + widthB);
         assertTrue(widthA < 1500, "expected a paired face's own width to be well below the biome's full max, got " + widthA);
 
-        double recoveredCombinedWidth = widthA * Math.sqrt(2);
-        assertTrue(recoveredCombinedWidth >= 898 && recoveredCombinedWidth <= 1502,
-            "expected the recovered COMBINED width to fall within the biome's own declared range (900-1500, +-rounding), got " + recoveredCombinedWidth);
+        int combinedWidth = widthA + widthB;
+        assertTrue(combinedWidth >= 900 && combinedWidth <= 1500,
+            "expected the two paired faces' SUM to fall within the biome's own declared range (900-1500), got " + combinedWidth);
+    }
+
+    /**
+     * The needs-driven half of the 2026-09-13 refinement: a pair member squeezed by REAL,
+     * already-committed EXTERNAL neighbors (5 of its 6 real mesh neighbors pinned to a large
+     * "anchor" biome here - a power diagram's boundary follows WEIGHT ratios, so a big,
+     * demanding neighbor claims territory and shrinks what's left for the center; a small
+     * one would do the opposite and CEDE room) must get only what its own achievable range
+     * can actually hold, while its unconstrained partner (touches nothing committed) absorbs
+     * the rest - proves the split is driven by real local geometry, not chance (see {@code
+     * FaceWidthPicker#splitByAchievableCapacity}).
+     */
+    @Test
+    void pairSplitsAsymmetricallyWhenOneMemberIsGenuinelyRoomConstrained() {
+        HexMeshBuilder.HexMesh mesh = HexMeshBuilder.build(300, 0, 0, 3000, 3000);
+        FaceAdjacency.Adjacency adjacency = FaceAdjacency.of(mesh.faces());
+        int constrainedMember = aFaceWithSixFullyInteriorNeighbors(mesh, adjacency);
+        int unconstrainedPartner = adjacency.neighborFaceIndices().get(constrainedMember).iterator().next();
+        // Real hex-ring topology: 2 of constrainedMember's OTHER 5 neighbors are also
+        // directly adjacent to unconstrainedPartner itself (consecutive ring members share
+        // an edge) - committing those would squeeze the "unconstrained" partner too, not
+        // just constrainedMember. Only commit the 3 that touch NEITHER the partner nor share
+        // an edge with it, to keep the partner's own achievable range genuinely clean.
+        Set<Integer> partnerOwnNeighbors = adjacency.neighborFaceIndices().get(unconstrainedPartner);
+
+        Map<Integer, BiomeId> fixedFaceBiomes = new HashMap<>();
+        Map<Integer, Integer> committedWidthBlocksByFace = new HashMap<>();
+        for (int neighbor : adjacency.neighborFaceIndices().get(constrainedMember)) {
+            if (neighbor == unconstrainedPartner || partnerOwnNeighbors.contains(neighbor)) {
+                continue; // the pair's OTHER member, or one of ITS OWN real neighbors - must stay uncommitted to keep it genuinely unconstrained
+            }
+            fixedFaceBiomes.put(neighbor, id("anchor"));
+            committedWidthBlocksByFace.put(neighbor, 5000);
+        }
+        assertTrue(committedWidthBlocksByFace.size() >= 2,
+            "expected at least 2 real non-partner-adjacent neighbors to squeeze constrainedMember with, got " + committedWidthBlocksByFace.size());
+        Set<Integer> free = Set.of(constrainedMember, unconstrainedPartner);
+
+        // A WIDE range (max >> min) on purpose: the achievable-range squeeze needs room to
+        // land below half the combined target while still overlapping desert's own min, or
+        // desert gets hard-excluded from the domain entirely before any split happens - a
+        // narrow range like 900-1500 makes those two requirements mutually exclusive. Anchor
+        // pushed far beyond baseline (650) so the squeeze lands with real margin below half
+        // the combined target, not right at the boundary (a moderate anchor width measured
+        // achievable-max within 1 block of half - real margin needed, not fragile rounding).
+        BiomeGraph graph = new BiomeGraph(
+            List.of(node("desert", 100, 1000, 1), node("anchor", 4000, 5000)),
+            List.of(AdjacencyRule.allow(id("desert"), id("anchor"), 10))
+        );
+
+        Map<Integer, TriangleIdentitySizeAssignment.Assignment> assignment = TriangleIdentitySizeAssignment.solve(
+            adjacency, free, fixedFaceBiomes, graph, 7L, Double.POSITIVE_INFINITY, committedWidthBlocksByFace, mesh, 300, 0.0
+        ).orElseThrow();
+
+        int constrainedWidth = assignment.get(constrainedMember).widthBlocks();
+        int partnerWidth = assignment.get(unconstrainedPartner).widthBlocks();
+        assertTrue(constrainedWidth < partnerWidth,
+            "expected the genuinely room-constrained member (surrounded by 5 tiny committed anchors) to get a real, meaningfully "
+                + "smaller share than its unconstrained partner - constrained=" + constrainedWidth + ", partner=" + partnerWidth);
     }
 
     /**
