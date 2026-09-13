@@ -4,17 +4,20 @@ Status: **Phase 1 (isolated seam prototype) VERIFIED** - `SeamResolution`/
 `SeamResolutionTest` (commit `15d04460`) directly confirmed identity+size+
 geometry are byte-identical regardless of seam-resolution order, against
 the real 48-biome catalog. **Phase 2 (live persistence mechanism) design
-LOCKED, but its first TWO implementation attempts both REGRESSED and were
-REVERTED** - see "ATTEMPT 1"/"ATTEMPT 2" entries below for what was tried,
-measured, and why. Real, load-bearing finding: `growCluster` unboundedly
-pulling ALL reachable tentative territory into one joint solve is likely
-too aggressive regardless of promotion criterion - a third attempt needs
-an INPUT-side bound (not yet designed), not another guess at the
-promotion criterion alone. **Phase 3 (canonical batch-extent boundary) is
-a separate, real, newly-found follow-up, NOT yet designed** - see its own
-section at the end; confirmed by direct measurement (not just prediction)
-to be the dominant cause of at least one of the two originally-targeted
-test failures. Branch
+LOCKED, its first TWO implementation attempts both REGRESSED and were
+REVERTED** (see "ATTEMPT 1"/"ATTEMPT 2" entries below). **Attempt 3
+DESIGNED, not yet implemented** ("Attempt 3 design" section below) - bounds
+`growCluster`'s own INPUT (how far its flood-fill may travel through
+pre-existing tentative territory) instead of changing promotion timing;
+needs no tier/schema change at all, directly targets both prior attempts'
+actual measured failure mode. Honestly scoped: fixes the crash-causing
+over-merge, does NOT achieve full order-independence (two real residuals
+named explicitly in that section, including the already-confirmed Phase 3
+case). **Phase 3 (canonical batch-extent boundary) is a separate, real,
+newly-found follow-up, NOT yet designed** - see its own section at the
+end; confirmed by direct measurement (not just prediction) to be the
+dominant cause of at least one of the two originally-targeted test
+failures. Branch
 `worldgen/symmetric-batch-boundary-solve`, forked from the
 `worldgen/mesh-geometry-realization` checkpoint commit (`6a10972d`).
 Supersedes nothing in `2026-08-29-remove-region-stitching.md` — that doc's
@@ -394,6 +397,94 @@ not unboundedly deep into old, already-tentatively-decided territory) -
 not yet designed. Two real implementation attempts now measured worse in
 some real way; a third blind attempt at the same shape isn't recommended
 without first designing this input-side bound.
+
+### Attempt 3 design (2026-09-13) — bound the INPUT, not the output; needs no promotion-tier change at all
+
+**Core idea**: neither prior attempt bounded how far `growCluster`'s flood-
+fill could travel THROUGH existing tentative territory - both let it run
+until it hit PERMANENT or hull, however deep that turned out to be. Bound
+that directly: cap how many CONSECUTIVE hops through tentative faces one
+BFS path may take before treating further tentative faces as FIXED
+(exactly like PERMANENT) instead of pulling them in - reset the counter
+to zero every time the path passes through genuinely FRESH (undecided)
+territory or starts at the seed. Growth through fresh territory itself
+stays completely unbounded, unchanged (today's real, correct "first-touch
+solve legitimately uses the whole cap radius" behavior).
+
+**Mechanism**: `growCluster`'s frontier carries one extra int per entry -
+`tentativeStreak`, the number of consecutive tentative-only hops taken to
+reach this face along the path that first discovered it. When a face is
+polled: PERMANENT is still the only true, streak-independent wall
+(unchanged). Hull-touching still always stops growth (unchanged). A
+TENTATIVE face is pulled into the free set (as today's fix intends) ONLY
+if `tentativeStreak < MAX_TENTATIVE_SEAM_DEPTH`; the face it's expanded
+to gets `tentativeStreak + 1`. Once the bound is reached, a tentative face
+is instead added to `fixedContext` (its CURRENT value used as-is, same as
+a permanent wall) and growth does NOT continue past it - the flood-fill
+simply cannot travel more than `MAX_TENTATIVE_SEAM_DEPTH` rings deep into
+any single stretch of pre-existing tentative territory, regardless of how
+large that territory actually is. A face reached through FRESH territory
+resets the streak to 0 for its own children, so a path that leaves
+tentative territory and re-enters fresh ground gets a full new budget.
+
+**Directly fixes the measured failure mode from BOTH prior attempts**: the
+actual regression in both cases was "a new query's own solve pulls in an
+entire prior cluster's whole reachable territory, not a thin seam" -
+bounding consecutive tentative hops makes that structurally impossible by
+construction, independent of cluster size, independent of how much
+surrounding territory happens to be tentative.
+
+**A genuine simplification found while designing this, not just a smaller
+patch**: this needs NO change to promotion/tier logic at all - the
+ORIGINAL, UNCHANGED single-tier rule ("only the literal query target ever
+promotes to PERMANENT, everything else stays tentative") can stay exactly
+as it always was. `SeedMeshCacheTest.queryingOneCellLeavesMostOfItsOwnClusterMerelyTentative`
+(the invariant Attempt 2 broke) is untouched by this design - nothing new
+ever gets promoted, so it can't contradict that test at all. A face
+beyond the seam bound stays formally "tentative" in the store forever,
+but is PRACTICALLY protected from revision beyond that bound by every
+future query the same way (any later solve reaching toward it from any
+direction hits the same `MAX_TENTATIVE_SEAM_DEPTH` cap) - the practical
+protection Attempts 1/2 tried to achieve via explicit early promotion
+falls out for free here, without formally changing any face's tier.
+
+**Honest, real limits - not full order-independence, checked by reasoning
+through the actual scenario before claiming otherwise**: this bounds the
+SIZE of any one joint solve (fixing the measured crashes), but does NOT
+achieve fully symmetric order-independence for every case. Two real,
+separate residuals:
+- **The Phase 3 (disk-anchor) case is untouched** - if one query's own
+  natural, UNCONSTRAINED first-touch growth already covers another
+  nearby query's seed point entirely (as `clustersAgreeRegardlessOfWhichQueryPointIsSolvedFirst`'s
+  own 900-vs-2500 geometry does), the bound never even engages - there's
+  no pre-existing tentative territory to bound against yet, the first
+  query simply decides everything unconstrained, exactly as it does
+  today. Confirmed this class of case needs actual Phase 3, not a better
+  Phase 2, already established by direct measurement on both prior
+  attempts.
+- **Even for a genuinely separate, merely-touching pair of clusters, a
+  narrower asymmetry remains**: whichever cluster solves FIRST decided
+  its own full deep interior with zero outside influence (nothing existed
+  yet to react to); whichever solves SECOND must incorporate the first's
+  now-fixed deep interior as ground truth when jointly resolving the
+  shared boundary band. The boundary ITSELF gets a fresh, jointly-computed
+  decision every time (real, not inherited) - but which side's deep
+  interior gets treated as immovable ground truth for that joint decision
+  still depends on solve order. This is the same "genuine, irreducible
+  residual of any online algorithm with a real caller that can't wait"
+  already named earlier in this whole investigation, now narrowed to
+  exactly the boundary's own two-sided negotiation instead of the entire
+  overlap - a real, measurable improvement, not a complete fix, and should
+  be reported as such rather than oversold.
+
+**`MAX_TENTATIVE_SEAM_DEPTH` needs tuning, not assuming** - start at 2 (a
+real hex-mesh vertex has 3 mutually-adjacent faces, so 2 rings is the
+smallest bound that still lets a genuine 2-batch seam fully resolve at a
+shared vertex without immediately walling on the very first tentative
+face touched), measure the real effect on both the targeted tests and the
+full suite (including `overworldLivePathRealizedWidthNeverBreachesItsOwnBiomesLegalSizeRange`,
+where the prior regression actually showed up on the real catalog) before
+trusting any specific value.
 
 **B. Canonical ownership tie-break.** Before solving, decide who "owns" a
 contested boundary face via a fixed, precomputable rule (e.g. a symmetric
