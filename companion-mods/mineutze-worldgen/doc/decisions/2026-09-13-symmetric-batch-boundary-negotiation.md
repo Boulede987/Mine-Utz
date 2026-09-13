@@ -4,20 +4,22 @@ Status: **Phase 1 (isolated seam prototype) VERIFIED** - `SeamResolution`/
 `SeamResolutionTest` (commit `15d04460`) directly confirmed identity+size+
 geometry are byte-identical regardless of seam-resolution order, against
 the real 48-biome catalog. **Phase 2 (live persistence mechanism) design
-LOCKED, its first TWO implementation attempts both REGRESSED and were
-REVERTED** (see "ATTEMPT 1"/"ATTEMPT 2" entries below). **Attempt 3
-DESIGNED, not yet implemented** ("Attempt 3 design" section below) - bounds
-`growCluster`'s own INPUT (how far its flood-fill may travel through
-pre-existing tentative territory) instead of changing promotion timing;
-needs no tier/schema change at all, directly targets both prior attempts'
-actual measured failure mode. Honestly scoped: fixes the crash-causing
-over-merge, does NOT achieve full order-independence (two real residuals
-named explicitly in that section, including the already-confirmed Phase 3
-case). **Phase 3 (canonical batch-extent boundary) is a separate, real,
-newly-found follow-up, NOT yet designed** - see its own section at the
-end; confirmed by direct measurement (not just prediction) to be the
-dominant cause of at least one of the two originally-targeted test
-failures. Branch
+LOCKED, THREE implementation attempts now built, measured, and REVERTED**
+(see "ATTEMPT 1"/"ATTEMPT 2"/"ATTEMPT 3 BUILT AND MEASURED" entries
+below). Attempt 3 found and fixed two real, separate bugs along the way
+(a dropped upfront-neighbor-seeding step causing a real "query point not
+covered" crash; an orphaning bug in the bound itself) and DID fix
+Attempt 2's `SeedMeshCacheTest` violation cleanly - but the core "letting
+tentative renegotiate at all can turn a solvable neighborhood into a real
+CSP dead end" problem survived even at the tightest possible bound (1
+ring), confirmed not a tuning problem. **Real next step identified, not
+yet built**: make the bounded-seam attempt a first try with a fallback to
+today's exact, always-solvable "treat tentative as fixed" behavior on CSP
+failure - can never regress below today's baseline solvability by
+construction, still gains the real benefit whenever the bounded attempt
+succeeds. **Phase 3 (canonical batch-extent boundary) remains a separate,
+real, confirmed-by-measurement follow-up, NOT yet designed** - see its own
+section at the end. Branch
 `worldgen/symmetric-batch-boundary-solve`, forked from the
 `worldgen/mesh-geometry-realization` checkpoint commit (`6a10972d`).
 Supersedes nothing in `2026-08-29-remove-region-stitching.md` — that doc's
@@ -485,6 +487,70 @@ face touched), measure the real effect on both the targeted tests and the
 full suite (including `overworldLivePathRealizedWidthNeverBreachesItsOwnBiomesLegalSizeRange`,
 where the prior regression actually showed up on the real catalog) before
 trusting any specific value.
+
+### ATTEMPT 3 BUILT AND MEASURED (2026-09-13) — two real bugs found+fixed along the way, but the core issue survives even at the tightest bound; REVERTED
+
+Implemented exactly as designed above. **A real, separate bug found and
+fixed WHILE building this, not a flaw in the bound idea itself**: the
+refactor (in all of Attempts 1/2/3) had dropped `growCluster`'s original
+"also seed the seed's own immediate ring directly, before classifying the
+seed itself" step - without it, a query whose own literal seed face
+happened to already be someone else's PERMANENT covering face got an
+EMPTY cluster and a needlessly narrow `resolveFromAlreadyDecidedNeighbors`
+check, producing a genuine "query point not covered by any nearby face"
+crash whenever organic wiggle put the real point inside a NEIGHBOR's
+boundary instead. Root-caused by direct comparison against the original
+code (not guessed), fixed by restoring the upfront neighbor-seeding step.
+**A second real bug, also found and fixed**: the first cut of the bound
+stopped BFS expansion entirely once a face crossed the seam-depth bound,
+which could ORPHAN genuinely fresh territory reachable only by walking
+past that point (present in neither `cluster` nor `fixedContext`) - fixed
+by letting the walk continue past a beyond-bound face (cheap, plain
+classification) while still never pulling anything past the bound into
+the expensive free set.
+
+**With both bugs fixed, real measurement**: `SeedMeshCacheTest
+.queryingOneCellLeavesMostOfItsOwnClusterMerelyTentative` (Attempt 2's own
+violation) passes clean now, as designed - this mechanism really does need
+zero promotion-tier changes. But **the core "new dead end" problem
+survives, unaffected by tuning**: `overworldLivePathRealizedWidthNeverBreachesItsOwnBiomesLegalSizeRange`
+(real 48-biome catalog) and `permanentResultsAgreeRegardlessOfExplorationOrderEvenWithTentativeGeometryRevision`
+both still hit a NEW `IllegalStateException` dead end - tried `MAX_TENTATIVE_SEAM_DEPTH`
+at BOTH 2 and 1 (the smallest meaningful value), identical failure shape
+either way. `clustersAgreeRegardlessOfWhichQueryPointIsSolvedFirst` still
+crashes too, exactly matching the already-confirmed Phase 3
+disk-anchor case (expected, unrelated to the bound value). Full suite: 255
+tests, 5 failed at both bound values - same COUNT as the known baseline,
+but 2 of those 5 changed FAILURE MODE (assertion → crash), a real
+regression in kind even though not in count. Reverted (`git checkout --`).
+
+**Real, deeper finding - not a tuning problem, a structural tension**:
+even the tightest possible bound (1 ring - the absolute minimum that still
+allows ANY seam renegotiation at all) still occasionally turns a
+previously-solvable neighborhood into a genuine CSP dead end. Giving the
+CSP MORE simultaneous free variables to jointly satisfy - even just a
+one-ring seam's worth - can occasionally make a combinatorially-tight
+neighborhood UNSOLVABLE where treating everything as fixed (fewer
+unknowns, easier problem) would have succeeded. This isn't a bug to tune
+away; it's the real cost of allowing joint negotiation AT ALL, independent
+of how narrowly it's scoped.
+
+**A real, sound way to reconcile this, not yet tried**: make the bounded-
+seam attempt a FIRST TRY, not the only path - if `trySolveCluster` fails
+against the bounded free set, fall back to re-growing the SAME seed with
+growth's ORIGINAL "treat any already-decided neighbor as fixed"
+rule (today's exact, always-solvable baseline behavior) as a guaranteed-
+safe recovery. This can never be LESS solvable than today (the fallback
+IS today's own mechanism, unchanged), while still gaining the real seam
+benefit whenever the bounded joint solve succeeds - which should be the
+common case, given genuine dead ends are rare enough that today's system
+practically never needs its own two-attempt recovery either. Structurally
+identical in SHAPE to the two-attempt strategy this whole arc has been
+trying to move away from - but now attempt 1 is the NEW, better mechanism
+and attempt 2 is the OLD, safe one, rather than the reverse - a real,
+deliberate return to a two-tier structure, not an accidental regression
+back to one. Not yet designed in detail or built - flagged as the likely
+next real step.
 
 **B. Canonical ownership tie-break.** Before solving, decide who "owns" a
 contested boundary face via a fixed, precomputable rule (e.g. a symmetric
