@@ -32,6 +32,13 @@ tasks.register('biomeGraphCompletenessReport', JavaExec) {
     mainClass = 'com.mineutze.worldgen.export.BiomeGraphCompletenessReport'
 }
 
+tasks.register('liveDeadEndDiagnosticReport', JavaExec) {
+    group = 'verification'
+    description = 'Sweeps the real live query path (SeedMeshCache) across 50 seeds for REAL, reachable dead ends - a much smaller, much more actionable list than biomeGraphCompletenessReport\'s own exhaustive abstract sweep. Self-explanatory report (doc/live-dead-end-diagnostic-report.txt): every entry explains the problem and proposes a concrete, verifiable AdjacencyRule fix. Run with: ./gradlew :worldgen-core:liveDeadEndDiagnosticReport'
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'com.mineutze.worldgen.export.LiveDeadEndDiagnosticReport'
+}
+
 repositories {
     mavenCentral()
 }
