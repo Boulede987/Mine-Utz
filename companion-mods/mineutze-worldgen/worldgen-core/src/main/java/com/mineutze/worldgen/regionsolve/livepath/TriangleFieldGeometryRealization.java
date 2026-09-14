@@ -29,7 +29,6 @@ import com.mineutze.worldgen.biomegraph.BiomeId;
 import com.mineutze.worldgen.regionsolve.topology.Point2D;
 
 import java.util.ArrayDeque;
-import java.util.ArrayList;
 import java.util.Deque;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -486,26 +485,6 @@ public final class TriangleFieldGeometryRealization {
      * real constraints) does this fail loud - a strictly narrower, rarer trigger than "any
      * already-decided neighbor, however it got that way."
      *
-     * <p><b>Attempt 3 (2026-09-14, real residual dead ends) — ring-staged solve, same
-     * cluster/fixed context as attempt 2, not a new growth.</b> Found via real
-     * DeadEndFrequencySimulation failures: attempt 2 already maximizes free-face
-     * flexibility (every reachable tentative face released), so when it STILL fails,
-     * {@code Optional.empty()} is a genuine, exhaustively-proven infeasibility of the
-     * WHOLE free cluster jointly against the fixed PERMANENT context ({@link
-     * FaceIdentityCsp}'s {@code SearchBudget} throws rather than silently giving up - see
-     * that class's own doc). Every real captured failure had the SAME shape: a large free
-     * cluster (40-50 faces) against only a handful (7) of scattered PERMANENT anchors from
-     * separate earlier queries. A single joint CSP over all 40-50 faces at once carries
-     * its OWN extra constraints a smaller batch wouldn't (one shared {@link
-     * FaceFairnessQuota} scope, achievable-range pruning computed against the full
-     * simultaneous fixed set) - {@link #ringsOf} partitions the free cluster into BFS
-     * rings by distance from the fixed boundary, and {@link #tryRingStagedSolve} solves
-     * ring 0 (touching the real fixed anchors) first, commits it as new real fixed
-     * context, then ring 1 against THAT, and so on - each stage faces a genuinely smaller,
-     * more tractable neighborhood than the monolithic joint solve. Only if staging ALSO
-     * fails (every ring's own local neighborhood, in sequence, has no legal solution) does
-     * this fail loud - strictly rarer than attempt 2 alone failing.
-     *
      * <p>Whichever attempt succeeds commits its OWN cluster faces/vertices as TENTATIVE
      * (never directly permanent) - then the ONE face actually covering {@code (queryX,
      * queryZ)} is promoted to PERMANENT via {@link #promoteFaceToPermanent}, since
@@ -613,107 +592,17 @@ public final class TriangleFieldGeometryRealization {
         }
         ClusterGrowth attempt2 = growCluster(mesh, adjacency, seedIndex, faceStore, false);
         solved = trySolveCluster(attempt2, adjacency, graph, worldSeed, mesh, minEdgeLengthBlocks, alreadyDecidedVertices);
-        if (solved.isPresent()) {
-            return new ClusterSolution(attempt2, solved.get());
-        }
-        Optional<Map<Integer, TriangleIdentitySizeAssignment.Assignment>> attempt3 =
-            tryRingStagedSolve(mesh, adjacency, graph, worldSeed, minEdgeLengthBlocks, alreadyDecidedVertices, attempt2);
-        if (attempt3.isEmpty()) {
+        if (solved.isEmpty()) {
             throw new IllegalStateException(
                 "TriangleFieldGeometryRealization.realizeCluster: no legal identity assignment exists for the cluster seeded at "
-                    + seedAxial + " (worldSeed=" + worldSeed + "), even after pulling in every reachable tentative neighbor as free AND"
-                    + " ring-staging the solve outward from the fixed boundary - a genuine dead end against only truly PERMANENT context."
-                    + " attempt1FreeFaceCount=" + attempt1.cluster().size() + ", attempt1FixedFaceCount=" + attempt1.fixedContext().size()
-                    + ", attempt2/3FreeFaceCount=" + attempt2.cluster().size() + ", attempt2/3FixedFaceCount=" + attempt2.fixedContext().size()
-                    + ", attempt2/3FixedFaceBiomes=" + biomesOf(attempt2.fixedContext())
+                    + seedAxial + " (worldSeed=" + worldSeed + "), even after pulling in every reachable tentative neighbor as free -"
+                    + " a genuine dead end against only truly PERMANENT context. attempt1FreeFaceCount=" + attempt1.cluster().size()
+                    + ", attempt1FixedFaceCount=" + attempt1.fixedContext().size() + ", attempt2FreeFaceCount=" + attempt2.cluster().size()
+                    + ", attempt2FixedFaceCount=" + attempt2.fixedContext().size() + ", attempt2FixedFaceBiomes="
+                    + biomesOf(attempt2.fixedContext())
             );
         }
-        return new ClusterSolution(attempt2, attempt3.get());
-    }
-
-    /**
-     * BFS partition of {@code freeCluster} into rings by real mesh-adjacency distance from
-     * {@code fixedFaceIndices} - ring 0 touches a real fixed face directly, ring 1 touches
-     * ring 0, and so on. {@code frontierSeeds} grows to include each newly-found ring, so
-     * this is a genuine outward BFS covering the WHOLE connected free cluster (including
-     * any part only reachable through other free faces, not directly touching a fixed
-     * one), not just the faces immediately touching the fixed boundary. Every collection
-     * here is insertion-ordered ({@link LinkedHashSet}) - this feeds a real, deterministic
-     * per-seed solve, never allowed to depend on JVM-run-specific hash-set iteration order
-     * (see {@code TriangleIdentitySizeAssignmentTest}'s own doc on that exact class of bug).
-     */
-    private static List<Set<Integer>> ringsOf(Set<Integer> freeCluster, Set<Integer> fixedFaceIndices, FaceAdjacency.Adjacency adjacency) {
-        List<Set<Integer>> rings = new ArrayList<>();
-        Set<Integer> remaining = new LinkedHashSet<>(freeCluster);
-        Set<Integer> frontierSeeds = new LinkedHashSet<>(fixedFaceIndices);
-        while (!remaining.isEmpty()) {
-            Set<Integer> ring = new LinkedHashSet<>();
-            for (int faceIndex : remaining) {
-                if (touchesAnyOf(faceIndex, frontierSeeds, adjacency)) {
-                    ring.add(faceIndex);
-                }
-            }
-            if (ring.isEmpty()) {
-                // Shouldn't happen - freeCluster is one connected BFS component by
-                // construction (growCluster) - but a disconnected remainder would infinite-
-                // loop otherwise; dump it as one final ring rather than hang.
-                ring.addAll(remaining);
-            }
-            rings.add(ring);
-            remaining.removeAll(ring);
-            frontierSeeds.addAll(ring);
-        }
-        return rings;
-    }
-
-    private static boolean touchesAnyOf(int faceIndex, Set<Integer> targets, FaceAdjacency.Adjacency adjacency) {
-        for (int neighbor : adjacency.neighborFaceIndices().getOrDefault(faceIndex, Set.of())) {
-            if (targets.contains(neighbor)) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    /**
-     * Solves {@code attempt2}'s own free cluster ring-by-ring outward from its fixed
-     * PERMANENT boundary instead of one joint CSP over the whole cluster - see {@link
-     * #realizeCluster}'s "Attempt 3" doc for why this can succeed where the monolithic
-     * solve can't. Each ring's own solve becomes real fixed context (biome AND width) for
-     * the NEXT ring, same discipline {@link #trySolveCluster} already uses for the
-     * cluster's own external fixed context. A later ring failing means this whole attempt
-     * fails - no partial result is ever returned.
-     */
-    private static Optional<Map<Integer, TriangleIdentitySizeAssignment.Assignment>> tryRingStagedSolve(
-        HexMeshBuilder.HexMesh mesh, FaceAdjacency.Adjacency adjacency, BiomeGraph graph, long worldSeed,
-        double minEdgeLengthBlocks, Map<Integer, Point2D> alreadyDecidedVertices, ClusterGrowth attempt2
-    ) {
-        List<Set<Integer>> rings = ringsOf(attempt2.cluster(), attempt2.fixedContext().keySet(), adjacency);
-
-        Map<Integer, BiomeId> fixedFaceBiomes = new LinkedHashMap<>();
-        Map<Integer, Integer> committedWidthBlocksByFace = new LinkedHashMap<>();
-        attempt2.fixedContext().forEach((faceIndex, decided) -> {
-            fixedFaceBiomes.put(faceIndex, decided.biomeId());
-            committedWidthBlocksByFace.put(faceIndex, decided.widthBlocks());
-        });
-
-        Map<Integer, TriangleIdentitySizeAssignment.Assignment> combined = new LinkedHashMap<>();
-        for (Set<Integer> ring : rings) {
-            double ringAreaBlocks2 = ring.size() * baselineFaceAreaBlocks2();
-            Optional<Map<Integer, TriangleIdentitySizeAssignment.Assignment>> ringSolved = TriangleIdentitySizeAssignment.solve(
-                adjacency, ring, fixedFaceBiomes, graph, worldSeed, ringAreaBlocks2, committedWidthBlocksByFace,
-                mesh, HEX_SIZE_BLOCKS, minEdgeLengthBlocks, alreadyDecidedVertices
-            );
-            if (ringSolved.isEmpty()) {
-                return Optional.empty();
-            }
-            combined.putAll(ringSolved.get());
-            ringSolved.get().forEach((faceIndex, assignment) -> {
-                fixedFaceBiomes.put(faceIndex, assignment.biome());
-                committedWidthBlocksByFace.put(faceIndex, assignment.widthBlocks());
-            });
-        }
-        return Optional.of(combined);
+        return new ClusterSolution(attempt2, solved.get());
     }
 
     /**
