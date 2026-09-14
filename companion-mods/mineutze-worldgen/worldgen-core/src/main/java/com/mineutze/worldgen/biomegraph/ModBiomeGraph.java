@@ -103,53 +103,69 @@ public final class ModBiomeGraph {
     private static final List<BiomeNode> OVERWORLD_NODES = List.of(
         new BiomeNode(BADLANDS, new BiomeSizeRange(500, 800)),
         new BiomeNode(BAMBOO_JUNGLE, new BiomeSizeRange(500, 800)),
-        new BiomeNode(BEACH, new BiomeSizeRange(300, 600)),
+        // 2026-09-14 experiment (real user permission, measurement only - thematic
+        // coherence pass still pending, by the user, afterward): tier-1 max 600->700,
+        // crossing the 650 geometry baseline - removes BridgeMotifChecker's Motif 2
+        // (Fragile Narrow Tier, candidate.max < baseline) trigger condition outright for
+        // every one of these 14 biomes. See DECISIONS.md if this becomes permanent.
+        new BiomeNode(BEACH, new BiomeSizeRange(300, 700)),
         new BiomeNode(BIRCH_FOREST, new BiomeSizeRange(500, 800)),
         new BiomeNode(CHERRY_GROVE, new BiomeSizeRange(500, 800)),
-        new BiomeNode(COLD_OCEAN, new BiomeSizeRange(700, 1000)),
+        // 2026-09-14 experiment (same rationale as tier-1/tier-4 above): min 700->650,
+        // AT the geometry baseline - this tier-3 "shallow ocean" family was the remaining
+        // Motif 1 (Dominant Neighbor) violator, missed in the first pass (only the tier-4
+        // "deep" family was fixed then) - matches these 5 biomes' own dominance in the
+        // real captured live-crash data (ocean 47.5%, lukewarm_ocean 38.9%, cold_ocean
+        // 33.6%, warm_ocean 28.5%, frozen_ocean 22.9% of all failures).
+        //
+        new BiomeNode(COLD_OCEAN, new BiomeSizeRange(650, 1000)),
         new BiomeNode(DARK_FOREST, new BiomeSizeRange(500, 800)),
-        // selfAdjacencyLimit=1 on these 5 (deep-ocean family + desert) - each spans up to 2
-        // hexes as one felt region. Each deep-ocean variant self-adjacent to ITSELF only,
-        // not OTHER deep-ocean variants. See DECISIONS.md 2026-09-11.
-        new BiomeNode(DEEP_COLD_OCEAN, new BiomeSizeRange(900, 1500), 1),
-        new BiomeNode(DEEP_FROZEN_OCEAN, new BiomeSizeRange(900, 1500), 1),
-        new BiomeNode(DEEP_LUKEWARM_OCEAN, new BiomeSizeRange(900, 1500), 1),
-        new BiomeNode(DEEP_OCEAN, new BiomeSizeRange(900, 1500), 1),
-        new BiomeNode(DESERT, new BiomeSizeRange(900, 1500), 1),
+        // 2026-09-14 experiment (real user framing: "keep adding couches as long as there
+        // isn't enough space"): selfAdjacencyLimit opt-in list dropped - every node now
+        // uses BiomeNode's own default (uncapped, hex mesh's ≤6-neighbor degree is the
+        // only real limit), not just these previously-opted-in 10. Min 900/700->650 on
+        // the ocean/desert families below is separate: exactly AT the 650 geometry
+        // baseline, removes Motif 1 (Dominant Neighbor) trigger outright. See
+        // DECISIONS.md 2026-09-14.
+        new BiomeNode(DEEP_COLD_OCEAN, new BiomeSizeRange(650, 1500)),
+        new BiomeNode(DEEP_FROZEN_OCEAN, new BiomeSizeRange(650, 1500)),
+        new BiomeNode(DEEP_LUKEWARM_OCEAN, new BiomeSizeRange(650, 1500)),
+        new BiomeNode(DEEP_OCEAN, new BiomeSizeRange(650, 1500)),
+        new BiomeNode(DESERT, new BiomeSizeRange(650, 1500)),
         new BiomeNode(ERODED_BADLANDS, new BiomeSizeRange(500, 800)),
         new BiomeNode(FLOWER_FOREST, new BiomeSizeRange(500, 800)),
         new BiomeNode(FOREST, new BiomeSizeRange(500, 800)),
-        new BiomeNode(FROZEN_OCEAN, new BiomeSizeRange(700, 1000)),
-        new BiomeNode(FROZEN_PEAKS, new BiomeSizeRange(300, 600)),
+        new BiomeNode(FROZEN_OCEAN, new BiomeSizeRange(650, 1000)),
+        new BiomeNode(FROZEN_PEAKS, new BiomeSizeRange(300, 700)),
         new BiomeNode(GROVE, new BiomeSizeRange(500, 800)),
-        new BiomeNode(ICE_SPIKES, new BiomeSizeRange(300, 600)),
-        new BiomeNode(JAGGED_PEAKS, new BiomeSizeRange(300, 600)),
+        new BiomeNode(ICE_SPIKES, new BiomeSizeRange(300, 700)),
+        new BiomeNode(JAGGED_PEAKS, new BiomeSizeRange(300, 700)),
         new BiomeNode(JUNGLE, new BiomeSizeRange(500, 800)),
-        new BiomeNode(LUKEWARM_OCEAN, new BiomeSizeRange(700, 1000)),
+        new BiomeNode(LUKEWARM_OCEAN, new BiomeSizeRange(650, 1000)),
         new BiomeNode(MANGROVE_SWAMP, new BiomeSizeRange(500, 800)),
-        new BiomeNode(MEADOW, new BiomeSizeRange(300, 600)),
+        new BiomeNode(MEADOW, new BiomeSizeRange(300, 700)),
         new BiomeNode(MUSHROOM_FIELDS, new BiomeSizeRange(500, 800)),
-        new BiomeNode(OCEAN, new BiomeSizeRange(700, 1000)),
+        new BiomeNode(OCEAN, new BiomeSizeRange(650, 1000)),
         new BiomeNode(OLD_GROWTH_BIRCH_FOREST, new BiomeSizeRange(500, 800)),
         new BiomeNode(OLD_GROWTH_PINE_TAIGA, new BiomeSizeRange(500, 800)),
         new BiomeNode(OLD_GROWTH_SPRUCE_TAIGA, new BiomeSizeRange(500, 800)),
-        new BiomeNode(PLAINS, new BiomeSizeRange(300, 600)),
+        new BiomeNode(PLAINS, new BiomeSizeRange(300, 700)),
         new BiomeNode(SAVANNA, new BiomeSizeRange(500, 800)),
         new BiomeNode(SAVANNA_PLATEAU, new BiomeSizeRange(500, 800)),
-        new BiomeNode(SNOWY_BEACH, new BiomeSizeRange(300, 600)),
-        new BiomeNode(SNOWY_PLAINS, new BiomeSizeRange(300, 600)),
-        new BiomeNode(SNOWY_SLOPES, new BiomeSizeRange(300, 600)),
+        new BiomeNode(SNOWY_BEACH, new BiomeSizeRange(300, 700)),
+        new BiomeNode(SNOWY_PLAINS, new BiomeSizeRange(300, 700)),
+        new BiomeNode(SNOWY_SLOPES, new BiomeSizeRange(300, 700)),
         new BiomeNode(SNOWY_TAIGA, new BiomeSizeRange(500, 800)),
         new BiomeNode(SPARSE_JUNGLE, new BiomeSizeRange(500, 800)),
-        new BiomeNode(STONY_PEAKS, new BiomeSizeRange(300, 600)),
-        new BiomeNode(STONY_SHORE, new BiomeSizeRange(300, 600)),
-        new BiomeNode(SUNFLOWER_PLAINS, new BiomeSizeRange(300, 600)),
+        new BiomeNode(STONY_PEAKS, new BiomeSizeRange(300, 700)),
+        new BiomeNode(STONY_SHORE, new BiomeSizeRange(300, 700)),
+        new BiomeNode(SUNFLOWER_PLAINS, new BiomeSizeRange(300, 700)),
         new BiomeNode(SWAMP, new BiomeSizeRange(500, 800)),
         new BiomeNode(TAIGA, new BiomeSizeRange(500, 800)),
-        new BiomeNode(WARM_OCEAN, new BiomeSizeRange(700, 1000)),
+        new BiomeNode(WARM_OCEAN, new BiomeSizeRange(650, 1000)),
         new BiomeNode(WINDSWEPT_FOREST, new BiomeSizeRange(500, 800)),
-        new BiomeNode(WINDSWEPT_GRAVELLY_HILLS, new BiomeSizeRange(300, 600)),
-        new BiomeNode(WINDSWEPT_HILLS, new BiomeSizeRange(300, 600)),
+        new BiomeNode(WINDSWEPT_GRAVELLY_HILLS, new BiomeSizeRange(300, 700)),
+        new BiomeNode(WINDSWEPT_HILLS, new BiomeSizeRange(300, 700)),
         new BiomeNode(WINDSWEPT_SAVANNA, new BiomeSizeRange(500, 800)),
         new BiomeNode(WOODED_BADLANDS, new BiomeSizeRange(500, 800))
     );

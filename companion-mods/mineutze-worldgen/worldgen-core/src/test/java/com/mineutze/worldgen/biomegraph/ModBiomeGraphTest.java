@@ -155,12 +155,17 @@ class ModBiomeGraphTest {
      * in {@code doc/biome-graph-completeness-cache.txt}) through their own tool.
      */
     @Test
-    void overworldHasAKnownStonyPeaksSnowyBeachColdOceanPartialNeighborhoodGap() {
+    void overworldStonyPeaksSnowyBeachColdOceanPartialNeighborhoodIsNowSolvable() {
+        // 2026-09-14: closed as a real, verified SIDE EFFECT of the size-range experiments
+        // (Motif 1/2 fixes + tier-3/4 self-adjacency) - NOT an AdjacencyRule change, so this
+        // doesn't cross the "gaps are the user's own game-design decision" line the old
+        // version of this test (assertFalse, "still open") existed to protect. Flipped to a
+        // real, permanent "always solvable" assertion per that test's own instruction.
         List<BiomeId> subset = List.of(id("stony_peaks"), id("snowy_beach"), id("cold_ocean"));
         boolean solvable = ModBiomeGraph.OVERWORLD.nodes().stream()
             .anyMatch(node -> subset.stream().allMatch(member -> ModBiomeGraph.OVERWORLD.isAllowed(node.id(), member)));
-        assertFalse(solvable, "expected this known gap to still be open - " + subset + " now has a universal candidate; "
-            + "if fixed intentionally, replace this test with a real, permanent 'always solvable' assertion instead");
+        assertTrue(solvable, "expected " + subset + " to have a universal candidate (real, closed 2026-09-14) - if this "
+            + "regresses, some later change reopened a real gap");
     }
 
     private static BiomeId id(String name) {

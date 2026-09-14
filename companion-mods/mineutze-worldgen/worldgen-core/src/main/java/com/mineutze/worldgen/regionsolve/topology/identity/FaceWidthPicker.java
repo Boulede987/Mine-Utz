@@ -2,6 +2,8 @@ package com.mineutze.worldgen.regionsolve.topology.identity;
 
 import com.mineutze.worldgen.regionsolve.topology.EdgeDisplacement;
 
+import com.mineutze.worldgen.regionsolve.topology.HexGeometry;
+
 import com.mineutze.worldgen.regionsolve.topology.Salt;
 
 import com.mineutze.worldgen.regionsolve.topology.placement.WeightedVertexPlacement;
@@ -13,6 +15,8 @@ import com.mineutze.worldgen.biomegraph.BiomeSizeRange;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
@@ -21,8 +25,21 @@ import java.util.Set;
 /**
  * Draws a width for a face whose identity is already decided - zero identity/legality
  * concern, see {@link TriangleIdentitySizeAssignment} (only caller) for how identity gets
- * decided first via {@link FaceIdentityCsp}. Deliberately geometry-agnostic: never imports
- * real hexagon area math (see {@link #BASELINE_WIDTH_BLOCKS}), only reasons in width blocks.
+ * decided first via {@link FaceIdentityCsp}. Stays geometry-agnostic for a SINGLE face's
+ * own draw ({@link #pickWidth}) - only reasons in width blocks there, never imports real
+ * hexagon area math (see {@link #BASELINE_WIDTH_BLOCKS}).
+ *
+ * <p><b>Self-adjacent GROUP splitting is the one deliberate exception (2026-09-14, real bug
+ * found and fixed).</b> A first cut summed raw WIDTHS across a group's members - correct
+ * for exactly 2 members (matches the real user rule: widths merely need to SUM into the
+ * biome's declared range), but area scales as the SQUARE of width, so N equal-width shares
+ * deliver only {@code combinedWidth}²{@code /N} of TOTAL felt area, not {@code
+ * combinedWidth}² - a group's real footprint SHRANK as more members joined, exactly
+ * backwards from "spread a big biome's demand across more couches without shrinking it."
+ * {@link #splitWidthForGroup} now distributes AREA (via {@link HexGeometry}, converting
+ * back to width only for the final per-member value) - the same physical quantity the
+ * pre-2026-09-13 {@code combined/sqrt(2)} mechanism preserved, keeping this session's real
+ * fix (needs-driven, asymmetric, not forced-equal) instead of reverting it.
  */
 final class FaceWidthPicker {
 
@@ -36,20 +53,22 @@ final class FaceWidthPicker {
     /** Classic hash-spreading multiplier (same convention as {@code java.util.Objects.hash}, and {@code EdgeDisplacement}/{@code WeightedVertexPlacement}'s {@code HASH_MULTIPLIER}). */
     private static final long HASH_MULTIPLIER = 31;
 
-    // A self-adjacent pair's combined width (drawn once, see splitWidthForPair) is split
-    // between the two members ONLY as asymmetrically as real local geometry actually demands
-    // (see splitByAchievableCapacity) - real user decision (2026-09-13): the pair represents
-    // ONE felt region whose members' widths merely SUM into the biome's declared [min,max]
-    // range, not two equal halves, but asymmetry should be NEEDS-DRIVEN, not random (a
-    // member squeezed by real committed external neighbors gets only what it can actually
-    // hold; its partner absorbs the rest) - not a decorative variance generator. This
-    // constant is the absolute floor either member can ever be pushed to, real squeeze or
-    // not - without one, a degenerate split could hand one member a near-zero or negative
-    // width. 50 blocks: comfortably above the geometry layer's own absolute minimum edge
-    // length (MIN_EDGE_LENGTH_MACRO_CELLS * macroCellSizeBlocks, ~24 blocks at today's
-    // MacroGridConfig.DEFAULT) - first cut, tune from real measurement like every other size
-    // constant in this codebase.
+    // A self-adjacent group's combined AREA (drawn as a width, see splitWidthForGroup, then
+    // converted - see this class's own doc for why AREA not raw width) is split across its
+    // members ONLY as asymmetrically as real local geometry actually demands (see
+    // splitByAchievableCapacity) - real user decision (2026-09-13, generalized 2026-09-14):
+    // a group represents ONE felt region whose members' TOTAL footprint must match the
+    // biome's declared [min,max] range, not equal shares, but asymmetry should be NEEDS-
+    // DRIVEN, not random (a member squeezed by real committed external neighbors gets only
+    // what it can actually hold; the rest of the group absorbs the difference) - not a
+    // decorative variance generator. This constant is the absolute WIDTH floor any member
+    // can ever be pushed to, real squeeze or not - without one, a degenerate split could
+    // hand one member a near-zero or negative width. 50 blocks: comfortably above the
+    // geometry layer's own absolute minimum edge length (MIN_EDGE_LENGTH_MACRO_CELLS *
+    // macroCellSizeBlocks, ~24 blocks at today's MacroGridConfig.DEFAULT) - first cut, tune
+    // from real measurement like every other size constant in this codebase.
     private static final int MIN_GROUP_MEMBER_WIDTH_BLOCKS = 50;
+    private static final double MIN_GROUP_MEMBER_AREA_BLOCKS2 = areaForWidth(MIN_GROUP_MEMBER_WIDTH_BLOCKS);
 
     // Matches WeightedVertexPlacement's baseline circumradius (HEX_SIZE_BLOCKS=325, see
     // TriangleFieldGeometryRealization for why 650) - reference point a face's chosen
@@ -67,23 +86,27 @@ final class FaceWidthPicker {
     }
 
     /**
-     * A paired face's own absolute legal range (used by {@code
+     * A group member's own absolute legal range (used by {@code
      * TriangleIdentitySizeAssignment#buildResult} for {@code legalMinWidthBlocks}/{@code
      * legalMaxWidthBlocks}) - checking a member against the FULL combined range would be
      * wrong (a real bug an earlier live-path legal-size test actually had), but under the
-     * asymmetric sum split neither member has a fixed share to check against either. This
-     * is the LOOSEST bound consistent with the real constraint (both members' widths sum to
-     * at most {@code combinedRange}'s max, and this member's own partner must get at least
-     * {@link #MIN_GROUP_MEMBER_WIDTH_BLOCKS}) - real per-instance legality is enforced by
-     * {@link #splitWidthForPair}'s own draw, not by this bound alone.
+     * asymmetric AREA split no single member has a fixed share to check against either. This
+     * is the LOOSEST WIDTH bound consistent with the real AREA constraint (every member's
+     * area sums to at most {@code combinedMaxWidthBlocks}'s own area, and every OTHER member
+     * in the group must get at least {@link #MIN_GROUP_MEMBER_AREA_BLOCKS2}) - real
+     * per-instance legality is enforced by {@link #splitWidthForGroup}'s own draw, not by
+     * this bound alone.
      */
-    static int pairedMemberLegalMinWidthBlocks(int combinedMinWidthBlocks, int combinedMaxWidthBlocks) {
+    static int groupMemberLegalMinWidthBlocks(int combinedMinWidthBlocks, int combinedMaxWidthBlocks) {
         return Math.min(MIN_GROUP_MEMBER_WIDTH_BLOCKS, combinedMaxWidthBlocks / 2);
     }
 
-    /** See {@link #pairedMemberLegalMinWidthBlocks} - symmetric ceiling. */
-    static int pairedMemberLegalMaxWidthBlocks(int combinedMaxWidthBlocks) {
-        return Math.max(combinedMaxWidthBlocks - MIN_GROUP_MEMBER_WIDTH_BLOCKS, combinedMaxWidthBlocks / 2);
+    /** See {@link #groupMemberLegalMinWidthBlocks} - symmetric ceiling, in AREA terms then converted back to width, generalized to a group of {@code groupSize} members (was hardcoded to 2, "a pair"). */
+    static int groupMemberLegalMaxWidthBlocks(int combinedMaxWidthBlocks, int groupSize) {
+        double combinedMaxArea = areaForWidth(combinedMaxWidthBlocks);
+        double flooredOthersArea = MIN_GROUP_MEMBER_AREA_BLOCKS2 * (groupSize - 1);
+        double maxShareArea = Math.max(combinedMaxArea - flooredOthersArea, combinedMaxArea / groupSize);
+        return widthForArea(maxShareArea);
     }
 
     /**
@@ -105,114 +128,137 @@ final class FaceWidthPicker {
     }
 
     /**
-     * Draws ONE combined width for a self-adjacent pair (same mechanism as {@link
-     * #pickWidth}, from the SAME biome {@code range}, keyed canonically over both faces so
-     * identical regardless of which face is visited first) and splits it between the two
-     * members - see class doc: two self-adjacent faces read as ONE felt region across two
-     * hexes, not two independently-full-target instances (strictly worse - two full demands
-     * on the local neighborhood instead of one).
+     * Draws ONE combined width for a self-adjacent GROUP (same mechanism as {@link
+     * #pickWidth}, from the SAME biome {@code range}, keyed canonically over EVERY member so
+     * identical regardless of which one is visited first) and splits it across the group -
+     * see class doc: self-adjacent faces read as ONE felt region spanning N hexes, not N
+     * independently-full-target instances (strictly worse - N full demands on the local
+     * neighborhood instead of one).
      *
-     * <p>Real user decision (2026-09-13, refined): the pair's two widths merely need to SUM
-     * into the biome's declared {@code [min,max]} range, not each independently occupy an
-     * equal (previously: area-equal, {@code combined/sqrt(2)} each) share - BUT the split
-     * itself is NEEDS-DRIVEN, not random (see {@link #splitByAchievableCapacity}): a member
-     * only gets pushed toward the floor when its OWN real, already-committed external
-     * neighbors genuinely can't spare more room, and its partner absorbs the rest. Two
-     * members with no real external squeeze split evenly, same as before this change - a
-     * self-adjacent pair is a completability escape hatch for a genuinely tight local
-     * neighborhood, not a decorative size-variance generator.
+     * <p>Real user decision (2026-09-13, refined 2026-09-14 from a pair to any group size):
+     * the group's widths merely need to SUM into the biome's declared {@code [min,max]}
+     * range, not each independently occupy an equal share - the split itself is NEEDS-
+     * DRIVEN, not random (see {@link #splitByAchievableCapacity}): a member only gets pushed
+     * toward the floor when its OWN real, already-committed external neighbors genuinely
+     * can't spare more room, and the REST of the group absorbs the difference. A group with
+     * no real external squeeze anywhere splits evenly. "Keep adding couches as long as
+     * there isn't enough space" (real user framing, 2026-09-14): a biome that can grow very
+     * large no longer has to demand that whole size from one local neighborhood - splitting
+     * across as many real cells as it happened to land self-adjacent to spreads the demand
+     * thin enough that none of them individually gets squeezed.
      *
-     * @param faceAchievableRange   {@code faceIndex}'s own real achievable width range from
-     *                              its EXTERNAL committed neighbors (excludes {@code
-     *                              partnerFaceIndex} by construction - a fellow free face in
-     *                              this same batch, never itself "committed" yet) - {@code
-     *                              null} if it has none (unconstrained). Same map {@link
-     *                              TriangleIdentitySizeAssignment#solve}'s mesh-aware
-     *                              overload already computes for CSP domain-pruning - reused
-     *                              here, not recomputed.
-     * @param partnerAchievableRange the partner's own equivalent range.
+     * @param groupMembers        every OTHER member of {@code faceIndex}'s own group
+     *                             (excludes {@code faceIndex} itself - added back internally
+     *                             for a canonical, order-independent member list).
+     * @param achievableRangeByFace each member's own real achievable width range from ITS
+     *                             OWN external committed neighbors (excludes fellow group
+     *                             members by construction - free faces in this same batch,
+     *                             never themselves "committed" yet) - missing entry means
+     *                             unconstrained. Same map {@link
+     *                             TriangleIdentitySizeAssignment#solve}'s mesh-aware overload
+     *                             already computes for CSP domain-pruning - reused here, not
+     *                             recomputed.
      */
-    static int splitWidthForPair(
-        BiomeSizeRange range, long worldSeed, int faceIndex, int partnerFaceIndex, BiomeId biome,
+    static int splitWidthForGroup(
+        BiomeSizeRange range, long worldSeed, int faceIndex, Set<Integer> groupMembers, BiomeId biome,
         FaceAdjacency.Adjacency adjacency, Map<Integer, Integer> committedWidthBlocksByFace,
-        AchievableWidthRange faceAchievableRange, AchievableWidthRange partnerAchievableRange
+        Map<Integer, AchievableWidthRange> achievableRangeByFace
     ) {
-        int lowerFace = Math.min(faceIndex, partnerFaceIndex);
-        int higherFace = Math.max(faceIndex, partnerFaceIndex);
+        List<Integer> orderedMembers = new ArrayList<>(groupMembers);
+        orderedMembers.add(faceIndex);
+        Collections.sort(orderedMembers);
+
         long hash = worldSeed ^ PAIR_SIZE_PICK_SALT;
-        hash = hash * HASH_MULTIPLIER + lowerFace;
-        hash = hash * HASH_MULTIPLIER + higherFace;
-        hash = hash * HASH_MULTIPLIER + biome.hashCode();
-        // Pair's own external committed neighbors, from BOTH faces' adjacency (excluding
-        // pair members themselves - not committed to each other, the fresh pair deciding now).
         List<Integer> committedNeighborWidths = new ArrayList<>();
-        collectCommittedNeighborWidths(faceIndex, adjacency, committedWidthBlocksByFace, committedNeighborWidths);
-        collectCommittedNeighborWidths(partnerFaceIndex, adjacency, committedWidthBlocksByFace, committedNeighborWidths);
+        for (int member : orderedMembers) {
+            hash = hash * HASH_MULTIPLIER + member;
+            collectCommittedNeighborWidths(member, adjacency, committedWidthBlocksByFace, committedNeighborWidths);
+        }
+        hash = hash * HASH_MULTIPLIER + biome.hashCode();
         Bias bias = biasFor(range, committedNeighborWidths);
         int combinedWidth = pickWidthFromHash(range, hash, bias);
+        double combinedArea = areaForWidth(combinedWidth);
 
-        AchievableWidthRange lowerAchievable = faceIndex == lowerFace ? faceAchievableRange : partnerAchievableRange;
-        AchievableWidthRange higherAchievable = faceIndex == lowerFace ? partnerAchievableRange : faceAchievableRange;
-        int[] shares = splitByAchievableCapacity(combinedWidth, lowerAchievable, higherAchievable);
-        return faceIndex == lowerFace ? shares[0] : shares[1];
+        Map<Integer, Double> areaShares = splitByAchievableCapacity(combinedArea, orderedMembers, achievableRangeByFace);
+        return widthForArea(areaShares.get(faceIndex));
     }
 
     /**
-     * Allocates {@code combinedWidth} between two members by REAL geometric need, not
-     * chance. Each member's "room" is its own achievable range's {@code maxWidthBlocks} (how
-     * wide its real external neighbors could let it get), or the full {@code combinedWidth}
-     * if it has no achievable-range entry (no external committed neighbor - unconstrained).
+     * Allocates {@code combinedArea} across a self-adjacent group's own members by REAL
+     * geometric need, not chance - water-filling / max-min fairness, the direct N-way
+     * generalization of this method's own former 2-member version. AREA, not raw width (see
+     * class doc for the real bug this fixes - N equal-WIDTH shares deliver only {@code 1/N}
+     * of the group's true total area, shrinking a big biome's real footprint the more it
+     * gets split). Each member's "room" is its own achievable width range's {@code
+     * maxWidthBlocks} CONVERTED to area (how much its real external neighbors could let it
+     * hold), or the full {@code combinedArea} if it has no achievable-range entry
+     * (unconstrained).
      *
-     * <ul>
-     *     <li>Both members comfortably room for an even half: split evenly - no real squeeze,
-     *     no reason to be asymmetric. This is the common case (most faces have no external
-     *     committed neighbor yet, or a generous one) - deliberately reduces to the OLD,
-     *     pre-2026-09-13 equal-split behavior whenever there's no real signal to do
-     *     otherwise.</li>
-     *     <li>Exactly one member is genuinely room-constrained below half: give it only what
-     *     it can actually hold (clamped to {@link #MIN_GROUP_MEMBER_WIDTH_BLOCKS}), the other
-     *     absorbs the remainder - this is the actual completability escape hatch a self-
-     *     adjacent pair exists for.</li>
-     *     <li>BOTH members are room-constrained below half: give each its own real room: the
-     *     realized combined width may fall short of the drawn {@code combinedWidth} - a real,
-     *     honest outcome (don't force more than geometry can support), not a bug.</li>
-     * </ul>
-     *
-     * @return {@code {lowerFaceShare, higherFaceShare}}, summing to {@code combinedWidth}
-     * except in the both-constrained case above.
+     * <p>Members are processed tightest-room-first: a member whose room can't even cover an
+     * EQUAL share of what's left gets exactly its own room (floor-clamped), and the
+     * remaining budget is re-split evenly across the remaining, roomier members. Once a
+     * member's room comfortably covers the current equal share, every member from there on
+     * (sorted ascending, so all of them too) genuinely has enough room for that share -
+     * ends the water-filling there, no further iteration needed. If every member is
+     * genuinely room-constrained, the realized SUM may fall short of {@code combinedArea} -
+     * a real, honest outcome (don't force more than geometry can support), not a bug, same
+     * precedent as this method's own former 2-member "both constrained" case.
      */
-    private static int[] splitByAchievableCapacity(int combinedWidth, AchievableWidthRange lowerAchievable, AchievableWidthRange higherAchievable) {
-        int half = combinedWidth / 2;
-        int lowerRoom = roomFor(lowerAchievable, combinedWidth);
-        int higherRoom = roomFor(higherAchievable, combinedWidth);
-        boolean lowerConstrained = lowerRoom < half;
-        boolean higherConstrained = higherRoom < half;
+    private static Map<Integer, Double> splitByAchievableCapacity(
+        double combinedArea, List<Integer> orderedMembers, Map<Integer, AchievableWidthRange> achievableRangeByFace
+    ) {
+        Map<Integer, Double> room = new LinkedHashMap<>();
+        for (int member : orderedMembers) {
+            room.put(member, roomFor(achievableRangeByFace.get(member), combinedArea));
+        }
+        List<Integer> byRoomAscending = new ArrayList<>(orderedMembers);
+        byRoomAscending.sort(Comparator.<Integer>comparingDouble(room::get).thenComparingInt(m -> m));
 
-        if (!lowerConstrained && !higherConstrained) {
-            return new int[] {half, combinedWidth - half};
+        Map<Integer, Double> shares = new LinkedHashMap<>();
+        double remainingArea = combinedArea;
+        int remainingCount = orderedMembers.size();
+        int cursor = 0;
+        while (cursor < byRoomAscending.size() && remainingCount > 1) {
+            int member = byRoomAscending.get(cursor);
+            double equalShare = remainingArea / remainingCount;
+            if (room.get(member) >= equalShare) {
+                break; // this member, and every roomier one after it (ascending sort), has enough for an equal split - stop water-filling
+            }
+            double share = clampShare(room.get(member), remainingArea, remainingCount);
+            shares.put(member, share);
+            remainingArea -= share;
+            remainingCount--;
+            cursor++;
         }
-        if (lowerConstrained && !higherConstrained) {
-            int lowerShare = clampShare(lowerRoom, combinedWidth);
-            return new int[] {lowerShare, combinedWidth - lowerShare};
+        double evenShare = Math.max(MIN_GROUP_MEMBER_AREA_BLOCKS2, remainingCount > 0 ? remainingArea / remainingCount : 0);
+        double remainder = remainingCount > 0 ? remainingArea - evenShare * remainingCount : 0;
+        for (int i = cursor; i < byRoomAscending.size(); i++) {
+            int member = byRoomAscending.get(i);
+            boolean isLast = i == byRoomAscending.size() - 1;
+            shares.put(member, evenShare + (isLast ? remainder : 0)); // remainder goes to the roomiest member - always safe
         }
-        if (higherConstrained && !lowerConstrained) {
-            int higherShare = clampShare(higherRoom, combinedWidth);
-            return new int[] {combinedWidth - higherShare, higherShare};
-        }
-        // Both genuinely constrained - give each its own real room; sum may fall short of
-        // combinedWidth, an honest outcome, see this method's own doc.
-        return new int[] {clampShare(lowerRoom, combinedWidth), clampShare(higherRoom, combinedWidth)};
+        return shares;
     }
 
-    /** A member's "room": its own achievable range's ceiling, or the full combined pool if it has no real external constraint (unconstrained). */
-    private static int roomFor(AchievableWidthRange achievable, int combinedWidth) {
-        return achievable == null ? combinedWidth : achievable.maxWidthBlocks();
+    /** A member's "room" in AREA terms: its own achievable width range's ceiling converted to area, or the full combined pool if it has no real external constraint (unconstrained). */
+    private static double roomFor(AchievableWidthRange achievable, double combinedArea) {
+        return achievable == null ? combinedArea : areaForWidth(achievable.maxWidthBlocks());
     }
 
-    private static int clampShare(int room, int combinedWidth) {
-        int floor = MIN_GROUP_MEMBER_WIDTH_BLOCKS;
-        int ceiling = Math.max(floor, combinedWidth - floor);
+    private static double clampShare(double room, double remainingArea, int remainingCount) {
+        double floor = MIN_GROUP_MEMBER_AREA_BLOCKS2;
+        double ceiling = Math.max(floor, remainingArea - floor * (remainingCount - 1));
         return Math.max(floor, Math.min(room, ceiling));
+    }
+
+    /** {@code widthBlocks}' own real hexagon area (circumradius = half-width, matching this codebase's standing width-to-circumradius convention) - the ONE deliberate crossing into real geometry math this class otherwise avoids, see class doc. */
+    private static double areaForWidth(double widthBlocks) {
+        return HexGeometry.areaForCircumradius(HexGeometry.circumradiusForWidth(widthBlocks));
+    }
+
+    /** Inverse of {@link #areaForWidth}. */
+    private static int widthForArea(double areaBlocks2) {
+        return (int) Math.round(HexGeometry.widthForCircumradius(HexGeometry.circumradiusForArea(areaBlocks2)));
     }
 
     private static void collectCommittedNeighborWidths(

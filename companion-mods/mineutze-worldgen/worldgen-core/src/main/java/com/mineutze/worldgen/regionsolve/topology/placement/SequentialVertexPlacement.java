@@ -11,9 +11,11 @@ import com.mineutze.worldgen.regionsolve.topology.identity.TriangleIdentitySizeA
 import com.mineutze.worldgen.regionsolve.topology.mesh.FaceAdjacency;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -149,16 +151,22 @@ final class SequentialVertexPlacement {
 
         Map<Integer, Point2D> displaced = new HashMap<>(committedVertexPositions);
         List<Integer> processingOrder = processingOrderFor(freeFaces, adjacency, solved, worldSeed);
-        Map<Integer, Integer> pairPartnerByFace = pairPartnersOf(assignments);
+        Map<Integer, Set<Integer>> groupPartnersByFace = groupPartnersOf(assignments);
 
         for (int faceIndex : processingOrder) {
             if (solved.contains(faceIndex)) {
-                continue; // already resolved jointly as its partner's own turn below
+                continue; // already resolved jointly as a fellow group member's own turn below
             }
-            Integer partner = pairPartnerByFace.get(faceIndex);
-            if (partner != null && freeFaces.contains(partner) && !solved.contains(partner)) {
-                resolvePairJointly(
-                    mesh, adjacency, centers, faceIndex, partner, weightByFace, targetAreaByFace, legalAreaRangeByFace,
+            Set<Integer> groupFaces = new LinkedHashSet<>();
+            for (int partner : groupPartnersByFace.getOrDefault(faceIndex, Set.of())) {
+                if (freeFaces.contains(partner) && !solved.contains(partner)) {
+                    groupFaces.add(partner);
+                }
+            }
+            if (!groupFaces.isEmpty()) {
+                groupFaces.add(faceIndex);
+                resolveGroupJointly(
+                    mesh, adjacency, centers, groupFaces, weightByFace, targetAreaByFace, legalAreaRangeByFace,
                     minEdgeLengthBlocks, baselineCircumradiusBlocks, displaced, solved
                 );
             } else {
@@ -196,15 +204,15 @@ final class SequentialVertexPlacement {
         return displaced;
     }
 
-    /** Reads pairing straight off each {@code Assignment} (see its own doc) - identity already decided it once, geometry never needs to re-derive it or see a {@code BiomeGraph}. */
-    private static Map<Integer, Integer> pairPartnersOf(Map<Integer, TriangleIdentitySizeAssignment.Assignment> assignments) {
-        Map<Integer, Integer> pairPartnerByFace = new HashMap<>();
+    /** Reads grouping straight off each {@code Assignment} (see its own doc) - identity already decided it once, geometry never needs to re-derive it or see a {@code BiomeGraph}. */
+    private static Map<Integer, Set<Integer>> groupPartnersOf(Map<Integer, TriangleIdentitySizeAssignment.Assignment> assignments) {
+        Map<Integer, Set<Integer>> groupPartnersByFace = new HashMap<>();
         assignments.forEach((faceIndex, assignment) -> {
-            if (assignment.pairedWithFaceIndex() != TriangleIdentitySizeAssignment.Assignment.NOT_PAIRED) {
-                pairPartnerByFace.put(faceIndex, assignment.pairedWithFaceIndex());
+            if (!assignment.groupPartnerFaceIndices().isEmpty()) {
+                groupPartnersByFace.put(faceIndex, assignment.groupPartnerFaceIndices());
             }
         });
-        return pairPartnerByFace;
+        return groupPartnersByFace;
     }
 
     /** One singleton face's own turn - resolve its weight against only its own target, finalize its corners, mark it solved, commit any now-fully-solved corner. */
@@ -230,52 +238,64 @@ final class SequentialVertexPlacement {
     }
 
     /**
-     * A self-adjacent pair's own joint turn - see class doc for why this is ONE binary
-     * search (against the pair's COMBINED target, over both faces' own local triangle
-     * rings merged) instead of two independent ones. Both faces get the SAME resolved
-     * weight.
+     * A self-adjacent GROUP's own joint turn (2026-09-14, generalized from exactly 2
+     * members, "a pair," to any size) - see class doc for why this is ONE binary search
+     * (against the group's COMBINED target, over every member's own local triangle rings
+     * merged) instead of N independent ones. Every member gets the SAME resolved weight.
      *
      * <p><b>The safety clamp afterward must ALSO be shared, not independent (real bug
-     * found and fixed while measuring this fix, not assumed safe)</b>: the raw joint
-     * search converges to the combined target essentially exactly every time (measured
-     * directly), but each face's own {@link HexPolygonSafety#maxSafeScale} check runs
-     * against ITS OWN local geometry (its own OTHER, non-shared neighbors) and can demand
-     * a smaller scale than its partner's - applying each face's own independent scale
-     * silently undid the whole joint fix, shrinking one side back toward baseline while
-     * letting the other keep its full raw share. Fixed the same way a shared VERTEX
-     * already gets the minimum of every owning face's own scale elsewhere in this
-     * pipeline: compute both faces' own required scale, take the MINIMUM, apply that ONE
-     * shared scale to both - preserves the ratio the joint search actually established.
+     * found and fixed while measuring the original 2-member version, not assumed safe)</b>:
+     * the raw joint search converges to the combined target essentially exactly every time
+     * (measured directly), but each member's own {@link HexPolygonSafety#maxSafeScale}
+     * check runs against ITS OWN local geometry (its own OTHER, non-shared neighbors) and
+     * can demand a smaller scale than another member's - applying each member's own
+     * independent scale would silently undo the whole joint fix. Fixed the same way a
+     * shared VERTEX already gets the minimum of every owning face's own scale elsewhere in
+     * this pipeline: compute EVERY member's own required scale, take the MINIMUM, apply
+     * that ONE shared scale to all - preserves the ratio the joint search actually
+     * established.
      */
-    private static void resolvePairJointly(
-        HexMeshBuilder.HexMesh mesh, FaceAdjacency.Adjacency adjacency, Map<Integer, Point2D> centers, int faceIndex, int partner,
+    private static void resolveGroupJointly(
+        HexMeshBuilder.HexMesh mesh, FaceAdjacency.Adjacency adjacency, Map<Integer, Point2D> centers, Set<Integer> groupFaces,
         Map<Integer, Double> weightByFace, Map<Integer, Double> targetAreaByFace, Map<Integer, WeightedVertexPlacement.AreaRange> legalAreaRangeByFace,
         double minEdgeLengthBlocks, double baselineCircumradiusBlocks, Map<Integer, Point2D> displaced, Set<Integer> solved
     ) {
-        List<int[]> localTrianglesA = localTrianglesOf(mesh, adjacency, faceIndex);
-        List<int[]> localTrianglesB = localTrianglesOf(mesh, adjacency, partner);
-        List<int[]> jointTriangles = jointTrianglesOf(mesh, localTrianglesA, localTrianglesB);
-        double jointTarget = targetAreaByFace.get(faceIndex) + targetAreaByFace.get(partner);
-        double neutralWeight = weightByFace.get(faceIndex);
-        double rawJointWeight = resolveJointWeightFor(mesh, centers, faceIndex, partner, jointTriangles, weightByFace, jointTarget, displaced);
+        Map<Integer, List<int[]>> localTrianglesByMember = new LinkedHashMap<>();
+        double jointTarget = 0.0;
+        for (int member : groupFaces) {
+            localTrianglesByMember.put(member, localTrianglesOf(mesh, adjacency, member));
+            jointTarget += targetAreaByFace.get(member);
+        }
+        List<int[]> jointTriangles = jointTrianglesOf(mesh, localTrianglesByMember.values());
+        double neutralWeight = weightByFace.get(groupFaces.iterator().next());
+        double rawJointWeight = resolveJointWeightFor(mesh, centers, groupFaces, jointTriangles, weightByFace, jointTarget, displaced);
         double resolvedWeight = weightRespectingProtectedNeighbors(
-            mesh, adjacency, centers, Set.of(faceIndex, partner), jointTriangles, weightByFace, neutralWeight, rawJointWeight, legalAreaRangeByFace, displaced, solved
+            mesh, adjacency, centers, groupFaces, jointTriangles, weightByFace, neutralWeight, rawJointWeight, legalAreaRangeByFace, displaced, solved
         );
-        weightByFace.put(faceIndex, resolvedWeight);
-        weightByFace.put(partner, resolvedWeight);
+        for (int member : groupFaces) {
+            weightByFace.put(member, resolvedWeight);
+        }
 
-        FaceLerpInputs inputsA = lerpInputsFor(mesh, centers, faceIndex, localTrianglesA, weightByFace, targetAreaByFace.get(faceIndex), legalAreaRangeByFace.get(faceIndex), baselineCircumradiusBlocks, displaced);
-        FaceLerpInputs inputsB = lerpInputsFor(mesh, centers, partner, localTrianglesB, weightByFace, targetAreaByFace.get(partner), legalAreaRangeByFace.get(partner), baselineCircumradiusBlocks, displaced);
-        double scaleA = HexPolygonSafety.maxSafeScale(inputsA.original(), inputsA.candidate(), minEdgeLengthBlocks, inputsA.bounds().minAreaBlocks2(), inputsA.bounds().maxAreaBlocks2(), inputsA.bounds().maxDisplacementBlocks());
-        double scaleB = HexPolygonSafety.maxSafeScale(inputsB.original(), inputsB.candidate(), minEdgeLengthBlocks, inputsB.bounds().minAreaBlocks2(), inputsB.bounds().maxAreaBlocks2(), inputsB.bounds().maxDisplacementBlocks());
-        double sharedScale = Math.min(scaleA, scaleB);
-        Map<Integer, Point2D> finalCornersA = finalCornersFrom(inputsA, sharedScale);
-        Map<Integer, Point2D> finalCornersB = finalCornersFrom(inputsB, sharedScale);
+        Map<Integer, FaceLerpInputs> inputsByMember = new LinkedHashMap<>();
+        double sharedScale = 1.0;
+        for (int member : groupFaces) {
+            FaceLerpInputs inputs = lerpInputsFor(
+                mesh, centers, member, localTrianglesByMember.get(member), weightByFace, targetAreaByFace.get(member),
+                legalAreaRangeByFace.get(member), baselineCircumradiusBlocks, displaced
+            );
+            inputsByMember.put(member, inputs);
+            double scale = HexPolygonSafety.maxSafeScale(
+                inputs.original(), inputs.candidate(), minEdgeLengthBlocks,
+                inputs.bounds().minAreaBlocks2(), inputs.bounds().maxAreaBlocks2(), inputs.bounds().maxDisplacementBlocks()
+            );
+            sharedScale = Math.min(sharedScale, scale);
+        }
 
-        solved.add(faceIndex);
-        solved.add(partner);
-        commitNewlySolvedCorners(mesh, localTrianglesA, solved, finalCornersA, displaced);
-        commitNewlySolvedCorners(mesh, localTrianglesB, solved, finalCornersB, displaced);
+        for (int member : groupFaces) {
+            Map<Integer, Point2D> finalCorners = finalCornersFrom(inputsByMember.get(member), sharedScale);
+            solved.add(member);
+            commitNewlySolvedCorners(mesh, localTrianglesByMember.get(member), solved, finalCorners, displaced);
+        }
     }
 
     /** Commits whichever of {@code faceIndex}'s own local-triangle corners now have all 3 owners solved - the shared "lock a vertex once its last owner is decided" step both {@link #resolveSingleFace} and {@link #resolvePairJointly} need. */
@@ -420,27 +440,26 @@ final class SequentialVertexPlacement {
         return positions;
     }
 
-    /** Union of two faces' own local triangle rings, deduplicated by the real mesh vertex each triangle shares (a shared-boundary triangle appears in BOTH faces' own rings, since both own it). */
-    private static List<int[]> jointTrianglesOf(HexMeshBuilder.HexMesh mesh, List<int[]> localTrianglesA, List<int[]> localTrianglesB) {
+    /** Union of every group member's own local triangle rings, deduplicated by the real mesh vertex each triangle shares (a shared-boundary triangle appears in EVERY owning member's own ring, since all of them own it). */
+    private static List<int[]> jointTrianglesOf(HexMeshBuilder.HexMesh mesh, Collection<List<int[]>> localTrianglesByMember) {
         Map<Integer, int[]> byVertexIndex = new HashMap<>();
-        for (int[] triangle : localTrianglesA) {
-            byVertexIndex.put(FaceAdjacency.sharedVertexOf(mesh, triangle), triangle);
-        }
-        for (int[] triangle : localTrianglesB) {
-            byVertexIndex.putIfAbsent(FaceAdjacency.sharedVertexOf(mesh, triangle), triangle);
+        for (List<int[]> localTriangles : localTrianglesByMember) {
+            for (int[] triangle : localTriangles) {
+                byVertexIndex.putIfAbsent(FaceAdjacency.sharedVertexOf(mesh, triangle), triangle);
+            }
         }
         return new ArrayList<>(byVertexIndex.values());
     }
 
-    /** Direct binary search for the weight whose RAW combined area (faceA's + faceB's, same candidate weight for both) is closest to {@code jointTargetArea} - same shape as {@link #resolveWeightFor}, one level up (a pair instead of a single face). */
+    /** Direct binary search for the weight whose RAW combined area (every group member's own, same candidate weight for all) is closest to {@code jointTargetArea} - same shape as {@link #resolveWeightFor}, one level up (a group instead of a single face). */
     private static double resolveJointWeightFor(
-        HexMeshBuilder.HexMesh mesh, Map<Integer, Point2D> centers, int faceA, int faceB, List<int[]> jointTriangles,
+        HexMeshBuilder.HexMesh mesh, Map<Integer, Point2D> centers, Set<Integer> groupFaces, List<int[]> jointTriangles,
         Map<Integer, Double> weightByFace, double jointTargetArea, Map<Integer, Point2D> displaced
     ) {
         double lowWeight = PowerDiagramMath.powerWeight(1);
         double highWeight = jointTargetArea * SEQUENTIAL_SEARCH_HIGH_MULTIPLIER;
-        double lowArea = jointRawAreaAt(mesh, centers, faceA, faceB, jointTriangles, weightByFace, lowWeight, displaced);
-        double highArea = jointRawAreaAt(mesh, centers, faceA, faceB, jointTriangles, weightByFace, highWeight, displaced);
+        double lowArea = jointRawAreaAt(mesh, centers, groupFaces, jointTriangles, weightByFace, lowWeight, displaced);
+        double highArea = jointRawAreaAt(mesh, centers, groupFaces, jointTriangles, weightByFace, highWeight, displaced);
         if (jointTargetArea <= lowArea) {
             return lowWeight;
         }
@@ -449,7 +468,7 @@ final class SequentialVertexPlacement {
         }
         for (int iteration = 0; iteration < BISECTION_ITERATIONS; iteration++) {
             double midWeight = (lowWeight + highWeight) / 2.0;
-            double midArea = jointRawAreaAt(mesh, centers, faceA, faceB, jointTriangles, weightByFace, midWeight, displaced);
+            double midArea = jointRawAreaAt(mesh, centers, groupFaces, jointTriangles, weightByFace, midWeight, displaced);
             if (midArea < jointTargetArea) {
                 lowWeight = midWeight;
             } else {
@@ -460,16 +479,20 @@ final class SequentialVertexPlacement {
     }
 
     private static double jointRawAreaAt(
-        HexMeshBuilder.HexMesh mesh, Map<Integer, Point2D> centers, int faceA, int faceB, List<int[]> jointTriangles,
+        HexMeshBuilder.HexMesh mesh, Map<Integer, Point2D> centers, Set<Integer> groupFaces, List<int[]> jointTriangles,
         Map<Integer, Double> weightByFace, double candidateWeight, Map<Integer, Point2D> displaced
     ) {
-        Map<Integer, Point2D> positions = jointCornerPositionsFor(mesh, centers, faceA, faceB, jointTriangles, weightByFace, candidateWeight, displaced);
-        return shoelaceAreaOfFace(mesh, faceA, positions) + shoelaceAreaOfFace(mesh, faceB, positions);
+        Map<Integer, Point2D> positions = jointCornerPositionsFor(mesh, centers, groupFaces, jointTriangles, weightByFace, candidateWeight, displaced);
+        double total = 0.0;
+        for (int member : groupFaces) {
+            total += shoelaceAreaOfFace(mesh, member, positions);
+        }
+        return total;
     }
 
-    /** Same as {@link #cornerPositionsFor}, but BOTH {@code faceA} and {@code faceB} are the search candidate at once (same weight) - the mechanism that makes the pair's own shared boundary land at the true bisector once resolved. */
+    /** Same as {@link #cornerPositionsFor}, but EVERY member of {@code groupFaces} is the search candidate at once (same weight) - the mechanism that makes the group's own shared boundaries land at the true radical center once resolved. */
     private static Map<Integer, Point2D> jointCornerPositionsFor(
-        HexMeshBuilder.HexMesh mesh, Map<Integer, Point2D> centers, int faceA, int faceB, List<int[]> jointTriangles,
+        HexMeshBuilder.HexMesh mesh, Map<Integer, Point2D> centers, Set<Integer> groupFaces, List<int[]> jointTriangles,
         Map<Integer, Double> weightByFace, double candidateWeight, Map<Integer, Point2D> displaced
     ) {
         Map<Integer, Point2D> positions = new HashMap<>();
@@ -480,16 +503,16 @@ final class SequentialVertexPlacement {
                 positions.put(vertexIndex, locked);
                 continue;
             }
-            double weightA = weightForCandidate(triangle[0], faceA, faceB, candidateWeight, weightByFace);
-            double weightB = weightForCandidate(triangle[1], faceA, faceB, candidateWeight, weightByFace);
-            double weightC = weightForCandidate(triangle[2], faceA, faceB, candidateWeight, weightByFace);
+            double weightA = weightForCandidate(triangle[0], groupFaces, candidateWeight, weightByFace);
+            double weightB = weightForCandidate(triangle[1], groupFaces, candidateWeight, weightByFace);
+            double weightC = weightForCandidate(triangle[2], groupFaces, candidateWeight, weightByFace);
             positions.put(vertexIndex, PowerDiagramMath.radicalCenter(centers.get(triangle[0]), weightA, centers.get(triangle[1]), weightB, centers.get(triangle[2]), weightC));
         }
         return positions;
     }
 
-    private static double weightForCandidate(int face, int faceA, int faceB, double candidateWeight, Map<Integer, Double> weightByFace) {
-        return (face == faceA || face == faceB) ? candidateWeight : weightByFace.get(face);
+    private static double weightForCandidate(int face, Set<Integer> groupFaces, double candidateWeight, Map<Integer, Double> weightByFace) {
+        return groupFaces.contains(face) ? candidateWeight : weightByFace.get(face);
     }
 
     /** Every real mesh-vertex triple touching {@code faceIndex}'s own 6 corners - {@code faceIndex} plus its neighbors is exactly enough for {@link FaceAdjacency.Adjacency#mutuallyAdjacentFaceTriples} to find all of them, same ring-restriction trick {@code AchievableAreaProbe} uses. */

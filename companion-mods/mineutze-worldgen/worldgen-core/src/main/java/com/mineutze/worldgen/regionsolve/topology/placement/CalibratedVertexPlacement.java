@@ -66,12 +66,25 @@ final class CalibratedVertexPlacement {
         );
     }
 
-    /** Reads pairing straight off each {@code Assignment} (see its own doc) - identity already decided it once, geometry never needs to re-derive it or see a {@code BiomeGraph}. */
+    /**
+     * Reads pairing straight off each {@code Assignment} (see its own doc) - identity
+     * already decided it once, geometry never needs to re-derive it or see a {@code
+     * BiomeGraph}.
+     *
+     * <p><b>Known simplification (2026-09-14):</b> {@code Assignment} now carries a full
+     * self-adjacent GROUP (any size), not just one partner - this export/measurement-only
+     * path (never the shipped mod's live path, see class doc) still only pairs with ONE
+     * representative member (the lowest-indexed) rather than correcting a full N-way group
+     * jointly. Left as-is deliberately: extending {@link #correctPairedFacesJointly} to N
+     * members wasn't worth doing for a dead code path while the real live path ({@code
+     * SequentialVertexPlacement}) was the one actually being measured today - revisit if
+     * this export path is ever needed for a real N-way measurement.
+     */
     private static Map<Integer, Integer> pairPartnersOf(Map<Integer, TriangleIdentitySizeAssignment.Assignment> assignments) {
         Map<Integer, Integer> pairPartnerByFace = new HashMap<>();
         assignments.forEach((faceIndex, assignment) -> {
-            if (assignment.pairedWithFaceIndex() != TriangleIdentitySizeAssignment.Assignment.NOT_PAIRED) {
-                pairPartnerByFace.put(faceIndex, assignment.pairedWithFaceIndex());
+            if (!assignment.groupPartnerFaceIndices().isEmpty()) {
+                pairPartnerByFace.put(faceIndex, java.util.Collections.min(assignment.groupPartnerFaceIndices()));
             }
         });
         return pairPartnerByFace;

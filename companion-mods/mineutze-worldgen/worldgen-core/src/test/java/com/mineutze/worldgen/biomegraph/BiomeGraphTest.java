@@ -110,8 +110,18 @@ class BiomeGraphTest {
     }
 
     @Test
-    void sameBiomeIsNeverAllowedNextToItself() {
+    void sameBiomeIsAllowedNextToItselfByDefault() {
+        // 2026-09-14: default selfAdjacencyLimit changed from 0 to uncapped (see
+        // BiomeNode's own doc) - a biome is allowed next to itself unless it explicitly
+        // opts OUT with limit=0. See sameBiomeCanOptOutOfSelfAdjacency for that case.
         BiomeGraph graph = new BiomeGraph(List.of(node(PLAINS)), List.of());
+
+        assertTrue(graph.isAllowed(PLAINS, PLAINS));
+    }
+
+    @Test
+    void sameBiomeCanOptOutOfSelfAdjacency() {
+        BiomeGraph graph = new BiomeGraph(List.of(new BiomeNode(PLAINS, new BiomeSizeRange(300, 600), 0)), List.of());
 
         assertFalse(graph.isAllowed(PLAINS, PLAINS));
     }

@@ -32,11 +32,25 @@ tasks.register('biomeGraphCompletenessReport', JavaExec) {
     mainClass = 'com.mineutze.worldgen.export.BiomeGraphCompletenessReport'
 }
 
+tasks.register('deadEndFrequencySimulation', JavaExec) {
+    group = 'verification'
+    description = 'Real dead-end FREQUENCY (not just existence) against ModBiomeGraph.OVERWORLD - RING_PROBE (deliberate worst case, structure-search-style) and ORGANIC_WALK (real player movement pattern), 100,000 trials each, parallel. Pre-existing tool, was never wired to a gradle task before. Run with: ./gradlew :worldgen-core:deadEndFrequencySimulation'
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'com.mineutze.worldgen.export.hex.DeadEndFrequencySimulation'
+}
+
 tasks.register('liveDeadEndDiagnosticReport', JavaExec) {
     group = 'verification'
     description = 'Sweeps the real live query path (SeedMeshCache) across 50 seeds for REAL, reachable dead ends - a much smaller, much more actionable list than biomeGraphCompletenessReport\'s own exhaustive abstract sweep. Self-explanatory report (doc/live-dead-end-diagnostic-report.txt): every entry explains the problem and proposes a concrete, verifiable AdjacencyRule fix. Run with: ./gradlew :worldgen-core:liveDeadEndDiagnosticReport'
     classpath = sourceSets.main.runtimeClasspath
     mainClass = 'com.mineutze.worldgen.export.LiveDeadEndDiagnosticReport'
+}
+
+tasks.register('geometricFeasibilityProof', JavaExec) {
+    group = 'verification'
+    description = 'Exhaustive (not sampled) geometric feasibility proof, one level beyond biomeGraphCompletenessReport: checks every real, physically-placeable partial neighborhood with few abstract legal candidates against the REAL production identity+size solver, at both width extremes (exact bound via WeightedVertexPlacement\'s proven area-monotonicity theorem, not a sampled approximation). Run with: ./gradlew :worldgen-core:geometricFeasibilityProof'
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'com.mineutze.worldgen.export.GeometricFeasibilityProof'
 }
 
 repositories {

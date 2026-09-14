@@ -375,7 +375,8 @@ final class FaceIdentityCsp {
     /**
      * Whether assigning {@code faceIndex = candidate} respects {@code candidate}'s {@link
      * com.mineutze.worldgen.biomegraph.BiomeNode#selfAdjacencyLimit} — no-op (always true)
-     * when limit is 0, today's default. Checks BOTH sides of every same-candidate neighbor
+     * unless a biome opts OUT with an explicit low limit (today's default is uncapped).
+     * Checks BOTH sides of every same-candidate neighbor
      * pair: {@code faceIndex}'s resulting same-biome-neighbor count must stay within the
      * limit, AND for each already-decided neighbor N also {@code candidate}, adding {@code
      * faceIndex} as one more same-biome neighbor of N must not push N over ITS OWN limit —

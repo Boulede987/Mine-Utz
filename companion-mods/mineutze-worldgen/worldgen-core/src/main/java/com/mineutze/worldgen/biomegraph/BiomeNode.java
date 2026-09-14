@@ -6,10 +6,12 @@ package com.mineutze.worldgen.biomegraph;
  * "universal filler" concept removed).
  *
  * @param selfAdjacencyLimit how many of this biome's own ≤6 mesh neighbors may also be
- *                           same biome - default 0 (self-adjacency banned, see {@link
- *                           BiomeGraph#isAllowed}). Raising it (e.g. desert=1) lets biome
- *                           span multiple hexes as one felt region instead of stretching
- *                           one hex's geometry. Count enforced by {@link
+ *                           same biome - default {@link Integer#MAX_VALUE} (no artificial
+ *                           cap; a face has ≤6 mesh neighbors anyway, so the hex mesh
+ *                           itself is the only real limit). Lets any biome span multiple
+ *                           hexes as one felt region instead of stretching one hex's
+ *                           geometry - "keep adding couches as long as there isn't enough
+ *                           space." See DECISIONS.md 2026-09-14. Count enforced by {@link
  *                           com.mineutze.worldgen.regionsolve.topology.identity.TriangleIdentitySizeAssignment},
  *                           not here - this is just the cap it reads.
  */
@@ -31,8 +33,8 @@ public record BiomeNode(
         }
     }
 
-    /** Defaults {@code selfAdjacencyLimit} to 0 — today's exact behavior, self-adjacency banned. */
+    /** Defaults {@code selfAdjacencyLimit} to uncapped — see that field's doc. */
     public BiomeNode(BiomeId id, BiomeSizeRange sizeRange) {
-        this(id, sizeRange, 0);
+        this(id, sizeRange, Integer.MAX_VALUE);
     }
 }

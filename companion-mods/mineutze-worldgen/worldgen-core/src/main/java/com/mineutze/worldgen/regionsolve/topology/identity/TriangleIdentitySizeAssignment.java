@@ -50,8 +50,8 @@ public final class TriangleIdentitySizeAssignment {
     /**
      * @param legalMinWidthBlocks this face's absolute legal floor - {@code biome}'s
      *                            declared {@link BiomeSizeRange} directly for a singleton
-     *                            face, or {@link FaceWidthPicker#pairedMemberLegalMinWidthBlocks}
-     *                            for a self-adjacent pair member: the two members' widths
+     *                            face, or {@link FaceWidthPicker#groupMemberLegalMinWidthBlocks}
+     *                            for a self-adjacent GROUP member: the members' widths
      *                            merely need to SUM into the biome's declared range (real
      *                            user decision, 2026-09-13 - an asymmetric (10, 1000) split
      *                            is legal for a (900,1500) range as long as 1010 fits),
@@ -60,22 +60,26 @@ public final class TriangleIdentitySizeAssignment {
      *                            wrong, a real bug an earlier live-path legal-size test had,
      *                            caught by the user.
      * @param legalMaxWidthBlocks symmetric ceiling, same reasoning
-     * @param pairedWithFaceIndex the OTHER face this one jointly forms one felt region with
-     *                            (see {@link SelfAdjacentPairing}), or {@link #NOT_PAIRED}
-     *                            for a singleton. Geometry (weight resolution) needs this to
-     *                            treat a pair as ONE competitor against external neighbors
-     *                            instead of two independent half-weighted ones - see
+     * @param groupPartnerFaceIndices the OTHER faces this one jointly forms one felt region
+     *                            with (see {@link SelfAdjacentPairing}), empty for a
+     *                            singleton - real user decision, 2026-09-14: no longer
+     *                            capped at exactly one partner ("a pair"), a self-adjacent
+     *                            GROUP of any size the graph's own {@code
+     *                            selfAdjacencyLimit} allows ("keep adding couches as long as
+     *                            there isn't enough space" - spreads one biome's total
+     *                            demand across as many real cells as it happened to land
+     *                            adjacent to, so no single local neighborhood ever takes the
+     *                            full squeeze). Geometry (weight resolution) needs this to
+     *                            treat a group as ONE competitor against external neighbors
+     *                            instead of independent fractionally-weighted ones - see
      *                            {@code CalibratedVertexPlacement}/{@code
      *                            SequentialVertexPlacement}'s own joint-weight-resolution
      *                            doc. Travels here (not re-derived from {@code
      *                            SelfAdjacentPairing} at each geometry call site) so the
-     *                            pairing decision is made exactly once, by identity, and
+     *                            grouping decision is made exactly once, by identity, and
      *                            geometry never needs a {@code BiomeGraph} at all.
      */
-    public record Assignment(BiomeId biome, int widthBlocks, int legalMinWidthBlocks, int legalMaxWidthBlocks, int pairedWithFaceIndex) {
-
-        /** Sentinel for {@link #pairedWithFaceIndex} meaning "no partner, a singleton face" - real face indices are always {@code >= 0}. */
-        public static final int NOT_PAIRED = -1;
+    public record Assignment(BiomeId biome, int widthBlocks, int legalMinWidthBlocks, int legalMaxWidthBlocks, Set<Integer> groupPartnerFaceIndices) {
 
         /**
          * Convenience for callers that only care about geometry math against a synthetic
@@ -87,12 +91,12 @@ public final class TriangleIdentitySizeAssignment {
          * 2-arg constructor defaulting {@code selfAdjacencyLimit}).
          */
         public Assignment(BiomeId biome, int widthBlocks) {
-            this(biome, widthBlocks, Integer.MIN_VALUE, Integer.MAX_VALUE, NOT_PAIRED);
+            this(biome, widthBlocks, Integer.MIN_VALUE, Integer.MAX_VALUE, Set.of());
         }
 
-        /** Convenience for a caller with a real legal range but no pairing concern (e.g. a hand-built singleton test case). */
+        /** Convenience for a caller with a real legal range but no grouping concern (e.g. a hand-built singleton test case). */
         public Assignment(BiomeId biome, int widthBlocks, int legalMinWidthBlocks, int legalMaxWidthBlocks) {
-            this(biome, widthBlocks, legalMinWidthBlocks, legalMaxWidthBlocks, NOT_PAIRED);
+            this(biome, widthBlocks, legalMinWidthBlocks, legalMaxWidthBlocks, Set.of());
         }
     }
 
@@ -286,26 +290,26 @@ public final class TriangleIdentitySizeAssignment {
         Map<Integer, BiomeId> assigned, FaceAdjacency.Adjacency adjacency, BiomeGraph graph, long worldSeed,
         Map<Integer, Integer> committedWidthBlocksByFace, Map<Integer, AchievableWidthRange> achievableRangeByFace
     ) {
-        Map<Integer, Integer> pairPartnerByFace = SelfAdjacentPairing.pairedFaces(assigned, adjacency, graph);
+        Map<Integer, Set<Integer>> groupPartnersByFace = SelfAdjacentPairing.groupedFaces(assigned, adjacency, graph, achievableRangeByFace);
         Map<Integer, Assignment> result = new LinkedHashMap<>();
         assigned.forEach((faceIndex, biome) -> {
-            Integer partner = pairPartnerByFace.get(faceIndex);
+            Set<Integer> groupPartners = groupPartnersByFace.getOrDefault(faceIndex, Set.of());
+            boolean grouped = !groupPartners.isEmpty();
+            int groupSize = groupPartners.size() + 1;
             BiomeSizeRange fullRange = graph.node(biome).sizeRange();
             AchievableWidthRange achievable = achievableRangeByFace.get(faceIndex);
             BiomeSizeRange effectiveRange = achievable == null ? fullRange : achievable.intersect(fullRange);
-            int widthBlocks = partner != null
-                ? FaceWidthPicker.splitWidthForPair(
-                    fullRange, worldSeed, faceIndex, partner, biome, adjacency, committedWidthBlocksByFace,
-                    achievable, achievableRangeByFace.get(partner))
+            int widthBlocks = grouped
+                ? FaceWidthPicker.splitWidthForGroup(
+                    fullRange, worldSeed, faceIndex, groupPartners, biome, adjacency, committedWidthBlocksByFace, achievableRangeByFace)
                 : FaceWidthPicker.pickWidth(effectiveRange, worldSeed, faceIndex, biome, adjacency, committedWidthBlocksByFace);
-            int legalMinWidthBlocks = partner != null
-                ? FaceWidthPicker.pairedMemberLegalMinWidthBlocks(fullRange.minWidthBlocks(), fullRange.maxWidthBlocks())
+            int legalMinWidthBlocks = grouped
+                ? FaceWidthPicker.groupMemberLegalMinWidthBlocks(fullRange.minWidthBlocks(), fullRange.maxWidthBlocks())
                 : fullRange.minWidthBlocks();
-            int legalMaxWidthBlocks = partner != null
-                ? FaceWidthPicker.pairedMemberLegalMaxWidthBlocks(fullRange.maxWidthBlocks())
+            int legalMaxWidthBlocks = grouped
+                ? FaceWidthPicker.groupMemberLegalMaxWidthBlocks(fullRange.maxWidthBlocks(), groupSize)
                 : fullRange.maxWidthBlocks();
-            int pairedWithFaceIndex = partner != null ? partner : Assignment.NOT_PAIRED;
-            result.put(faceIndex, new Assignment(biome, widthBlocks, legalMinWidthBlocks, legalMaxWidthBlocks, pairedWithFaceIndex));
+            result.put(faceIndex, new Assignment(biome, widthBlocks, legalMinWidthBlocks, legalMaxWidthBlocks, groupPartners));
         });
         return result;
     }
