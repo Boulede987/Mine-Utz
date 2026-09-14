@@ -21,6 +21,8 @@ import com.mineutze.worldgen.regionsolve.RegionSolveInput;
 import com.mineutze.worldgen.biomegraph.AdjacencyRule;
 import com.mineutze.worldgen.biomegraph.BiomeGraph;
 import com.mineutze.worldgen.biomegraph.BiomeId;
+import com.mineutze.worldgen.biomegraph.BiomeNode;
+import com.mineutze.worldgen.biomegraph.BiomeSizeRange;
 import com.mineutze.worldgen.regionsolve.topology.Point2D;
 import org.junit.jupiter.api.Test;
 
@@ -95,10 +97,22 @@ class TriangleFieldGeometryRealizationTest {
         );
     }
 
-    /** Bare 4-cycle from {@link #fourBiomeGraph}'s doc, minus diagonal that makes it solvable - kept only for {@link #genuineDeadEndFailsLoud}. */
+    /**
+     * Bare 4-cycle from {@link #fourBiomeGraph}'s doc, minus diagonal that makes it
+     * solvable - kept only for {@link #genuineDeadEndFailsLoud}/{@link
+     * #realizeClusterFailsLoudOnAGenuineDeadEnd}. Explicit {@code selfAdjacencyLimit=0} on
+     * every node (2026-09-14, real regression found and fixed): {@link BiomeNode}'s own
+     * default changed from banned to uncapped this session, and same-biome-next-to-itself
+     * is ALWAYS trivially legal once allowed - without this, every face could simply
+     * repeat its own biome and escape what's supposed to be a genuine, inescapable dead
+     * end, silently defeating this fixture's entire premise.
+     */
     private static BiomeGraph bareFourCycleGraphWithNoHub() {
         return new BiomeGraph(
-            List.of(node("desert", 200, 300), node("savanna", 200, 300), node("plains", 100, 200), node("badlands", 150, 250)),
+            List.of(
+                new BiomeNode(id("desert"), new BiomeSizeRange(200, 300), 0), new BiomeNode(id("savanna"), new BiomeSizeRange(200, 300), 0),
+                new BiomeNode(id("plains"), new BiomeSizeRange(100, 200), 0), new BiomeNode(id("badlands"), new BiomeSizeRange(150, 250), 0)
+            ),
             List.of(
                 AdjacencyRule.allow(id("desert"), id("savanna"), 10),
                 AdjacencyRule.allow(id("savanna"), id("plains"), 10),
