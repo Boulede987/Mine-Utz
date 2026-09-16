@@ -1,11 +1,13 @@
 GRAPH COHERENCE EXISTENCE PROOF - SUCCESS
 ==========================================
 
-This is a COMPLETE, DEFINITIVE proof that the current biome-graph.json rule set
-admits an infinite valid world: the periodic patch below satisfies every real
-constraint (adjacency legality, required-neighbor minimums, full-catalog coverage)
-including across its own wraparound seam - repeating it forever in every direction
-therefore produces a valid infinite world.
+Checked against: production ModBiomeGraph.OVERWORLD (src/main/resources/biomegraph/biome-graph.json)
+
+This is a COMPLETE, DEFINITIVE proof that the checked rule set admits an infinite
+valid world: the periodic patch below satisfies every real constraint (adjacency
+legality, required-neighbor minimums, full-catalog coverage) including across its
+own wraparound seam - repeating it forever in every direction therefore produces
+a valid infinite world.
 
 This does NOT mean the LIVE generator (FaceIdentityCsp/HexMeshBuilder/etc.) can
 find this or any other valid world - this proof is fully independent of that code,

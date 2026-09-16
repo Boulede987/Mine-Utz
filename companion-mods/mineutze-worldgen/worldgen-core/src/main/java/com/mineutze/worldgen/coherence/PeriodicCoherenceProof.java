@@ -193,30 +193,29 @@ public final class PeriodicCoherenceProof {
             boolean isLastRow = rows.size() == rowCount - 1;
             PeriodicRowLayout.Row wraparoundRow = isLastRow && rowCount > 1 ? rows.get(0) : null;
 
-            PeriodicRowLayout.Row builtRow = null;
-            for (int attempt = 0; attempt < ROW_BUILD_RETRIES && builtRow == null; attempt++) {
-                int targetCellCount = minCellsPerRow + random.nextInt(maxCellsPerRow - minCellsPerRow + 1);
-                List<BiomeId> sequence = buildRowSequence(table, targetCellCount, globallyUsed, random, previousRow, wraparoundRow, rowHeightBlocks);
-                if (sequence == null) {
-                    continue;
+            PeriodicRowLayout.Row builtRow;
+            if (circumferenceBlocks == null) {
+                // Row 0 only: no fixed circumference yet - the first successfully-built
+                // row's own achievable interval picks it (see #findWitness's own doc), so
+                // this one case can't go through the fixed-circumference helper below.
+                builtRow = null;
+                for (int attempt = 0; attempt < ROW_BUILD_RETRIES && builtRow == null; attempt++) {
+                    int targetCellCount = minCellsPerRow + random.nextInt(maxCellsPerRow - minCellsPerRow + 1);
+                    List<BiomeId> sequence = buildRowSequence(table, targetCellCount, globallyUsed, random, null, null, rowHeightBlocks);
+                    if (sequence == null) {
+                        continue;
+                    }
+                    RowFeasibility.WidthInterval interval = RowFeasibility.achievableInterval(sequence, table, rowHeightBlocks);
+                    double candidateCircumference = (interval.lowBlocks() + interval.highBlocks()) / 2.0;
+                    List<PeriodicRowLayout.Cell> cells = RowFeasibility.distributeWidths(sequence, table, rowHeightBlocks, candidateCircumference);
+                    builtRow = new PeriodicRowLayout.Row(cells);
+                    circumferenceBlocks = candidateCircumference;
                 }
-                RowFeasibility.WidthInterval interval = RowFeasibility.achievableInterval(sequence, table, rowHeightBlocks);
-                // The first row picks the shared circumference every later row must then fit -
-                // arbitrary but principled: whatever the first successfully-built row needs.
-                double candidateCircumference = circumferenceBlocks != null ? circumferenceBlocks : (interval.lowBlocks() + interval.highBlocks()) / 2.0;
-                if (!RowFeasibility.fits(candidateCircumference, interval)) {
-                    continue;
-                }
-                List<PeriodicRowLayout.Cell> cells = RowFeasibility.distributeWidths(sequence, table, rowHeightBlocks, candidateCircumference);
-                PeriodicRowLayout.Row candidateRow = new PeriodicRowLayout.Row(cells);
-                if (previousRow != null && !isVerticallyLegal(previousRow, candidateRow, table)) {
-                    continue;
-                }
-                if (wraparoundRow != null && !isVerticallyLegal(candidateRow, wraparoundRow, table)) {
-                    continue;
-                }
-                builtRow = candidateRow;
-                circumferenceBlocks = candidateCircumference;
+            } else {
+                builtRow = tryBuildLegalRow(
+                    table, globallyUsed, previousRow, wraparoundRow, minCellsPerRow, maxCellsPerRow, rowHeightBlocks, circumferenceBlocks, random,
+                    ROW_BUILD_RETRIES
+                );
             }
 
             if (builtRow != null) {
@@ -239,6 +238,43 @@ public final class PeriodicCoherenceProof {
             return new AttemptResult(null, rowCount - 1); // wraparound pair itself failed - report as "one short"
         }
         return new AttemptResult(new PeriodicRowLayout(rowHeightBlocks, circumferenceBlocks, rows), rowCount);
+    }
+
+    /**
+     * Tries up to {@code retries} times to build ONE legal row at an ALREADY-FIXED
+     * circumference (unlike row 0's own once-per-attempt circumference selection inside
+     * {@link #attemptGrid}, which this does not handle) - package-visible so {@code
+     * ReachabilityScoutingChecks} can reuse the exact same row-building mechanism to probe
+     * "does this specific previous row have ANY legal successor at all," not a separate
+     * copy of this logic.
+     *
+     * @return a legal row, or {@code null} if no legal row was found within {@code retries} attempts.
+     */
+    static PeriodicRowLayout.Row tryBuildLegalRow(
+        RawRuleTable table, Set<BiomeId> globallyUsed, PeriodicRowLayout.Row previousRow, PeriodicRowLayout.Row wraparoundRow,
+        int minCellsPerRow, int maxCellsPerRow, double rowHeightBlocks, double circumferenceBlocks, Random random, int retries
+    ) {
+        for (int attempt = 0; attempt < retries; attempt++) {
+            int targetCellCount = minCellsPerRow + random.nextInt(maxCellsPerRow - minCellsPerRow + 1);
+            List<BiomeId> sequence = buildRowSequence(table, targetCellCount, globallyUsed, random, previousRow, wraparoundRow, rowHeightBlocks);
+            if (sequence == null) {
+                continue;
+            }
+            RowFeasibility.WidthInterval interval = RowFeasibility.achievableInterval(sequence, table, rowHeightBlocks);
+            if (!RowFeasibility.fits(circumferenceBlocks, interval)) {
+                continue;
+            }
+            List<PeriodicRowLayout.Cell> cells = RowFeasibility.distributeWidths(sequence, table, rowHeightBlocks, circumferenceBlocks);
+            PeriodicRowLayout.Row candidateRow = new PeriodicRowLayout.Row(cells);
+            if (previousRow != null && !isVerticallyLegal(previousRow, candidateRow, table)) {
+                continue;
+            }
+            if (wraparoundRow != null && !isVerticallyLegal(candidateRow, wraparoundRow, table)) {
+                continue;
+            }
+            return candidateRow;
+        }
+        return null;
     }
 
     private static Set<BiomeId> unionOfBiomeIds(List<PeriodicRowLayout.Row> rows) {
@@ -278,6 +314,28 @@ public final class PeriodicCoherenceProof {
      * used here are a provisional estimate (each biome's own midpoint width, not yet the
      * final exact-redistributed width from {@link RowFeasibility}) - good enough to guide
      * the walk; the caller re-verifies the FINAL row for real once distributed.
+     *
+     * <p><b>Known real gap, found while building {@code ReachabilityScoutingChecks}
+     * (2026-09), not yet fixed:</b> the provisional-midpoint estimate can systematically
+     * disagree with the FINAL exact width badly enough to make a genuinely valid successor
+     * UNREACHABLE by this walk, not just statistically rare - confirmed directly: a 3-biome
+     * synthetic fixture where all 3 shared the exact same declared range (so every cell's
+     * final exact width, 6.25, was identical and NOTABLY BELOW the naive midpoint estimate,
+     * 6.5) caused a hand-verified-legal successor (confirmed via a direct {@link
+     * #isVerticallyLegal} call) to be missed at 100,000 retries, not just 2,000. Root cause:
+     * the provisional cursor's overestimate compounds cell-by-cell, eventually causing a
+     * candidate to "see" a false extra overlap with a previous-row cell it will not actually
+     * reach post-redistribution, rejecting the only viable branch before it's ever tried.
+     * Not observed against the real 66-biome catalog (real biomes have enough range
+     * diversity that this degenerate exact-tie case seems not to arise there - {@code
+     * ReachabilityScoutingChecks} found successors for all 10 real adversarial probes) -
+     * this is a real reliability/completeness gap in the heuristic (can cause missed valid
+     * solutions), NOT a soundness gap ({@link ConstraintChecker}/{@link #isVerticallyLegal}
+     * remain the final, always-correct authority on anything this walk DOES accept - a false
+     * ACCEPT here is not possible, only a false, silent REJECT of something that would have
+     * worked). Flagged, not fixed - a real fix would need either exact widths threaded
+     * through the walk instead of a cheap estimate, or a documented tolerance margin;
+     * out of scope for now.
      *
      * <p><b>{@code globallyUsed} is read-only here</b> (real, measured bug: this method used
      * to add to it directly, which meant every DISCARDED candidate sequence from a failed

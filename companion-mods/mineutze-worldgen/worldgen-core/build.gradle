@@ -60,6 +60,13 @@ tasks.register('graphCoherenceExtendabilityProof', JavaExec) {
     mainClass = 'com.mineutze.worldgen.coherence.EscapeHatchExtendabilityProof'
 }
 
+tasks.register('graphCoherenceReachabilityScouting', JavaExec) {
+    group = 'verification'
+    description = 'Two CHEAP checks before investing in the full reachability proof (see com.mineutze.worldgen.coherence.ReachabilityScoutingChecks\'s own doc): is any witness row a universal sink (always-safe next row regardless of context), and can an adversarial low-degree-biome row be built with NO legal successor at all. Neither is the reachability proof itself - a fast sanity pass to see if the question resolves trivially before committing real effort. Run with: ./gradlew :worldgen-core:graphCoherenceReachabilityScouting'
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'com.mineutze.worldgen.coherence.ReachabilityScoutingChecks'
+}
+
 tasks.register('graphEditorSeed', JavaExec) {
     group = 'application'
     description = 'One-off: writes ModBiomeGraph.OVERWORLD out to the graph editor\'s own data file (src/main/resources/biomegraph/biome-graph.json). Only needed once, or to reset the editor back to a known-good in-memory graph. Run with: ./gradlew :worldgen-core:graphEditorSeed'
