@@ -67,6 +67,13 @@ tasks.register('graphEditor', JavaExec) {
     mainClass = 'com.mineutze.worldgen.tooling.graphedit.GraphEditorServer'
 }
 
+tasks.register('graphCoherenceExistenceProof', JavaExec) {
+    group = 'verification'
+    description = 'Independent existence proof (see com.mineutze.worldgen.coherence\'s own doc): does NOT use the live hex mesh/CSP/geometry code at all - builds its own periodic "brick wall" substrate from scratch and searches for a toroidal patch satisfying every real constraint (adjacency legality, required-neighbor minimums, full-catalog coverage). A success is a complete, definitive, reproducible proof (see doc/graph-coherence-existence-proof-report.txt); a failure is inconclusive, never a claim of impossibility. Run with: ./gradlew :worldgen-core:graphCoherenceExistenceProof'
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'com.mineutze.worldgen.coherence.PeriodicCoherenceProof'
+}
+
 tasks.register('graphEditorDeepCheck', JavaExec) {
     group = 'verification'
     description = 'The graph editor\'s "Deep check" button - runs the real exhaustive GeometricFeasibilityProof against the editor\'s currently SAVED graph (not the hardcoded catalog directly, though it\'s the same file now). Run with: ./gradlew :worldgen-core:graphEditorDeepCheck'

@@ -40,7 +40,8 @@ final class GraphDataSeeder {
         for (BiomeId id : allBiomes) {
             BiomeNode node = graph.node(id);
             nodes.add(new NodeData(
-                id.namespace(), id.path(), node.sizeRange().minWidthBlocks(), node.sizeRange().maxWidthBlocks(), node.selfAdjacencyLimit()
+                id.namespace(), id.path(), node.sizeRange().minWidthBlocks(), node.sizeRange().maxWidthBlocks(), node.selfAdjacencyLimit(),
+                List.of()
             ));
         }
 
