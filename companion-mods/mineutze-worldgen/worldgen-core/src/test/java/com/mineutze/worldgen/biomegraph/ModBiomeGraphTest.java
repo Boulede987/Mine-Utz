@@ -113,9 +113,10 @@ class ModBiomeGraphTest {
         }
     }
 
+    /** 66, not the original 48 - {@code OVERWORLD} now loads from the graph editor's own saved data (see {@code ModBiomeGraph.OVERWORLD}'s own doc), which has grown via real editor sessions since. */
     @Test
     void overworldHasTheExpectedNodeCount() {
-        assertEquals(48, ModBiomeGraph.OVERWORLD.nodes().size());
+        assertEquals(66, ModBiomeGraph.OVERWORLD.nodes().size());
     }
 
     /**
