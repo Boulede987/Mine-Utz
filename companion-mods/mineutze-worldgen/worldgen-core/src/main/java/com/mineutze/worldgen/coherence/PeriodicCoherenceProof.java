@@ -139,7 +139,8 @@ public final class PeriodicCoherenceProof {
         return new WitnessSearchResult(null, totalAttempts);
     }
 
-    private static double defaultRowHeightBlocks(RawRuleTable table) {
+    /** Package-visible: {@code FailureModeCharacterization} reuses this same default for any custom table it builds, rather than a second copy. */
+    static double defaultRowHeightBlocks(RawRuleTable table) {
         int minOfMins = table.allBiomeIds().stream().mapToInt(id -> table.sizeRangeOf(id).minWidthBlocks()).min().orElseThrow();
         return Math.max(10.0, minOfMins / 4.0);
     }
@@ -198,20 +199,9 @@ public final class PeriodicCoherenceProof {
                 // Row 0 only: no fixed circumference yet - the first successfully-built
                 // row's own achievable interval picks it (see #findWitness's own doc), so
                 // this one case can't go through the fixed-circumference helper below.
-                builtRow = null;
-                for (int attempt = 0; attempt < ROW_BUILD_RETRIES && builtRow == null; attempt++) {
-                    int targetCellCount = minCellsPerRow + random.nextInt(maxCellsPerRow - minCellsPerRow + 1);
-                    // circumferenceBlocks is unused when both previousRow/wraparoundRow are
-                    // null (row 0 has no vertical constraint yet) - 0.0 is a safe placeholder.
-                    List<BiomeId> sequence = buildRowSequence(table, targetCellCount, globallyUsed, random, null, null, rowHeightBlocks, 0.0);
-                    if (sequence == null) {
-                        continue;
-                    }
-                    RowFeasibility.WidthInterval interval = RowFeasibility.achievableInterval(sequence, table, rowHeightBlocks);
-                    double candidateCircumference = (interval.lowBlocks() + interval.highBlocks()) / 2.0;
-                    List<PeriodicRowLayout.Cell> cells = RowFeasibility.distributeWidths(sequence, table, rowHeightBlocks, candidateCircumference);
-                    builtRow = new PeriodicRowLayout.Row(cells);
-                    circumferenceBlocks = candidateCircumference;
+                builtRow = tryBuildAnchorRow(table, globallyUsed, minCellsPerRow, maxCellsPerRow, rowHeightBlocks, random, ROW_BUILD_RETRIES);
+                if (builtRow != null) {
+                    circumferenceBlocks = builtRow.totalWidthBlocks();
                 }
             } else {
                 builtRow = tryBuildLegalRow(
@@ -277,6 +267,36 @@ public final class PeriodicCoherenceProof {
                 continue;
             }
             return candidateRow;
+        }
+        return null;
+    }
+
+    /**
+     * Builds ONE legal row with no vertical constraint at all (no previousRow, no
+     * wraparoundRow) and no target circumference to match - its own achievable interval's
+     * midpoint BECOMES the circumference (the row's own {@link
+     * PeriodicRowLayout.Row#totalWidthBlocks} is that circumference, by construction).
+     * Package-visible: {@code FailureModeCharacterization} reuses this to establish its own
+     * real, self-consistent circumference to sample against, without needing a full torus
+     * witness first (which a deliberately-broken graph may never produce).
+     *
+     * @return a legal row whose own total width can be used directly as a circumference, or {@code null} if none was found within {@code retries} attempts.
+     */
+    static PeriodicRowLayout.Row tryBuildAnchorRow(
+        RawRuleTable table, Set<BiomeId> globallyUsed, int minCellsPerRow, int maxCellsPerRow, double rowHeightBlocks, Random random, int retries
+    ) {
+        for (int attempt = 0; attempt < retries; attempt++) {
+            int targetCellCount = minCellsPerRow + random.nextInt(maxCellsPerRow - minCellsPerRow + 1);
+            // circumferenceBlocks is unused when both previousRow/wraparoundRow are null
+            // (no vertical constraint yet) - 0.0 is a safe placeholder.
+            List<BiomeId> sequence = buildRowSequence(table, targetCellCount, globallyUsed, random, null, null, rowHeightBlocks, 0.0);
+            if (sequence == null) {
+                continue;
+            }
+            RowFeasibility.WidthInterval interval = RowFeasibility.achievableInterval(sequence, table, rowHeightBlocks);
+            double candidateCircumference = (interval.lowBlocks() + interval.highBlocks()) / 2.0;
+            List<PeriodicRowLayout.Cell> cells = RowFeasibility.distributeWidths(sequence, table, rowHeightBlocks, candidateCircumference);
+            return new PeriodicRowLayout.Row(cells);
         }
         return null;
     }

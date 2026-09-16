@@ -13,7 +13,7 @@ This does NOT mean the LIVE generator (FaceIdentityCsp/HexMeshBuilder/etc.) can
 find this or any other valid world - this proof is fully independent of that code,
 by design (see com.mineutze.worldgen.coherence's own package doc).
 
-rowCount=65, rowHeightBlocks=75.0, circumferenceBlocks=54.66666666666667
+rowCount=65, rowHeightBlocks=75.0, circumferenceBlocks=54.666666666666664
 Found after 46 randomized construction attempts (seed=20260916, reproducible).
 
 Row 0 (7 cells, total width 54,67):

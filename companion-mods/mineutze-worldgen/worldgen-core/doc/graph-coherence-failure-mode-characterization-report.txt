@@ -1,0 +1,67 @@
+FAILURE-MODE CHARACTERIZATION - mined screen, validated against a known-bad graph
+====================================================================================
+
+Mined pattern: a row's single most space-hungry biome ("domination fraction" = that
+biome's own total width / the row's total width). Threshold: 0.5
+
+--- production ModBiomeGraph.OVERWORLD (src/main/resources/biomegraph/biome-graph.json) (25 rows sampled) ---
+  successor=FOUND    dominationFraction=0,110 dominantBiome=minecraft:lukewarm_ocean (degree 17)
+  successor=FOUND    dominationFraction=0,181 dominantBiome=biomesoplenty:shrubland (degree 10)
+  successor=FOUND    dominationFraction=0,071 dominantBiome=biomesoplenty:orchard (degree 9)
+  successor=FOUND    dominationFraction=0,083 dominantBiome=minecraft:forest (degree 24)
+  successor=FOUND    dominationFraction=0,169 dominantBiome=minecraft:ocean (degree 25)
+  successor=FOUND    dominationFraction=0,143 dominantBiome=minecraft:frozen_ocean (degree 14)
+  successor=FOUND    dominationFraction=0,105 dominantBiome=minecraft:old_growth_birch_forest (degree 18)
+  successor=FOUND    dominationFraction=0,114 dominantBiome=minecraft:warm_ocean (degree 15)
+  successor=FOUND    dominationFraction=0,153 dominantBiome=minecraft:bamboo_jungle (degree 11)
+  successor=FOUND    dominationFraction=0,142 dominantBiome=minecraft:deep_ocean (degree 10)
+  successor=FOUND    dominationFraction=0,085 dominantBiome=minecraft:ocean (degree 25)
+  successor=FOUND    dominationFraction=0,143 dominantBiome=minecraft:bamboo_jungle (degree 11)
+  successor=FOUND    dominationFraction=0,114 dominantBiome=minecraft:desert (degree 5)
+  successor=FOUND    dominationFraction=0,093 dominantBiome=minecraft:ocean (degree 25)
+  successor=NOT FOUND dominationFraction=0,188 dominantBiome=minecraft:ocean (degree 25)
+  successor=FOUND    dominationFraction=0,095 dominantBiome=minecraft:lukewarm_ocean (degree 17)
+  successor=FOUND    dominationFraction=0,173 dominantBiome=minecraft:wooded_badlands (degree 16)
+  successor=FOUND    dominationFraction=0,081 dominantBiome=biomeswevegone:rose_fields (degree 11)
+  successor=FOUND    dominationFraction=0,095 dominantBiome=minecraft:ocean (degree 25)
+  successor=FOUND    dominationFraction=0,129 dominantBiome=minecraft:old_growth_spruce_taiga (degree 15)
+  successor=FOUND    dominationFraction=0,219 dominantBiome=minecraft:warm_ocean (degree 15)
+  successor=FOUND    dominationFraction=0,099 dominantBiome=minecraft:warm_ocean (degree 15)
+  successor=FOUND    dominationFraction=0,091 dominantBiome=minecraft:deep_ocean (degree 10)
+  successor=FOUND    dominationFraction=0,117 dominantBiome=minecraft:forest (degree 24)
+  successor=FOUND    dominationFraction=0,197 dominantBiome=biomesoplenty:forested_field (degree 18)
+
+--- synthetic dominant-hub graph (deliberately pathological, see this class's own doc) (25 rows sampled) ---
+  successor=NOT FOUND dominationFraction=0,957 dominantBiome=synthetic:dominant_hub (degree 4)
+  successor=NOT FOUND dominationFraction=0,957 dominantBiome=synthetic:dominant_hub (degree 4)
+  successor=NOT FOUND dominationFraction=0,940 dominantBiome=synthetic:dominant_hub (degree 4)
+  successor=NOT FOUND dominationFraction=0,951 dominantBiome=synthetic:dominant_hub (degree 4)
+  successor=NOT FOUND dominationFraction=0,952 dominantBiome=synthetic:dominant_hub (degree 4)
+  successor=NOT FOUND dominationFraction=0,951 dominantBiome=synthetic:dominant_hub (degree 4)
+  successor=NOT FOUND dominationFraction=0,948 dominantBiome=synthetic:dominant_hub (degree 4)
+  successor=NOT FOUND dominationFraction=0,945 dominantBiome=synthetic:dominant_hub (degree 4)
+  successor=NOT FOUND dominationFraction=0,950 dominantBiome=synthetic:dominant_hub (degree 4)
+  successor=NOT FOUND dominationFraction=0,948 dominantBiome=synthetic:dominant_hub (degree 4)
+  successor=NOT FOUND dominationFraction=0,948 dominantBiome=synthetic:dominant_hub (degree 4)
+  successor=NOT FOUND dominationFraction=0,948 dominantBiome=synthetic:dominant_hub (degree 4)
+  successor=NOT FOUND dominationFraction=0,942 dominantBiome=synthetic:dominant_hub (degree 4)
+  successor=NOT FOUND dominationFraction=0,950 dominantBiome=synthetic:dominant_hub (degree 4)
+  successor=NOT FOUND dominationFraction=0,951 dominantBiome=synthetic:dominant_hub (degree 4)
+  successor=NOT FOUND dominationFraction=0,957 dominantBiome=synthetic:dominant_hub (degree 4)
+  successor=NOT FOUND dominationFraction=0,940 dominantBiome=synthetic:dominant_hub (degree 4)
+  successor=NOT FOUND dominationFraction=0,942 dominantBiome=synthetic:dominant_hub (degree 4)
+  successor=NOT FOUND dominationFraction=0,948 dominantBiome=synthetic:dominant_hub (degree 4)
+  successor=NOT FOUND dominationFraction=0,940 dominantBiome=synthetic:dominant_hub (degree 4)
+  successor=NOT FOUND dominationFraction=0,947 dominantBiome=synthetic:dominant_hub (degree 4)
+  successor=NOT FOUND dominationFraction=0,943 dominantBiome=synthetic:dominant_hub (degree 4)
+  successor=NOT FOUND dominationFraction=0,948 dominantBiome=synthetic:dominant_hub (degree 4)
+  successor=NOT FOUND dominationFraction=0,948 dominantBiome=synthetic:dominant_hub (degree 4)
+  successor=NOT FOUND dominationFraction=0,957 dominantBiome=synthetic:dominant_hub (degree 4)
+
+--- Screen precision/recall on this real data (not asserted blind) ---
+real catalog: 1 real failures, 0 flagged as risky - truePositives=0 falsePositives=0 falseNegatives=1
+broken graph: 25 real failures, 25 flagged as risky - truePositives=25 falsePositives=0 falseNegatives=0
+
+Honest limit: this is a correlate mined from these two tables' own samples, not a
+proof - same discipline as BridgeMotifChecker. A row it flags should still be verified
+against a real search before being treated as definitely doomed.

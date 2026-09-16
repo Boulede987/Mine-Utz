@@ -74,6 +74,13 @@ tasks.register('graphCoherenceConstructivePathfinding', JavaExec) {
     mainClass = 'com.mineutze.worldgen.coherence.ConstructivePathfindingProof'
 }
 
+tasks.register('graphCoherenceFailureModeCharacterization', JavaExec) {
+    group = 'verification'
+    description = 'Option 2 from the reachability menu (see com.mineutze.worldgen.coherence.FailureModeCharacterization\'s own doc): mines a cheap, reusable "this row looks risky" screen from real search results, validated against BOTH the real catalog and a deliberately pathological synthetic graph guaranteed to fail. A correlate, not a proof, same discipline as BridgeMotifChecker. Run with: ./gradlew :worldgen-core:graphCoherenceFailureModeCharacterization'
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'com.mineutze.worldgen.coherence.FailureModeCharacterization'
+}
+
 tasks.register('graphEditorSeed', JavaExec) {
     group = 'application'
     description = 'One-off: writes ModBiomeGraph.OVERWORLD out to the graph editor\'s own data file (src/main/resources/biomegraph/biome-graph.json). Only needed once, or to reset the editor back to a known-good in-memory graph. Run with: ./gradlew :worldgen-core:graphEditorSeed'
