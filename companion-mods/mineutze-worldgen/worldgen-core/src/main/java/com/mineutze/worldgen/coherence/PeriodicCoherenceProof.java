@@ -56,7 +56,19 @@ public final class PeriodicCoherenceProof {
 
     public static void main(String[] args) throws IOException {
         BiomeGraphData data = BiomeGraphJson.loadResource(RawRuleTable.class, "/biomegraph/biome-graph.json");
-        RawRuleTable table = RawRuleTable.from(data);
+        runProof(RawRuleTable.from(data), REPORT_PATH, "production ModBiomeGraph.OVERWORLD (src/main/resources/biomegraph/biome-graph.json)");
+    }
+
+    /**
+     * The real search entry point - {@link #main} is a thin wrapper around this for the
+     * production catalog; {@code GraphEditorCoherenceCheck} (tooling.graphedit) calls this
+     * directly against the graph editor's own currently-SAVED data (not yet rebuilt into a
+     * classpath resource), same relationship {@code GeometricFeasibilityProof.runProof} and
+     * {@code GraphEditorDeepCheck} already have.
+     *
+     * @param label human-readable description of what was checked, written into the report so a reader knows without guessing.
+     */
+    public static void runProof(RawRuleTable table, Path reportPath, String label) throws IOException {
         double rowHeightBlocks = defaultRowHeightBlocks(table);
         System.out.println(
             "Loaded " + table.allBiomeIds().size() + " biomes. rowHeightBlocks=" + rowHeightBlocks + " (independent of any live-algorithm constant)."
@@ -77,9 +89,9 @@ public final class PeriodicCoherenceProof {
                 }
                 ConstraintChecker.Result result = ConstraintChecker.check(attemptResult.layout(), table);
                 if (result.isValid()) {
-                    writeSuccessReport(attemptResult.layout(), table, totalAttempts, rowCount);
+                    writeSuccessReport(attemptResult.layout(), table, totalAttempts, rowCount, reportPath, label);
                     System.out.println("PROOF FOUND after " + totalAttempts + " attempts (rowCount=" + rowCount + ").");
-                    System.out.println("Report link: " + REPORT_PATH.toAbsolutePath().toUri());
+                    System.out.println("Report link: " + reportPath.toAbsolutePath().toUri());
                     return;
                 }
                 checkerRejections++;
@@ -100,12 +112,12 @@ public final class PeriodicCoherenceProof {
                     + checkerRejections + ". Trying a larger rowCount..."
             );
         }
-        writeInconclusiveReport(totalAttempts, table);
+        writeInconclusiveReport(totalAttempts, table, reportPath, label);
         System.out.println(
             "INCONCLUSIVE after " + totalAttempts + " total attempts across rowCount " + Arrays.toString(ROW_COUNTS_TO_TRY)
                 + " - NOT a proof of impossibility, only this bounded search found nothing."
         );
-        System.out.println("Report link: " + REPORT_PATH.toAbsolutePath().toUri());
+        System.out.println("Report link: " + reportPath.toAbsolutePath().toUri());
     }
 
     private static double defaultRowHeightBlocks(RawRuleTable table) {
@@ -335,15 +347,18 @@ public final class PeriodicCoherenceProof {
         return pool.get(random.nextInt(pool.size()));
     }
 
-    private static void writeSuccessReport(PeriodicRowLayout layout, RawRuleTable table, int attemptsUsed, int rowCount) throws IOException {
+    private static void writeSuccessReport(
+        PeriodicRowLayout layout, RawRuleTable table, int attemptsUsed, int rowCount, Path reportPath, String label
+    ) throws IOException {
         StringBuilder report = new StringBuilder();
         report.append("GRAPH COHERENCE EXISTENCE PROOF - SUCCESS\n");
         report.append("==========================================\n\n");
-        report.append("This is a COMPLETE, DEFINITIVE proof that the current biome-graph.json rule set\n");
-        report.append("admits an infinite valid world: the periodic patch below satisfies every real\n");
-        report.append("constraint (adjacency legality, required-neighbor minimums, full-catalog coverage)\n");
-        report.append("including across its own wraparound seam - repeating it forever in every direction\n");
-        report.append("therefore produces a valid infinite world.\n\n");
+        report.append("Checked against: ").append(label).append("\n\n");
+        report.append("This is a COMPLETE, DEFINITIVE proof that the checked rule set admits an infinite\n");
+        report.append("valid world: the periodic patch below satisfies every real constraint (adjacency\n");
+        report.append("legality, required-neighbor minimums, full-catalog coverage) including across its\n");
+        report.append("own wraparound seam - repeating it forever in every direction therefore produces\n");
+        report.append("a valid infinite world.\n\n");
         report.append("This does NOT mean the LIVE generator (FaceIdentityCsp/HexMeshBuilder/etc.) can\n");
         report.append("find this or any other valid world - this proof is fully independent of that code,\n");
         report.append("by design (see com.mineutze.worldgen.coherence's own package doc).\n\n");
@@ -369,20 +384,21 @@ public final class PeriodicCoherenceProof {
         report.append("\nAll ").append(table.allBiomeIds().size()).append(" declared biomes appear at least once. ")
             .append("Zero illegal adjacencies, zero unmet required-neighbor minimums (verified by ConstraintChecker.check).\n");
 
-        Files.createDirectories(REPORT_PATH.getParent());
-        Files.writeString(REPORT_PATH, report.toString(), StandardCharsets.UTF_8);
+        Files.createDirectories(reportPath.getParent());
+        Files.writeString(reportPath, report.toString(), StandardCharsets.UTF_8);
     }
 
-    private static void writeInconclusiveReport(int totalAttempts, RawRuleTable table) throws IOException {
+    private static void writeInconclusiveReport(int totalAttempts, RawRuleTable table, Path reportPath, String label) throws IOException {
         String report = "GRAPH COHERENCE EXISTENCE PROOF - INCONCLUSIVE\n"
             + "================================================\n\n"
+            + "Checked against: " + label + "\n\n"
             + "No valid periodic patch found after " + totalAttempts + " randomized construction attempts\n"
             + "across rowCount " + Arrays.toString(ROW_COUNTS_TO_TRY) + " (seed=" + RANDOM_SEED + ").\n\n"
             + "THIS IS NOT A PROOF OF IMPOSSIBILITY. Only a bounded, randomized search was tried - a\n"
             + "real solution may still exist at a larger rowCount, wider per-row cell range, or via a\n"
             + "smarter (non-random) construction strategy. Do not treat this as \"the graph is broken.\"\n\n"
             + "Catalog size: " + table.allBiomeIds().size() + " biomes.\n";
-        Files.createDirectories(REPORT_PATH.getParent());
-        Files.writeString(REPORT_PATH, report, StandardCharsets.UTF_8);
+        Files.createDirectories(reportPath.getParent());
+        Files.writeString(reportPath, report, StandardCharsets.UTF_8);
     }
 }

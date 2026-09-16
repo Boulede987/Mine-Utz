@@ -81,6 +81,13 @@ tasks.register('graphEditorDeepCheck', JavaExec) {
     mainClass = 'com.mineutze.worldgen.tooling.graphedit.GraphEditorDeepCheck'
 }
 
+tasks.register('graphEditorCoherenceCheck', JavaExec) {
+    group = 'verification'
+    description = 'The graph editor\'s "Coherence proof" button - runs com.mineutze.worldgen.coherence\'s independent existence-proof search (no live hex mesh/CSP/geometry code at all) against the editor\'s currently SAVED graph. Run with: ./gradlew :worldgen-core:graphEditorCoherenceCheck'
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'com.mineutze.worldgen.tooling.graphedit.GraphEditorCoherenceCheck'
+}
+
 repositories {
     mavenCentral()
 }

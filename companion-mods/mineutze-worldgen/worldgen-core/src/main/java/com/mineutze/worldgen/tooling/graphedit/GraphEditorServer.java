@@ -80,6 +80,9 @@ public final class GraphEditorServer {
         server.createContext("/api/validate", GraphEditorServer::handleValidate);
         server.createContext("/api/tests", GraphEditorServer::handleRunTests);
         server.createContext("/api/deepcheck", GraphEditorServer::handleDeepCheck);
+        server.createContext("/api/coherencecheck", GraphEditorServer::handleCoherenceCheck);
+        server.createContext("/api/requiredneighbors", GraphEditorServer::handleAddRequiredNeighbor);
+        server.createContext("/api/requiredneighbors/remove", GraphEditorServer::handleRemoveRequiredNeighbor);
         server.start();
         System.out.println("Graph editor running at http://localhost:" + PORT + " - Ctrl+C to stop.");
     }
@@ -201,6 +204,109 @@ public final class GraphEditorServer {
      */
     private static void handleDeepCheck(HttpExchange exchange) throws IOException {
         runGradleTaskAndRespond(exchange, List.of("../gradlew.bat", ":worldgen-core:graphEditorDeepCheck"));
+    }
+
+    /**
+     * Runs {@code graphEditorCoherenceCheck} - {@link com.mineutze.worldgen.coherence}'s own
+     * independent existence-proof search against THIS tool's saved graph. Unlike Deep
+     * Check, this one never touches the live hex mesh/CSP/geometry code at all - see that
+     * package's own doc for why, and {@code GraphEditorCoherenceCheck}'s own doc for the
+     * process-separation reasoning (shared with the Deep Check button).
+     */
+    private static void handleCoherenceCheck(HttpExchange exchange) throws IOException {
+        runGradleTaskAndRespond(exchange, List.of("../gradlew.bat", ":worldgen-core:graphEditorCoherenceCheck"));
+    }
+
+    /**
+     * Adds (or, if one already exists for the same required biome, REPLACES the minCount
+     * of) one "this biome must have at least N real neighbors that are exactly that other
+     * biome" requirement - schema-only today (see {@link BiomeGraphData.NodeData}'s own
+     * doc: nothing in the live solver enforces this yet), but real, saved, and checked by
+     * the coherence proof. Re-validates before saving, same discipline as every other
+     * mutation here.
+     */
+    @SuppressWarnings("unchecked")
+    private static void handleAddRequiredNeighbor(HttpExchange exchange) throws IOException {
+        if (!"POST".equals(exchange.getRequestMethod())) {
+            respond(exchange, 405, "text/plain; charset=utf-8", "POST only".getBytes(StandardCharsets.UTF_8));
+            return;
+        }
+        Map<String, Object> body = (Map<String, Object>) MinimalJson.parse(readBody(exchange));
+        String namespace = (String) body.get("namespace");
+        String path = (String) body.get("path");
+        BiomeGraphData.RequiredNeighbor newRequirement = new BiomeGraphData.RequiredNeighbor(
+            (String) body.get("requiredNamespace"), (String) body.get("requiredPath"), ((Double) body.get("minCount")).intValue()
+        );
+
+        BiomeGraphData current = BiomeGraphJson.load(GraphEditorFiles.DATA_FILE);
+        if (current.nodes().stream().noneMatch(node -> node.namespace().equals(namespace) && node.path().equals(path))) {
+            respondJson(exchange, 200, MinimalJson.writeObject(Map.of(
+                "constructs", false, "constructionError", "No such biome: " + namespace + ":" + path,
+                "errors", List.of(), "motifWarnings", List.of()
+            )));
+            return;
+        }
+        List<NodeData> updatedNodes = current.nodes().stream()
+            .map(node -> node.namespace().equals(namespace) && node.path().equals(path) ? withRequirement(node, newRequirement) : node)
+            .toList();
+        BiomeGraphData proposed = new BiomeGraphData(updatedNodes, current.edges());
+
+        ValidationResult result = GraphValidation.validate(proposed);
+        if (result.constructs()) {
+            BiomeGraphJson.save(GraphEditorFiles.DATA_FILE, proposed);
+        }
+        respondJson(exchange, 200, resultJson(result, proposed));
+    }
+
+    private static NodeData withRequirement(NodeData node, BiomeGraphData.RequiredNeighbor newRequirement) {
+        List<BiomeGraphData.RequiredNeighbor> updated = new java.util.ArrayList<>();
+        boolean replaced = false;
+        for (BiomeGraphData.RequiredNeighbor existing : node.requiredNeighbors()) {
+            if (existing.namespace().equals(newRequirement.namespace()) && existing.path().equals(newRequirement.path())) {
+                updated.add(newRequirement);
+                replaced = true;
+            } else {
+                updated.add(existing);
+            }
+        }
+        if (!replaced) {
+            updated.add(newRequirement);
+        }
+        return new NodeData(node.namespace(), node.path(), node.minWidthBlocks(), node.maxWidthBlocks(), node.selfAdjacencyLimit(), updated);
+    }
+
+    /** Removes one required-neighbor entry, matched by (biome, required biome) - re-validates before saving, same as adding one. */
+    @SuppressWarnings("unchecked")
+    private static void handleRemoveRequiredNeighbor(HttpExchange exchange) throws IOException {
+        if (!"POST".equals(exchange.getRequestMethod())) {
+            respond(exchange, 405, "text/plain; charset=utf-8", "POST only".getBytes(StandardCharsets.UTF_8));
+            return;
+        }
+        Map<String, Object> body = (Map<String, Object>) MinimalJson.parse(readBody(exchange));
+        String namespace = (String) body.get("namespace");
+        String path = (String) body.get("path");
+        String requiredNamespace = (String) body.get("requiredNamespace");
+        String requiredPath = (String) body.get("requiredPath");
+
+        BiomeGraphData current = BiomeGraphJson.load(GraphEditorFiles.DATA_FILE);
+        List<NodeData> updatedNodes = current.nodes().stream()
+            .map(node -> {
+                if (!node.namespace().equals(namespace) || !node.path().equals(path)) {
+                    return node;
+                }
+                List<BiomeGraphData.RequiredNeighbor> filtered = node.requiredNeighbors().stream()
+                    .filter(requirement -> !(requirement.namespace().equals(requiredNamespace) && requirement.path().equals(requiredPath)))
+                    .toList();
+                return new NodeData(node.namespace(), node.path(), node.minWidthBlocks(), node.maxWidthBlocks(), node.selfAdjacencyLimit(), filtered);
+            })
+            .toList();
+        BiomeGraphData proposed = new BiomeGraphData(updatedNodes, current.edges());
+
+        ValidationResult result = GraphValidation.validate(proposed);
+        if (result.constructs()) {
+            BiomeGraphJson.save(GraphEditorFiles.DATA_FILE, proposed);
+        }
+        respondJson(exchange, 200, resultJson(result, proposed));
     }
 
     /**
@@ -347,6 +453,14 @@ public final class GraphEditorServer {
             <button onclick="addEdge()">Add adjacency</button>
           </fieldset>
 
+          <h3 id="requiredNeighborsHeading">Required neighbors (focus a biome first)</h3>
+          <ul id="requiredNeighborsList"></ul>
+          <fieldset>
+            <label>Must have at least this many neighbors of:</label><select id="reqTarget"></select>
+            <label>Minimum count</label><input id="reqMinCount" type="number" value="1" min="1">
+            <button onclick="addRequiredNeighbor()">Add requirement (to focused biome)</button>
+          </fieldset>
+
           <h3>Warnings</h3>
           <button onclick="validateNow()">Validate current graph</button>
           <div id="warnings"></div>
@@ -355,6 +469,7 @@ public final class GraphEditorServer {
           <button onclick="runTests(false)">Run quick check (BiomeGraphTest)</button>
           <button onclick="runTests(true)">Run full worldgen-core suite</button>
           <button onclick="runDeepCheck()">Deep check (real solver, slower)</button>
+          <button onclick="runCoherenceCheck()">Coherence proof (independent, no live algorithm)</button>
           <div id="testStatus"></div>
           <div id="testReportLinks"></div>
           <pre id="testOutput"></pre>
@@ -369,6 +484,7 @@ public final class GraphEditorServer {
           populateSelectors();
           renderGraph();
           renderAdjacencyList();
+          renderRequiredNeighbors();
         }
 
         function keyOf(n) { return n.namespace + ':' + n.path; }
@@ -378,6 +494,7 @@ public final class GraphEditorServer {
           fillSelect('focusSelect', keys, true, focusKey);
           fillSelect('edgeA', keys, false, document.getElementById('edgeA') ? document.getElementById('edgeA').value : '');
           fillSelect('edgeB', keys, false, document.getElementById('edgeB') ? document.getElementById('edgeB').value : '');
+          fillSelect('reqTarget', keys, false, document.getElementById('reqTarget') ? document.getElementById('reqTarget').value : '');
         }
 
         function fillSelect(id, keys, withShowAll, keepValue) {
@@ -400,6 +517,63 @@ public final class GraphEditorServer {
           focusKey = key;
           renderGraph();
           renderAdjacencyList();
+          renderRequiredNeighbors();
+        }
+
+        function focusedNode() {
+          if (!focusKey) return null;
+          return graph.nodes.find(n => keyOf(n) === focusKey) || null;
+        }
+
+        function renderRequiredNeighbors() {
+          const heading = document.getElementById('requiredNeighborsHeading');
+          const list = document.getElementById('requiredNeighborsList');
+          list.innerHTML = '';
+          const node = focusedNode();
+          if (!node) {
+            heading.textContent = 'Required neighbors (focus a biome first)';
+            return;
+          }
+          const requirements = node.requiredNeighbors || [];
+          heading.textContent = focusKey + ' — ' + requirements.length + ' required neighbor rule' + (requirements.length === 1 ? '' : 's');
+          requirements.forEach(r => {
+            const li = document.createElement('li');
+            const label = document.createElement('span');
+            label.textContent = 'needs >= ' + r.minCount + ' ' + r.namespace + ':' + r.path + ' ';
+            li.appendChild(label);
+            const removeBtn = document.createElement('button');
+            removeBtn.textContent = 'Remove';
+            removeBtn.onclick = () => removeRequiredNeighbor(r.namespace, r.path);
+            li.appendChild(removeBtn);
+            list.appendChild(li);
+          });
+        }
+
+        async function addRequiredNeighbor() {
+          const node = focusedNode();
+          if (!node) { alert('Focus a biome first (top dropdown) - required neighbors are added to the FOCUSED biome.'); return; }
+          const reqKey = document.getElementById('reqTarget').value;
+          if (!reqKey) { alert('Pick which biome is required.'); return; }
+          const [requiredNamespace, requiredPath] = reqKey.split(':');
+          const body = {
+            namespace: node.namespace, path: node.path,
+            requiredNamespace, requiredPath,
+            minCount: parseInt(document.getElementById('reqMinCount').value, 10)
+          };
+          const response = await fetch('/api/requiredneighbors', { method: 'POST', body: JSON.stringify(body) });
+          const result = await response.json();
+          showResult(result);
+          if (result.constructs) await loadGraph();
+        }
+
+        async function removeRequiredNeighbor(requiredNamespace, requiredPath) {
+          const node = focusedNode();
+          if (!node) return;
+          const body = { namespace: node.namespace, path: node.path, requiredNamespace, requiredPath };
+          const response = await fetch('/api/requiredneighbors/remove', { method: 'POST', body: JSON.stringify(body) });
+          const result = await response.json();
+          showResult(result);
+          if (result.constructs) await loadGraph();
         }
 
         function neighborsOf(key) {
@@ -579,6 +753,10 @@ public final class GraphEditorServer {
 
         async function runDeepCheck() {
           await runGradleTaskAndRender('/api/deepcheck');
+        }
+
+        async function runCoherenceCheck() {
+          await runGradleTaskAndRender('/api/coherencecheck');
         }
 
         async function runGradleTaskAndRender(endpoint) {
