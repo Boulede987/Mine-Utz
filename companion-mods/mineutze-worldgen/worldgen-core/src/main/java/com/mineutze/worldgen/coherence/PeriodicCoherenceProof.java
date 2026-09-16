@@ -69,6 +69,32 @@ public final class PeriodicCoherenceProof {
      * @param label human-readable description of what was checked, written into the report so a reader knows without guessing.
      */
     public static void runProof(RawRuleTable table, Path reportPath, String label) throws IOException {
+        WitnessSearchResult searchResult = findWitness(table);
+        if (searchResult.layout() != null) {
+            writeSuccessReport(searchResult.layout(), table, searchResult.totalAttempts(), searchResult.layout().rows().size(), reportPath, label);
+            System.out.println("PROOF FOUND after " + searchResult.totalAttempts() + " attempts (rowCount=" + searchResult.layout().rows().size() + ").");
+            System.out.println("Report link: " + reportPath.toAbsolutePath().toUri());
+            return;
+        }
+        writeInconclusiveReport(searchResult.totalAttempts(), table, reportPath, label);
+        System.out.println(
+            "INCONCLUSIVE after " + searchResult.totalAttempts() + " total attempts across rowCount " + Arrays.toString(ROW_COUNTS_TO_TRY)
+                + " - NOT a proof of impossibility, only this bounded search found nothing."
+        );
+        System.out.println("Report link: " + reportPath.toAbsolutePath().toUri());
+    }
+
+    /** {@code layout} is {@code null} on an inconclusive search - {@code totalAttempts} is kept either way, for reporting. */
+    public record WitnessSearchResult(PeriodicRowLayout layout, int totalAttempts) {
+    }
+
+    /**
+     * The search itself, with no report-writing side effect - {@link #runProof} wraps this
+     * for the production/editor entry points; {@code EscapeHatchExtendabilityProof} calls
+     * this directly to get the actual witness object it needs to check row-to-row
+     * transitions against, not just a human-readable report of one.
+     */
+    public static WitnessSearchResult findWitness(RawRuleTable table) {
         double rowHeightBlocks = defaultRowHeightBlocks(table);
         System.out.println(
             "Loaded " + table.allBiomeIds().size() + " biomes. rowHeightBlocks=" + rowHeightBlocks + " (independent of any live-algorithm constant)."
@@ -89,10 +115,8 @@ public final class PeriodicCoherenceProof {
                 }
                 ConstraintChecker.Result result = ConstraintChecker.check(attemptResult.layout(), table);
                 if (result.isValid()) {
-                    writeSuccessReport(attemptResult.layout(), table, totalAttempts, rowCount, reportPath, label);
                     System.out.println("PROOF FOUND after " + totalAttempts + " attempts (rowCount=" + rowCount + ").");
-                    System.out.println("Report link: " + reportPath.toAbsolutePath().toUri());
-                    return;
+                    return new WitnessSearchResult(attemptResult.layout(), totalAttempts);
                 }
                 checkerRejections++;
                 if (checkerRejections <= 3) {
@@ -112,12 +136,7 @@ public final class PeriodicCoherenceProof {
                     + checkerRejections + ". Trying a larger rowCount..."
             );
         }
-        writeInconclusiveReport(totalAttempts, table, reportPath, label);
-        System.out.println(
-            "INCONCLUSIVE after " + totalAttempts + " total attempts across rowCount " + Arrays.toString(ROW_COUNTS_TO_TRY)
-                + " - NOT a proof of impossibility, only this bounded search found nothing."
-        );
-        System.out.println("Report link: " + reportPath.toAbsolutePath().toUri());
+        return new WitnessSearchResult(null, totalAttempts);
     }
 
     private static double defaultRowHeightBlocks(RawRuleTable table) {
@@ -232,7 +251,8 @@ public final class PeriodicCoherenceProof {
         return ids;
     }
 
-    private static boolean isVerticallyLegal(PeriodicRowLayout.Row lower, PeriodicRowLayout.Row upper, RawRuleTable table) {
+    /** Package-visible: {@code EscapeHatchExtendabilityProof} reuses this exact same check to independently re-verify each witness row-to-row transition, rather than duplicating the pairwise overlap+legality logic. */
+    static boolean isVerticallyLegal(PeriodicRowLayout.Row lower, PeriodicRowLayout.Row upper, RawRuleTable table) {
         for (PeriodicRowLayout.Cell lowerCell : lower.cells()) {
             for (PeriodicRowLayout.Cell upperCell : upper.cells()) {
                 if (AdjacencyDerivation.overlaps(lowerCell, upperCell) && !table.isLegal(lowerCell.biomeId(), upperCell.biomeId())) {

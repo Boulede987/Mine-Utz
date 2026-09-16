@@ -53,6 +53,13 @@ tasks.register('geometricFeasibilityProof', JavaExec) {
     mainClass = 'com.mineutze.worldgen.export.GeometricFeasibilityProof'
 }
 
+tasks.register('graphCoherenceExtendabilityProof', JavaExec) {
+    group = 'verification'
+    description = 'The "escape hatch" extendability theorem (see com.mineutze.worldgen.coherence.EscapeHatchExtendabilityProof\'s own doc): finds the same periodic witness as graphCoherenceExistenceProof, then independently re-verifies every row-to-row transition, proving any construction that reaches a witness-aligned state can continue forever - a real, restricted, honest result, NOT a claim that every valid state is extendable (already known false from real production dead ends). Run with: ./gradlew :worldgen-core:graphCoherenceExtendabilityProof'
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'com.mineutze.worldgen.coherence.EscapeHatchExtendabilityProof'
+}
+
 tasks.register('graphEditorSeed', JavaExec) {
     group = 'application'
     description = 'One-off: writes ModBiomeGraph.OVERWORLD out to the graph editor\'s own data file (src/main/resources/biomegraph/biome-graph.json). Only needed once, or to reset the editor back to a known-good in-memory graph. Run with: ./gradlew :worldgen-core:graphEditorSeed'
