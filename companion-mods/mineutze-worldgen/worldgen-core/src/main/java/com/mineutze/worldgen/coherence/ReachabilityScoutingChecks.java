@@ -132,7 +132,8 @@ public final class ReachabilityScoutingChecks {
         return new AdversarialRowResult(true, biomeSequenceOf(hardRow), successor != null);
     }
 
-    private static Map<BiomeId, Integer> computeDegrees(RawRuleTable table) {
+    /** Package-visible: {@code ConstructivePathfindingProof} reuses this to build its own adversarial starting rows, rather than a second copy. */
+    static Map<BiomeId, Integer> computeDegrees(RawRuleTable table) {
         List<BiomeId> allIds = table.allBiomeIds();
         Map<BiomeId, Integer> degreeById = new HashMap<>();
         for (BiomeId id : allIds) {
@@ -141,7 +142,8 @@ public final class ReachabilityScoutingChecks {
         return degreeById;
     }
 
-    private static Row buildLowDegreeAdversarialRow(
+    /** Package-visible: {@code ConstructivePathfindingProof} reuses this to build its own adversarial starting rows, rather than a second copy. */
+    static Row buildLowDegreeAdversarialRow(
         RawRuleTable table, Map<BiomeId, Integer> degreeById, double rowHeightBlocks, double circumferenceBlocks, Random random
     ) {
         for (int attempt = 0; attempt < ADVERSARIAL_ROW_BUILD_RETRIES; attempt++) {
