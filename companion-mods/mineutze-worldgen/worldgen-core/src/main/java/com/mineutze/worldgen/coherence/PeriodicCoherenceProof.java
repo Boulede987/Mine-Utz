@@ -201,7 +201,9 @@ public final class PeriodicCoherenceProof {
                 builtRow = null;
                 for (int attempt = 0; attempt < ROW_BUILD_RETRIES && builtRow == null; attempt++) {
                     int targetCellCount = minCellsPerRow + random.nextInt(maxCellsPerRow - minCellsPerRow + 1);
-                    List<BiomeId> sequence = buildRowSequence(table, targetCellCount, globallyUsed, random, null, null, rowHeightBlocks);
+                    // circumferenceBlocks is unused when both previousRow/wraparoundRow are
+                    // null (row 0 has no vertical constraint yet) - 0.0 is a safe placeholder.
+                    List<BiomeId> sequence = buildRowSequence(table, targetCellCount, globallyUsed, random, null, null, rowHeightBlocks, 0.0);
                     if (sequence == null) {
                         continue;
                     }
@@ -256,7 +258,9 @@ public final class PeriodicCoherenceProof {
     ) {
         for (int attempt = 0; attempt < retries; attempt++) {
             int targetCellCount = minCellsPerRow + random.nextInt(maxCellsPerRow - minCellsPerRow + 1);
-            List<BiomeId> sequence = buildRowSequence(table, targetCellCount, globallyUsed, random, previousRow, wraparoundRow, rowHeightBlocks);
+            List<BiomeId> sequence = buildRowSequence(
+                table, targetCellCount, globallyUsed, random, previousRow, wraparoundRow, rowHeightBlocks, circumferenceBlocks
+            );
             if (sequence == null) {
                 continue;
             }
@@ -310,32 +314,28 @@ public final class PeriodicCoherenceProof {
      * purely horizontal walk, checked against the previous row only AFTER being fully
      * built, succeeded in roughly 1 attempt per 2000 against the real ~20% legal-pair
      * density - checking every candidate's PROVISIONAL position against the previous row
-     * DURING the walk, not after, is what actually makes success reachable). Positions
-     * used here are a provisional estimate (each biome's own midpoint width, not yet the
-     * final exact-redistributed width from {@link RowFeasibility}) - good enough to guide
-     * the walk; the caller re-verifies the FINAL row for real once distributed.
+     * DURING the walk, not after, is what actually makes success reachable).
      *
-     * <p><b>Known real gap, found while building {@code ReachabilityScoutingChecks}
-     * (2026-09), not yet fixed:</b> the provisional-midpoint estimate can systematically
-     * disagree with the FINAL exact width badly enough to make a genuinely valid successor
-     * UNREACHABLE by this walk, not just statistically rare - confirmed directly: a 3-biome
-     * synthetic fixture where all 3 shared the exact same declared range (so every cell's
-     * final exact width, 6.25, was identical and NOTABLY BELOW the naive midpoint estimate,
-     * 6.5) caused a hand-verified-legal successor (confirmed via a direct {@link
-     * #isVerticallyLegal} call) to be missed at 100,000 retries, not just 2,000. Root cause:
-     * the provisional cursor's overestimate compounds cell-by-cell, eventually causing a
-     * candidate to "see" a false extra overlap with a previous-row cell it will not actually
-     * reach post-redistribution, rejecting the only viable branch before it's ever tried.
-     * Not observed against the real 66-biome catalog (real biomes have enough range
-     * diversity that this degenerate exact-tie case seems not to arise there - {@code
-     * ReachabilityScoutingChecks} found successors for all 10 real adversarial probes) -
-     * this is a real reliability/completeness gap in the heuristic (can cause missed valid
-     * solutions), NOT a soundness gap ({@link ConstraintChecker}/{@link #isVerticallyLegal}
-     * remain the final, always-correct authority on anything this walk DOES accept - a false
-     * ACCEPT here is not possible, only a false, silent REJECT of something that would have
-     * worked). Flagged, not fixed - a real fix would need either exact widths threaded
-     * through the walk instead of a cheap estimate, or a documented tolerance margin;
-     * out of scope for now.
+     * <p><b>FIXED (2026-09), real bug found while building {@code
+     * ReachabilityScoutingChecks}:</b> positions here used to be each biome's own MIDPOINT
+     * width, independent of the actual target circumference - a 3-biome synthetic fixture
+     * where all 3 shared the exact same declared range (so every cell's real final width,
+     * 6.25, was identical and notably BELOW the naive midpoint, 6.5) caused a hand-verified-
+     * legal successor to be UNREACHABLE by this walk even at 100,000 retries, not just
+     * statistically rare - the systematic overestimate compounded cell-by-cell, eventually
+     * making a candidate "see" a false extra overlap it would never actually reach post-
+     * redistribution. Root cause: this method never knew the target circumference at all.
+     * Fixed by estimating each candidate's width from the SAME proportional-fraction formula
+     * {@link RowFeasibility} uses for the real final widths, not an independent per-biome
+     * guess - the fraction is estimated from cells already committed (exact) plus the
+     * remaining not-yet-chosen cells (approximated via the whole catalog's own average
+     * low/high), so it CONVERGES to the exact fraction as the row fills in, and is already
+     * exact from the first cell in the degenerate case that broke the old approach (uniform
+     * ranges make the catalog average equal every individual biome's own range). See {@link
+     * #fitsWithEstimate}. This was always a completeness/reliability gap, never a soundness
+     * one - {@link ConstraintChecker}/{@link #isVerticallyLegal} were always the real
+     * authority on anything actually accepted; this only affects whether a valid row gets
+     * FOUND, same as everywhere else in this search.
      *
      * <p><b>{@code globallyUsed} is read-only here</b> (real, measured bug: this method used
      * to add to it directly, which meant every DISCARDED candidate sequence from a failed
@@ -349,17 +349,22 @@ public final class PeriodicCoherenceProof {
      */
     private static List<BiomeId> buildRowSequence(
         RawRuleTable table, int targetCellCount, Set<BiomeId> globallyUsed, Random random,
-        PeriodicRowLayout.Row previousRow, PeriodicRowLayout.Row wraparoundRow, double rowHeightBlocks
+        PeriodicRowLayout.Row previousRow, PeriodicRowLayout.Row wraparoundRow, double rowHeightBlocks, double circumferenceBlocks
     ) {
         List<BiomeId> allIds = table.allBiomeIds();
+        boolean verticallyConstrained = previousRow != null || wraparoundRow != null;
+        // Computed once per row attempt, not per candidate - real per-biome ranges don't
+        // change mid-walk, only which ones are already committed does.
+        CatalogAverageWidths averages = verticallyConstrained ? catalogAverageWidths(table, rowHeightBlocks) : null;
+
         // The row's OWN starting cell must also prefer unused biomes, not just its
         // interior steps - real, measured bug: leaving this uniform-random over all 66
         // left coverage stuck around 20-45/66 even with a large retry budget, since the
         // single biggest lever for reaching NEW territory (where a row even starts) was
         // ignoring coverage entirely.
         List<BiomeId> firstCandidates = allIds.stream()
-            .filter(id -> previousRow == null || fitsVertically(id, 0, midpointWidth(id, table, rowHeightBlocks), previousRow, table))
-            .filter(id -> wraparoundRow == null || fitsVertically(id, 0, midpointWidth(id, table, rowHeightBlocks), wraparoundRow, table))
+            .filter(id -> !verticallyConstrained
+                || fitsWithEstimate(List.of(), id, targetCellCount, table, rowHeightBlocks, circumferenceBlocks, averages, previousRow, wraparoundRow))
             .toList();
         if (firstCandidates.isEmpty()) {
             return null;
@@ -374,7 +379,6 @@ public final class PeriodicCoherenceProof {
         usedInThisRow.add(first);
         List<BiomeId> sequence = new ArrayList<>();
         sequence.add(first);
-        double provisionalCursor = midpointWidth(first, table, rowHeightBlocks);
         for (int i = 1; i < targetCellCount; i++) {
             BiomeId previous = sequence.get(sequence.size() - 1);
             boolean isClosingCell = i == targetCellCount - 1;
@@ -382,11 +386,9 @@ public final class PeriodicCoherenceProof {
             if (isClosingCell) {
                 candidates = candidates.stream().filter(id -> table.isLegal(id, first)).toList();
             }
-            if (previousRow != null || wraparoundRow != null) {
-                double cursor = provisionalCursor;
+            if (verticallyConstrained) {
                 candidates = candidates.stream()
-                    .filter(id -> previousRow == null || fitsVertically(id, cursor, midpointWidth(id, table, rowHeightBlocks), previousRow, table))
-                    .filter(id -> wraparoundRow == null || fitsVertically(id, cursor, midpointWidth(id, table, rowHeightBlocks), wraparoundRow, table))
+                    .filter(id -> fitsWithEstimate(sequence, id, targetCellCount, table, rowHeightBlocks, circumferenceBlocks, averages, previousRow, wraparoundRow))
                     .toList();
             }
             if (candidates.isEmpty()) {
@@ -395,14 +397,73 @@ public final class PeriodicCoherenceProof {
             BiomeId chosen = pickPreferringUnused(candidates, globallyUsed, usedInThisRow, random);
             sequence.add(chosen);
             usedInThisRow.add(chosen);
-            provisionalCursor += midpointWidth(chosen, table, rowHeightBlocks);
         }
         return sequence;
     }
 
-    private static double midpointWidth(BiomeId id, RawRuleTable table, double rowHeightBlocks) {
-        RawRuleTable.SizeRange range = table.sizeRangeOf(id);
-        return ((range.minWidthBlocks() + range.maxWidthBlocks()) / 2.0) / rowHeightBlocks;
+    /** Catalog-wide average min/max width (in row-height units), used only to estimate the NOT-YET-CHOSEN portion of a row still being built - see {@link #fitsWithEstimate}. */
+    private record CatalogAverageWidths(double averageMinWidth, double averageMaxWidth) {
+    }
+
+    private static CatalogAverageWidths catalogAverageWidths(RawRuleTable table, double rowHeightBlocks) {
+        double totalMin = 0;
+        double totalMax = 0;
+        for (BiomeId id : table.allBiomeIds()) {
+            RawRuleTable.SizeRange range = table.sizeRangeOf(id);
+            totalMin += range.minWidthBlocks() / rowHeightBlocks;
+            totalMax += range.maxWidthBlocks() / rowHeightBlocks;
+        }
+        int count = table.allBiomeIds().size();
+        return new CatalogAverageWidths(totalMin / count, totalMax / count);
+    }
+
+    /**
+     * Would placing {@code candidate} right after {@code committedSoFar} still be legal
+     * against previousRow/wraparoundRow, using an ESTIMATED position? The estimate uses the
+     * exact same proportional-fraction formula {@link RowFeasibility} uses for the real
+     * final widths - {@code committedSoFar + candidate}'s own low/high sums are exact (their
+     * real declared ranges), the still-unchosen remainder is approximated via the catalog's
+     * own average low/high. This converges to the EXACT fraction as the row fills in (zero
+     * remainder left), and is already exact from the very first cell whenever every
+     * candidate biome shares the same range (the degenerate case that broke the old flat
+     * midpoint estimate - see this class's own {@link #buildRowSequence} doc).
+     */
+    private static boolean fitsWithEstimate(
+        List<BiomeId> committedSoFar, BiomeId candidate, int targetCellCount, RawRuleTable table, double rowHeightBlocks,
+        double circumferenceBlocks, CatalogAverageWidths averages, PeriodicRowLayout.Row previousRow, PeriodicRowLayout.Row wraparoundRow
+    ) {
+        double committedMin = 0;
+        double committedMax = 0;
+        for (BiomeId id : committedSoFar) {
+            RawRuleTable.SizeRange range = table.sizeRangeOf(id);
+            committedMin += range.minWidthBlocks() / rowHeightBlocks;
+            committedMax += range.maxWidthBlocks() / rowHeightBlocks;
+        }
+        RawRuleTable.SizeRange candidateRange = table.sizeRangeOf(candidate);
+        double candidateMin = candidateRange.minWidthBlocks() / rowHeightBlocks;
+        double candidateMax = candidateRange.maxWidthBlocks() / rowHeightBlocks;
+
+        int remaining = targetCellCount - committedSoFar.size() - 1;
+        double estimatedTotalMin = committedMin + candidateMin + remaining * averages.averageMinWidth();
+        double estimatedTotalMax = committedMax + candidateMax + remaining * averages.averageMaxWidth();
+        // Degenerate (zero estimated slack, e.g. every remaining candidate has an
+        // identical min=max) - fall back to the midpoint fraction rather than divide by zero.
+        double fraction = estimatedTotalMax <= estimatedTotalMin
+            ? 0.5
+            : Math.max(0, Math.min(1, (circumferenceBlocks - estimatedTotalMin) / (estimatedTotalMax - estimatedTotalMin)));
+
+        double start = 0;
+        for (BiomeId id : committedSoFar) {
+            RawRuleTable.SizeRange range = table.sizeRangeOf(id);
+            double min = range.minWidthBlocks() / rowHeightBlocks;
+            double max = range.maxWidthBlocks() / rowHeightBlocks;
+            start += min + fraction * (max - min);
+        }
+        double width = candidateMin + fraction * (candidateMax - candidateMin);
+
+        boolean okPrevious = previousRow == null || fitsVertically(candidate, start, width, previousRow, table);
+        boolean okWraparound = wraparoundRow == null || fitsVertically(candidate, start, width, wraparoundRow, table);
+        return okPrevious && okWraparound;
     }
 
     private static boolean fitsVertically(BiomeId candidateId, double start, double width, PeriodicRowLayout.Row previousRow, RawRuleTable table) {
