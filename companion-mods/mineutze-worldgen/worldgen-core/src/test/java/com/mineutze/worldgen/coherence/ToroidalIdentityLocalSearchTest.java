@@ -6,7 +6,6 @@ import com.mineutze.worldgen.biomegraph.BiomeId;
 import org.junit.jupiter.api.Test;
 
 import java.util.HashSet;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -21,7 +20,9 @@ import static com.mineutze.worldgen.coherence.ToroidalTestTables.A;
 import static com.mineutze.worldgen.coherence.ToroidalTestTables.B;
 import static com.mineutze.worldgen.coherence.ToroidalTestTables.C;
 import static com.mineutze.worldgen.coherence.ToroidalTestTables.D;
+import static com.mineutze.worldgen.coherence.ToroidalTestTables.everyCellHolds;
 import static com.mineutze.worldgen.coherence.ToroidalTestTables.fullyLegalTable;
+import static com.mineutze.worldgen.coherence.ToroidalTestTables.threeColoring;
 import static com.mineutze.worldgen.coherence.ToroidalTestTables.tableWithNoLegalTriangle;
 
 class ToroidalIdentityLocalSearchTest {
@@ -29,24 +30,6 @@ class ToroidalIdentityLocalSearchTest {
     private static final long GENEROUS_MILLIS = 10_000;
     private static final long STALL_STEPS = 500_000;
     private static final long SEED = 1234L;
-
-    /** A proper 3-coloring of the hex torus: color = (q - r) mod 3 differs across every neighbor direction. Only well-defined when both sides are multiples of 3. */
-    private static Map<ToroidalPos, BiomeId> threeColoring(ToroidalGrid grid, BiomeId first, BiomeId second, BiomeId third) {
-        List<BiomeId> colors = List.of(first, second, third);
-        Map<ToroidalPos, BiomeId> assignment = new LinkedHashMap<>();
-        for (ToroidalPos pos : grid.allPositionsInFillOrder()) {
-            assignment.put(pos, colors.get(Math.floorMod(pos.q() - pos.r(), 3)));
-        }
-        return assignment;
-    }
-
-    private static Map<ToroidalPos, BiomeId> everyCellHolds(ToroidalGrid grid, BiomeId biome) {
-        Map<ToroidalPos, BiomeId> assignment = new LinkedHashMap<>();
-        for (ToroidalPos pos : grid.allPositionsInFillOrder()) {
-            assignment.put(pos, biome);
-        }
-        return assignment;
-    }
 
     @Test
     void verifyAcceptsALegalTilingThatCoversTheRequiredBiomes() {
