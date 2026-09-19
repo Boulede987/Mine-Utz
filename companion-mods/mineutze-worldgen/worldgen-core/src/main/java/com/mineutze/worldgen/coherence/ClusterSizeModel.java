@@ -15,32 +15,52 @@ import java.util.Map;
  * DOWN; a range that contains no whole atom count is rejected outright, because no cluster
  * could ever satisfy it at this atom size.
  *
- * <p><b>Roundness</b> ("a biome must be roughly round", user requirement): a cluster's
- * perimeter - its cell-edges that touch a different biome - may not exceed {@code
- * roundnessRatio} times the smallest perimeter any cluster of that many hexagons can have,
- * {@code 2 * ceil(sqrt(12n - 3))} (Harary and Harborth, hexagonal animals). A ratio of 1
- * demands the most compact shape possible; larger values tolerate more ragged ones. The number
- * is a design choice, not a measured constant - "roughly round" has no exact definition.
+ * <p><b>Shape</b>: biomes may be irregular - natural, not round - but not thin snakes (user,
+ * 2026-09-19; replaced an earlier perimeter-based roundness rule). "Thin" is judged by whether a
+ * part of the cluster is thick, and how thick scales with the cluster (see {@link Thickness}):
+ * a large cluster must be built from flower-shaped cores (a cell plus its six neighbors, three
+ * cells across), and every cell must be within {@code tailReachCells} steps of one, so bumps and
+ * short necks are allowed but a long thin arm is not.
  */
 final class ClusterSizeModel {
 
+    /** The kind of solid piece every cell of a cluster must belong to, chosen by the cluster's size. */
+    enum Thickness {
+        /** One or two cells: nothing to check. */
+        NONE,
+        /** Three to six cells: every cell must be part of a triangle of three mutually adjacent cluster cells. */
+        TRIANGLE,
+        /** Seven or more cells: the cluster must contain flowers, and every cell must be within the tail reach of a flower's center. */
+        FLOWER
+    }
+
+    private static final int SMALLEST_CLUSTER_NEEDING_A_TRIANGLE = 3;
+    private static final int SMALLEST_CLUSTER_ABLE_TO_HOLD_A_FLOWER = 7;
     private static final double ROUNDING_TOLERANCE = 1e-9;
 
     private final List<BiomeId> biomes;
     private final Map<BiomeId, Integer> indexOf = new HashMap<>();
     private final int[] minCells;
     private final int[] maxCells;
-    private final double roundnessRatio;
+    private final int tailReachCells;
+    private final int smallestClusterNeedingAFlower;
 
-    ClusterSizeModel(RawRuleTable table, double atomWidthBlocks, double roundnessRatio) {
+    /** {@code smallestClusterNeedingAFlower} is the cell count from which a cluster must contain flowers; below it (down to three cells) only triangles are required. */
+    ClusterSizeModel(RawRuleTable table, double atomWidthBlocks, int tailReachCells, int smallestClusterNeedingAFlower) {
         if (atomWidthBlocks <= 0) {
             throw new IllegalArgumentException("ClusterSizeModel: atomWidthBlocks must be positive, got " + atomWidthBlocks);
         }
-        if (roundnessRatio < 1.0) {
-            throw new IllegalArgumentException("ClusterSizeModel: roundnessRatio must be at least 1 (no shape is more compact than the minimum), got " + roundnessRatio);
+        if (tailReachCells < 1) {
+            throw new IllegalArgumentException("ClusterSizeModel: tailReachCells must be at least 1 (a flower's own rim is one step from its center), got " + tailReachCells);
+        }
+        if (smallestClusterNeedingAFlower < SMALLEST_CLUSTER_ABLE_TO_HOLD_A_FLOWER) {
+            throw new IllegalArgumentException(
+                "ClusterSizeModel: smallestClusterNeedingAFlower must be at least " + SMALLEST_CLUSTER_ABLE_TO_HOLD_A_FLOWER + " (a smaller cluster cannot hold a flower), got " + smallestClusterNeedingAFlower
+            );
         }
         this.biomes = table.allBiomeIds();
-        this.roundnessRatio = roundnessRatio;
+        this.tailReachCells = tailReachCells;
+        this.smallestClusterNeedingAFlower = smallestClusterNeedingAFlower;
         this.minCells = new int[biomes.size()];
         this.maxCells = new int[biomes.size()];
         for (int index = 0; index < biomes.size(); index++) {
@@ -68,34 +88,26 @@ final class ClusterSizeModel {
         return maxCells[indexOf.get(biome)];
     }
 
-    /** Largest perimeter, in cell-edges, a cluster of {@code cellCount} cells may have and still count as round. */
-    int allowedPerimeter(int cellCount) {
-        return (int) Math.ceil(roundnessRatio * minimumPerimeter(cellCount) - ROUNDING_TOLERANCE);
+    int tailReachCells() {
+        return tailReachCells;
     }
 
-    /** Smallest possible perimeter of a hexagon cluster of {@code cellCount} cells: 6, 10, 12, ... 18 for the seven-cell flower. */
-    static int minimumPerimeter(int cellCount) {
-        int target = 12 * cellCount - 3;
-        int root = (int) Math.ceil(Math.sqrt(target));
-        while (root * root < target) {
-            root++;
+    Thickness thicknessRequiredFor(int cellCount) {
+        if (cellCount >= smallestClusterNeedingAFlower) {
+            return Thickness.FLOWER;
         }
-        while ((root - 1) * (root - 1) >= target) {
-            root--;
-        }
-        return 2 * root;
+        return cellCount >= SMALLEST_CLUSTER_NEEDING_A_TRIANGLE ? Thickness.TRIANGLE : Thickness.NONE;
     }
 
-    /** How far a cluster is from valid: one point per cell outside its biome's range plus one per perimeter edge beyond what roundness allows. Zero means valid. */
-    int violation(BiomeId biome, int cellCount, int perimeter) {
-        return violation(indexOf.get(biome), cellCount, perimeter);
+    /** How far a cluster is from valid: one point per cell outside its biome's range plus one per thin cell (a cell not part of the solid shape its size requires). Zero means valid. */
+    int violation(BiomeId biome, int cellCount, int thinCells) {
+        return violation(indexOf.get(biome), cellCount, thinCells);
     }
 
     /** As {@link #violation(BiomeId, int, int)}, by the biome's position in the rule table's biome list - what the search's hot loop uses. */
-    int violation(int biomeIndex, int cellCount, int perimeter) {
+    int violation(int biomeIndex, int cellCount, int thinCells) {
         int outsideRange = Math.max(0, minCells[biomeIndex] - cellCount) + Math.max(0, cellCount - maxCells[biomeIndex]);
-        int beyondRoundness = Math.max(0, perimeter - allowedPerimeter(cellCount));
-        return outsideRange + beyondRoundness;
+        return outsideRange + thinCells;
     }
 
     int minCells(int biomeIndex) {

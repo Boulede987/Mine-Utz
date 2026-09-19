@@ -24,12 +24,13 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class ToroidalSizedLocalSearchTest {
 
     private static final double ATOM_WIDTH = 300;
-    private static final double ROUNDNESS_RATIO = 1.25;
+    private static final int TAIL_REACH = 2;
+    private static final int FLOWER_FROM = 7;
     private static final long SEED = 4321L;
     private static final long GENEROUS_STEPS = 5_000_000;
 
     private static ClusterSizeModel model(RawRuleTable table) {
-        return new ClusterSizeModel(table, ATOM_WIDTH, ROUNDNESS_RATIO);
+        return new ClusterSizeModel(table, ATOM_WIDTH, TAIL_REACH, FLOWER_FROM);
     }
 
     /** Widths 300..300 mean exactly one cell per cluster, so the 3-coloring's single-cell clusters are all valid. */
@@ -81,19 +82,82 @@ class ToroidalSizedLocalSearchTest {
         assertFalse(message.contains("cluster violation=0"), message);
     }
 
-    /** Right area, wrong shape: a straight line of five cells fits A's range but is far from round. */
+    /** Right area, wrong shape: a straight line of five cells fits A's range but is a snake - no cell of it sits in a triangle. */
     @Test
-    void verifyRejectsAClusterThatIsInRangeButNotRound() {
+    void verifyRejectsAThinLineThatFitsTheSizeRange() {
+        ToroidalGrid grid = new ToroidalGrid(8, 8);
+        RawRuleTable table = fullyLegalTableWithWidths(300, 3000, A, B);
+
+        String message = rejectionMessage(table, grid, blobAndRest(grid, A, B, cells(0, 0, 1, 0, 2, 0, 3, 0, 4, 0)));
+
+        assertFalse(message.contains("cluster violation=0"), message);
+    }
+
+    @Test
+    void verifyAcceptsAThreeCellTriangleWhichIsTheSmallestSolidShape() {
+        ToroidalGrid grid = new ToroidalGrid(8, 8);
+        RawRuleTable table = fullyLegalTableWithWidths(300, 3000, A, B);
+
+        assertDoesNotThrow(() -> ToroidalSizedLocalSearch.verify(table, grid, model(table), blobAndRest(grid, A, B, cells(3, 3, 4, 3, 3, 4))));
+    }
+
+    /** A band two cells wide that wraps the whole torus is wide enough for a triangle everywhere but has no flower core, so at this size it is a snake. */
+    @Test
+    void verifyRejectsAStripTwoCellsWideBecauseALargeClusterNeedsAFlower() {
         ToroidalGrid grid = new ToroidalGrid(8, 8);
         RawRuleTable table = fullyLegalTableWithWidths(300, 3000, A, B);
         Map<ToroidalPos, BiomeId> assignment = new LinkedHashMap<>();
         for (ToroidalPos pos : grid.allPositionsInFillOrder()) {
-            assignment.put(pos, pos.r() == 0 && pos.q() < 5 ? A : B);
+            assignment.put(pos, pos.r() < 2 ? A : B);
         }
 
         String message = rejectionMessage(table, grid, assignment);
 
-        assertFalse(message.contains("cluster violation=0"), message);
+        assertTrue(message.contains("cluster violation=16"), "every cell of the 16-cell band is thin: " + message);
+    }
+
+    private static final int[] FLOWER = {3, 3, 4, 3, 4, 2, 3, 2, 2, 3, 2, 4, 3, 4};
+
+    private static int[] withCells(int[] base, int... extra) {
+        int[] all = java.util.Arrays.copyOf(base, base.length + extra.length);
+        System.arraycopy(extra, 0, all, base.length, extra.length);
+        return all;
+    }
+
+    /** A flower plus one cell beyond its rim: that cell is two steps from the core, within the tail reach of 2. */
+    @Test
+    void verifyAcceptsAFlowerWithABumpWithinTheTailReach() {
+        ToroidalGrid grid = new ToroidalGrid(8, 8);
+        RawRuleTable table = fullyLegalTableWithWidths(300, 3000, A, B);
+
+        assertDoesNotThrow(() -> ToroidalSizedLocalSearch.verify(table, grid, model(table), blobAndRest(grid, A, B, cells(withCells(FLOWER, 5, 3)))));
+    }
+
+    /** One more cell along the same tail sits three steps from the core, past the reach of 2: exactly one thin cell. */
+    @Test
+    void verifyRejectsATailLongerThanTheReachByExactlyTheCellsBeyondIt() {
+        ToroidalGrid grid = new ToroidalGrid(8, 8);
+        RawRuleTable table = fullyLegalTableWithWidths(300, 3000, A, B);
+
+        String message = rejectionMessage(table, grid, blobAndRest(grid, A, B, cells(withCells(FLOWER, 5, 3, 6, 3))));
+
+        assertTrue(message.contains("cluster violation=1"), message);
+    }
+
+    private static java.util.Set<ToroidalPos> cells(int... coordinates) {
+        java.util.Set<ToroidalPos> result = new java.util.HashSet<>();
+        for (int index = 0; index < coordinates.length; index += 2) {
+            result.add(new ToroidalPos(coordinates[index], coordinates[index + 1]));
+        }
+        return result;
+    }
+
+    private static Map<ToroidalPos, BiomeId> blobAndRest(ToroidalGrid grid, BiomeId blob, BiomeId rest, java.util.Set<ToroidalPos> blobCells) {
+        Map<ToroidalPos, BiomeId> assignment = new LinkedHashMap<>();
+        for (ToroidalPos pos : grid.allPositionsInFillOrder()) {
+            assignment.put(pos, blobCells.contains(pos) ? blob : rest);
+        }
+        return assignment;
     }
 
     @Test
