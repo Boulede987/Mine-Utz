@@ -172,6 +172,13 @@ tasks.register('toroidalSizedLocalSearch', JavaExec) {
     mainClass = 'com.mineutze.worldgen.coherence.ToroidalSizedLocalSearchRunner'
 }
 
+tasks.register('toroidalSolvability', JavaExec) {
+    group = 'verification'
+    description = 'The evidence for "every world seed solves": many independent single-seed searches against the real catalog, with per-seed solve rate, failure bound and restarts needed. Long-running. Run with: ./gradlew :worldgen-core:toroidalSolvability'
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'com.mineutze.worldgen.coherence.ToroidalSolvabilityRunner'
+}
+
 tasks.register('graphEditorDeepCheck', JavaExec) {
     group = 'verification'
     description = 'The graph editor\'s "Deep check" button - runs the real exhaustive GeometricFeasibilityProof against the editor\'s currently SAVED graph (not the hardcoded catalog directly, though it\'s the same file now). Run with: ./gradlew :worldgen-core:graphEditorDeepCheck'
