@@ -45,8 +45,11 @@ public final class PeriodicCoherenceProof {
     // this exact seed against an unchanged biome-graph.json must find the same certificate.
     private static final long RANDOM_SEED = 20260916L;
     private static final int[] ROW_COUNTS_TO_TRY = {65, 80, 100};
-    private static final int MIN_CELLS_PER_ROW = 6;
-    private static final int MAX_CELLS_PER_ROW = 16;
+    // Package-visible (not private): PatternDiversityLowerBound reuses these same bounds
+    // when constructing alternative rows via tryBuildLegalRow, rather than a second,
+    // independently-maintained copy that could silently drift from the real search's own.
+    static final int MIN_CELLS_PER_ROW = 6;
+    static final int MAX_CELLS_PER_ROW = 16;
     private static final int ROW_BUILD_RETRIES = 100;
     private static final int ATTEMPTS_PER_ROW_COUNT = 200;
     private static final Path REPORT_PATH = Path.of("doc", "graph-coherence-existence-proof-report.txt");
@@ -95,20 +98,47 @@ public final class PeriodicCoherenceProof {
      * transitions against, not just a human-readable report of one.
      */
     public static WitnessSearchResult findWitness(RawRuleTable table) {
+        return findWitness(table, RANDOM_SEED);
+    }
+
+    /**
+     * Same search as {@link #findWitness(RawRuleTable)}, but driven by an explicit random
+     * seed instead of the fixed internal {@link #RANDOM_SEED} constant - different seeds
+     * deterministically produce different witnesses (real basis for {@code
+     * SeedDrivenPatchGenerator}'s own per-worldSeed pattern generation, 2026-09-17 user
+     * direction). The fixed-seed overload above stays reproducible for the production
+     * report/existing callers; this is the one real point of variation.
+     */
+    public static WitnessSearchResult findWitness(RawRuleTable table, long randomSeed) {
+        return findWitness(table, randomSeed, MIN_CELLS_PER_ROW, MAX_CELLS_PER_ROW, ROW_COUNTS_TO_TRY, ATTEMPTS_PER_ROW_COUNT);
+    }
+
+    /**
+     * Fully parameterized search - the two overloads above delegate here using the
+     * production defaults. Real basis for the periodic-patch WIDTH-scaling question
+     * (2026-09-17): {@code minCellsPerRow}/{@code maxCellsPerRow} are normally fixed
+     * production constants, but circumference (the row's own wrap distance, real "width" of
+     * the patch) is a direct, mechanical function of how many cells a row can hold - this
+     * lets a caller (e.g. a width-scaling experiment) drive that directly without touching
+     * the production defaults every other caller relies on.
+     */
+    public static WitnessSearchResult findWitness(
+        RawRuleTable table, long randomSeed, int minCellsPerRow, int maxCellsPerRow, int[] rowCountsToTry, int attemptsPerRowCount
+    ) {
         double rowHeightBlocks = defaultRowHeightBlocks(table);
         System.out.println(
             "Loaded " + table.allBiomeIds().size() + " biomes. rowHeightBlocks=" + rowHeightBlocks + " (independent of any live-algorithm constant)."
         );
 
-        Random random = new Random(RANDOM_SEED);
+        Random random = new Random(randomSeed);
         int totalAttempts = 0;
-        for (int rowCount : ROW_COUNTS_TO_TRY) {
+        for (int rowCount : rowCountsToTry) {
             long rowCountStartNanos = System.nanoTime();
             int[] rowsCompletedHistogram = new int[rowCount + 1];
             int checkerRejections = 0;
-            for (int attempt = 0; attempt < ATTEMPTS_PER_ROW_COUNT; attempt++) {
+            for (int attempt = 0; attempt < attemptsPerRowCount; attempt++) {
                 totalAttempts++;
-                AttemptResult attemptResult = attemptGrid(table, rowCount, MIN_CELLS_PER_ROW, MAX_CELLS_PER_ROW, rowHeightBlocks, random);
+                AttemptResult attemptResult = attemptGrid(table, rowCount, minCellsPerRow, maxCellsPerRow, rowHeightBlocks, random);
                 rowsCompletedHistogram[attemptResult.rowsCompleted()]++;
                 if (attemptResult.layout() == null) {
                     continue;
@@ -129,8 +159,8 @@ public final class PeriodicCoherenceProof {
             }
             double elapsedSeconds = (System.nanoTime() - rowCountStartNanos) / 1_000_000_000.0;
             System.out.println(
-                "rowCount=" + rowCount + ": no success after " + ATTEMPTS_PER_ROW_COUNT + " attempts (" + String.format("%.1f", elapsedSeconds)
-                    + "s, " + String.format("%.3f", elapsedSeconds / ATTEMPTS_PER_ROW_COUNT) + "s/attempt). Rows-completed histogram "
+                "rowCount=" + rowCount + ": no success after " + attemptsPerRowCount + " attempts (" + String.format("%.1f", elapsedSeconds)
+                    + "s, " + String.format("%.3f", elapsedSeconds / attemptsPerRowCount) + "s/attempt). Rows-completed histogram "
                     + Arrays.toString(rowsCompletedHistogram) + " (index = how many rows got placed before construction gave up; "
                     + rowCount + " means construction finished but ConstraintChecker rejected it). ConstraintChecker rejections: "
                     + checkerRejections + ". Trying a larger rowCount..."
@@ -365,8 +395,50 @@ public final class PeriodicCoherenceProof {
      * 15-20 covered no matter how much retry budget was thrown at it). The caller now only
      * commits a row's ids to the real set once that row is actually accepted.
      *
-     * @return {@code null} if the walk hit a dead end (no legal next step) - caller retries with a fresh walk.
+     * <p><b>Real CELL-level backtracking (2026-09-17)</b> - direct fix for a real, explained
+     * asymmetry: row-STACKING (vertical growth) already backtracks at the row level (pop the
+     * last row, re-roll it - see {@link #attemptGrid}), so an occasional dead end costs one
+     * row's progress, not the whole attempt. Building the cells WITHIN one row (horizontal
+     * growth) used to have no such recovery - any dead end anywhere in the walk discarded
+     * the ENTIRE partial sequence, so per-cell failure probability compounded with zero
+     * recovery, making long rows disproportionately fragile (real, measured: rows past ~16
+     * cells got WORSE, not better, before this fix - see this class's own top-level doc).
+     * Now a dead end at position {@code i} pops position {@code i-1}'s own choice and
+     * excludes it from being immediately re-picked there, exactly mirroring
+     * {@link #attemptGrid}'s own row-level strategy one level down - bounded by {@link
+     * #cellBacktrackBudgetFor} so a genuinely pathological walk still terminates.
+     *
+     * <p><b>Budget SCALES with row length, not a flat constant (2026-09-17 real tuning):</b>
+     * a flat 2000-backtrack budget measurably slowed the real 66-biome search down (9m7s for
+     * 73 attempts at the current 16-cell row cap, vs sub-minute before this fix) - a
+     * genuinely doomed SHORT row could burn most of that budget recovering before giving up,
+     * instead of failing fast like the old flat-restart approach did. Scaling the budget to
+     * {@code targetCellCount} keeps short rows cheap (few real backtrack points exist to
+     * exploit anyway) while still giving long rows (the whole reason this fix exists) real
+     * room to recover.
+     *
+     * <p><b>GATED OFF entirely for today's normal row lengths (2026-09-17, second real
+     * tuning):</b> even the scaled-down budget above was measurably WORSE than a flat
+     * restart for {@code targetCellCount <= MAX_CELLS_PER_ROW} (19m30s, one real trial) -
+     * this mechanism's whole reason for existing is rows MUCH longer than today's 16-cell
+     * cap (the periodic-patch width-scaling question, see this class's own git history
+     * 2026-09-17), where a full restart is expensive and recovery genuinely pays off. Below
+     * that length, a restart is already cheap, so backtracking is pure overhead with nothing
+     * to offset it. {@link #isCellBacktrackingWorthwhile} keeps today's default search
+     * byte-behavior-identical to before this whole mechanism existed (first dead end fails
+     * immediately, same as the original flat-restart {@code buildRowSequence}) - only rows
+     * past the normal cap ever pay the backtracking cost, and only they get its benefit.
+     *
+     * @return {@code null} if the walk exhausted its cell-backtrack budget - caller retries with a fresh walk.
      */
+    private static int cellBacktrackBudgetFor(int targetCellCount) {
+        return Math.max(50, targetCellCount * 15);
+    }
+
+    private static boolean isCellBacktrackingWorthwhile(int targetCellCount) {
+        return targetCellCount > MAX_CELLS_PER_ROW;
+    }
+
     private static List<BiomeId> buildRowSequence(
         RawRuleTable table, int targetCellCount, Set<BiomeId> globallyUsed, Random random,
         PeriodicRowLayout.Row previousRow, PeriodicRowLayout.Row wraparoundRow, double rowHeightBlocks, double circumferenceBlocks
@@ -376,49 +448,87 @@ public final class PeriodicCoherenceProof {
         // Computed once per row attempt, not per candidate - real per-biome ranges don't
         // change mid-walk, only which ones are already committed does.
         CatalogAverageWidths averages = verticallyConstrained ? catalogAverageWidths(table, rowHeightBlocks) : null;
+        int cellBacktrackBudget = cellBacktrackBudgetFor(targetCellCount);
 
-        // The row's OWN starting cell must also prefer unused biomes, not just its
-        // interior steps - real, measured bug: leaving this uniform-random over all 66
-        // left coverage stuck around 20-45/66 even with a large retry budget, since the
-        // single biggest lever for reaching NEW territory (where a row even starts) was
-        // ignoring coverage entirely.
-        List<BiomeId> firstCandidates = allIds.stream()
-            .filter(id -> !verticallyConstrained
-                || fitsWithEstimate(List.of(), id, targetCellCount, table, rowHeightBlocks, circumferenceBlocks, averages, previousRow, wraparoundRow))
-            .toList();
-        if (firstCandidates.isEmpty()) {
-            return null;
-        }
-        // Local to this one row/attempt, separate from globallyUsed (read-only here, see
-        // this method's own doc) - without it, nothing stops the walk from placing the
-        // same biome twice within a single row, since globallyUsed no longer updates
-        // mid-walk. Not a correctness issue on its own (immediate repeats are already
-        // impossible - isLegal(X,X) is always false), just wasted coverage opportunity.
-        Set<BiomeId> usedInThisRow = new HashSet<>();
-        BiomeId first = pickPreferringUnused(firstCandidates, globallyUsed, usedInThisRow, random);
-        usedInThisRow.add(first);
         List<BiomeId> sequence = new ArrayList<>();
-        sequence.add(first);
-        for (int i = 1; i < targetCellCount; i++) {
-            BiomeId previous = sequence.get(sequence.size() - 1);
-            boolean isClosingCell = i == targetCellCount - 1;
-            List<BiomeId> candidates = legalCandidatesAfter(previous, table);
-            if (isClosingCell) {
-                candidates = candidates.stream().filter(id -> table.isLegal(id, first)).toList();
-            }
-            if (verticallyConstrained) {
-                candidates = candidates.stream()
-                    .filter(id -> fitsWithEstimate(sequence, id, targetCellCount, table, rowHeightBlocks, circumferenceBlocks, averages, previousRow, wraparoundRow))
-                    .toList();
-            }
+        // excludedAtPosition.get(i) = biomes already tried-and-failed AT position i, for
+        // THIS position's current predecessor context - cleared whenever backtracking past
+        // position i changes what that predecessor context even is (a fresh slate, real
+        // stale-exclusion bug avoided, not just "always append, never reset").
+        List<Set<BiomeId>> excludedAtPosition = new ArrayList<>();
+        int cellBacktracksUsed = 0;
+        boolean backtrackingWorthwhile = isCellBacktrackingWorthwhile(targetCellCount);
+
+        while (sequence.size() < targetCellCount) {
+            int i = sequence.size();
+            ensureExclusionSlot(excludedAtPosition, i);
+            List<BiomeId> candidates = candidatesAtPosition(
+                i, sequence, allIds, table, targetCellCount, verticallyConstrained, rowHeightBlocks, circumferenceBlocks, averages, previousRow,
+                wraparoundRow
+            );
+            candidates = candidates.stream().filter(id -> !excludedAtPosition.get(i).contains(id)).toList();
+
             if (candidates.isEmpty()) {
-                return null;
+                if (i == 0 || !backtrackingWorthwhile || cellBacktracksUsed >= cellBacktrackBudget) {
+                    return null;
+                }
+                excludedAtPosition.get(i).clear();
+                BiomeId poppedValue = sequence.remove(sequence.size() - 1);
+                ensureExclusionSlot(excludedAtPosition, i - 1);
+                excludedAtPosition.get(i - 1).add(poppedValue);
+                cellBacktracksUsed++;
+                continue;
             }
+
+            // Recomputed fresh each step, not incrementally maintained through backtracking
+            // - simpler and correctness-safe (a biome CAN legitimately repeat non-
+            // consecutively within a row, so naively "un-marking" a popped value would be
+            // wrong if it still appears elsewhere in the standing sequence).
+            Set<BiomeId> usedInThisRow = new HashSet<>(sequence);
             BiomeId chosen = pickPreferringUnused(candidates, globallyUsed, usedInThisRow, random);
             sequence.add(chosen);
-            usedInThisRow.add(chosen);
         }
         return sequence;
+    }
+
+    private static void ensureExclusionSlot(List<Set<BiomeId>> excludedAtPosition, int index) {
+        while (excludedAtPosition.size() <= index) {
+            excludedAtPosition.add(new HashSet<>());
+        }
+    }
+
+    /**
+     * Real legal candidates at position {@code i} given {@code sequence}'s own current
+     * (possibly backtracked) state - same branching {@code buildRowSequence} always had
+     * (first cell prefers coverage/fits the vertical estimate; interior cells must be legal
+     * after their predecessor, the CLOSING cell must ALSO be legal back to the first cell,
+     * and every cell is vertically-estimate-checked when constrained), just extracted so it
+     * can be called fresh at any position, including one being RE-tried after a backtrack.
+     */
+    private static List<BiomeId> candidatesAtPosition(
+        int i, List<BiomeId> sequence, List<BiomeId> allIds, RawRuleTable table, int targetCellCount, boolean verticallyConstrained,
+        double rowHeightBlocks, double circumferenceBlocks, CatalogAverageWidths averages, PeriodicRowLayout.Row previousRow,
+        PeriodicRowLayout.Row wraparoundRow
+    ) {
+        if (i == 0) {
+            return allIds.stream()
+                .filter(id -> !verticallyConstrained
+                    || fitsWithEstimate(List.of(), id, targetCellCount, table, rowHeightBlocks, circumferenceBlocks, averages, previousRow, wraparoundRow))
+                .toList();
+        }
+        BiomeId previous = sequence.get(i - 1);
+        boolean isClosingCell = i == targetCellCount - 1;
+        List<BiomeId> candidates = legalCandidatesAfter(previous, table);
+        if (isClosingCell) {
+            BiomeId first = sequence.get(0);
+            candidates = candidates.stream().filter(id -> table.isLegal(id, first)).toList();
+        }
+        if (verticallyConstrained) {
+            candidates = candidates.stream()
+                .filter(id -> fitsWithEstimate(sequence, id, targetCellCount, table, rowHeightBlocks, circumferenceBlocks, averages, previousRow, wraparoundRow))
+                .toList();
+        }
+        return candidates;
     }
 
     /** Catalog-wide average min/max width (in row-height units), used only to estimate the NOT-YET-CHOSEN portion of a row still being built - see {@link #fitsWithEstimate}. */
