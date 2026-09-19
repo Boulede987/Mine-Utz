@@ -11,6 +11,7 @@ import static com.mineutze.worldgen.coherence.ToroidalTestTables.B;
 import static com.mineutze.worldgen.coherence.ToroidalTestTables.C;
 import static com.mineutze.worldgen.coherence.ToroidalTestTables.everyCellHolds;
 import static com.mineutze.worldgen.coherence.ToroidalTestTables.fullyLegalTableWithWidths;
+import static com.mineutze.worldgen.coherence.ToroidalTestTables.legalPairWithSizes;
 import static com.mineutze.worldgen.coherence.ToroidalTestTables.tableWithNoLegalTriangle;
 import static com.mineutze.worldgen.coherence.ToroidalTestTables.threeColoring;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
@@ -24,13 +25,12 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class ToroidalSizedLocalSearchTest {
 
     private static final double ATOM_WIDTH = 300;
-    private static final int TAIL_REACH = 2;
-    private static final int FLOWER_FROM = 7;
+    private static final ShapeRule THICKNESS_ONLY = new ShapeRule(ShapeRule.NO_PERIMETER_LIMIT, 3, 7, 2);
     private static final long SEED = 4321L;
     private static final long GENEROUS_STEPS = 5_000_000;
 
     private static ClusterSizeModel model(RawRuleTable table) {
-        return new ClusterSizeModel(table, ATOM_WIDTH, TAIL_REACH, FLOWER_FROM);
+        return new ClusterSizeModel(table, ATOM_WIDTH, THICKNESS_ONLY);
     }
 
     /** Widths 300..300 mean exactly one cell per cluster, so the 3-coloring's single-cell clusters are all valid. */
@@ -160,6 +160,29 @@ class ToroidalSizedLocalSearchTest {
         return assignment;
     }
 
+    /** With only a perimeter limit (no thickness checks), a straight line of eight cells is in range but its perimeter of 34 exceeds 1.5 x the minimum 20 = 30 by exactly 4. */
+    @Test
+    void verifyRejectsAClusterWhosePerimeterExceedsTheRuleByExactlyTheExcessEdges() {
+        ToroidalGrid grid = new ToroidalGrid(10, 10);
+        RawRuleTable table = fullyLegalTableWithWidths(300, 3000, A, B);
+        ClusterSizeModel perimeterOnly = new ClusterSizeModel(table, ATOM_WIDTH, new ShapeRule(1.5, Integer.MAX_VALUE, Integer.MAX_VALUE, 2));
+        Map<ToroidalPos, BiomeId> line = blobAndRest(grid, A, B, cells(0, 0, 1, 0, 2, 0, 3, 0, 4, 0, 5, 0, 6, 0, 7, 0));
+
+        String message = assertThrows(IllegalStateException.class, () -> ToroidalSizedLocalSearch.verify(table, grid, perimeterOnly, line)).getMessage();
+
+        assertTrue(message.contains("cluster violation=4"), message);
+    }
+
+    /** The same eight cells packed as a flower plus one cell have perimeter 20, well inside the limit. */
+    @Test
+    void verifyAcceptsACompactClusterUnderThePerimeterLimit() {
+        ToroidalGrid grid = new ToroidalGrid(10, 10);
+        RawRuleTable table = fullyLegalTableWithWidths(300, 3000, A, B);
+        ClusterSizeModel perimeterOnly = new ClusterSizeModel(table, ATOM_WIDTH, new ShapeRule(1.5, Integer.MAX_VALUE, Integer.MAX_VALUE, 2));
+
+        assertDoesNotThrow(() -> ToroidalSizedLocalSearch.verify(table, grid, perimeterOnly, blobAndRest(grid, A, B, cells(withCells(FLOWER, 5, 3)))));
+    }
+
     @Test
     void verifyRejectsAPatternMissingABiome() {
         ToroidalGrid grid = new ToroidalGrid(8, 8);
@@ -216,6 +239,32 @@ class ToroidalSizedLocalSearchTest {
 
         assertNull(result.assignment());
         assertEquals(result.bestCost(), ToroidalSizedLocalSearch.cost(table, grid, model(table), result.closestAssignment()));
+    }
+
+    /** Same cross-check as above but with a perimeter limit switched on, so the search's own perimeter counting is what must agree with the independent recomputation. */
+    @Test
+    void reportedBestCostAgreesWithTheIndependentCostWhenAPerimeterLimitIsActive() {
+        ToroidalGrid grid = new ToroidalGrid(6, 6);
+        RawRuleTable table = fullyLegalTableWithWidths(1500, 1500, A, B, C);
+        ClusterSizeModel withPerimeterLimit = new ClusterSizeModel(table, ATOM_WIDTH, new ShapeRule(1.2, 3, 7, 2));
+
+        ToroidalSizedLocalSearch.Result result = ToroidalSizedLocalSearch.search(table, grid, withPerimeterLimit, SEED, 30_000);
+
+        assertNull(result.assignment());
+        assertEquals(result.bestCost(), ToroidalSizedLocalSearch.cost(table, grid, withPerimeterLimit, result.closestAssignment()));
+    }
+
+    /** A is pinned to exactly 8 cells and the strictest perimeter ratio (1.0) allows it only the 20-edge minimum, so the search must find a genuinely compact 8-cell shape; a search that ignored perimeter would "solve" with a worse one, and its own verify would throw. */
+    @Test
+    void searchFindsACompactShapeWhenAStrictPerimeterLimitBinds() {
+        ToroidalGrid grid = new ToroidalGrid(10, 10);
+        RawRuleTable table = legalPairWithSizes(A, 848, 849, B, 300, 3000);
+        ClusterSizeModel strict = new ClusterSizeModel(table, ATOM_WIDTH, new ShapeRule(1.0, Integer.MAX_VALUE, Integer.MAX_VALUE, 2));
+
+        ToroidalSizedLocalSearch.Result result = ToroidalSizedLocalSearch.search(table, grid, strict, SEED, GENEROUS_STEPS);
+
+        assertNotNull(result.assignment(), "a compact 8-cell blob inside a 100-cell torus exists");
+        assertDoesNotThrow(() -> ToroidalSizedLocalSearch.verify(table, grid, strict, result.assignment()));
     }
 
     @Test

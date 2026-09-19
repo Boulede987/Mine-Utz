@@ -21,7 +21,7 @@ class ParallelSeedSearchTest {
     private static final ToroidalSizedLocalSearch.Schedule SCHEDULE = ToroidalSizedLocalSearch.Schedule.constant(0.4);
 
     private static ClusterSizeModel model(RawRuleTable table) {
-        return new ClusterSizeModel(table, ATOM_WIDTH, 2, 13);
+        return new ClusterSizeModel(table, ATOM_WIDTH, new ShapeRule(ShapeRule.NO_PERIMETER_LIMIT, 3, 13, 2));
     }
 
     /** Solvable, but the short budget below makes most seeds fail and a few succeed - the situation where parallel scheduling could change the answer. */

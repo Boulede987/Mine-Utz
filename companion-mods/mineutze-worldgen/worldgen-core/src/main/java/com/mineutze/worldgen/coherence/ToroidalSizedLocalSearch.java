@@ -25,7 +25,7 @@ import java.util.function.BooleanSupplier;
  *
  * <p>A pattern is VALID when: every edge between two DIFFERENT biomes is legal (same-biome
  * adjacency is just the inside of a cluster); every cluster's cell count is inside its biome's
- * range and it is thick enough - irregular is fine, a thin snake is not ({@link ClusterSizeModel});
+ * range and its shape passes the {@link ShapeRule} - irregular is fine, a thin snake is not;
  * every biome appears.
  *
  * <p>Method: simulated annealing over single-cell reassignments. A cell either adopts a
@@ -137,6 +137,7 @@ final class ToroidalSizedLocalSearch {
             }
             BiomeId biome = assignment.get(start);
             Set<ToroidalPos> cluster = new HashSet<>();
+            int perimeter = 0;
             Deque<ToroidalPos> frontier = new ArrayDeque<>();
             frontier.add(start);
             visited.add(start);
@@ -144,12 +145,14 @@ final class ToroidalSizedLocalSearch {
                 ToroidalPos pos = frontier.poll();
                 cluster.add(pos);
                 for (ToroidalPos neighbor : grid.neighborsOf(pos)) {
-                    if (biome.equals(assignment.get(neighbor)) && visited.add(neighbor)) {
+                    if (!biome.equals(assignment.get(neighbor))) {
+                        perimeter++;
+                    } else if (visited.add(neighbor)) {
                         frontier.add(neighbor);
                     }
                 }
             }
-            clusterViolation += model.violation(biome, cluster.size(), thinCellsOf(grid, model, cluster));
+            clusterViolation += model.violation(biome, cluster.size(), thinCellsOf(grid, model, cluster), perimeter);
         }
 
         int missingBiomes = 0;
@@ -161,10 +164,10 @@ final class ToroidalSizedLocalSearch {
         return new Breakdown(illegalEdges, clusterViolation, missingBiomes);
     }
 
-    /** Independent, set-based count of a cluster's thin cells (see {@link ClusterSizeModel.Thickness}) - shares nothing with the search's array version. */
+    /** Independent, set-based count of a cluster's thin cells (see {@link ShapeRule.Thickness}) - shares nothing with the search's array version. */
     private static int thinCellsOf(ToroidalGrid grid, ClusterSizeModel model, Set<ToroidalPos> cluster) {
-        int tailReachCells = model.tailReachCells();
-        switch (model.thicknessRequiredFor(cluster.size())) {
+        int tailReachCells = model.shape().tailReachCells();
+        switch (model.shape().thicknessRequiredFor(cluster.size())) {
             case NONE:
                 return 0;
             case TRIANGLE:
@@ -246,6 +249,7 @@ final class ToroidalSizedLocalSearch {
         private int stamp;
         private int exploredSize;
         private int exploredThinCells;
+        private int exploredPerimeter;
         private final int[] reachDistance;
         private final int[] reachQueue;
 
@@ -421,7 +425,7 @@ final class ToroidalSizedLocalSearch {
             for (int cell = 0; cell < cellCount; cell++) {
                 if (visitStamp[cell] != stamp) {
                     exploreCluster(cell);
-                    total += model.violation(value[cell], exploredSize, exploredThinCells);
+                    total += model.violation(value[cell], exploredSize, exploredThinCells, exploredPerimeter);
                 }
             }
             return total + MISSING_BIOME_COST * missingBiomes;
@@ -483,7 +487,7 @@ final class ToroidalSizedLocalSearch {
          * Exact change in total cost if {@code cell} switched from {@code old} to {@code candidate}.
          * Only what the cell touches can change: its own edges, the cluster it leaves (which may
          * split into pieces), the candidate-biome clusters beside it (which merge with it), and
-         * the missing-biome count. Every other cluster keeps its size and thin cells, because a
+         * the missing-biome count. Every other cluster keeps its size, perimeter and thin cells, because a
          * neighbor of some third biome sees a different biome across that edge either way.
          */
         private int costChangeOfReassigning(int cell, int old, int candidate) {
@@ -504,11 +508,11 @@ final class ToroidalSizedLocalSearch {
             stamp++;
             int clustersBefore = 0;
             exploreCluster(cell);
-            clustersBefore += model.violation(old, exploredSize, exploredThinCells);
+            clustersBefore += model.violation(old, exploredSize, exploredThinCells, exploredPerimeter);
             for (int neighbor : cellNeighbors) {
                 if (value[neighbor] == candidate && visitStamp[neighbor] != stamp) {
                     exploreCluster(neighbor);
-                    clustersBefore += model.violation(candidate, exploredSize, exploredThinCells);
+                    clustersBefore += model.violation(candidate, exploredSize, exploredThinCells, exploredPerimeter);
                 }
             }
 
@@ -516,11 +520,11 @@ final class ToroidalSizedLocalSearch {
             stamp++;
             int clustersAfter = 0;
             exploreCluster(cell);
-            clustersAfter += model.violation(candidate, exploredSize, exploredThinCells);
+            clustersAfter += model.violation(candidate, exploredSize, exploredThinCells, exploredPerimeter);
             for (int neighbor : cellNeighbors) {
                 if (value[neighbor] == old && visitStamp[neighbor] != stamp) {
                     exploreCluster(neighbor);
-                    clustersAfter += model.violation(old, exploredSize, exploredThinCells);
+                    clustersAfter += model.violation(old, exploredSize, exploredThinCells, exploredPerimeter);
                 }
             }
             value[cell] = old;
@@ -529,24 +533,28 @@ final class ToroidalSizedLocalSearch {
             return edgesAfter - edgesBefore + clustersAfter - clustersBefore + missingChange;
         }
 
-        /** Breadth-first over the same-biome cluster containing {@code start}, marking it visited with the current stamp; leaves its cell count and its thin-cell count (see {@link ClusterSizeModel}) in {@code exploredSize}/{@code exploredThinCells}. */
+        /** Breadth-first over the same-biome cluster containing {@code start}, marking it visited with the current stamp; leaves its cell count, perimeter (cell-edges to a different biome) and thin-cell count (see {@link ShapeRule}) in {@code exploredSize}/{@code exploredPerimeter}/{@code exploredThinCells}. */
         private void exploreCluster(int start) {
             int biome = value[start];
             int head = 0;
             int tail = 0;
             queue[tail++] = start;
             visitStamp[start] = stamp;
+            int perimeter = 0;
             while (head < tail) {
                 int cell = queue[head++];
                 for (int neighbor : neighbors[cell]) {
-                    if (value[neighbor] == biome && visitStamp[neighbor] != stamp) {
+                    if (value[neighbor] != biome) {
+                        perimeter++;
+                    } else if (visitStamp[neighbor] != stamp) {
                         visitStamp[neighbor] = stamp;
                         queue[tail++] = neighbor;
                     }
                 }
             }
             exploredSize = tail;
-            exploredThinCells = switch (model.thicknessRequiredFor(tail)) {
+            exploredPerimeter = perimeter;
+            exploredThinCells = switch (model.shape().thicknessRequiredFor(tail)) {
                 case NONE -> 0;
                 case TRIANGLE -> countCellsOutsideAnyTriangle(biome, tail);
                 case FLOWER -> countCellsBeyondReachOfAFlower(biome, tail);
@@ -587,7 +595,7 @@ final class ToroidalSizedLocalSearch {
                     reachQueue[tail++] = cell;
                 }
             }
-            int reach = model.tailReachCells();
+            int reach = model.shape().tailReachCells();
             while (head < tail) {
                 int cell = reachQueue[head++];
                 if (reachDistance[cell] == reach) {

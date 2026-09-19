@@ -2,9 +2,6 @@ package com.mineutze.worldgen.coherence;
 
 import org.junit.jupiter.api.Test;
 
-import static com.mineutze.worldgen.coherence.ClusterSizeModel.Thickness.FLOWER;
-import static com.mineutze.worldgen.coherence.ClusterSizeModel.Thickness.NONE;
-import static com.mineutze.worldgen.coherence.ClusterSizeModel.Thickness.TRIANGLE;
 import static com.mineutze.worldgen.coherence.ToroidalTestTables.A;
 import static com.mineutze.worldgen.coherence.ToroidalTestTables.fullyLegalTableWithWidths;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -14,11 +11,15 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class ClusterSizeModelTest {
 
     private static final double ATOM_WIDTH = 300;
-    private static final int TAIL_REACH = 2;
-    private static final int FLOWER_FROM = 7;
+    private static final ShapeRule NO_PERIMETER_RULE = new ShapeRule(ShapeRule.NO_PERIMETER_LIMIT, 3, 13, 2);
+    private static final ShapeRule PERIMETER_RULE = new ShapeRule(1.25, 3, 13, 2);
 
     private static ClusterSizeModel modelWithSizeRange(int minWidthBlocks, int maxWidthBlocks) {
-        return new ClusterSizeModel(fullyLegalTableWithWidths(minWidthBlocks, maxWidthBlocks, A), ATOM_WIDTH, TAIL_REACH, FLOWER_FROM);
+        return modelWithSizeRange(minWidthBlocks, maxWidthBlocks, NO_PERIMETER_RULE);
+    }
+
+    private static ClusterSizeModel modelWithSizeRange(int minWidthBlocks, int maxWidthBlocks, ShapeRule shape) {
+        return new ClusterSizeModel(fullyLegalTableWithWidths(minWidthBlocks, maxWidthBlocks, A), ATOM_WIDTH, shape);
     }
 
     @Test
@@ -54,69 +55,46 @@ class ClusterSizeModelTest {
 
     @Test
     void rejectsANonPositiveCellWidth() {
-        assertThrows(IllegalArgumentException.class, () -> new ClusterSizeModel(fullyLegalTableWithWidths(500, 800, A), 0, TAIL_REACH, FLOWER_FROM));
+        assertThrows(IllegalArgumentException.class, () -> new ClusterSizeModel(fullyLegalTableWithWidths(500, 800, A), 0, NO_PERIMETER_RULE));
     }
 
     @Test
-    void rejectsATailReachBelowOneBecauseEveryCellOfAThickPartIsItselfWithinOneOfItsCore() {
-        assertThrows(IllegalArgumentException.class, () -> new ClusterSizeModel(fullyLegalTableWithWidths(500, 800, A), ATOM_WIDTH, 0, FLOWER_FROM));
+    void theModelExposesItsShapeRule() {
+        assertEquals(PERIMETER_RULE, modelWithSizeRange(500, 600, PERIMETER_RULE).shape());
     }
 
     @Test
-    void tinyClustersOfOneOrTwoCellsNeedNoThickness() {
-        assertEquals(NONE, modelWithSizeRange(500, 600).thicknessRequiredFor(1));
-        assertEquals(NONE, modelWithSizeRange(500, 600).thicknessRequiredFor(2));
-    }
+    void aClusterInsideTheRangeWithNoThinCellsAndAnAllowedPerimeterHasNoViolation() {
+        ClusterSizeModel model = modelWithSizeRange(500, 600, PERIMETER_RULE);
 
-    @Test
-    void clustersOfThreeToSixCellsNeedEveryCellInATriangle() {
-        assertEquals(TRIANGLE, modelWithSizeRange(500, 600).thicknessRequiredFor(3));
-        assertEquals(TRIANGLE, modelWithSizeRange(500, 600).thicknessRequiredFor(6));
-    }
-
-    /** Seven cells is the smallest cluster that can contain a whole flower (a cell plus all six neighbors). */
-    @Test
-    void clustersOfSevenOrMoreCellsNeedAFlowerCore() {
-        assertEquals(FLOWER, modelWithSizeRange(500, 600).thicknessRequiredFor(7));
-        assertEquals(FLOWER, modelWithSizeRange(500, 600).thicknessRequiredFor(400));
-    }
-
-    /** A larger threshold spares mid-sized clusters the flower and asks only for triangles, a much weaker demand. */
-    @Test
-    void aLaterFlowerThresholdKeepsTriangleThicknessUntilThen() {
-        ClusterSizeModel model = new ClusterSizeModel(fullyLegalTableWithWidths(500, 600, A), ATOM_WIDTH, TAIL_REACH, 13);
-
-        assertEquals(TRIANGLE, model.thicknessRequiredFor(12));
-        assertEquals(FLOWER, model.thicknessRequiredFor(13));
-    }
-
-    @Test
-    void aFlowerThresholdBelowSevenIsRejectedBecauseSmallerClustersCannotHoldAFlower() {
-        assertThrows(IllegalArgumentException.class, () -> new ClusterSizeModel(fullyLegalTableWithWidths(500, 600, A), ATOM_WIDTH, TAIL_REACH, 6));
-    }
-
-    @Test
-    void theModelReportsItsTailReach() {
-        assertEquals(TAIL_REACH, modelWithSizeRange(500, 600).tailReachCells());
-    }
-
-    @Test
-    void aClusterInsideTheRangeWithNoThinCellsHasNoViolation() {
-        assertEquals(0, modelWithSizeRange(500, 600).violation(A, 3, 0));
+        assertEquals(0, model.violation(A, 3, 0, ShapeRule.minimumPerimeter(3)));
     }
 
     @Test
     void violationCountsEachCellBelowTheMinimum() {
-        assertEquals(2, modelWithSizeRange(500, 600).violation(A, 1, 0));
+        assertEquals(2, modelWithSizeRange(500, 600).violation(A, 1, 0, 6));
     }
 
     @Test
     void violationCountsEachCellAboveTheMaximum() {
-        assertEquals(3, modelWithSizeRange(500, 600).violation(A, 7, 0));
+        assertEquals(3, modelWithSizeRange(500, 600).violation(A, 7, 0, 18));
     }
 
     @Test
     void violationCountsEachThinCell() {
-        assertEquals(4, modelWithSizeRange(500, 600).violation(A, 3, 4));
+        assertEquals(4, modelWithSizeRange(500, 600).violation(A, 3, 4, 12));
+    }
+
+    @Test
+    void violationCountsEachPerimeterEdgeBeyondWhatTheRuleAllows() {
+        ClusterSizeModel model = modelWithSizeRange(500, 600, PERIMETER_RULE);
+        int allowed = PERIMETER_RULE.allowedPerimeter(3);
+
+        assertEquals(2, model.violation(A, 3, 0, allowed + 2));
+    }
+
+    @Test
+    void aRuleWithoutAPerimeterLimitNeverChargesForPerimeter() {
+        assertEquals(0, modelWithSizeRange(500, 600).violation(A, 3, 0, 1_000));
     }
 }

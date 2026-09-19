@@ -39,6 +39,16 @@ final class ToroidalTestTables {
         return RawRuleTable.from(new BiomeGraphData(nodes, edges));
     }
 
+    /** Two mutually legal biomes with DIFFERENT size ranges, for tests where one biome's size must be pinned tightly and the other left loose. */
+    static RawRuleTable legalPairWithSizes(BiomeId first, int firstMinWidth, int firstMaxWidth, BiomeId second, int secondMinWidth, int secondMaxWidth) {
+        List<NodeData> nodes = List.of(
+            new NodeData(first.namespace(), first.path(), firstMinWidth, firstMaxWidth, Integer.MAX_VALUE, List.of()),
+            new NodeData(second.namespace(), second.path(), secondMinWidth, secondMaxWidth, Integer.MAX_VALUE, List.of())
+        );
+        List<EdgeData> edges = List.of(new EdgeData(first.namespace(), first.path(), second.namespace(), second.path(), 10));
+        return RawRuleTable.from(new BiomeGraphData(nodes, edges));
+    }
+
     /** A proper 3-coloring of the hex torus: color = (q - r) mod 3 differs across every neighbor direction. Only well-defined when both sides are multiples of 3. */
     static Map<ToroidalPos, BiomeId> threeColoring(ToroidalGrid grid, BiomeId first, BiomeId second, BiomeId third) {
         List<BiomeId> colors = List.of(first, second, third);
