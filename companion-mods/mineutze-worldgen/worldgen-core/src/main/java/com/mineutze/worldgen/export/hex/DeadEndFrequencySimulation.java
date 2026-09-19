@@ -42,6 +42,12 @@ import java.util.concurrent.TimeUnit;
  *   (worldSeed=291692674858800685) via this class's own exception-message capture, not
  *   the unrelated extreme-coordinate artifact found earlier - see git history / plan doc
  *   for full story.</li>
+ *   <li>{@code STRUCTURE_RING_SWEEP} (added 2026-09-16) - many points in concentric rings
+ *   around one origin, ALL sharing ONE cache per trial (unlike the two above) - approximates
+ *   real structure/stronghold placement's own pattern of probing many scattered points
+ *   against the same world at once. Deliberately small trial count for now
+ *   ({@code STRUCTURE_RING_SWEEP_TRIALS}) - first exploratory pass, not a calibrated rate
+ *   measurement yet.</li>
  * </ul>
  *
  * <p>Every trial uses FRESH {@link SeedMeshCache} (no cross-trial reuse) so each is an
@@ -82,6 +88,22 @@ public final class DeadEndFrequencySimulation {
     private static final int ORGANIC_WALK_STEPS = 20;
     private static final double ORGANIC_WALK_STEP_BLOCKS = 300;
 
+    // STRUCTURE_RING_SWEEP - mirrors the QUALITATIVE shape of real Minecraft structure/
+    // stronghold placement (BiomeSource.findBiomeHorizontal-style: many candidate points
+    // arranged in concentric rings around one origin, probed against ONE SHARED cache -
+    // unlike RING_PROBE/ORGANIC_WALK above, which deliberately isolate every trial). Real
+    // vanilla ring-count/distance constants NOT reproduced exactly (not needed - approximate
+    // shape confirmed sufficient, 2026-09-16); point spacing per ring is instead derived
+    // directly from HEX_SIZE_BLOCKS so some same-ring points land close enough to share/
+    // border each other's hex clusters, giving a genuine chance of cross-point interaction
+    // through the shared cache - the actual thing this scenario is trying to exercise.
+    private static final int STRUCTURE_RING_SWEEP_TRIALS = 12;
+    private static final int RING_SWEEP_RING_COUNT = 6;
+    private static final double RING_SWEEP_INNERMOST_RADIUS_BLOCKS = 1_500;
+    private static final double RING_SWEEP_RING_SPACING_BLOCKS = 1_800;
+    private static final double RING_SWEEP_POINT_SPACING_BLOCKS = HEX_SIZE_BLOCKS * 2;
+    private static final int RING_SWEEP_MIN_POINTS_PER_RING = 6;
+
     // Leaves one logical core free for OS/rest of machine - long batch job, not
     // latency-sensitive, so most/all cores fine, but starving the machine isn't necessary.
     // Measured on build machine: 6 physical/12 logical cores - real speedup well under full
@@ -106,12 +128,18 @@ public final class DeadEndFrequencySimulation {
             Result organicWalk = runTrials(executor, graph, new SplittableRandom(20260405), TRIALS_PER_SCENARIO, DeadEndFrequencySimulation::runOrganicWalkTrial);
             System.out.println(organicWalk);
 
+            System.out.println("Running " + STRUCTURE_RING_SWEEP_TRIALS + " STRUCTURE_RING_SWEEP trials (many points in concentric rings, one shared cache per trial)...");
+            Result ringSweep = runTrials(executor, graph, new SplittableRandom(20260916), STRUCTURE_RING_SWEEP_TRIALS, DeadEndFrequencySimulation::runStructureRingSweepTrial);
+            System.out.println(ringSweep);
+
             System.out.println();
-            System.out.println("RING_PROBE:   " + ringProbe.deadEnds().size() + "/" + ringProbe.trials() + " dead ends (" + ringProbe.ratePercent() + "%)");
-            System.out.println("ORGANIC_WALK: " + organicWalk.deadEnds().size() + "/" + organicWalk.trials() + " dead ends (" + organicWalk.ratePercent() + "%)");
+            System.out.println("RING_PROBE:           " + ringProbe.deadEnds().size() + "/" + ringProbe.trials() + " dead ends (" + ringProbe.ratePercent() + "%)");
+            System.out.println("ORGANIC_WALK:         " + organicWalk.deadEnds().size() + "/" + organicWalk.trials() + " dead ends (" + organicWalk.ratePercent() + "%)");
+            System.out.println("STRUCTURE_RING_SWEEP: " + ringSweep.deadEnds().size() + "/" + ringSweep.trials() + " dead ends (" + ringSweep.ratePercent() + "%)");
 
             printFailureDetails("RING_PROBE", ringProbe);
             printFailureDetails("ORGANIC_WALK", organicWalk);
+            printFailureDetails("STRUCTURE_RING_SWEEP", ringSweep);
         } finally {
             executor.shutdown();
             executor.awaitTermination(1, TimeUnit.HOURS);
@@ -239,6 +267,39 @@ public final class DeadEndFrequencySimulation {
                 x += Math.cos(angle) * ORGANIC_WALK_STEP_BLOCKS;
                 z += Math.sin(angle) * ORGANIC_WALK_STEP_BLOCKS;
                 cache.biomeAt(GRID_CONFIG.cellContaining(x, z));
+            }
+            return Optional.empty();
+        } catch (IllegalStateException e) {
+            return Optional.of(String.valueOf(e.getMessage()));
+        }
+    }
+
+    /**
+     * Concentric rings of candidate points around (centerX, centerZ), all probed against ONE
+     * shared cache - unlike RING_PROBE/ORGANIC_WALK, this scenario's whole point is letting
+     * many independently-picked points interact through shared committed state, the way real
+     * structure/stronghold search hits many points against the same world. Ring radius grows
+     * outward; points-per-ring scales with each ring's own circumference (divided by {@code
+     * RING_SWEEP_POINT_SPACING_BLOCKS}) so point density stays roughly constant instead of
+     * thinning out on outer rings - keeps a real chance of same-ring neighbors landing close
+     * enough to share/border hex clusters at every radius, not just the innermost one.
+     */
+    private static Optional<String> runStructureRingSweepTrial(BiomeGraph graph, long worldSeed, double centerX, double centerZ) {
+        SeedMeshCache cache = new SeedMeshCache(graph, GRID_CONFIG, worldSeed);
+        SplittableRandom angleRandom = new SplittableRandom(worldSeed ^ 0x5216_5EEDL);
+        try {
+            for (int ring = 0; ring < RING_SWEEP_RING_COUNT; ring++) {
+                double radius = RING_SWEEP_INNERMOST_RADIUS_BLOCKS + ring * RING_SWEEP_RING_SPACING_BLOCKS;
+                int pointsInRing = Math.max(
+                    RING_SWEEP_MIN_POINTS_PER_RING, (int) Math.round(2 * Math.PI * radius / RING_SWEEP_POINT_SPACING_BLOCKS)
+                );
+                double startAngle = angleRandom.nextDouble() * 2 * Math.PI;
+                for (int point = 0; point < pointsInRing; point++) {
+                    double angle = startAngle + (2 * Math.PI * point / pointsInRing);
+                    double x = centerX + Math.cos(angle) * radius;
+                    double z = centerZ + Math.sin(angle) * radius;
+                    cache.biomeAt(GRID_CONFIG.cellContaining(x, z));
+                }
             }
             return Optional.empty();
         } catch (IllegalStateException e) {
