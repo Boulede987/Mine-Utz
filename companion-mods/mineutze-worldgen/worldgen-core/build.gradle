@@ -165,6 +165,13 @@ tasks.register('toroidalIdentityLocalSearch', JavaExec) {
     mainClass = 'com.mineutze.worldgen.coherence.ToroidalIdentityLocalSearchRunner'
 }
 
+tasks.register('toroidalSizedLocalSearch', JavaExec) {
+    group = 'verification'
+    description = 'Real, timed test of joint identity + size + roundness solving on a fine toroidal lattice, where a biome is a connected cluster of small cells - against the real catalog. Run with: ./gradlew :worldgen-core:toroidalSizedLocalSearch'
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'com.mineutze.worldgen.coherence.ToroidalSizedLocalSearchRunner'
+}
+
 tasks.register('graphEditorDeepCheck', JavaExec) {
     group = 'verification'
     description = 'The graph editor\'s "Deep check" button - runs the real exhaustive GeometricFeasibilityProof against the editor\'s currently SAVED graph (not the hardcoded catalog directly, though it\'s the same file now). Run with: ./gradlew :worldgen-core:graphEditorDeepCheck'
