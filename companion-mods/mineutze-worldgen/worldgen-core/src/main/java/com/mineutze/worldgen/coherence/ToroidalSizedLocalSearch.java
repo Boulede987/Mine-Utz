@@ -11,6 +11,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Random;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.function.BooleanSupplier;
 
 /**
@@ -44,6 +45,7 @@ final class ToroidalSizedLocalSearch {
     private static final int ACCEPTANCE_TABLE_SIZE = 64;
     private static final int SCHEDULE_LEVELS = 16;
     private static final double FOCUS_PROBABILITY = 0.3;
+    static final double DEFAULT_RELABEL_PROBABILITY = 0.02;
 
     static final double DEFAULT_TEMPERATURE = 0.5;
 
@@ -75,7 +77,23 @@ final class ToroidalSizedLocalSearch {
 
     /** {@code shouldStop} is polled every {@value #BEST_TRACKING_INTERVAL_STEPS} steps; once it returns true the search ends early, reported like an exhausted budget (not solved, closest state so far). */
     static Result search(RawRuleTable table, ToroidalGrid grid, ClusterSizeModel model, long randomSeed, long maxSteps, Schedule schedule, BooleanSupplier shouldStop) {
-        return new Search(table, grid, model, new Random(randomSeed), schedule, shouldStop).run(maxSteps);
+        return search(table, grid, model, randomSeed, maxSteps, schedule, shouldStop, DEFAULT_RELABEL_PROBABILITY);
+    }
+
+    /**
+     * {@code relabelProbability} is the share of steps spent on a whole-cluster relabel instead of a
+     * single-cell move. Single cells cannot fix a cluster that touches a biome it may not touch
+     * (2026-09-19: every stuck pattern was ocean-family beside a wrong-climate land biome): to
+     * relabel a cluster one cell at a time the walk passes through half-and-half states with size
+     * violations far too costly to accept. A relabel changes the whole cluster in one move.
+     */
+    static Result search(
+        RawRuleTable table, ToroidalGrid grid, ClusterSizeModel model, long randomSeed, long maxSteps, Schedule schedule, BooleanSupplier shouldStop, double relabelProbability
+    ) {
+        if (relabelProbability < 0.0 || relabelProbability > 1.0) {
+            throw new IllegalArgumentException("ToroidalSizedLocalSearch: relabelProbability must be within 0..1, got " + relabelProbability);
+        }
+        return new Search(table, grid, model, new Random(randomSeed), schedule, shouldStop, relabelProbability).run(maxSteps);
     }
 
     /**
@@ -114,6 +132,23 @@ final class ToroidalSizedLocalSearch {
 
     static int cost(RawRuleTable table, ToroidalGrid grid, ClusterSizeModel model, Map<ToroidalPos, BiomeId> assignment) {
         return breakdown(table, grid, model, assignment).cost();
+    }
+
+    /** Which biome pairs the illegal edges of {@code assignment} join, and how many edges each - "a | b" with the names in sorted order. Says WHAT a stuck pattern is stuck on. */
+    static Map<String, Integer> illegalPairCounts(RawRuleTable table, ToroidalGrid grid, Map<ToroidalPos, BiomeId> assignment) {
+        Map<String, Integer> counts = new TreeMap<>();
+        for (Map.Entry<ToroidalPos, BiomeId> entry : assignment.entrySet()) {
+            for (ToroidalPos neighbor : grid.neighborsOf(entry.getKey())) {
+                boolean firstOfPair = entry.getKey().r() < neighbor.r() || (entry.getKey().r() == neighbor.r() && entry.getKey().q() < neighbor.q());
+                BiomeId neighborBiome = assignment.get(neighbor);
+                if (firstOfPair && !entry.getValue().equals(neighborBiome) && !table.isLegal(entry.getValue(), neighborBiome)) {
+                    BiomeId lower = entry.getValue().compareTo(neighborBiome) <= 0 ? entry.getValue() : neighborBiome;
+                    BiomeId higher = lower == entry.getValue() ? neighborBiome : entry.getValue();
+                    counts.merge(lower + " | " + higher, 1, Integer::sum);
+                }
+            }
+        }
+        return counts;
     }
 
     /** Independent, map-based recomputation of everything wrong with {@code assignment} - shares no bookkeeping with the search, so it is what the search's own accounting is checked against. */
@@ -252,9 +287,17 @@ final class ToroidalSizedLocalSearch {
         private int exploredPerimeter;
         private final int[] reachDistance;
         private final int[] reachQueue;
+        private final double relabelProbability;
+        private final int[] changedCells;
+        private final int[] changedStamp;
+        private int changedGeneration;
+        private final int[] seenBiomeStamp;
+        private final int[] seenBiomes;
+        private int seenBiomeGeneration;
 
-        Search(RawRuleTable table, ToroidalGrid grid, ClusterSizeModel model, Random random, Schedule schedule, BooleanSupplier shouldStop) {
+        Search(RawRuleTable table, ToroidalGrid grid, ClusterSizeModel model, Random random, Schedule schedule, BooleanSupplier shouldStop, double relabelProbability) {
             this.table = table;
+            this.relabelProbability = relabelProbability;
             this.schedule = schedule;
             this.shouldStop = shouldStop;
             this.grid = grid;
@@ -294,6 +337,10 @@ final class ToroidalSizedLocalSearch {
             this.queue = new int[cellCount];
             this.reachDistance = new int[cellCount];
             this.reachQueue = new int[cellCount];
+            this.changedCells = new int[cellCount];
+            this.changedStamp = new int[cellCount];
+            this.seenBiomeStamp = new int[biomeCount];
+            this.seenBiomes = new int[biomeCount];
         }
 
         Result run(long maxSteps) {
@@ -324,11 +371,43 @@ final class ToroidalSizedLocalSearch {
             if (cost == 0) {
                 return solved(stepsTaken);
             }
+            failIfBookkeepingDrifted();
             if (cost < bestCost) {
                 bestCost = cost;
                 System.arraycopy(value, 0, bestValue, 0, cellCount);
             }
             return new Result(null, toAssignment(bestValue), stepsTaken, bestCost);
+        }
+
+        /**
+         * The search keeps its cost, per-biome cell counts and missing-biome count up to date move by
+         * move. Recomputes all three from the cell values once at the end of a run and throws if
+         * they disagree: a drift would mean the walk had been steering by a wrong cost, and a wrong
+         * "closest state" report is worse than a crash.
+         */
+        private void failIfBookkeepingDrifted() {
+            int[] recountedUses = new int[biomeCount];
+            for (int cell = 0; cell < cellCount; cell++) {
+                recountedUses[value[cell]]++;
+            }
+            int recountedMissing = 0;
+            for (int biome = 0; biome < biomeCount; biome++) {
+                if (recountedUses[biome] != usesOfBiome[biome]) {
+                    throw new IllegalStateException(
+                        "ToroidalSizedLocalSearch: cell count of " + biomes.get(biome) + " drifted: tracked " + usesOfBiome[biome] + ", actual " + recountedUses[biome]
+                    );
+                }
+                if (recountedUses[biome] == 0) {
+                    recountedMissing++;
+                }
+            }
+            if (recountedMissing != missingBiomes) {
+                throw new IllegalStateException("ToroidalSizedLocalSearch: missing-biome count drifted: tracked " + missingBiomes + ", actual " + recountedMissing);
+            }
+            int recomputedCost = fullCost();
+            if (recomputedCost != cost) {
+                throw new IllegalStateException("ToroidalSizedLocalSearch: cost drifted: tracked " + cost + ", recomputed from scratch " + recomputedCost);
+            }
         }
 
         private Result solved(long steps) {
@@ -445,6 +524,10 @@ final class ToroidalSizedLocalSearch {
         }
 
         private void proposeAndMaybeApply() {
+            if (relabelProbability > 0.0 && random.nextDouble() < relabelProbability) {
+                proposeWholeClusterRelabel();
+                return;
+            }
             int cell = conflictedCount > 0 && random.nextDouble() < FOCUS_PROBABILITY ? conflictedCells[random.nextInt(conflictedCount)] : random.nextInt(cellCount);
             int old = value[cell];
             int candidate;
@@ -471,6 +554,124 @@ final class ToroidalSizedLocalSearch {
                 }
                 cost += delta;
             }
+        }
+
+        /**
+         * Relabels the whole cluster around a (preferably conflicted) cell to another biome in one
+         * move, judged by the same Metropolis rule as a single-cell move. The new biome must be
+         * legal beside every biome the cluster touches and its size range must contain the
+         * cluster's cell count, so the move is only tried where it could plausibly help. The cost
+         * change is measured by applying the move and re-measuring just the affected region
+         * ({@link #localCost}); a rejected move is undone.
+         */
+        private void proposeWholeClusterRelabel() {
+            int cell = conflictedCount > 0 && random.nextDouble() < FOCUS_PROBABILITY ? conflictedCells[random.nextInt(conflictedCount)] : random.nextInt(cellCount);
+            int old = value[cell];
+            stamp++;
+            exploreCluster(cell);
+            int size = exploredSize;
+            System.arraycopy(queue, 0, changedCells, 0, size);
+            int candidate = randomBiomeFittingClusterAndItsSurroundings(old, size);
+            if (candidate < 0) {
+                return;
+            }
+
+            int costBefore = localCost(size);
+            int missingBefore = missingBiomes;
+            setChangedCells(size, candidate);
+            usesOfBiome[old] -= size;
+            usesOfBiome[candidate] += size;
+            int missingAfter = missingBefore + (usesOfBiome[old] == 0 ? 1 : 0) - (usesOfBiome[candidate] == size ? 1 : 0);
+            int costAfter = localCost(size);
+
+            int delta = costAfter - costBefore + MISSING_BIOME_COST * (missingAfter - missingBefore);
+            boolean accept = delta <= 0 || (delta < ACCEPTANCE_TABLE_SIZE && random.nextDouble() < acceptanceProbability[delta]);
+            if (accept) {
+                cost += delta;
+                missingBiomes = missingAfter;
+            } else {
+                setChangedCells(size, old);
+                usesOfBiome[old] += size;
+                usesOfBiome[candidate] -= size;
+            }
+        }
+
+        private void setChangedCells(int size, int biome) {
+            for (int index = 0; index < size; index++) {
+                value[changedCells[index]] = biome;
+            }
+        }
+
+        /** A uniformly random biome other than {@code old} that is legal beside every biome bordering the cluster in {@code changedCells} and whose size range holds {@code size} cells; -1 if there is none. */
+        private int randomBiomeFittingClusterAndItsSurroundings(int old, int size) {
+            seenBiomeGeneration++;
+            int seenCount = 0;
+            for (int index = 0; index < size; index++) {
+                for (int neighbor : neighbors[changedCells[index]]) {
+                    int neighborBiome = value[neighbor];
+                    if (neighborBiome != old && seenBiomeStamp[neighborBiome] != seenBiomeGeneration) {
+                        seenBiomeStamp[neighborBiome] = seenBiomeGeneration;
+                        seenBiomes[seenCount++] = neighborBiome;
+                    }
+                }
+            }
+            int fitting = 0;
+            int chosen = -1;
+            for (int biome = 0; biome < biomeCount; biome++) {
+                if (biome == old || size < model.minCells(biome) || size > model.maxCells(biome)) {
+                    continue;
+                }
+                boolean legalBesideAll = true;
+                for (int index = 0; index < seenCount && legalBesideAll; index++) {
+                    legalBesideAll = seenBiomes[index] == biome || legal[biome][seenBiomes[index]];
+                }
+                if (legalBesideAll) {
+                    fitting++;
+                    if (random.nextInt(fitting) == 0) {
+                        chosen = biome;
+                    }
+                }
+            }
+            return chosen;
+        }
+
+        /**
+         * Everything in the cost that depends on the {@code changedSize} cells in {@code changedCells}
+         * (given their CURRENT biomes): illegal edges touching them, and the violation of every
+         * cluster that contains one of them or borders one - so a cluster that merges, splits or
+         * loses cells is counted whole. The difference between two calls, before and after changing
+         * those cells, is the exact cost change of the move.
+         */
+        private int localCost(int changedSize) {
+            changedGeneration++;
+            for (int index = 0; index < changedSize; index++) {
+                changedStamp[changedCells[index]] = changedGeneration;
+            }
+            int total = 0;
+            for (int index = 0; index < changedSize; index++) {
+                int cell = changedCells[index];
+                for (int neighbor : neighbors[cell]) {
+                    boolean illegalEdge = value[cell] != value[neighbor] && !legal[value[cell]][value[neighbor]];
+                    if (illegalEdge && (changedStamp[neighbor] != changedGeneration || cell < neighbor)) {
+                        total++;
+                    }
+                }
+            }
+            stamp++;
+            for (int index = 0; index < changedSize; index++) {
+                int cell = changedCells[index];
+                if (visitStamp[cell] != stamp) {
+                    exploreCluster(cell);
+                    total += model.violation(value[cell], exploredSize, exploredThinCells, exploredPerimeter);
+                }
+                for (int neighbor : neighbors[cell]) {
+                    if (visitStamp[neighbor] != stamp) {
+                        exploreCluster(neighbor);
+                        total += model.violation(value[neighbor], exploredSize, exploredThinCells, exploredPerimeter);
+                    }
+                }
+            }
+            return total;
         }
 
         private int randomMissingBiome() {

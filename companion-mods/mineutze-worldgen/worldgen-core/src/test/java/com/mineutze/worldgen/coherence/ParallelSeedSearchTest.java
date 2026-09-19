@@ -29,7 +29,7 @@ class ParallelSeedSearchTest {
         return fullyLegalTableWithWidths(500, 600, A, B, C);
     }
 
-    private static final long SHORT_BUDGET = 3_000;
+    private static final long SHORT_BUDGET = 4_000;
 
     private static boolean solvesWithinTheShortBudget(RawRuleTable table, ToroidalGrid grid, int index) {
         return ToroidalSizedLocalSearch.search(table, grid, model(table), BASE_SEED + index, SHORT_BUDGET, SCHEDULE).assignment() != null;

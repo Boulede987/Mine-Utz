@@ -267,6 +267,90 @@ class ToroidalSizedLocalSearchTest {
         assertDoesNotThrow(() -> ToroidalSizedLocalSearch.verify(table, grid, strict, result.assignment()));
     }
 
+    /** Only A-B is legal, so a 3-coloring on 6x6 has 36 edges of each kind: A|B fine, A|C and B|C illegal. */
+    @Test
+    void illegalPairCountsNameEachIllegalBiomePairWithItsEdgeCount() {
+        ToroidalGrid grid = new ToroidalGrid(6, 6);
+        RawRuleTable table = tableWithNoLegalTriangle(300, 300);
+
+        Map<String, Integer> counts = ToroidalSizedLocalSearch.illegalPairCounts(table, grid, threeColoring(grid, A, B, C));
+
+        assertEquals(Map.of(A + " | " + C, 36, B + " | " + C, 36), counts);
+    }
+
+    @Test
+    void illegalPairCountsAreEmptyForAPatternWithoutIllegalEdges() {
+        ToroidalGrid grid = new ToroidalGrid(6, 6);
+        RawRuleTable table = singleCellClusterTable();
+
+        assertTrue(ToroidalSizedLocalSearch.illegalPairCounts(table, grid, threeColoring(grid, A, B, C)).isEmpty());
+    }
+
+    private static final ToroidalSizedLocalSearch.Schedule STEADY = ToroidalSizedLocalSearch.Schedule.constant(0.4);
+    /** So hot that nearly every plausible relabel is accepted, which is what makes drift in its bookkeeping visible. */
+    private static final ToroidalSizedLocalSearch.Schedule BOILING = ToroidalSizedLocalSearch.Schedule.constant(3.0);
+    /** Warm enough that clusters keep changing yet stay within a wide size range, so many whole-cluster relabels are eligible and accepted. */
+    private static final ToroidalSizedLocalSearch.Schedule WARM = ToroidalSizedLocalSearch.Schedule.constant(1.0);
+
+    @Test
+    void trackedCostStaysExactWhenRelabelsRunUnderAStrictPerimeterLimit() {
+        ToroidalGrid grid = new ToroidalGrid(8, 8);
+        RawRuleTable table = fullyLegalTableWithWidths(700, 900, A, B, C);
+        ClusterSizeModel strict = new ClusterSizeModel(table, ATOM_WIDTH, new ShapeRule(1.1, Integer.MAX_VALUE, Integer.MAX_VALUE, 2));
+
+        ToroidalSizedLocalSearch.Result result = ToroidalSizedLocalSearch.search(table, grid, strict, SEED, 40_000, BOILING, () -> false, 0.5);
+
+        assertEquals(result.bestCost(), ToroidalSizedLocalSearch.cost(table, grid, strict, result.closestAssignment()));
+    }
+
+    /** Sizes 1..9 cells, so a relabel that merges a cluster into a same-biome neighbor can push the merged cluster over its maximum: the move must account for that neighbor's changed cost. Over 100 relabels are accepted in this walk. */
+    @Test
+    void trackedCostStaysExactWhenRelabelsMergeClustersOfTheSameBiome() {
+        ToroidalGrid grid = new ToroidalGrid(8, 8);
+        RawRuleTable table = fullyLegalTableWithWidths(300, 900, A, B, C);
+
+        ToroidalSizedLocalSearch.Result result = ToroidalSizedLocalSearch.search(table, grid, model(table), SEED, 80_000, WARM, () -> false, 0.8);
+
+        assertEquals(result.bestCost(), ToroidalSizedLocalSearch.cost(table, grid, model(table), result.closestAssignment()));
+    }
+
+    /** Only A-B is legal, so C clusters touch illegal edges; relabeling one to A or B removes them, and the move must count exactly those edges. Over 100 relabels are accepted in this walk. */
+    @Test
+    void trackedCostStaysExactWhenRelabelsRemoveIllegalEdges() {
+        ToroidalGrid grid = new ToroidalGrid(8, 8);
+        RawRuleTable table = tableWithNoLegalTriangle(300, 1200);
+
+        ToroidalSizedLocalSearch.Result result = ToroidalSizedLocalSearch.search(table, grid, model(table), SEED, 80_000, WARM, () -> false, 0.8);
+
+        assertNull(result.assignment());
+        assertEquals(result.bestCost(), ToroidalSizedLocalSearch.cost(table, grid, model(table), result.closestAssignment()));
+    }
+
+    /** A solved state is verified independently inside the search, so any cost drift caused by relabel moves would make this throw instead of return. */
+    @Test
+    void searchMixingInRelabelMovesStillSolvesAndVerifiesASmallInstance() {
+        ToroidalGrid grid = new ToroidalGrid(6, 6);
+        RawRuleTable table = fullyLegalTableWithWidths(500, 600, A, B, C);
+
+        ToroidalSizedLocalSearch.Result result = ToroidalSizedLocalSearch.search(table, grid, model(table), SEED, GENEROUS_STEPS, STEADY, () -> false, 0.3);
+
+        assertNotNull(result.assignment());
+        assertDoesNotThrow(() -> ToroidalSizedLocalSearch.verify(table, grid, model(table), result.assignment()));
+    }
+
+    @Test
+    void relabelProbabilityOutsideZeroToOneIsRejected() {
+        ToroidalGrid grid = new ToroidalGrid(6, 6);
+        RawRuleTable table = solvableTableForArguments();
+
+        assertThrows(IllegalArgumentException.class, () -> ToroidalSizedLocalSearch.search(table, grid, model(table), SEED, 1_000, STEADY, () -> false, -0.1));
+        assertThrows(IllegalArgumentException.class, () -> ToroidalSizedLocalSearch.search(table, grid, model(table), SEED, 1_000, STEADY, () -> false, 1.1));
+    }
+
+    private static RawRuleTable solvableTableForArguments() {
+        return fullyLegalTableWithWidths(500, 600, A, B, C);
+    }
+
     @Test
     void sameSeedGivesTheSameOutcome() {
         ToroidalGrid grid = new ToroidalGrid(6, 6);
