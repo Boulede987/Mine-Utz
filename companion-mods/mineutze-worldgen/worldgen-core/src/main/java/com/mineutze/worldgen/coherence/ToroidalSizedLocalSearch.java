@@ -11,6 +11,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Random;
 import java.util.Set;
+import java.util.function.BooleanSupplier;
 
 /**
  * Joint identity + size search on a FINE lattice (2026-09-19). Every cell is a small "atom" of
@@ -69,7 +70,12 @@ final class ToroidalSizedLocalSearch {
     }
 
     static Result search(RawRuleTable table, ToroidalGrid grid, ClusterSizeModel model, long randomSeed, long maxSteps, Schedule schedule) {
-        return new Search(table, grid, model, new Random(randomSeed), schedule).run(maxSteps);
+        return search(table, grid, model, randomSeed, maxSteps, schedule, () -> false);
+    }
+
+    /** {@code shouldStop} is polled every {@value #BEST_TRACKING_INTERVAL_STEPS} steps; once it returns true the search ends early, reported like an exhausted budget (not solved, closest state so far). */
+    static Result search(RawRuleTable table, ToroidalGrid grid, ClusterSizeModel model, long randomSeed, long maxSteps, Schedule schedule, BooleanSupplier shouldStop) {
+        return new Search(table, grid, model, new Random(randomSeed), schedule, shouldStop).run(maxSteps);
     }
 
     /**
@@ -224,6 +230,7 @@ final class ToroidalSizedLocalSearch {
         private final boolean[][] legal;
         private final int[][] neighbors;
         private final Schedule schedule;
+        private final BooleanSupplier shouldStop;
         private final double[][] acceptanceProbabilityByLevel = new double[SCHEDULE_LEVELS][ACCEPTANCE_TABLE_SIZE];
         private double[] acceptanceProbability;
 
@@ -242,9 +249,10 @@ final class ToroidalSizedLocalSearch {
         private final int[] reachDistance;
         private final int[] reachQueue;
 
-        Search(RawRuleTable table, ToroidalGrid grid, ClusterSizeModel model, Random random, Schedule schedule) {
+        Search(RawRuleTable table, ToroidalGrid grid, ClusterSizeModel model, Random random, Schedule schedule, BooleanSupplier shouldStop) {
             this.table = table;
             this.schedule = schedule;
+            this.shouldStop = shouldStop;
             this.grid = grid;
             this.model = model;
             this.random = random;
@@ -290,6 +298,7 @@ final class ToroidalSizedLocalSearch {
             int bestCost = cost;
             int[] bestValue = value.clone();
 
+            long stepsTaken = maxSteps;
             for (long step = 0; step < maxSteps; step++) {
                 if (cost == 0) {
                     return solved(step);
@@ -302,16 +311,20 @@ final class ToroidalSizedLocalSearch {
                         bestCost = cost;
                         System.arraycopy(value, 0, bestValue, 0, cellCount);
                     }
+                    if (shouldStop.getAsBoolean()) {
+                        stepsTaken = step + 1;
+                        break;
+                    }
                 }
             }
             if (cost == 0) {
-                return solved(maxSteps);
+                return solved(stepsTaken);
             }
             if (cost < bestCost) {
                 bestCost = cost;
                 System.arraycopy(value, 0, bestValue, 0, cellCount);
             }
-            return new Result(null, toAssignment(bestValue), maxSteps, bestCost);
+            return new Result(null, toAssignment(bestValue), stepsTaken, bestCost);
         }
 
         private Result solved(long steps) {
