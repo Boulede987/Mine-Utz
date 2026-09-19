@@ -169,9 +169,10 @@ public final class TriangleIdentitySizeAssignment {
      * but also computes each free face's REAL achievable size range from committed
      * neighbors BEFORE deciding what goes there ("compute achievable range first, decide
      * second"). {@code TriangleIdentitySizeAssignment} otherwise has zero geometry input -
-     * this is the one, narrow crossing into {@link WeightedVertexPlacement}'s real geometry
-     * math, via {@link WeightedVertexPlacement#achievableAreaRangeFor} rather than merging
-     * the two classes.
+     * this crosses into real geometry math only through {@link AchievableSizeRangeCalculator}
+     * (real production mechanism: {@link PowerDiagramAchievableSizeRangeCalculator}, wrapping
+     * {@link WeightedVertexPlacement#achievableAreaRangeFor}) - see that interface's own doc
+     * for why it's behind a contract rather than a direct call.
      *
      * <p>A candidate biome whose ENTIRE {@link BiomeSizeRange} falls outside a face's
      * achievable range is HARD-EXCLUDED from its domain, same standing as a graph-illegal
@@ -183,6 +184,10 @@ public final class TriangleIdentitySizeAssignment {
      * second chance with a WIDER achievable range on attempt 2, no new recovery mechanism.
      * Once identity is chosen, width is drawn from the INTERSECTION of the biome's catalog
      * range and achievable range, not raw catalog range alone.
+     *
+     * <p>Uses the real, production {@link PowerDiagramAchievableSizeRangeCalculator} - see
+     * the trailing-{@link AchievableSizeRangeCalculator}-parameter overload below to supply
+     * a different one (reachability/verification tooling, or a future alternate mechanism).
      *
      * @param mesh                       the real mesh this solve's faces belong to - only
      *                                   used to compute achievable ranges, nothing else.
@@ -223,6 +228,26 @@ public final class TriangleIdentitySizeAssignment {
         HexMeshBuilder.HexMesh mesh, double baselineCircumradiusBlocks, double minEdgeLengthBlocks,
         Map<Integer, Point2D> committedVertexPositions
     ) {
+        return solve(
+            adjacency, freeFaceIndices, fixedFaceBiomes, graph, worldSeed, regionAreaBlocks2, committedWidthBlocksByFace,
+            mesh, baselineCircumradiusBlocks, minEdgeLengthBlocks, committedVertexPositions, PowerDiagramAchievableSizeRangeCalculator.INSTANCE
+        );
+    }
+
+    /**
+     * Same as the 10-arg overload above, but lets a caller supply an alternate {@link
+     * AchievableSizeRangeCalculator} instead of the real, production power-diagram
+     * mechanism - used by reachability/verification tooling that needs the SAME real math
+     * production uses (not a re-guessed proxy, see that interface's own doc), and by any
+     * future experiment with a DIFFERENT size mechanism, without this class itself
+     * changing (2026-09-17).
+     */
+    public static Optional<Map<Integer, Assignment>> solve(
+        FaceAdjacency.Adjacency adjacency, Set<Integer> freeFaceIndices, Map<Integer, BiomeId> fixedFaceBiomes,
+        BiomeGraph graph, long worldSeed, double regionAreaBlocks2, Map<Integer, Integer> committedWidthBlocksByFace,
+        HexMeshBuilder.HexMesh mesh, double baselineCircumradiusBlocks, double minEdgeLengthBlocks,
+        Map<Integer, Point2D> committedVertexPositions, AchievableSizeRangeCalculator calculator
+    ) {
         // Real catalog-wide bounds, not arbitrary extreme - see achievableAreaRangeFor for
         // why an astronomically large probe weight collapses to the same constant
         // regardless of real neighbor context (real bug found/fixed before this was
@@ -239,11 +264,10 @@ public final class TriangleIdentitySizeAssignment {
             if (!hasCommittedNeighbor) {
                 continue;
             }
-            WeightedVertexPlacement.AreaRange areaRange = WeightedVertexPlacement.achievableAreaRangeFor(
+            achievableRangeByFace.put(faceIndex, calculator.rangeFor(
                 mesh, adjacency, faceIndex, committedWidthBlocksByFace, committedVertexPositions, baselineCircumradiusBlocks, minEdgeLengthBlocks,
                 probeMinWidthBlocks, probeMaxWidthBlocks
-            );
-            achievableRangeByFace.put(faceIndex, AchievableWidthRange.from(areaRange));
+            ));
         }
         return solve(adjacency, freeFaceIndices, fixedFaceBiomes, graph, worldSeed, regionAreaBlocks2, committedWidthBlocksByFace, achievableRangeByFace);
     }
