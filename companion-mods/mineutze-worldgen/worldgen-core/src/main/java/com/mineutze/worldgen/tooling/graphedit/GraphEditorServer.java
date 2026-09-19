@@ -20,6 +20,7 @@ import java.nio.file.Path;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.Executors;
 
 /**
@@ -56,8 +57,10 @@ import java.util.concurrent.Executors;
  * to start until fixed - the user's own explicit, informed choice ("wire it now, let it
  * fail loud") over fixing existing data first.
  *
- * <p>NOT in this slice: editing/removing an existing BIOME (node), editing an existing
- * adjacency's blend width, dragging nodes, a real force-directed layout.
+ * <p>An existing biome's size range can be edited in FOCUS view (2026-09-19, real user
+ * request - see {@link #handleUpdateNodeSize}). NOT in this slice: removing a BIOME (node),
+ * editing its other properties, editing an existing adjacency's blend width, dragging
+ * nodes, a real force-directed layout.
  */
 public final class GraphEditorServer {
 
@@ -75,6 +78,7 @@ public final class GraphEditorServer {
         server.createContext("/", GraphEditorServer::serveIndex);
         server.createContext("/api/graph", GraphEditorServer::serveGraph);
         server.createContext("/api/nodes", GraphEditorServer::handleAddNode);
+        server.createContext("/api/nodes/size", GraphEditorServer::handleUpdateNodeSize);
         server.createContext("/api/edges", GraphEditorServer::handleAddEdge);
         server.createContext("/api/edges/remove", GraphEditorServer::handleRemoveEdge);
         server.createContext("/api/validate", GraphEditorServer::handleValidate);
@@ -121,6 +125,65 @@ public final class GraphEditorServer {
             BiomeGraphJson.save(GraphEditorFiles.DATA_FILE, proposed);
         }
         respondJson(exchange, 200, resultJson(result, proposed));
+    }
+
+    /**
+     * Changes ONE existing biome's size range (2026-09-19, real user request: edit the
+     * focused biome's min/max from the UI). Despite the field names, the two numbers are an
+     * AREA written as the width of a regular hexagon with that same area (see {@link
+     * com.mineutze.worldgen.regionsolve.topology.HexGeometry}) - the UI labels say so.
+     * Re-validates before saving, same as every other mutation: an inverted or non-positive
+     * range is rejected by {@code BiomeSizeRange} during validation and never written.
+     */
+    @SuppressWarnings("unchecked")
+    private static void handleUpdateNodeSize(HttpExchange exchange) throws IOException {
+        if (!"POST".equals(exchange.getRequestMethod())) {
+            respond(exchange, 405, "text/plain; charset=utf-8", "POST only".getBytes(StandardCharsets.UTF_8));
+            return;
+        }
+        Map<String, Object> body = (Map<String, Object>) MinimalJson.parse(readBody(exchange));
+        String namespace = (String) body.get("namespace");
+        String path = (String) body.get("path");
+        if (!(body.get("minWidthBlocks") instanceof Double minSize) || !(body.get("maxWidthBlocks") instanceof Double maxSize)) {
+            respondJson(exchange, 200, MinimalJson.writeObject(Map.of(
+                "constructs", false, "constructionError", "Both a minimum and a maximum size are required, as numbers.",
+                "errors", List.of(), "motifWarnings", List.of()
+            )));
+            return;
+        }
+
+        BiomeGraphData current = BiomeGraphJson.load(GraphEditorFiles.DATA_FILE);
+        Optional<BiomeGraphData> proposed = withSize(current, namespace, path, minSize.intValue(), maxSize.intValue());
+        if (proposed.isEmpty()) {
+            respondJson(exchange, 200, MinimalJson.writeObject(Map.of(
+                "constructs", false, "constructionError", "No such biome: " + namespace + ":" + path,
+                "errors", List.of(), "motifWarnings", List.of()
+            )));
+            return;
+        }
+
+        ValidationResult result = GraphValidation.validate(proposed.get());
+        if (result.constructs()) {
+            BiomeGraphJson.save(GraphEditorFiles.DATA_FILE, proposed.get());
+        }
+        respondJson(exchange, 200, resultJson(result, proposed.get()));
+    }
+
+    /** {@code current} with {@code namespace:path}'s size range replaced and everything else identical, or empty if no such biome exists. Pure - never touches the data file, so it is what the tests exercise. */
+    static Optional<BiomeGraphData> withSize(BiomeGraphData current, String namespace, String path, int minWidthBlocks, int maxWidthBlocks) {
+        if (current.nodes().stream().noneMatch(node -> isBiome(node, namespace, path))) {
+            return Optional.empty();
+        }
+        List<NodeData> updatedNodes = current.nodes().stream()
+            .map(node -> isBiome(node, namespace, path)
+                ? new NodeData(node.namespace(), node.path(), minWidthBlocks, maxWidthBlocks, node.selfAdjacencyLimit(), node.requiredNeighbors())
+                : node)
+            .toList();
+        return Optional.of(new BiomeGraphData(updatedNodes, current.edges()));
+    }
+
+    private static boolean isBiome(NodeData node, String namespace, String path) {
+        return node.namespace().equals(namespace) && node.path().equals(path);
     }
 
     @SuppressWarnings("unchecked")
@@ -420,6 +483,7 @@ public final class GraphEditorServer {
           input, select { width: 100%; box-sizing: border-box; }
           pre { white-space: pre-wrap; font-size: 11px; max-height: 300px; overflow: auto; background: #222; color: #ddd; padding: 6px; }
           button { margin-top: 8px; }
+          #areaReadout { font-size: 12px; color: #555; margin-top: 4px; }
           #adjacencyList { font-size: 12px; }
           #adjacencyList li { margin: 2px 0; }
         </style>
@@ -436,11 +500,19 @@ public final class GraphEditorServer {
           <h3 id="adjacencyHeading">All adjacencies</h3>
           <ul id="adjacencyList"></ul>
 
+          <h3 id="editSizeHeading">Edit size (focus a biome first)</h3>
+          <fieldset>
+            <label>Min size (blocks) - the width of a regular hexagon with the minimum AREA</label><input id="editMin" type="number" oninput="updateAreaReadout()">
+            <label>Max size (blocks) - the width of a regular hexagon with the maximum AREA</label><input id="editMax" type="number" oninput="updateAreaReadout()">
+            <div id="areaReadout"></div>
+            <button id="saveSizeButton" onclick="saveSize()">Save size (to focused biome)</button>
+          </fieldset>
+
           <h3>Add biome</h3>
           <fieldset>
             <label>Biome ID (namespace:path, matches /dump_biomes output)</label><input id="nodeId" placeholder="biomesoplenty:maple_woods">
-            <label>Min width blocks</label><input id="nodeMin" type="number" value="500">
-            <label>Max width blocks</label><input id="nodeMax" type="number" value="800">
+            <label>Min size (blocks) - the width of a regular hexagon with the minimum AREA</label><input id="nodeMin" type="number" value="500">
+            <label>Max size (blocks) - the width of a regular hexagon with the maximum AREA</label><input id="nodeMax" type="number" value="800">
             <label>Self-adjacency limit (blank = uncapped)</label><input id="nodeSelfAdj" type="number">
             <button onclick="addNode()">Add biome</button>
           </fieldset>
@@ -485,6 +557,7 @@ public final class GraphEditorServer {
           renderGraph();
           renderAdjacencyList();
           renderRequiredNeighbors();
+          renderEditSize();
         }
 
         function keyOf(n) { return n.namespace + ':' + n.path; }
@@ -518,11 +591,61 @@ public final class GraphEditorServer {
           renderGraph();
           renderAdjacencyList();
           renderRequiredNeighbors();
+          renderEditSize();
         }
 
         function focusedNode() {
           if (!focusKey) return null;
           return graph.nodes.find(n => keyOf(n) === focusKey) || null;
+        }
+
+        // Same formula as HexGeometry: a regular hexagon's area is 3*sqrt(3)/2 times its circumradius squared, and the
+        // "size" number is the hexagon's width, i.e. twice the circumradius. The size is an area, entered as that width.
+        function areaOfHexagonWidth(widthBlocks) {
+          const circumradius = widthBlocks / 2;
+          return 3 * Math.sqrt(3) / 2 * circumradius * circumradius;
+        }
+
+        function updateAreaReadout() {
+          const minSize = parseInt(document.getElementById('editMin').value, 10);
+          const maxSize = parseInt(document.getElementById('editMax').value, 10);
+          const readout = document.getElementById('areaReadout');
+          if (isNaN(minSize) || isNaN(maxSize)) { readout.textContent = ''; return; }
+          const format = size => Math.round(areaOfHexagonWidth(size)).toLocaleString();
+          readout.textContent = 'Area: ' + format(minSize) + ' to ' + format(maxSize) + ' blocks²';
+        }
+
+        function renderEditSize() {
+          const node = focusedNode();
+          const heading = document.getElementById('editSizeHeading');
+          const minInput = document.getElementById('editMin');
+          const maxInput = document.getElementById('editMax');
+          document.getElementById('saveSizeButton').disabled = !node;
+          minInput.disabled = !node;
+          maxInput.disabled = !node;
+          if (!node) {
+            heading.textContent = 'Edit size (focus a biome first)';
+            minInput.value = '';
+            maxInput.value = '';
+          } else {
+            heading.textContent = 'Edit size of ' + focusKey;
+            minInput.value = node.minWidthBlocks;
+            maxInput.value = node.maxWidthBlocks;
+          }
+          updateAreaReadout();
+        }
+
+        async function saveSize() {
+          const node = focusedNode();
+          if (!node) { alert('Focus a biome first (top dropdown) - the size is saved to the FOCUSED biome.'); return; }
+          const minSize = parseInt(document.getElementById('editMin').value, 10);
+          const maxSize = parseInt(document.getElementById('editMax').value, 10);
+          if (isNaN(minSize) || isNaN(maxSize)) { alert('Enter both a minimum and a maximum size.'); return; }
+          const body = { namespace: node.namespace, path: node.path, minWidthBlocks: minSize, maxWidthBlocks: maxSize };
+          const response = await fetch('/api/nodes/size', { method: 'POST', body: JSON.stringify(body) });
+          const result = await response.json();
+          showResult(result);
+          if (result.constructs) await loadGraph();
         }
 
         function renderRequiredNeighbors() {
