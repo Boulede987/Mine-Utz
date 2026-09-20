@@ -86,4 +86,52 @@ class GraphEditorServerTest {
 
         assertFalse(GraphValidation.validate(nonPositive).constructs());
     }
+
+    private static BiomeGraphData threeBiomeGraph() {
+        return new BiomeGraphData(
+            List.of(
+                node("beach", 100, 200, List.of(new RequiredNeighbor("test", "ocean", 1), new RequiredNeighbor("test", "plains", 2))),
+                node("ocean", 300, 700, List.of()),
+                node("plains", 300, 700, List.of())
+            ),
+            List.of(
+                new EdgeData("test", "beach", "test", "ocean", 10),
+                new EdgeData("test", "plains", "test", "beach", 10),
+                new EdgeData("test", "ocean", "test", "plains", 10)
+            )
+        );
+    }
+
+    @Test
+    void withoutBiomeDropsTheBiomeAndKeepsTheOthers() {
+        BiomeGraphData updated = GraphEditorServer.withoutBiome(threeBiomeGraph(), "test", "ocean").orElseThrow();
+
+        assertEquals(List.of("beach", "plains"), updated.nodes().stream().map(NodeData::path).toList());
+    }
+
+    @Test
+    void withoutBiomeDropsEveryAdjacencyTouchingItWhicheverSideItIsOn() {
+        BiomeGraphData updated = GraphEditorServer.withoutBiome(threeBiomeGraph(), "test", "beach").orElseThrow();
+
+        assertEquals(List.of(new EdgeData("test", "ocean", "test", "plains", 10)), updated.edges());
+    }
+
+    @Test
+    void withoutBiomeDropsRequirementsOtherBiomesHadOnIt() {
+        BiomeGraphData updated = GraphEditorServer.withoutBiome(threeBiomeGraph(), "test", "ocean").orElseThrow();
+
+        assertEquals(List.of(new RequiredNeighbor("test", "plains", 2)), updated.nodes().get(0).requiredNeighbors());
+    }
+
+    @Test
+    void withoutBiomeLeavesAValidGraphWhenTheBiomeWasReferencedEverywhere() {
+        BiomeGraphData updated = GraphEditorServer.withoutBiome(threeBiomeGraph(), "test", "ocean").orElseThrow();
+
+        assertTrue(GraphValidation.validate(updated).constructs());
+    }
+
+    @Test
+    void withoutBiomeReturnsEmptyForABiomeThatDoesNotExist() {
+        assertTrue(GraphEditorServer.withoutBiome(threeBiomeGraph(), "test", "missing").isEmpty());
+    }
 }

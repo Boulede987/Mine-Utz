@@ -79,6 +79,7 @@ public final class GraphEditorServer {
         server.createContext("/api/graph", GraphEditorServer::serveGraph);
         server.createContext("/api/nodes", GraphEditorServer::handleAddNode);
         server.createContext("/api/nodes/size", GraphEditorServer::handleUpdateNodeSize);
+        server.createContext("/api/nodes/remove", GraphEditorServer::handleRemoveNode);
         server.createContext("/api/edges", GraphEditorServer::handleAddEdge);
         server.createContext("/api/edges/remove", GraphEditorServer::handleRemoveEdge);
         server.createContext("/api/validate", GraphEditorServer::handleValidate);
@@ -182,6 +183,61 @@ public final class GraphEditorServer {
 
     private static boolean isBiome(NodeData node, String namespace, String path) {
         return node.namespace().equals(namespace) && node.path().equals(path);
+    }
+
+    private static boolean isBiome(BiomeGraphData.RequiredNeighbor requirement, String namespace, String path) {
+        return requirement.namespace().equals(namespace) && requirement.path().equals(path);
+    }
+
+    /**
+     * Removes ONE biome together with everything that names it: its adjacencies and the required-neighbor
+     * entries other biomes had on it (left behind they would be dangling references). Re-validates before
+     * saving, same as every other mutation.
+     */
+    @SuppressWarnings("unchecked")
+    private static void handleRemoveNode(HttpExchange exchange) throws IOException {
+        if (!"POST".equals(exchange.getRequestMethod())) {
+            respond(exchange, 405, "text/plain; charset=utf-8", "POST only".getBytes(StandardCharsets.UTF_8));
+            return;
+        }
+        Map<String, Object> body = (Map<String, Object>) MinimalJson.parse(readBody(exchange));
+        String namespace = (String) body.get("namespace");
+        String path = (String) body.get("path");
+
+        BiomeGraphData current = BiomeGraphJson.load(GraphEditorFiles.DATA_FILE);
+        Optional<BiomeGraphData> proposed = withoutBiome(current, namespace, path);
+        if (proposed.isEmpty()) {
+            respondJson(exchange, 200, MinimalJson.writeObject(Map.of(
+                "constructs", false, "constructionError", "No such biome: " + namespace + ":" + path,
+                "errors", List.of()
+            )));
+            return;
+        }
+
+        ValidationResult result = GraphValidation.validate(proposed.get());
+        if (result.constructs()) {
+            BiomeGraphJson.save(GraphEditorFiles.DATA_FILE, proposed.get());
+        }
+        respondJson(exchange, 200, resultJson(result, proposed.get()));
+    }
+
+    /** {@code current} without {@code namespace:path}, its adjacencies, and every other biome's requirement on it; empty if no such biome exists. Pure - never touches the data file. */
+    static Optional<BiomeGraphData> withoutBiome(BiomeGraphData current, String namespace, String path) {
+        if (current.nodes().stream().noneMatch(node -> isBiome(node, namespace, path))) {
+            return Optional.empty();
+        }
+        String removedKey = namespace + ":" + path;
+        List<NodeData> remainingNodes = current.nodes().stream()
+            .filter(node -> !isBiome(node, namespace, path))
+            .map(node -> new NodeData(
+                node.namespace(), node.path(), node.minWidthBlocks(), node.maxWidthBlocks(), node.selfAdjacencyLimit(),
+                node.requiredNeighbors().stream().filter(requirement -> !isBiome(requirement, namespace, path)).toList()
+            ))
+            .toList();
+        List<EdgeData> remainingEdges = current.edges().stream()
+            .filter(edge -> !edge.aKey().equals(removedKey) && !edge.bKey().equals(removedKey))
+            .toList();
+        return Optional.of(new BiomeGraphData(remainingNodes, remainingEdges));
     }
 
     @SuppressWarnings("unchecked")
@@ -491,6 +547,11 @@ public final class GraphEditorServer {
             <button id="saveSizeButton" onclick="saveSize()">Save size (to focused biome)</button>
           </fieldset>
 
+          <h3 id="removeBiomeHeading">Remove biome (focus a biome first)</h3>
+          <fieldset>
+            <button id="removeBiomeButton" onclick="removeBiome()">Remove focused biome</button>
+          </fieldset>
+
           <h3>Add biome</h3>
           <fieldset>
             <label>Biome ID (namespace:path, matches /dump_biomes output)</label><input id="nodeId" placeholder="biomesoplenty:maple_woods">
@@ -540,6 +601,7 @@ public final class GraphEditorServer {
           renderAdjacencyList();
           renderRequiredNeighbors();
           renderEditSize();
+          renderRemoveBiome();
         }
 
         function keyOf(n) { return n.namespace + ':' + n.path; }
@@ -574,6 +636,7 @@ public final class GraphEditorServer {
           renderAdjacencyList();
           renderRequiredNeighbors();
           renderEditSize();
+          renderRemoveBiome();
         }
 
         function focusedNode() {
@@ -628,6 +691,30 @@ public final class GraphEditorServer {
           const result = await response.json();
           showResult(result);
           if (result.constructs) await loadGraph();
+        }
+
+        function renderRemoveBiome() {
+          const node = focusedNode();
+          document.getElementById('removeBiomeButton').disabled = !node;
+          document.getElementById('removeBiomeHeading').textContent = node ? 'Remove biome ' + focusKey : 'Remove biome (focus a biome first)';
+        }
+
+        async function removeBiome() {
+          const node = focusedNode();
+          if (!node) { alert('Focus a biome first (top dropdown) - the FOCUSED biome is the one removed.'); return; }
+          const adjacencyCount = neighborsOf(focusKey).length;
+          const requirementCount = graph.nodes.reduce((total, other) => total
+            + (other.requiredNeighbors || []).filter(r => r.namespace === node.namespace && r.path === node.path).length, 0);
+          if (!confirm('Remove biome ' + focusKey + '? Its ' + adjacencyCount + ' adjacencies and ' + requirementCount
+            + ' requirement(s) other biomes have on it are removed too.')) return;
+          const body = { namespace: node.namespace, path: node.path };
+          const response = await fetch('/api/nodes/remove', { method: 'POST', body: JSON.stringify(body) });
+          const result = await response.json();
+          showResult(result);
+          if (result.constructs) {
+            focusKey = '';
+            await loadGraph();
+          }
         }
 
         function renderRequiredNeighbors() {
