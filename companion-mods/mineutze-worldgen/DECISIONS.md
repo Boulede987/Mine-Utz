@@ -1,5 +1,40 @@
 # Decisions
 
+## 2026-09-20 — Required borders: a biome's clusters must share a stretch of border with a named biome
+
+**Context:** `requiredNeighbors` (a beach beside the ocean) existed in the catalog schema and the
+editor but nothing enforced it; only the deleted old checker read it. The author wants shores and
+beaches to touch their water, and to expand the feature later.
+
+**Decision:** A requirement is "every cluster of biome B shares at least N cell-edges with a cluster
+of biome X" (`RequiredNeighbor.minCount`, now meaning cell-edges; one edge is about 150 blocks).
+One-way: X asks nothing back. It is enforced in three places: `ClusterSizeModel` rejects a
+requirement that could never be met (unknown biome, itself, not a legal neighbor, more edges than the
+shape rule lets the biome's largest cluster have); the local search prices the shortfall as part of a
+cluster's violation, including the clusters of a third biome whose border a cell change takes away;
+and `BiomeMapVerifier`/`RealizationSelector` re-check the warped map, holding it to half the planned
+border length (`REALIZED_BORDER_FRACTION`, since the warp bends and shortens borders). The editor shows
+what the generator would reject as a live error.
+
+**Alternatives considered:**
+- Count touching clusters instead of border length: rejected, a beach could touch the ocean at one
+  corner.
+- Check only after solving: rejected, it would fail worlds instead of steering the search.
+- A per-biome shape exception for strips: not built. At 300-block cells a shore cluster is one to
+  seven cells and the size range already bounds a strip; measured shapes are blobs hugging the water,
+  and the perimeter rule did not get in the way.
+
+**Evidence:** 271 unit tests including exact-cost drift checks; 22 mutants of the new logic all caught.
+Shipped catalog with beach requiring the ocean: 4 of 4 world seeds solved (13-57 s). Stress catalog
+with four shore biomes each requiring 2 edges (beach-ocean, snowy_beach-cold_ocean,
+stony_shore-cold_ocean, dacite_shore-frozen_ocean): 20 of 20 world seeds solved and realized (pattern
+attempts median 8, max 34 of 200; pattern seconds median 27.5); an independent script over the
+saved patterns found all 92 shore clusters at 2 or more shared edges, half their outline on average.
+
+**Known limits:** A requirement names ONE biome, but a beach may touch `ocean` or `lukewarm_ocean`;
+"any of these" groups are the natural next step. A shore cannot be narrower than one cell (300 blocks
+across); a genuinely thin beach needs a border fringe drawn when the map is rendered.
+
 ## 2026-09-20 — One solved biome plan per world replaces the hex-mesh region solver
 
 **Context:** The hex-mesh generator solved regions lazily while the player explored, and could not

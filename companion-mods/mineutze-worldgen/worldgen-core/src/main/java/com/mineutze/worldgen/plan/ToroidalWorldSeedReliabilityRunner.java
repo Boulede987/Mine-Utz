@@ -47,8 +47,10 @@ public final class ToroidalWorldSeedReliabilityRunner {
     private ToroidalWorldSeedReliabilityRunner() {
     }
 
+    /** Optional arguments: a catalog file to test instead of the shipped one, and how many ordinary world seeds to try instead of {@value #WORLD_SEED_COUNT}. */
     public static void main(String[] args) {
-        BiomeGraphData data = BiomeGraphJson.loadResource(RawRuleTable.class, "/biomegraph/biome-graph.json");
+        BiomeGraphData data = args.length > 0 ? BiomeGraphJson.load(Path.of(args[0])) : BiomeGraphJson.loadResource(RawRuleTable.class, "/biomegraph/biome-graph.json");
+        int ordinarySeedCount = args.length > 1 ? Integer.parseInt(args[1]) : WORLD_SEED_COUNT;
         RawRuleTable table = RawRuleTable.from(data);
         ToroidalGrid grid = new ToroidalGrid(GRID_SIZE, GRID_SIZE);
         HexTorusGeometry geometry = new HexTorusGeometry(GRID_SIZE, GRID_SIZE, ATOM_WIDTH_BLOCKS);
@@ -60,7 +62,7 @@ public final class ToroidalWorldSeedReliabilityRunner {
         for (long extreme : EXTREME_WORLD_SEEDS) {
             worldSeeds.add(extreme);
         }
-        for (int index = 0; index < WORLD_SEED_COUNT; index++) {
+        for (int index = 0; index < ordinarySeedCount; index++) {
             worldSeeds.add(FIRST_ORDINARY_WORLD_SEED + index);
         }
 

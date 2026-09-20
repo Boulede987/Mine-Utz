@@ -242,7 +242,8 @@ Each stage ends with tests green, a commit, and the acceptance check named.
   16-64 s each). 242 worldgen-core tests pass. DECISIONS.md has the entry.
 - Still open: unit tests for the mod-side save format (NeoGradle's JUnit hook did not start; the in-game
   save/restore is the check for now); the game-grid speck check and the minimum-width check of section
-  4.7; re-running the 104-seed study through `WorldBiomePlan`; `requiredNeighbors` in the catalog schema
-  is not enforced by the generator (the author wants it kept for beaches/shores and expanded).
+  4.7; re-running the 104-seed study through `WorldBiomePlan`.
+- Required borders (2026-09-20): `requiredNeighbors` is now enforced (see DECISIONS.md). Open: "any of these"
+  groups (a beach touches `ocean` or `lukewarm_ocean`), and a rendered border fringe for beaches narrower than a cell.
 - Also done (2026-09-20): editor "Remove focused biome" button; `BiomeGraph`'s old-mesh completeness checks
   and the catalog node-count test deleted (241 tests).
