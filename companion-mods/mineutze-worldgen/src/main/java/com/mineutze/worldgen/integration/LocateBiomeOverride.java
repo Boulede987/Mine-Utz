@@ -1,8 +1,8 @@
 package com.mineutze.worldgen.integration;
 
 import com.mineutze.worldgen.biomegraph.BiomeId;
-import com.mineutze.worldgen.coherence.BlockPosition;
-import com.mineutze.worldgen.coherence.WorldBiomePlan;
+import com.mineutze.worldgen.plan.BlockPosition;
+import com.mineutze.worldgen.plan.WorldBiomePlan;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import com.mojang.brigadier.exceptions.DynamicCommandExceptionType;

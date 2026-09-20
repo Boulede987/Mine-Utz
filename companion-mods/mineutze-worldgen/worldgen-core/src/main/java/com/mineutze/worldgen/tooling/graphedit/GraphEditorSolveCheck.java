@@ -2,7 +2,7 @@ package com.mineutze.worldgen.tooling.graphedit;
 
 import com.mineutze.worldgen.biomegraph.BiomeGraphData;
 import com.mineutze.worldgen.biomegraph.BiomeGraphJson;
-import com.mineutze.worldgen.coherence.WorldBiomePlan;
+import com.mineutze.worldgen.plan.WorldBiomePlan;
 
 import java.io.IOException;
 import java.util.List;

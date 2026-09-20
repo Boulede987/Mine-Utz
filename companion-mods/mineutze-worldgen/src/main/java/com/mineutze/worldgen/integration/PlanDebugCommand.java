@@ -1,6 +1,6 @@
 package com.mineutze.worldgen.integration;
 
-import com.mineutze.worldgen.coherence.WorldBiomePlan;
+import com.mineutze.worldgen.plan.WorldBiomePlan;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.context.CommandContext;

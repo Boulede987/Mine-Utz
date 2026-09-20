@@ -1,6 +1,6 @@
 package com.mineutze.worldgen.integration;
 
-import com.mineutze.worldgen.coherence.WorldBiomePlan;
+import com.mineutze.worldgen.plan.WorldBiomePlan;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Holder;
 import net.minecraft.server.level.ServerLevel;

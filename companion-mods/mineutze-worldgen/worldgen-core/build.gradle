@@ -29,28 +29,28 @@ tasks.register('toroidalSolvability', JavaExec) {
     group = 'verification'
     description = 'The evidence for "every world seed solves": many independent single-seed searches against the real catalog, with per-seed solve rate, failure bound and restarts needed. Long-running. Run with: ./gradlew :worldgen-core:toroidalSolvability'
     classpath = sourceSets.main.runtimeClasspath
-    mainClass = 'com.mineutze.worldgen.coherence.ToroidalSolvabilityRunner'
+    mainClass = 'com.mineutze.worldgen.plan.ToroidalSolvabilityRunner'
 }
 
 tasks.register('toroidalWorldSeedReliability', JavaExec) {
     group = 'verification'
     description = 'End-to-end proof that every world seed solves: the real per-world-seed pattern generator on many different world seeds against the real catalog, one CSV line per world seed. Long-running. Run with: ./gradlew :worldgen-core:toroidalWorldSeedReliability'
     classpath = sourceSets.main.runtimeClasspath
-    mainClass = 'com.mineutze.worldgen.coherence.ToroidalWorldSeedReliabilityRunner'
+    mainClass = 'com.mineutze.worldgen.plan.ToroidalWorldSeedReliabilityRunner'
 }
 
 tasks.register('biomeRealizationPrototype', JavaExec) {
     group = 'verification'
     description = 'Prototype: turn a solved 40x40 cell pattern into a map with natural borders via an area-preserving warp, verify it directly (areas, legality, topology) and write pictures to build/realization. Run with: ./gradlew :worldgen-core:biomeRealizationPrototype'
     classpath = sourceSets.main.runtimeClasspath
-    mainClass = 'com.mineutze.worldgen.coherence.BiomeRealizationPrototypeRunner'
+    mainClass = 'com.mineutze.worldgen.plan.BiomeRealizationPrototypeRunner'
 }
 
 tasks.register('worldBiomePlanCheck', JavaExec) {
     group = 'verification'
     description = 'Real-scale check of WorldBiomePlan against the real catalog: creation time, lookup speed, tile repeat, snapshot round trip, a raster hash to compare between runs, and a comparison of the solved pattern with the one the reliability study saved. Run with: ./gradlew :worldgen-core:worldBiomePlanCheck'
     classpath = sourceSets.main.runtimeClasspath
-    mainClass = 'com.mineutze.worldgen.coherence.WorldBiomePlanCheckRunner'
+    mainClass = 'com.mineutze.worldgen.plan.WorldBiomePlanCheckRunner'
 }
 
 tasks.register('graphEditorSolveCheck', JavaExec) {

@@ -28,7 +28,7 @@ import java.util.Optional;
 import java.util.stream.Stream;
 
 /**
- * Reports the biome the world's {@link com.mineutze.worldgen.coherence.WorldBiomePlan} holds for a
+ * Reports the biome the world's {@link com.mineutze.worldgen.plan.WorldBiomePlan} holds for a
  * column - nothing here samples climate noise to pick a biome.
  * Registered via {@link ModBiomeSources} and selected by the
  * data/minecraft/dimension/overworld.json datapack override.
