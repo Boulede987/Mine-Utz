@@ -104,7 +104,7 @@ final class ToroidalPatternPngExporter {
     }
 
     /** Spreads consecutive biome indices around the hue wheel by the golden ratio so neighbors in the order look different. */
-    private static Color colorOf(int colorIndex) {
+    static Color colorOf(int colorIndex) {
         float hue = (float) ((colorIndex * GOLDEN_RATIO_CONJUGATE) % 1.0);
         float brightness = colorIndex % 2 == 0 ? 0.95f : 0.75f;
         return Color.getHSBColor(hue, 0.55f, brightness);
