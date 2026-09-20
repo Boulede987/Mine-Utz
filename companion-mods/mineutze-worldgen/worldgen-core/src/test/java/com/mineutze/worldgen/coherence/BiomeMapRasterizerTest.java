@@ -91,6 +91,25 @@ class BiomeMapRasterizerTest {
         assertArrayEquals(first.cells(), second.cells());
     }
 
+    /** The map is nothing but the field sampled on a lattice: every sample must equal the field's answer at that sample's position. */
+    @Test
+    void everySampleEqualsTheFieldAtItsPosition() {
+        DivergenceFreeWarp warp = new DivergenceFreeWarp(GEOMETRY, 5, new DivergenceFreeWarp.Settings(16, 60, 800, 30, 0.8, 4));
+        BiomeMap map = BiomeMapRasterizer.rasterize(GRID, pattern(), GEOMETRY, warp, SAMPLES_PER_SIDE, ORDER);
+        RealizedBiomeField field = new RealizedBiomeField(GRID, pattern(), GEOMETRY, warp, ORDER);
+
+        for (int j = 0; j < SAMPLES_PER_SIDE; j += 3) {
+            for (int i = 0; i < SAMPLES_PER_SIDE; i += 2) {
+                double u = (i + 0.5) / SAMPLES_PER_SIDE;
+                double v = (j + 0.5) / SAMPLES_PER_SIDE;
+                double x = u * GEOMETRY.tileVectorAX() + v * GEOMETRY.tileVectorBX();
+                double y = u * GEOMETRY.tileVectorAY() + v * GEOMETRY.tileVectorBY();
+                assertEquals(field.cellIndexAt(x, y), map.cellAt(i, j), "sample " + i + "," + j);
+                assertEquals(field.biomeIndexAt(x, y), map.biomeAt(i, j), "sample " + i + "," + j);
+            }
+        }
+    }
+
     @Test
     void sampleAreasAddUpToTheTile() {
         BiomeMap map = BiomeMapRasterizer.rasterize(GRID, pattern(), GEOMETRY, DivergenceFreeWarp.none(GEOMETRY), SAMPLES_PER_SIDE, ORDER);
