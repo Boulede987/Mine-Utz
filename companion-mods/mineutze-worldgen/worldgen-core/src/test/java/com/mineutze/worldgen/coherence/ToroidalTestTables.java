@@ -28,6 +28,11 @@ final class ToroidalTestTables {
 
     /** As {@link #fullyLegalTable}, with every biome given the same size range (min/max are the width of an equal-area regular hexagon, like the real catalog's). */
     static RawRuleTable fullyLegalTableWithWidths(int minWidthBlocks, int maxWidthBlocks, BiomeId... biomes) {
+        return RawRuleTable.from(fullyLegalCatalog(minWidthBlocks, maxWidthBlocks, biomes));
+    }
+
+    /** The catalog data behind {@link #fullyLegalTableWithWidths}, for tests that go through the public plan API. */
+    static BiomeGraphData fullyLegalCatalog(int minWidthBlocks, int maxWidthBlocks, BiomeId... biomes) {
         List<NodeData> nodes = new ArrayList<>();
         List<EdgeData> edges = new ArrayList<>();
         for (int first = 0; first < biomes.length; first++) {
@@ -36,7 +41,7 @@ final class ToroidalTestTables {
                 edges.add(new EdgeData(biomes[first].namespace(), biomes[first].path(), biomes[second].namespace(), biomes[second].path(), 10));
             }
         }
-        return RawRuleTable.from(new BiomeGraphData(nodes, edges));
+        return new BiomeGraphData(nodes, edges);
     }
 
     /** Two mutually legal biomes with DIFFERENT size ranges, for tests where one biome's size must be pinned tightly and the other left loose. */

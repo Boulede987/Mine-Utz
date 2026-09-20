@@ -29,8 +29,8 @@ final class RealizationSelector {
     private RealizationSelector() {
     }
 
-    /** The winning strength, its warp, the verification report that cleared it and how many strengths were tried to get there. */
-    record Selection(double strength, DivergenceFreeWarp warp, BiomeMapVerifier.Report report, int candidatesTried, List<BiomeId> biomeOrder) {
+    /** The winning strength, its warp, the verified map itself, the report that cleared it and how many strengths were tried to get there. */
+    record Selection(double strength, DivergenceFreeWarp warp, BiomeMap map, BiomeMapVerifier.Report report, int candidatesTried, List<BiomeId> biomeOrder) {
     }
 
     static Selection select(
@@ -49,7 +49,7 @@ final class RealizationSelector {
             BiomeMap map = BiomeMapRasterizer.rasterize(grid, pattern, geometry, warp, samplesPerSide, biomeOrder);
             BiomeMapVerifier.Report report = BiomeMapVerifier.verify(map, table, toleranceOfMinimum, clusters);
             if (passes(report)) {
-                return new Selection(strength, warp, report, index + 1, biomeOrder);
+                return new Selection(strength, warp, map, report, index + 1, biomeOrder);
             }
             attempts.append("\n  strength ").append(describe(strength)).append(": ").append(whyItFailed(report));
         }

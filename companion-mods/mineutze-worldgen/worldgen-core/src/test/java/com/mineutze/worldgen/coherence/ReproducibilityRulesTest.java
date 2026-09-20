@@ -27,7 +27,7 @@ class ReproducibilityRulesTest {
     private static final List<String> PRODUCTION_CLASSES = List.of(
         "BiomeMap", "BiomeMapRasterizer", "BiomeMapVerifier", "ClusterSizeModel", "DeterministicTrig", "DivergenceFreeWarp", "HexTorusGeometry", "ParallelSeedSearch",
         "PatternClusters", "RawRuleTable", "RealizationSelector", "RealizedBiomeField", "ShapeRule", "ToroidalGrid", "ToroidalPos", "ToroidalSizedLocalSearch",
-        "ToroidalSizedPatternGenerator"
+        "ToroidalSizedPatternGenerator", "WorldBiomePlan", "PlanSnapshot", "PlanSettings", "BlockPosition"
     );
 
     private static final Path SOURCE_DIRECTORY = Path.of("src", "main", "java", "com", "mineutze", "worldgen", "coherence");
