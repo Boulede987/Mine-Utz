@@ -3,7 +3,7 @@ package com.mineutze.worldgen.plan;
 import com.mineutze.worldgen.biomegraph.BiomeGraphData;
 import com.mineutze.worldgen.biomegraph.BiomeGraphData.EdgeData;
 import com.mineutze.worldgen.biomegraph.BiomeGraphData.NodeData;
-import com.mineutze.worldgen.biomegraph.BiomeGraphData.RequiredNeighbor;
+import com.mineutze.worldgen.biomegraph.BiomeGraphData.GroupData;
 import com.mineutze.worldgen.biomegraph.BiomeId;
 
 import java.util.ArrayList;
@@ -37,7 +37,7 @@ final class ToroidalTestTables {
         List<NodeData> nodes = new ArrayList<>();
         List<EdgeData> edges = new ArrayList<>();
         for (int first = 0; first < biomes.length; first++) {
-            nodes.add(new NodeData(biomes[first].namespace(), biomes[first].path(), minWidthBlocks, maxWidthBlocks, Integer.MAX_VALUE, List.of()));
+            nodes.add(new NodeData(biomes[first].namespace(), biomes[first].path(), minWidthBlocks, maxWidthBlocks, Integer.MAX_VALUE, ""));
             for (int second = first + 1; second < biomes.length; second++) {
                 edges.add(new EdgeData(biomes[first].namespace(), biomes[first].path(), biomes[second].namespace(), biomes[second].path(), 10));
             }
@@ -52,20 +52,31 @@ final class ToroidalTestTables {
 
     /** {@code data} with a "shares at least {@code minEdges} edges with {@code required}" requirement added to {@code requirer}. */
     static BiomeGraphData withRequirement(BiomeGraphData data, BiomeId requirer, BiomeId required, int minEdges) {
+        return withRequirementText(data, requirer, required + " >= " + minEdges);
+    }
+
+    /** {@code data} with {@code text} as the requirement of {@code requirer}. */
+    static BiomeGraphData withRequirementText(BiomeGraphData data, BiomeId requirer, String text) {
         List<NodeData> nodes = data.nodes().stream()
             .map(node -> node.namespace().equals(requirer.namespace()) && node.path().equals(requirer.path())
-                ? new NodeData(node.namespace(), node.path(), node.minWidthBlocks(), node.maxWidthBlocks(), node.selfAdjacencyLimit(),
-                    List.of(new RequiredNeighbor(required.namespace(), required.path(), minEdges)))
+                ? new NodeData(node.namespace(), node.path(), node.minWidthBlocks(), node.maxWidthBlocks(), node.selfAdjacencyLimit(), text)
                 : node)
             .toList();
-        return new BiomeGraphData(nodes, data.edges());
+        return new BiomeGraphData(nodes, data.edges(), data.groups());
+    }
+
+    /** {@code data} with a group called {@code name} holding {@code members} added. */
+    static BiomeGraphData withGroup(BiomeGraphData data, String name, BiomeId... members) {
+        List<GroupData> groups = new ArrayList<>(data.groups());
+        groups.add(new GroupData(name, java.util.Arrays.stream(members).map(BiomeId::toString).toList()));
+        return new BiomeGraphData(data.nodes(), data.edges(), groups);
     }
 
     /** Two mutually legal biomes with DIFFERENT size ranges, for tests where one biome's size must be pinned tightly and the other left loose. */
     static RawRuleTable legalPairWithSizes(BiomeId first, int firstMinWidth, int firstMaxWidth, BiomeId second, int secondMinWidth, int secondMaxWidth) {
         List<NodeData> nodes = List.of(
-            new NodeData(first.namespace(), first.path(), firstMinWidth, firstMaxWidth, Integer.MAX_VALUE, List.of()),
-            new NodeData(second.namespace(), second.path(), secondMinWidth, secondMaxWidth, Integer.MAX_VALUE, List.of())
+            new NodeData(first.namespace(), first.path(), firstMinWidth, firstMaxWidth, Integer.MAX_VALUE, ""),
+            new NodeData(second.namespace(), second.path(), secondMinWidth, secondMaxWidth, Integer.MAX_VALUE, "")
         );
         List<EdgeData> edges = List.of(new EdgeData(first.namespace(), first.path(), second.namespace(), second.path(), 10));
         return RawRuleTable.from(new BiomeGraphData(nodes, edges));
@@ -101,9 +112,9 @@ final class ToroidalTestTables {
     static BiomeGraphData noLegalTriangleCatalog(int minWidthBlocks, int maxWidthBlocks) {
         return new BiomeGraphData(
             List.of(
-                new NodeData(A.namespace(), A.path(), minWidthBlocks, maxWidthBlocks, Integer.MAX_VALUE, List.of()),
-                new NodeData(B.namespace(), B.path(), minWidthBlocks, maxWidthBlocks, Integer.MAX_VALUE, List.of()),
-                new NodeData(C.namespace(), C.path(), minWidthBlocks, maxWidthBlocks, Integer.MAX_VALUE, List.of())
+                new NodeData(A.namespace(), A.path(), minWidthBlocks, maxWidthBlocks, Integer.MAX_VALUE, ""),
+                new NodeData(B.namespace(), B.path(), minWidthBlocks, maxWidthBlocks, Integer.MAX_VALUE, ""),
+                new NodeData(C.namespace(), C.path(), minWidthBlocks, maxWidthBlocks, Integer.MAX_VALUE, "")
             ),
             List.of(new EdgeData(A.namespace(), A.path(), B.namespace(), B.path(), 10))
         );

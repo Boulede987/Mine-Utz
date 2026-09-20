@@ -16,7 +16,9 @@ import static com.mineutze.worldgen.plan.ToroidalTestTables.legalPairWithSizes;
 import static com.mineutze.worldgen.plan.ToroidalTestTables.noLegalTriangleCatalog;
 import static com.mineutze.worldgen.plan.ToroidalTestTables.tableWithNoLegalTriangle;
 import static com.mineutze.worldgen.plan.ToroidalTestTables.threeColoring;
+import static com.mineutze.worldgen.plan.ToroidalTestTables.withGroup;
 import static com.mineutze.worldgen.plan.ToroidalTestTables.withRequirement;
+import static com.mineutze.worldgen.plan.ToroidalTestTables.withRequirementText;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -520,6 +522,75 @@ class ToroidalSizedLocalSearchTest {
     void trackedCostStaysExactWhenMostClustersTouchNoneOfTheRequiredBiome() {
         ToroidalGrid grid = new ToroidalGrid(8, 8);
         RawRuleTable table = fullyLegalTableRequiring(1500, 1500, A, B, 3, A, B, C);
+
+        ToroidalSizedLocalSearch.Result result = ToroidalSizedLocalSearch.search(table, grid, model(table), SEED, 80_000, BOILING, () -> false, 0.5);
+
+        assertNull(result.assignment());
+        assertEquals(result.bestCost(), ToroidalSizedLocalSearch.cost(table, grid, model(table), result.closestAssignment()));
+    }
+
+    private static RawRuleTable tableWith(String requirementOfA, int width) {
+        return tableWith(requirementOfA, width, width);
+    }
+
+    private static RawRuleTable tableWith(String requirementOfA, int minWidth, int maxWidth) {
+        return RawRuleTable.from(withRequirementText(withGroup(withGroup(ToroidalTestTables.fullyLegalCatalog(minWidth, maxWidth, A, B, C), "bc", B, C), "justB", B), A, requirementOfA));
+    }
+
+    private static int clusterViolationOfTheThreeColoring(String requirementOfA) {
+        ToroidalGrid grid = new ToroidalGrid(6, 6);
+        RawRuleTable table = tableWith(requirementOfA, 300);
+        return ToroidalSizedLocalSearch.breakdown(table, grid, model(table), threeColoring(grid, A, B, C)).clusterViolation();
+    }
+
+    /** Every one-cell A in the 3-coloring has three B edges and three C edges, and there are twelve of them. */
+    @Test
+    void anOrCostsTheNearestAlternativeForEachCluster() {
+        assertEquals(12, clusterViolationOfTheThreeColoring("test:b >= 4 or test:c >= 4"), "1 edge short either way");
+        assertEquals(0, clusterViolationOfTheThreeColoring("test:b >= 3 or test:c >= 4"));
+    }
+
+    @Test
+    void anAndCostsTheSumOfItsPartsForEachCluster() {
+        assertEquals(24, clusterViolationOfTheThreeColoring("test:b >= 4 and test:c >= 4"));
+        assertEquals(0, clusterViolationOfTheThreeColoring("test:b >= 3 and test:c >= 3"));
+    }
+
+    @Test
+    void aGroupCostsWhatIsMissingFromTheCombinedEdges() {
+        assertEquals(0, clusterViolationOfTheThreeColoring("bc >= 6"), "3 B edges and 3 C edges make 6 with the group");
+        assertEquals(12, clusterViolationOfTheThreeColoring("justB >= 4"), "only the 3 B edges count for a group of B alone");
+    }
+
+    @Test
+    void searchSolvesAnInstanceWhereTheBorderMayBeWithEitherOfTwoBiomes() {
+        ToroidalGrid grid = new ToroidalGrid(8, 8);
+        RawRuleTable table = tableWith("test:b >= 4 or test:c >= 4", 500, 600);
+
+        ToroidalSizedLocalSearch.Result result = ToroidalSizedLocalSearch.search(table, grid, model(table), SEED, GENEROUS_STEPS);
+
+        assertNotNull(result.assignment());
+        assertDoesNotThrow(() -> ToroidalSizedLocalSearch.verify(table, grid, model(table), result.assignment()));
+    }
+
+    private static final String MIXED_REQUIREMENT = "(test:b >= 2 and bc >= 5) or test:c >= 4";
+
+    /** Widths of 1500 need 25 cells per biome on a 64-cell torus: unsolvable, so the walk never stops early. */
+    @Test
+    void trackedCostStaysExactForANestedRequirementWithSingleCellMoves() {
+        ToroidalGrid grid = new ToroidalGrid(8, 8);
+        RawRuleTable table = tableWith(MIXED_REQUIREMENT, 1500);
+
+        ToroidalSizedLocalSearch.Result result = ToroidalSizedLocalSearch.search(table, grid, model(table), SEED, 80_000, WARM, () -> false, 0.0);
+
+        assertNull(result.assignment());
+        assertEquals(result.bestCost(), ToroidalSizedLocalSearch.cost(table, grid, model(table), result.closestAssignment()));
+    }
+
+    @Test
+    void trackedCostStaysExactForANestedRequirementWhenRelabelsRunToo() {
+        ToroidalGrid grid = new ToroidalGrid(8, 8);
+        RawRuleTable table = tableWith(MIXED_REQUIREMENT, 1500);
 
         ToroidalSizedLocalSearch.Result result = ToroidalSizedLocalSearch.search(table, grid, model(table), SEED, 80_000, BOILING, () -> false, 0.5);
 

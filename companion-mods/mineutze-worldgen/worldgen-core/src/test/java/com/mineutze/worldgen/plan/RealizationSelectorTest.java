@@ -98,7 +98,7 @@ class RealizationSelectorTest {
         for (int pair = 0; pair < illegalContactPairs; pair++) {
             contacts.put("pair" + pair, 1);
         }
-        List<BiomeMapVerifier.BorderShortfall> shortfalls = java.util.Collections.nCopies(shortBorders, new BiomeMapVerifier.BorderShortfall(A, B, 1, 2));
+        List<BiomeMapVerifier.BorderShortfall> shortfalls = java.util.Collections.nCopies(shortBorders, new BiomeMapVerifier.BorderShortfall(A, "test:b >= 1"));
         return new BiomeMapVerifier.Report(5, violations, contacts, shortfalls, 100, new double[0], vanished, split, merged);
     }
 

@@ -12,6 +12,7 @@ import java.util.List;
 import java.util.Map;
 
 import com.mineutze.worldgen.biomegraph.BiomeGraphData.EdgeData;
+import com.mineutze.worldgen.biomegraph.BiomeGraphData.GroupData;
 import com.mineutze.worldgen.biomegraph.BiomeGraphData.NodeData;
 
 /**
@@ -119,6 +120,7 @@ public final class BiomeGraphJson {
         Map<String, Object> root = new LinkedHashMap<>();
         root.put("nodes", nodesJson);
         root.put("edges", edgesJson);
+        root.put("groups", data.groups().stream().<Object>map(BiomeGraphJson::groupToJson).toList());
         return MinimalJson.writeObject(root);
     }
 
@@ -135,7 +137,27 @@ public final class BiomeGraphJson {
         for (Object edgeJson : edgesJson) {
             edges.add(edgeFromJson((Map<String, Object>) edgeJson));
         }
-        return new BiomeGraphData(nodes, edges);
+        List<GroupData> groups = new ArrayList<>();
+        for (Object groupJson : (List<Object>) root.getOrDefault("groups", List.of())) {
+            groups.add(groupFromJson((Map<String, Object>) groupJson));
+        }
+        return new BiomeGraphData(nodes, edges, groups);
+    }
+
+    private static Map<String, Object> groupToJson(GroupData group) {
+        Map<String, Object> json = new LinkedHashMap<>();
+        json.put("name", group.name());
+        json.put("members", List.copyOf(group.members()));
+        return json;
+    }
+
+    @SuppressWarnings("unchecked")
+    private static GroupData groupFromJson(Map<String, Object> json) {
+        List<String> members = new ArrayList<>();
+        for (Object member : (List<Object>) json.getOrDefault("members", List.of())) {
+            members.add((String) member);
+        }
+        return new GroupData(stringField(json, "name"), members);
     }
 
     private static Map<String, Object> nodeToJson(NodeData node) {
@@ -145,33 +167,24 @@ public final class BiomeGraphJson {
         json.put("minWidthBlocks", node.minWidthBlocks());
         json.put("maxWidthBlocks", node.maxWidthBlocks());
         json.put("selfAdjacencyLimit", node.selfAdjacencyLimit());
-        json.put("requiredNeighbors", node.requiredNeighbors().stream().<Object>map(BiomeGraphJson::requiredNeighborToJson).toList());
+        json.put("requirement", node.requirement());
         return json;
     }
 
     @SuppressWarnings("unchecked")
     public static NodeData nodeFromJson(Map<String, Object> json) {
-        List<Object> requiredNeighborsJson = (List<Object>) json.getOrDefault("requiredNeighbors", List.of());
-        List<BiomeGraphData.RequiredNeighbor> requiredNeighbors = requiredNeighborsJson.stream()
-            .map(entry -> requiredNeighborFromJson((Map<String, Object>) entry))
-            .toList();
+        String namespace = stringField(json, "namespace");
+        String path = stringField(json, "path");
+        if (!((List<Object>) json.getOrDefault("requiredNeighbors", List.of())).isEmpty()) {
+            throw new IllegalArgumentException(
+                "BiomeGraphJson: " + namespace + ":" + path + " has a \"requiredNeighbors\" list, the old form of a border requirement, which this version no longer reads "
+                    + "(loading it would silently drop the requirement) - rewrite it as a \"requirement\" text such as \"minecraft:ocean >= 2\""
+            );
+        }
         return new NodeData(
-            stringField(json, "namespace"), stringField(json, "path"),
-            intField(json, "minWidthBlocks"), intField(json, "maxWidthBlocks"), intField(json, "selfAdjacencyLimit"),
-            requiredNeighbors
+            namespace, path, intField(json, "minWidthBlocks"), intField(json, "maxWidthBlocks"), intField(json, "selfAdjacencyLimit"),
+            (String) json.getOrDefault("requirement", "")
         );
-    }
-
-    private static Map<String, Object> requiredNeighborToJson(BiomeGraphData.RequiredNeighbor requiredNeighbor) {
-        Map<String, Object> json = new LinkedHashMap<>();
-        json.put("namespace", requiredNeighbor.namespace());
-        json.put("path", requiredNeighbor.path());
-        json.put("minCount", requiredNeighbor.minCount());
-        return json;
-    }
-
-    private static BiomeGraphData.RequiredNeighbor requiredNeighborFromJson(Map<String, Object> json) {
-        return new BiomeGraphData.RequiredNeighbor(stringField(json, "namespace"), stringField(json, "path"), intField(json, "minCount"));
     }
 
     private static Map<String, Object> edgeToJson(EdgeData edge) {

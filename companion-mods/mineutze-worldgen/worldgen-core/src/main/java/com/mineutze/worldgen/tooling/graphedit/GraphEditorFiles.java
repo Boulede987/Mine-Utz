@@ -4,8 +4,7 @@ import java.nio.file.Path;
 
 /**
  * Where the editor's own data lives - relative to the working directory a gradle task
- * runs from ({@code worldgen-core}, see build.gradle's {@code graphEditor}/{@code
- * graphEditorSeed} task registrations).
+ * runs from ({@code worldgen-core}, see build.gradle's {@code graphEditor} task registration).
  *
  * <p>Real user decision (2026-09-15): now the SAME file production loads from ({@link
  * com.mineutze.worldgen.biomegraph.ModBiomeGraph#OVERWORLD}, via {@link

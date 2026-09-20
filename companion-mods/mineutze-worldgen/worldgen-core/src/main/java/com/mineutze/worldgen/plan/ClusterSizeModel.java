@@ -17,10 +17,11 @@ import java.util.Map;
  *
  * <p>What shape a cluster may take (irregular yes, thin snakes no) is a {@link ShapeRule}.
  *
- * <p>A biome may also REQUIRE a border: every cluster of it must share at least N cell-edges with
- * biome X (a beach with the ocean). The count is of edges, so a beach cannot satisfy it by touching
- * the ocean at one corner. The requirement is one-way: X asks nothing back. A requirement that no
- * cluster could ever meet is rejected outright, like an empty size range.
+ * <p>A biome may also REQUIRE borders (a {@link ResolvedBorderRequirement}): every cluster of it must
+ * share at least N cell-edges with a group of biomes, alone or combined with "and" / "or" (a beach
+ * with the ocean or the lukewarm ocean). The count is of edges, so a beach cannot satisfy it by touching
+ * the ocean at one corner. The requirement is one-way: the biomes it names ask nothing back. A
+ * requirement that no cluster could ever meet is rejected outright, like an empty size range.
  */
 final class ClusterSizeModel {
 
@@ -33,8 +34,7 @@ final class ClusterSizeModel {
     private final Map<BiomeId, Integer> indexOf = new HashMap<>();
     private final int[] minCells;
     private final int[] maxCells;
-    private final int[][] requiredTargets;
-    private final int[][] requiredMinEdges;
+    private final CompiledRequirement[] requirements;
     private final ShapeRule shape;
 
     ClusterSizeModel(RawRuleTable table, double atomWidthBlocks, ShapeRule shape) {
@@ -45,8 +45,7 @@ final class ClusterSizeModel {
         this.shape = shape;
         this.minCells = new int[biomes.size()];
         this.maxCells = new int[biomes.size()];
-        this.requiredTargets = new int[biomes.size()][];
-        this.requiredMinEdges = new int[biomes.size()][];
+        this.requirements = new CompiledRequirement[biomes.size()];
         for (int index = 0; index < biomes.size(); index++) {
             BiomeId biome = biomes.get(index);
             RawRuleTable.SizeRange range = table.sizeRangeOf(biome);
@@ -69,44 +68,101 @@ final class ClusterSizeModel {
 
     private void readRequirements(RawRuleTable table, int biomeIndex) {
         BiomeId biome = biomes.get(biomeIndex);
-        Map<BiomeId, Integer> requirements = table.requiredNeighborsOf(biome);
-        for (BiomeId required : requirements.keySet()) {
-            if (!indexOf.containsKey(required)) {
-                throw new IllegalArgumentException("ClusterSizeModel: " + biome + " requires a border with " + required + ", which is not in the catalog");
+        table.requirementOf(biome).ifPresent(requirement -> {
+            String reason = whyNeverMet(table, biome, requirement, maxCells[biomeIndex]);
+            if (reason != null) {
+                throw new IllegalArgumentException("ClusterSizeModel: " + biome + " requires " + requirement + ", which could never be met: " + reason);
             }
-        }
-        requiredTargets[biomeIndex] = new int[requirements.size()];
-        requiredMinEdges[biomeIndex] = new int[requirements.size()];
-        int slot = 0;
-        for (BiomeId required : biomes) {
-            Integer minEdges = requirements.get(required);
-            if (minEdges != null) {
-                requiredTargets[biomeIndex][slot] = indexOf.get(required);
-                requiredMinEdges[biomeIndex][slot] = requireMeetable(table, biome, required, minEdges, maxCells[biomeIndex]);
-                slot++;
-            }
-        }
+            requirements[biomeIndex] = compile(requirement);
+        });
     }
 
-    /** Returns {@code minEdges} if some cluster of {@code biome} could share that many edges with {@code required}, otherwise throws saying why not. */
-    private int requireMeetable(RawRuleTable table, BiomeId biome, BiomeId required, int minEdges, int biomeMaxCells) {
-        if (biome.equals(required)) {
-            throw new IllegalArgumentException("ClusterSizeModel: " + biome + " requires a border with itself");
-        }
-        if (minEdges < 1) {
-            throw new IllegalArgumentException("ClusterSizeModel: " + biome + " requires " + minEdges + " shared edges with " + required + " - at least 1 is needed for a requirement to mean anything");
-        }
-        if (!table.isLegal(biome, required)) {
-            throw new IllegalArgumentException("ClusterSizeModel: " + biome + " requires a border with " + required + ", which is not a legal neighbor of it - the requirement could never be met");
+    /** Null if some cluster of {@code biome} could meet {@code requirement}; otherwise why none ever could. */
+    private String whyNeverMet(RawRuleTable table, BiomeId biome, ResolvedBorderRequirement requirement, int biomeMaxCells) {
+        return switch (requirement) {
+            case ResolvedBorderRequirement.Share share -> whyShareNeverMet(table, biome, share, biomeMaxCells);
+            case ResolvedBorderRequirement.AllOf all -> all.parts().stream().map(part -> whyNeverMet(table, biome, part, biomeMaxCells)).filter(reason -> reason != null).findFirst().orElse(null);
+            case ResolvedBorderRequirement.AnyOf any -> {
+                List<String> reasons = new java.util.ArrayList<>();
+                for (ResolvedBorderRequirement part : any.parts()) {
+                    String reason = whyNeverMet(table, biome, part, biomeMaxCells);
+                    if (reason == null) {
+                        yield null;
+                    }
+                    reasons.add(reason);
+                }
+                yield "none of the alternatives can be met (" + String.join("; ", reasons) + ")";
+            }
+        };
+    }
+
+    private String whyShareNeverMet(RawRuleTable table, BiomeId biome, ResolvedBorderRequirement.Share share, int biomeMaxCells) {
+        if (share.biomes().stream().noneMatch(member -> table.isLegal(biome, member))) {
+            return share.biomes().isEmpty()
+                ? "'" + share.subject() + "' holds no biome"
+                : (share.subject().contains(":") ? share.subject() + " is not" : "none of the biomes of '" + share.subject() + "' is") + " a legal neighbor of " + biome;
         }
         int largestOutline = Math.min(STRAIGHT_LINE_OUTLINE_PER_CELL * biomeMaxCells + STRAIGHT_LINE_OUTLINE_EXTRA, shape.allowedPerimeter(biomeMaxCells));
-        if (minEdges > largestOutline) {
-            throw new IllegalArgumentException(
-                "ClusterSizeModel: " + biome + " requires " + minEdges + " shared edges with " + required + " but a cluster of at most " + biomeMaxCells
-                    + " cells has at most " + largestOutline + " outline edges under the shape rule - the requirement could never be met"
-            );
+        if (share.minEdges() > largestOutline) {
+            return share.minEdges() + " shared edges with '" + share.subject() + "' are asked for, but a cluster of at most " + biomeMaxCells + " cells has at most "
+                + largestOutline + " outline edges under the shape rule";
         }
-        return minEdges;
+        return null;
+    }
+
+    private CompiledRequirement compile(ResolvedBorderRequirement requirement) {
+        return switch (requirement) {
+            case ResolvedBorderRequirement.Share share -> new CompiledRequirement(
+                CompiledRequirement.Kind.SHARE, share.minEdges(), share.biomes().stream().mapToInt(indexOf::get).toArray(), new CompiledRequirement[0]
+            );
+            case ResolvedBorderRequirement.AllOf all -> new CompiledRequirement(
+                CompiledRequirement.Kind.ALL, 0, new int[0], all.parts().stream().map(this::compile).toArray(CompiledRequirement[]::new)
+            );
+            case ResolvedBorderRequirement.AnyOf any -> new CompiledRequirement(
+                CompiledRequirement.Kind.ANY, 0, new int[0], any.parts().stream().map(this::compile).toArray(CompiledRequirement[]::new)
+            );
+        };
+    }
+
+    /** {@link ResolvedBorderRequirement} with biomes as positions in the biome list, evaluated against an array of shared edges per biome: what the search's hot loop uses. */
+    private static final class CompiledRequirement {
+
+        enum Kind { SHARE, ALL, ANY }
+
+        private final Kind kind;
+        private final int minEdges;
+        private final int[] biomes;
+        private final CompiledRequirement[] parts;
+
+        CompiledRequirement(Kind kind, int minEdges, int[] biomes, CompiledRequirement[] parts) {
+            this.kind = kind;
+            this.minEdges = minEdges;
+            this.biomes = biomes;
+            this.parts = parts;
+        }
+
+        int shortfall(int[] sharedEdgesByBiome) {
+            switch (kind) {
+                case SHARE:
+                    int shared = 0;
+                    for (int biome : biomes) {
+                        shared += sharedEdgesByBiome[biome];
+                    }
+                    return Math.max(0, minEdges - shared);
+                case ALL:
+                    int total = 0;
+                    for (CompiledRequirement part : parts) {
+                        total += part.shortfall(sharedEdgesByBiome);
+                    }
+                    return total;
+                default:
+                    int best = Integer.MAX_VALUE;
+                    for (CompiledRequirement part : parts) {
+                        best = Math.min(best, part.shortfall(sharedEdgesByBiome));
+                    }
+                    return best;
+            }
+        }
     }
 
     private static double squared(double value) {
@@ -140,18 +196,16 @@ final class ClusterSizeModel {
         return outsideRange + thinCells + beyondPerimeterLimit + borderShortfall;
     }
 
-    boolean hasRequirements(int biomeIndex) {
-        return requiredTargets[biomeIndex].length > 0;
+    boolean hasRequirement(int biomeIndex) {
+        return requirements[biomeIndex] != null;
     }
 
-    /** Positions (in the biome list) of the biomes {@code biomeIndex} must share a border with; pairs up with {@link #requiredMinEdges}. */
-    int[] requiredTargets(int biomeIndex) {
-        return requiredTargets[biomeIndex];
-    }
-
-    /** For each of {@link #requiredTargets}, the fewest cell-edges a cluster of the biome must share with it. */
-    int[] requiredMinEdges(int biomeIndex) {
-        return requiredMinEdges[biomeIndex];
+    /**
+     * How many shared edges a cluster of the biome is short of its required borders, given how many
+     * edges it shares with each biome (indexed like the biome list); zero when it has none required or all are met.
+     */
+    int borderShortfall(int biomeIndex, int[] sharedEdgesByBiome) {
+        return requirements[biomeIndex] == null ? 0 : requirements[biomeIndex].shortfall(sharedEdgesByBiome);
     }
 
     /** Position of {@code biome} in the rule table's biome list. */

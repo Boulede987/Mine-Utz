@@ -4,6 +4,7 @@ import com.mineutze.worldgen.biomegraph.BiomeGraph;
 import com.mineutze.worldgen.biomegraph.BiomeGraphData;
 import com.mineutze.worldgen.biomegraph.BiomeGraphJson;
 import com.mineutze.worldgen.biomegraph.BiomeId;
+import com.mineutze.worldgen.plan.RawRuleTable;
 import com.mineutze.worldgen.plan.WorldBiomePlan;
 
 import java.util.ArrayList;
@@ -44,9 +45,10 @@ final class GraphValidation {
      * {@code constructs=false} does (see {@link #MIN_LEGAL_NEIGHBORS}'s own doc).
      *
      * @param constructs        whether {@link BiomeGraph}'s own bare constructor accepted
-     *                          this data as-is - {@code false} means a genuinely malformed
-     *                          reference (e.g. a rule naming an unknown biome), blocks
-     *                          saving outright.
+     *                          this data as-is and every group and requirement in it can be
+     *                          read and points at something that exists - {@code false} means a
+     *                          genuinely malformed reference (e.g. a rule naming an unknown
+     *                          biome, a requirement naming a missing group), blocks saving outright.
      * @param constructionError {@link BiomeGraph}'s own real exception message when {@code
      *                          constructs} is false, {@code null} otherwise.
      * @param errors            real violations of a check production WOULD enforce
@@ -62,6 +64,11 @@ final class GraphValidation {
             graph = BiomeGraphJson.toBiomeGraph(data);
         } catch (IllegalArgumentException e) {
             return new ValidationResult(false, e.getMessage(), List.of());
+        }
+        try {
+            RawRuleTable.from(data);
+        } catch (IllegalArgumentException unreadable) {
+            return new ValidationResult(false, unreadable.getMessage(), List.of());
         }
         List<String> errors = underConnectedErrors(graph, data);
         errors.addAll(generatorRejections(data));

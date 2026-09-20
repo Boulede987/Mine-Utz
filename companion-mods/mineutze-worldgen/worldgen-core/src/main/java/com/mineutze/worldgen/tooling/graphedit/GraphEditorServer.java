@@ -2,8 +2,10 @@ package com.mineutze.worldgen.tooling.graphedit;
 
 import com.mineutze.worldgen.biomegraph.BiomeGraphData;
 import com.mineutze.worldgen.biomegraph.BiomeGraphData.EdgeData;
+import com.mineutze.worldgen.biomegraph.BiomeGraphData.GroupData;
 import com.mineutze.worldgen.biomegraph.BiomeGraphData.NodeData;
 import com.mineutze.worldgen.biomegraph.BiomeGraphJson;
+import com.mineutze.worldgen.biomegraph.BorderRequirement;
 import com.mineutze.worldgen.biomegraph.MinimalJson;
 import com.mineutze.worldgen.tooling.graphedit.GraphValidation.ValidationResult;
 
@@ -64,16 +66,16 @@ import java.util.concurrent.Executors;
  */
 public final class GraphEditorServer {
 
-    private static final int PORT = 8842;
+    private static final int DEFAULT_PORT = 8842;
 
     public static void main(String[] args) throws IOException {
         if (!java.nio.file.Files.exists(GraphEditorFiles.DATA_FILE)) {
             throw new IllegalStateException(
-                "GraphEditorServer: " + GraphEditorFiles.DATA_FILE.toAbsolutePath() + " doesn't exist yet - run "
-                    + "./gradlew :worldgen-core:graphEditorSeed once first to create it from ModBiomeGraph.OVERWORLD"
+                "GraphEditorServer: " + GraphEditorFiles.DATA_FILE.toAbsolutePath() + " doesn't exist - it is the shipped catalog, restore it from git"
             );
         }
-        HttpServer server = HttpServer.create(new InetSocketAddress("localhost", PORT), 0);
+        int port = args.length > 0 ? Integer.parseInt(args[0]) : DEFAULT_PORT;
+        HttpServer server = HttpServer.create(new InetSocketAddress("localhost", port), 0);
         server.setExecutor(Executors.newFixedThreadPool(4));
         server.createContext("/", GraphEditorServer::serveIndex);
         server.createContext("/api/graph", GraphEditorServer::serveGraph);
@@ -85,10 +87,11 @@ public final class GraphEditorServer {
         server.createContext("/api/validate", GraphEditorServer::handleValidate);
         server.createContext("/api/tests", GraphEditorServer::handleRunTests);
         server.createContext("/api/solvecheck", GraphEditorServer::handleSolveCheck);
-        server.createContext("/api/requiredneighbors", GraphEditorServer::handleAddRequiredNeighbor);
-        server.createContext("/api/requiredneighbors/remove", GraphEditorServer::handleRemoveRequiredNeighbor);
+        server.createContext("/api/requirement", GraphEditorServer::handleSetRequirement);
+        server.createContext("/api/groups", GraphEditorServer::handleSaveGroup);
+        server.createContext("/api/groups/remove", GraphEditorServer::handleRemoveGroup);
         server.start();
-        System.out.println("Graph editor running at http://localhost:" + PORT + " - Ctrl+C to stop.");
+        System.out.println("Graph editor running at http://localhost:" + port + " - Ctrl+C to stop.");
     }
 
     private static void serveIndex(HttpExchange exchange) throws IOException {
@@ -118,7 +121,7 @@ public final class GraphEditorServer {
 
         BiomeGraphData current = BiomeGraphJson.load(GraphEditorFiles.DATA_FILE);
         List<NodeData> withNewNode = concat(current.nodes(), newNode);
-        BiomeGraphData proposed = new BiomeGraphData(withNewNode, current.edges());
+        BiomeGraphData proposed = new BiomeGraphData(withNewNode, current.edges(), current.groups());
 
         ValidationResult result = GraphValidation.validate(proposed);
         if (result.constructs()) {
@@ -175,18 +178,14 @@ public final class GraphEditorServer {
         }
         List<NodeData> updatedNodes = current.nodes().stream()
             .map(node -> isBiome(node, namespace, path)
-                ? new NodeData(node.namespace(), node.path(), minWidthBlocks, maxWidthBlocks, node.selfAdjacencyLimit(), node.requiredNeighbors())
+                ? new NodeData(node.namespace(), node.path(), minWidthBlocks, maxWidthBlocks, node.selfAdjacencyLimit(), node.requirement())
                 : node)
             .toList();
-        return Optional.of(new BiomeGraphData(updatedNodes, current.edges()));
+        return Optional.of(new BiomeGraphData(updatedNodes, current.edges(), current.groups()));
     }
 
     private static boolean isBiome(NodeData node, String namespace, String path) {
         return node.namespace().equals(namespace) && node.path().equals(path);
-    }
-
-    private static boolean isBiome(BiomeGraphData.RequiredNeighbor requirement, String namespace, String path) {
-        return requirement.namespace().equals(namespace) && requirement.path().equals(path);
     }
 
     /**
@@ -221,23 +220,23 @@ public final class GraphEditorServer {
         respondJson(exchange, 200, resultJson(result, proposed.get()));
     }
 
-    /** {@code current} without {@code namespace:path}, its adjacencies, and every other biome's requirement on it; empty if no such biome exists. Pure - never touches the data file. */
+    /**
+     * {@code current} without {@code namespace:path}, its adjacencies, and its place in every group; empty if no such biome exists. A requirement that names it directly is
+     * left as written, so the result no longer validates and the removal is refused until that requirement is edited. Pure - never touches the data file.
+     */
     static Optional<BiomeGraphData> withoutBiome(BiomeGraphData current, String namespace, String path) {
         if (current.nodes().stream().noneMatch(node -> isBiome(node, namespace, path))) {
             return Optional.empty();
         }
         String removedKey = namespace + ":" + path;
-        List<NodeData> remainingNodes = current.nodes().stream()
-            .filter(node -> !isBiome(node, namespace, path))
-            .map(node -> new NodeData(
-                node.namespace(), node.path(), node.minWidthBlocks(), node.maxWidthBlocks(), node.selfAdjacencyLimit(),
-                node.requiredNeighbors().stream().filter(requirement -> !isBiome(requirement, namespace, path)).toList()
-            ))
-            .toList();
+        List<NodeData> remainingNodes = current.nodes().stream().filter(node -> !isBiome(node, namespace, path)).toList();
         List<EdgeData> remainingEdges = current.edges().stream()
             .filter(edge -> !edge.aKey().equals(removedKey) && !edge.bKey().equals(removedKey))
             .toList();
-        return Optional.of(new BiomeGraphData(remainingNodes, remainingEdges));
+        List<GroupData> remainingGroups = current.groups().stream()
+            .map(group -> new GroupData(group.name(), group.members().stream().filter(member -> !member.equals(removedKey)).toList()))
+            .toList();
+        return Optional.of(new BiomeGraphData(remainingNodes, remainingEdges, remainingGroups));
     }
 
     @SuppressWarnings("unchecked")
@@ -251,7 +250,7 @@ public final class GraphEditorServer {
 
         BiomeGraphData current = BiomeGraphJson.load(GraphEditorFiles.DATA_FILE);
         List<EdgeData> withNewEdge = concat(current.edges(), newEdge);
-        BiomeGraphData proposed = new BiomeGraphData(current.nodes(), withNewEdge);
+        BiomeGraphData proposed = new BiomeGraphData(current.nodes(), withNewEdge, current.groups());
 
         ValidationResult result = GraphValidation.validate(proposed);
         if (result.constructs()) {
@@ -288,7 +287,7 @@ public final class GraphEditorServer {
             )));
             return;
         }
-        BiomeGraphData proposed = new BiomeGraphData(current.nodes(), withoutEdge);
+        BiomeGraphData proposed = new BiomeGraphData(current.nodes(), withoutEdge, current.groups());
 
         ValidationResult result = GraphValidation.validate(proposed);
         if (result.constructs()) {
@@ -322,13 +321,11 @@ public final class GraphEditorServer {
     }
 
     /**
-     * Adds (or, if one already exists for the same required biome, REPLACES the minCount
-     * of) one "every cluster of this biome must share at least N cell-edges with that other
-     * biome" requirement, which the world generator enforces (see {@link BiomeGraphData.NodeData}).
-     * Re-validates before saving, same discipline as every other mutation here.
+     * Sets the border requirement of ONE biome from its text, blank clearing it. A text that cannot be read, or that names a group or biome that does not exist, is refused
+     * by validation and not saved; a requirement the generator could never meet is saved and shown as an error. Re-validates before saving, like every mutation here.
      */
     @SuppressWarnings("unchecked")
-    private static void handleAddRequiredNeighbor(HttpExchange exchange) throws IOException {
+    private static void handleSetRequirement(HttpExchange exchange) throws IOException {
         if (!"POST".equals(exchange.getRequestMethod())) {
             respond(exchange, 405, "text/plain; charset=utf-8", "POST only".getBytes(StandardCharsets.UTF_8));
             return;
@@ -336,74 +333,96 @@ public final class GraphEditorServer {
         Map<String, Object> body = (Map<String, Object>) MinimalJson.parse(readBody(exchange));
         String namespace = (String) body.get("namespace");
         String path = (String) body.get("path");
-        BiomeGraphData.RequiredNeighbor newRequirement = new BiomeGraphData.RequiredNeighbor(
-            (String) body.get("requiredNamespace"), (String) body.get("requiredPath"), ((Double) body.get("minCount")).intValue()
-        );
 
         BiomeGraphData current = BiomeGraphJson.load(GraphEditorFiles.DATA_FILE);
-        if (current.nodes().stream().noneMatch(node -> node.namespace().equals(namespace) && node.path().equals(path))) {
-            respondJson(exchange, 200, MinimalJson.writeObject(Map.of(
-                "constructs", false, "constructionError", "No such biome: " + namespace + ":" + path,
-                "errors", List.of()
-            )));
+        Optional<BiomeGraphData> proposed = withRequirement(current, namespace, path, (String) body.get("requirement"));
+        if (proposed.isEmpty()) {
+            respondNoSuchBiome(exchange, namespace, path);
             return;
         }
+        validateSaveAndRespond(exchange, proposed.get());
+    }
+
+    /** {@code current} with {@code text} as the requirement of {@code namespace:path}, in its canonical form when it can be read (as written when it cannot, so validation can say why); empty if no such biome exists. Pure. */
+    static Optional<BiomeGraphData> withRequirement(BiomeGraphData current, String namespace, String path, String text) {
+        if (current.nodes().stream().noneMatch(node -> isBiome(node, namespace, path))) {
+            return Optional.empty();
+        }
+        String stored;
+        try {
+            stored = BorderRequirement.parse(text).map(BorderRequirement::toString).orElse("");
+        } catch (IllegalArgumentException unreadable) {
+            stored = text.strip();
+        }
+        String requirement = stored;
         List<NodeData> updatedNodes = current.nodes().stream()
-            .map(node -> node.namespace().equals(namespace) && node.path().equals(path) ? withRequirement(node, newRequirement) : node)
+            .map(node -> isBiome(node, namespace, path)
+                ? new NodeData(node.namespace(), node.path(), node.minWidthBlocks(), node.maxWidthBlocks(), node.selfAdjacencyLimit(), requirement)
+                : node)
             .toList();
-        BiomeGraphData proposed = new BiomeGraphData(updatedNodes, current.edges());
-
-        ValidationResult result = GraphValidation.validate(proposed);
-        if (result.constructs()) {
-            BiomeGraphJson.save(GraphEditorFiles.DATA_FILE, proposed);
-        }
-        respondJson(exchange, 200, resultJson(result, proposed));
+        return Optional.of(new BiomeGraphData(updatedNodes, current.edges(), current.groups()));
     }
 
-    private static NodeData withRequirement(NodeData node, BiomeGraphData.RequiredNeighbor newRequirement) {
-        List<BiomeGraphData.RequiredNeighbor> updated = new java.util.ArrayList<>();
-        boolean replaced = false;
-        for (BiomeGraphData.RequiredNeighbor existing : node.requiredNeighbors()) {
-            if (existing.namespace().equals(newRequirement.namespace()) && existing.path().equals(newRequirement.path())) {
-                updated.add(newRequirement);
-                replaced = true;
-            } else {
-                updated.add(existing);
-            }
-        }
-        if (!replaced) {
-            updated.add(newRequirement);
-        }
-        return new NodeData(node.namespace(), node.path(), node.minWidthBlocks(), node.maxWidthBlocks(), node.selfAdjacencyLimit(), updated);
-    }
-
-    /** Removes one required-neighbor entry, matched by (biome, required biome) - re-validates before saving, same as adding one. */
+    /** Adds a group, or replaces the members of the group of the same name. */
     @SuppressWarnings("unchecked")
-    private static void handleRemoveRequiredNeighbor(HttpExchange exchange) throws IOException {
+    private static void handleSaveGroup(HttpExchange exchange) throws IOException {
         if (!"POST".equals(exchange.getRequestMethod())) {
             respond(exchange, 405, "text/plain; charset=utf-8", "POST only".getBytes(StandardCharsets.UTF_8));
             return;
         }
         Map<String, Object> body = (Map<String, Object>) MinimalJson.parse(readBody(exchange));
-        String namespace = (String) body.get("namespace");
-        String path = (String) body.get("path");
-        String requiredNamespace = (String) body.get("requiredNamespace");
-        String requiredPath = (String) body.get("requiredPath");
-
+        List<String> members = new java.util.ArrayList<>();
+        for (Object member : (List<Object>) body.get("members")) {
+            members.add((String) member);
+        }
         BiomeGraphData current = BiomeGraphJson.load(GraphEditorFiles.DATA_FILE);
-        List<NodeData> updatedNodes = current.nodes().stream()
-            .map(node -> {
-                if (!node.namespace().equals(namespace) || !node.path().equals(path)) {
-                    return node;
-                }
-                List<BiomeGraphData.RequiredNeighbor> filtered = node.requiredNeighbors().stream()
-                    .filter(requirement -> !(requirement.namespace().equals(requiredNamespace) && requirement.path().equals(requiredPath)))
-                    .toList();
-                return new NodeData(node.namespace(), node.path(), node.minWidthBlocks(), node.maxWidthBlocks(), node.selfAdjacencyLimit(), filtered);
-            })
-            .toList();
-        BiomeGraphData proposed = new BiomeGraphData(updatedNodes, current.edges());
+        validateSaveAndRespond(exchange, withGroup(current, ((String) body.get("name")).strip(), members));
+    }
 
+    /** {@code current} with a group called {@code name} holding {@code members}, replacing the group of that name if there is one, in place. Pure. */
+    static BiomeGraphData withGroup(BiomeGraphData current, String name, List<String> members) {
+        GroupData group = new GroupData(name, List.copyOf(members));
+        boolean replaced = current.groups().stream().anyMatch(existing -> existing.name().equals(name));
+        List<GroupData> groups = replaced
+            ? current.groups().stream().map(existing -> existing.name().equals(name) ? group : existing).toList()
+            : concat(current.groups(), group);
+        return new BiomeGraphData(current.nodes(), current.edges(), groups);
+    }
+
+    /** Removes a group; refused by validation (and not saved) while a requirement still names it. */
+    @SuppressWarnings("unchecked")
+    private static void handleRemoveGroup(HttpExchange exchange) throws IOException {
+        if (!"POST".equals(exchange.getRequestMethod())) {
+            respond(exchange, 405, "text/plain; charset=utf-8", "POST only".getBytes(StandardCharsets.UTF_8));
+            return;
+        }
+        Map<String, Object> body = (Map<String, Object>) MinimalJson.parse(readBody(exchange));
+        String name = (String) body.get("name");
+        BiomeGraphData current = BiomeGraphJson.load(GraphEditorFiles.DATA_FILE);
+        Optional<BiomeGraphData> proposed = withoutGroup(current, name);
+        if (proposed.isEmpty()) {
+            respondJson(exchange, 200, MinimalJson.writeObject(Map.of("constructs", false, "constructionError", "No such group: " + name, "errors", List.of())));
+            return;
+        }
+        validateSaveAndRespond(exchange, proposed.get());
+    }
+
+    /** {@code current} without the group called {@code name}; empty if there is none. Pure. */
+    static Optional<BiomeGraphData> withoutGroup(BiomeGraphData current, String name) {
+        if (current.groups().stream().noneMatch(group -> group.name().equals(name))) {
+            return Optional.empty();
+        }
+        return Optional.of(new BiomeGraphData(current.nodes(), current.edges(), current.groups().stream().filter(group -> !group.name().equals(name)).toList()));
+    }
+
+    private static void respondNoSuchBiome(HttpExchange exchange, String namespace, String path) throws IOException {
+        respondJson(exchange, 200, MinimalJson.writeObject(Map.of(
+            "constructs", false, "constructionError", "No such biome: " + namespace + ":" + path, "errors", List.of()
+        )));
+    }
+
+    /** Validates {@code proposed}, saves it unless it is malformed, and answers with the validation result: the tail every mutation shares. */
+    private static void validateSaveAndRespond(HttpExchange exchange, BiomeGraphData proposed) throws IOException {
         ValidationResult result = GraphValidation.validate(proposed);
         if (result.constructs()) {
             BiomeGraphJson.save(GraphEditorFiles.DATA_FILE, proposed);
@@ -568,12 +587,23 @@ public final class GraphEditorServer {
             <button onclick="addEdge()">Add adjacency</button>
           </fieldset>
 
-          <h3 id="requiredNeighborsHeading">Required borders (focus a biome first)</h3>
-          <ul id="requiredNeighborsList"></ul>
+          <h3 id="requirementHeading">Border requirement (focus a biome first)</h3>
           <fieldset>
-            <label>Every cluster of it must share a border with:</label><select id="reqTarget"></select>
-            <label>Minimum shared border, in cell edges (one edge is about 150 blocks)</label><input id="reqMinCount" type="number" value="1" min="1">
-            <button onclick="addRequiredNeighbor()">Add requirement (to focused biome)</button>
+            <label>Every cluster of the focused biome must share these borders, in cell edges (one edge is about 150 blocks) with a group or a biome id. Examples:
+              <code>oceans &gt;= 2</code> - <code>oceans &gt;= 2 and forests &gt;= 1</code> - <code>minecraft:ocean &gt;= 2 or minecraft:lukewarm_ocean &gt;= 2</code>.
+              "and" binds tighter than "or"; use parentheses to group. Leave empty for none.</label>
+            <textarea id="requirementText" rows="3"></textarea>
+            <div id="groupNamesHint"></div>
+            <button id="saveRequirementButton" onclick="saveRequirement()">Save requirement (to focused biome)</button>
+          </fieldset>
+
+          <h3>Groups</h3>
+          <fieldset>
+            <label>Existing groups</label><select id="groupSelect" onchange="loadGroup(this.value)"></select>
+            <label>Group name (letters, digits, _ . -)</label><input id="groupName">
+            <label>Members (ctrl-click to pick several)</label><select id="groupMembers" multiple size="10"></select>
+            <button onclick="saveGroup()">Save group</button>
+            <button id="removeGroupButton" onclick="removeGroup()">Remove group</button>
           </fieldset>
 
           <h3>Warnings</h3>
@@ -598,7 +628,8 @@ public final class GraphEditorServer {
           populateSelectors();
           renderGraph();
           renderAdjacencyList();
-          renderRequiredNeighbors();
+          renderRequirement();
+          renderGroups();
           renderEditSize();
           renderRemoveBiome();
         }
@@ -610,7 +641,6 @@ public final class GraphEditorServer {
           fillSelect('focusSelect', keys, true, focusKey);
           fillSelect('edgeA', keys, false, document.getElementById('edgeA') ? document.getElementById('edgeA').value : '');
           fillSelect('edgeB', keys, false, document.getElementById('edgeB') ? document.getElementById('edgeB').value : '');
-          fillSelect('reqTarget', keys, false, document.getElementById('reqTarget') ? document.getElementById('reqTarget').value : '');
         }
 
         function fillSelect(id, keys, withShowAll, keepValue) {
@@ -633,7 +663,7 @@ public final class GraphEditorServer {
           focusKey = key;
           renderGraph();
           renderAdjacencyList();
-          renderRequiredNeighbors();
+          renderRequirement();
           renderEditSize();
           renderRemoveBiome();
         }
@@ -702,10 +732,9 @@ public final class GraphEditorServer {
           const node = focusedNode();
           if (!node) { alert('Focus a biome first (top dropdown) - the FOCUSED biome is the one removed.'); return; }
           const adjacencyCount = neighborsOf(focusKey).length;
-          const requirementCount = graph.nodes.reduce((total, other) => total
-            + (other.requiredNeighbors || []).filter(r => r.namespace === node.namespace && r.path === node.path).length, 0);
-          if (!confirm('Remove biome ' + focusKey + '? Its ' + adjacencyCount + ' adjacencies and ' + requirementCount
-            + ' requirement(s) other biomes have on it are removed too.')) return;
+          const groupCount = (graph.groups || []).filter(group => group.members.includes(focusKey)).length;
+          if (!confirm('Remove biome ' + focusKey + '? Its ' + adjacencyCount + ' adjacencies are removed too, and it leaves ' + groupCount
+            + ' group(s). A requirement that names it directly must be edited first.')) return;
           const body = { namespace: node.namespace, path: node.path };
           const response = await fetch('/api/nodes/remove', { method: 'POST', body: JSON.stringify(body) });
           const result = await response.json();
@@ -716,52 +745,75 @@ public final class GraphEditorServer {
           }
         }
 
-        function renderRequiredNeighbors() {
-          const heading = document.getElementById('requiredNeighborsHeading');
-          const list = document.getElementById('requiredNeighborsList');
-          list.innerHTML = '';
+        function renderRequirement() {
           const node = focusedNode();
-          if (!node) {
-            heading.textContent = 'Required borders (focus a biome first)';
-            return;
-          }
-          const requirements = node.requiredNeighbors || [];
-          heading.textContent = focusKey + ' — ' + requirements.length + ' required border' + (requirements.length === 1 ? '' : 's');
-          requirements.forEach(r => {
-            const li = document.createElement('li');
-            const label = document.createElement('span');
-            label.textContent = 'needs >= ' + r.minCount + ' shared edge' + (r.minCount === 1 ? '' : 's') + ' (about ' + (r.minCount * 150) + ' blocks) with ' + r.namespace + ':' + r.path + ' ';
-            li.appendChild(label);
-            const removeBtn = document.createElement('button');
-            removeBtn.textContent = 'Remove';
-            removeBtn.onclick = () => removeRequiredNeighbor(r.namespace, r.path);
-            li.appendChild(removeBtn);
-            list.appendChild(li);
-          });
+          document.getElementById('requirementText').disabled = !node;
+          document.getElementById('saveRequirementButton').disabled = !node;
+          document.getElementById('requirementHeading').textContent = node ? 'Border requirement of ' + focusKey : 'Border requirement (focus a biome first)';
+          document.getElementById('requirementText').value = node ? (node.requirement || '') : '';
+          const names = (graph.groups || []).map(group => group.name);
+          document.getElementById('groupNamesHint').textContent = names.length ? 'Groups: ' + names.join(', ') : 'No groups yet - name a biome by its id, or make a group below.';
         }
 
-        async function addRequiredNeighbor() {
+        async function saveRequirement() {
           const node = focusedNode();
-          if (!node) { alert('Focus a biome first (top dropdown) - required neighbors are added to the FOCUSED biome.'); return; }
-          const reqKey = document.getElementById('reqTarget').value;
-          if (!reqKey) { alert('Pick which biome is required.'); return; }
-          const [requiredNamespace, requiredPath] = reqKey.split(':');
-          const body = {
-            namespace: node.namespace, path: node.path,
-            requiredNamespace, requiredPath,
-            minCount: parseInt(document.getElementById('reqMinCount').value, 10)
-          };
-          const response = await fetch('/api/requiredneighbors', { method: 'POST', body: JSON.stringify(body) });
+          if (!node) { alert('Focus a biome first (top dropdown) - the requirement is saved to the FOCUSED biome.'); return; }
+          const body = { namespace: node.namespace, path: node.path, requirement: document.getElementById('requirementText').value };
+          const response = await fetch('/api/requirement', { method: 'POST', body: JSON.stringify(body) });
           const result = await response.json();
           showResult(result);
           if (result.constructs) await loadGraph();
         }
 
-        async function removeRequiredNeighbor(requiredNamespace, requiredPath) {
-          const node = focusedNode();
-          if (!node) return;
-          const body = { namespace: node.namespace, path: node.path, requiredNamespace, requiredPath };
-          const response = await fetch('/api/requiredneighbors/remove', { method: 'POST', body: JSON.stringify(body) });
+        function renderGroups() {
+          const groups = graph.groups || [];
+          const select = document.getElementById('groupSelect');
+          const kept = select.value;
+          select.innerHTML = '';
+          const blank = document.createElement('option');
+          blank.value = ''; blank.textContent = '— new group —';
+          select.appendChild(blank);
+          groups.forEach(group => {
+            const option = document.createElement('option');
+            option.value = group.name; option.textContent = group.name + ' (' + group.members.length + ')';
+            select.appendChild(option);
+          });
+          select.value = groups.some(group => group.name === kept) ? kept : '';
+          const members = document.getElementById('groupMembers');
+          members.innerHTML = '';
+          graph.nodes.map(keyOf).sort().forEach(key => {
+            const option = document.createElement('option');
+            option.value = key; option.textContent = key;
+            members.appendChild(option);
+          });
+          loadGroup(select.value);
+        }
+
+        function loadGroup(name) {
+          const group = (graph.groups || []).find(candidate => candidate.name === name);
+          document.getElementById('groupName').value = group ? group.name : '';
+          Array.from(document.getElementById('groupMembers').options).forEach(option => { option.selected = !!group && group.members.includes(option.value); });
+          document.getElementById('removeGroupButton').disabled = !group;
+        }
+
+        async function saveGroup() {
+          const name = document.getElementById('groupName').value.trim();
+          if (!name) { alert('Give the group a name.'); return; }
+          const members = Array.from(document.getElementById('groupMembers').selectedOptions).map(option => option.value);
+          const response = await fetch('/api/groups', { method: 'POST', body: JSON.stringify({ name, members }) });
+          const result = await response.json();
+          showResult(result);
+          if (result.constructs) {
+            await loadGraph();
+            document.getElementById('groupSelect').value = name;
+            loadGroup(name);
+          }
+        }
+
+        async function removeGroup() {
+          const name = document.getElementById('groupSelect').value;
+          if (!name || !confirm('Remove the group ' + name + '?')) return;
+          const response = await fetch('/api/groups/remove', { method: 'POST', body: JSON.stringify({ name }) });
           const result = await response.json();
           showResult(result);
           if (result.constructs) await loadGraph();

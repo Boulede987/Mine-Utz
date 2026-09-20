@@ -1,15 +1,20 @@
 package com.mineutze.worldgen.plan;
 
+import com.mineutze.worldgen.biomegraph.BiomeGraphData;
 import org.junit.jupiter.api.Test;
 
 import static com.mineutze.worldgen.plan.ToroidalTestTables.A;
 import static com.mineutze.worldgen.plan.ToroidalTestTables.B;
 import static com.mineutze.worldgen.plan.ToroidalTestTables.C;
+import static com.mineutze.worldgen.plan.ToroidalTestTables.D;
 import static com.mineutze.worldgen.plan.ToroidalTestTables.fullyLegalTableRequiring;
 import static com.mineutze.worldgen.plan.ToroidalTestTables.noLegalTriangleCatalog;
+import static com.mineutze.worldgen.plan.ToroidalTestTables.withGroup;
 import static com.mineutze.worldgen.plan.ToroidalTestTables.withRequirement;
+import static com.mineutze.worldgen.plan.ToroidalTestTables.withRequirementText;
 import static com.mineutze.worldgen.plan.ToroidalTestTables.fullyLegalTableWithWidths;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -108,14 +113,85 @@ class ClusterSizeModelTest {
         assertEquals(5, modelWithSizeRange(500, 600).violation(A, 3, 0, ShapeRule.minimumPerimeter(3), 5));
     }
 
-    @Test
-    void theModelExposesEachBiomesRequiredBorders() {
-        ClusterSizeModel model = new ClusterSizeModel(fullyLegalTableRequiring(500, 800, A, B, 4, A, B, C), ATOM_WIDTH, NO_PERIMETER_RULE);
+    private static ClusterSizeModel modelOf(String requirementOfA, BiomeGraphData base) {
+        return new ClusterSizeModel(RawRuleTable.from(withRequirementText(base, A, requirementOfA)), ATOM_WIDTH, NO_PERIMETER_RULE);
+    }
 
-        assertTrue(model.hasRequirements(0));
-        assertEquals(java.util.List.of(1), java.util.Arrays.stream(model.requiredTargets(0)).boxed().toList());
-        assertEquals(java.util.List.of(4), java.util.Arrays.stream(model.requiredMinEdges(0)).boxed().toList());
-        assertEquals(0, model.requiredTargets(1).length);
+    private static BiomeGraphData fourBiomes() {
+        return withGroup(withGroup(ToroidalTestTables.fullyLegalCatalog(500, 800, A, B, C, D), "bc", B, C), "cd", C, D);
+    }
+
+    @Test
+    void aBiomeWithARequirementSaysSoAndOthersDoNot() {
+        ClusterSizeModel model = modelOf("test:b >= 4", fourBiomes());
+
+        assertTrue(model.hasRequirement(0));
+        assertFalse(model.hasRequirement(1));
+    }
+
+    @Test
+    void theShortfallOfAShareIsTheEdgesStillMissing() {
+        ClusterSizeModel model = modelOf("test:b >= 4", fourBiomes());
+
+        assertEquals(1, model.borderShortfall(0, new int[] {0, 3, 0, 0}));
+        assertEquals(0, model.borderShortfall(0, new int[] {0, 4, 0, 0}));
+        assertEquals(4, model.borderShortfall(0, new int[] {9, 0, 9, 9}), "edges with other biomes count for nothing");
+    }
+
+    @Test
+    void aGroupCountsTheEdgesOfAllItsMembersTogether() {
+        ClusterSizeModel model = modelOf("bc >= 5", fourBiomes());
+
+        assertEquals(1, model.borderShortfall(0, new int[] {0, 2, 2, 0}));
+        assertEquals(0, model.borderShortfall(0, new int[] {0, 2, 3, 0}));
+    }
+
+    @Test
+    void anAndAddsThePartsShortfallsAndAnOrTakesTheSmallest() {
+        ClusterSizeModel both = modelOf("test:b >= 3 and test:c >= 2", fourBiomes());
+        ClusterSizeModel either = modelOf("test:b >= 3 or test:c >= 2", fourBiomes());
+
+        assertEquals(3 + 1, both.borderShortfall(0, new int[] {0, 0, 1, 0}), "3 missing with B, 1 missing with C");
+        assertEquals(1, either.borderShortfall(0, new int[] {0, 0, 1, 0}));
+        assertEquals(0, either.borderShortfall(0, new int[] {0, 3, 0, 0}));
+    }
+
+    @Test
+    void aBiomeWithoutARequirementHasNoShortfallWhateverItsBorders() {
+        assertEquals(0, modelOf("test:b >= 3", fourBiomes()).borderShortfall(1, new int[] {0, 0, 0, 0}));
+    }
+
+    private static final String[] SUBJECTS = {"test:b", "test:c", "test:d", "bc", "cd"};
+
+    private static String randomRequirement(java.util.Random random, int depth) {
+        if (depth == 0 || random.nextInt(3) == 0) {
+            return SUBJECTS[random.nextInt(SUBJECTS.length)] + " >= " + (1 + random.nextInt(6));
+        }
+        String separator = random.nextBoolean() ? " and " : " or ";
+        int parts = 2 + random.nextInt(2);
+        StringBuilder text = new StringBuilder();
+        for (int part = 0; part < parts; part++) {
+            text.append(part == 0 ? "" : separator).append("(").append(randomRequirement(random, depth - 1)).append(")");
+        }
+        return text.toString();
+    }
+
+    /** The search evaluates a compiled copy of each requirement; the plain reference reading must give the same shortfall for any edge counts. */
+    @Test
+    void theCompiledShortfallAgreesWithTheReferenceOnRandomRequirementsAndEdgeCounts() {
+        java.util.Random random = new java.util.Random(7);
+        for (int trial = 0; trial < 300; trial++) {
+            String text = randomRequirement(random, 3);
+            RawRuleTable table = RawRuleTable.from(withRequirementText(fourBiomes(), A, text));
+            ClusterSizeModel model = new ClusterSizeModel(table, ATOM_WIDTH, NO_PERIMETER_RULE);
+            ResolvedBorderRequirement reference = table.requirementOf(A).orElseThrow();
+            for (int draw = 0; draw < 20; draw++) {
+                int[] edges = {0, random.nextInt(6), random.nextInt(6), random.nextInt(6)};
+                int expected = reference.shortfall(biome -> edges[table.allBiomeIds().indexOf(biome)]);
+
+                assertEquals(expected, model.borderShortfall(0, edges), text + " with edges " + java.util.Arrays.toString(edges));
+            }
+        }
     }
 
     @Test
@@ -133,7 +209,7 @@ class ClusterSizeModelTest {
 
         IllegalArgumentException failure = assertThrows(IllegalArgumentException.class, () -> new ClusterSizeModel(RawRuleTable.from(catalog), ATOM_WIDTH, NO_PERIMETER_RULE));
 
-        assertTrue(failure.getMessage().contains("not a legal neighbor"), failure.getMessage());
+        assertTrue(failure.getMessage().contains("legal neighbor"), failure.getMessage());
     }
 
     @Test
@@ -150,7 +226,48 @@ class ClusterSizeModelTest {
         assertThrows(IllegalArgumentException.class, () -> new ClusterSizeModel(fullyLegalTableRequiring(500, 800, A, B, 0, A, B), ATOM_WIDTH, NO_PERIMETER_RULE));
     }
 
-    /** A biome of at most 5 cells has at most 22 perimeter edges (a straight line), and a perimeter rule may allow fewer: asking for more shared edges than that can never be met. */
+    @Test
+    void anOrWithOneAlternativeThatCanBeMetIsAccepted() {
+        var catalog = withRequirementText(noLegalTriangleCatalog(500, 800), A, "test:c >= 2 or test:b >= 2");
+
+        new ClusterSizeModel(RawRuleTable.from(catalog), ATOM_WIDTH, NO_PERIMETER_RULE);
+    }
+
+    @Test
+    void anOrWhoseEveryAlternativeIsImpossibleIsRejectedSayingSo() {
+        var catalog = withRequirementText(noLegalTriangleCatalog(500, 800), A, "test:c >= 2 or test:c >= 3");
+
+        IllegalArgumentException failure = assertThrows(IllegalArgumentException.class, () -> new ClusterSizeModel(RawRuleTable.from(catalog), ATOM_WIDTH, NO_PERIMETER_RULE));
+
+        assertTrue(failure.getMessage().contains("none of the alternatives"), failure.getMessage());
+    }
+
+    @Test
+    void anAndWithOneImpossiblePartIsRejected() {
+        var catalog = withRequirementText(noLegalTriangleCatalog(500, 800), A, "test:b >= 2 and test:c >= 2");
+
+        assertThrows(IllegalArgumentException.class, () -> new ClusterSizeModel(RawRuleTable.from(catalog), ATOM_WIDTH, NO_PERIMETER_RULE));
+    }
+
+    @Test
+    void aGroupWithNoLegalNeighborOfTheBiomeIsRejectedNamingTheGroup() {
+        var catalog = withRequirementText(withGroup(noLegalTriangleCatalog(500, 800), "far", C), A, "far >= 1");
+
+        IllegalArgumentException failure = assertThrows(IllegalArgumentException.class, () -> new ClusterSizeModel(RawRuleTable.from(catalog), ATOM_WIDTH, NO_PERIMETER_RULE));
+
+        assertTrue(failure.getMessage().contains("'far'"), failure.getMessage());
+    }
+
+    @Test
+    void anEmptyGroupIsRejectedAsHoldingNoBiome() {
+        var catalog = withRequirementText(new BiomeGraphData(noLegalTriangleCatalog(500, 800).nodes(), noLegalTriangleCatalog(500, 800).edges(),
+            java.util.List.of(new BiomeGraphData.GroupData("nobody", java.util.List.of()))), A, "nobody >= 1");
+
+        IllegalArgumentException failure = assertThrows(IllegalArgumentException.class, () -> new ClusterSizeModel(RawRuleTable.from(catalog), ATOM_WIDTH, NO_PERIMETER_RULE));
+
+        assertTrue(failure.getMessage().contains("holds no biome"), failure.getMessage());
+    }
+
     @Test
     void aRequirementLargerThanTheLargestPerimeterTheShapeAllowsIsRejected() {
         RawRuleTable table = fullyLegalTableRequiring(300, 700, A, B, 22, A, B);

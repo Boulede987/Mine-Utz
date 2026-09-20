@@ -188,7 +188,7 @@ final class ToroidalSizedLocalSearch {
                     }
                 }
             }
-            clusterViolation += model.violation(biome, cluster.size(), thinCellsOf(grid, model, cluster), perimeter, borderShortfallOf(table, model, biome, edgesToBiome));
+            clusterViolation += model.violation(biome, cluster.size(), thinCellsOf(grid, model, cluster), perimeter, borderShortfallOf(table, biome, edgesToBiome));
         }
 
         int missingBiomes = 0;
@@ -200,15 +200,9 @@ final class ToroidalSizedLocalSearch {
         return new Breakdown(illegalEdges, clusterViolation, missingBiomes);
     }
 
-    /** Independent count of how many shared edges a cluster of {@code biome} is short of its required borders, given how many edges it shares with each other biome. */
-    private static int borderShortfallOf(RawRuleTable table, ClusterSizeModel model, BiomeId biome, Map<BiomeId, Integer> edgesToBiome) {
-        int biomeIndex = model.biomeIndex(biome);
-        int shortfall = 0;
-        for (int slot = 0; slot < model.requiredTargets(biomeIndex).length; slot++) {
-            BiomeId required = table.allBiomeIds().get(model.requiredTargets(biomeIndex)[slot]);
-            shortfall += Math.max(0, model.requiredMinEdges(biomeIndex)[slot] - edgesToBiome.getOrDefault(required, 0));
-        }
-        return shortfall;
+    /** Independent count of how many shared edges a cluster of {@code biome} is short of its required borders, given how many edges it shares with each other biome: the plain reference reading of the requirement. */
+    private static int borderShortfallOf(RawRuleTable table, BiomeId biome, Map<BiomeId, Integer> edgesToBiome) {
+        return table.requirementOf(biome).map(requirement -> requirement.shortfall(other -> edgesToBiome.getOrDefault(other, 0))).orElse(0);
     }
 
     /** Independent, set-based count of a cluster's thin cells (see {@link ShapeRule.Thickness}) - shares nothing with the search's array version. */
@@ -300,8 +294,8 @@ final class ToroidalSizedLocalSearch {
         private int exploredBorderShortfall;
         private final boolean[] needsBorder;
         private final int[] borderEdges;
-        private final int[] borderEdgesGeneration;
-        private int borderGeneration;
+        private final int[] borderEdgeBiomes;
+        private int borderEdgeBiomeCount;
         private final int[] reachDistance;
         private final int[] reachQueue;
         private final double relabelProbability;
@@ -358,10 +352,10 @@ final class ToroidalSizedLocalSearch {
             this.changedStamp = new int[cellCount];
             this.needsBorder = new boolean[biomeCount];
             for (int biome = 0; biome < biomeCount; biome++) {
-                needsBorder[biome] = model.hasRequirements(biome);
+                needsBorder[biome] = model.hasRequirement(biome);
             }
             this.borderEdges = new int[biomeCount];
-            this.borderEdgesGeneration = new int[biomeCount];
+            this.borderEdgeBiomes = new int[biomeCount];
             this.seenBiomeStamp = new int[biomeCount];
             this.seenBiomes = new int[biomeCount];
         }
@@ -785,7 +779,6 @@ final class ToroidalSizedLocalSearch {
             visitStamp[start] = stamp;
             int perimeter = 0;
             boolean countsBorders = needsBorder[biome];
-            borderGeneration++;
             while (head < tail) {
                 int cell = queue[head++];
                 for (int neighbor : neighbors[cell]) {
@@ -802,7 +795,7 @@ final class ToroidalSizedLocalSearch {
             }
             exploredSize = tail;
             exploredPerimeter = perimeter;
-            exploredBorderShortfall = countsBorders ? shortfallOfRequiredBorders(biome) : 0;
+            exploredBorderShortfall = countsBorders ? borderShortfallOfExploredCluster(biome) : 0;
             exploredThinCells = switch (model.shape().thicknessRequiredFor(tail)) {
                 case NONE -> 0;
                 case TRIANGLE -> countCellsOutsideAnyTriangle(biome, tail);
@@ -810,24 +803,20 @@ final class ToroidalSizedLocalSearch {
             };
         }
 
-        /** Counts one more edge of the cluster being explored towards {@code otherBiome}; counters restart lazily, once per exploration. */
+        /** Counts one more edge of the cluster being explored towards {@code otherBiome}. */
         private void countEdgeTo(int otherBiome) {
-            if (borderEdgesGeneration[otherBiome] != borderGeneration) {
-                borderEdgesGeneration[otherBiome] = borderGeneration;
-                borderEdges[otherBiome] = 0;
+            if (borderEdges[otherBiome]++ == 0) {
+                borderEdgeBiomes[borderEdgeBiomeCount++] = otherBiome;
             }
-            borderEdges[otherBiome]++;
         }
 
-        /** How many shared edges the cluster just explored is short of the borders {@code biome} requires. */
-        private int shortfallOfRequiredBorders(int biome) {
-            int[] targets = model.requiredTargets(biome);
-            int[] minEdges = model.requiredMinEdges(biome);
-            int shortfall = 0;
-            for (int slot = 0; slot < targets.length; slot++) {
-                int shared = borderEdgesGeneration[targets[slot]] == borderGeneration ? borderEdges[targets[slot]] : 0;
-                shortfall += Math.max(0, minEdges[slot] - shared);
+        /** How many shared edges the cluster just explored is short of the borders {@code biome} requires; leaves the edge counters zeroed for the next cluster. */
+        private int borderShortfallOfExploredCluster(int biome) {
+            int shortfall = model.borderShortfall(biome, borderEdges);
+            for (int index = 0; index < borderEdgeBiomeCount; index++) {
+                borderEdges[borderEdgeBiomes[index]] = 0;
             }
+            borderEdgeBiomeCount = 0;
             return shortfall;
         }
 

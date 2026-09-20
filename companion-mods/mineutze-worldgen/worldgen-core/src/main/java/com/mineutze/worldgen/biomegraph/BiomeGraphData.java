@@ -15,28 +15,30 @@ import java.util.List;
  * (core {@code biomegraph} package), not the other way around - a dev tool depending on
  * production code is normal; production depending on a package named "tooling" is not.
  */
-public record BiomeGraphData(List<NodeData> nodes, List<EdgeData> edges) {
+public record BiomeGraphData(List<NodeData> nodes, List<EdgeData> edges, List<GroupData> groups) {
+
+    /** A graph without groups. */
+    public BiomeGraphData(List<NodeData> nodes, List<EdgeData> edges) {
+        this(nodes, edges, List.of());
+    }
 
     /**
      * Mirrors {@link BiomeNode} + its {@link BiomeId}, flattened to scalars for JSON, plus
-     * {@code requiredNeighbors} - not part of {@link BiomeNode}: borders every cluster of this
-     * biome must share with other biomes (a beach with the ocean), enforced by the world
-     * generator. Defaults to empty - every existing saved graph still loads unchanged.
+     * {@code requirement} - not part of {@link BiomeNode}: the borders every cluster of this biome
+     * must share with other biomes (a beach with the ocean), as {@link BorderRequirement} text over
+     * the graph's groups, enforced by the world generator. Blank means none.
      */
     public record NodeData(
         String namespace, String path, int minWidthBlocks, int maxWidthBlocks, int selfAdjacencyLimit,
-        List<RequiredNeighbor> requiredNeighbors
+        String requirement
     ) {
         public String key() {
             return namespace + ":" + path;
         }
     }
 
-    /** One "every cluster of this biome must share at least {@code minCount} cell-edges (about 150 blocks each) with this other biome" rule. One-way: the other biome asks nothing back. */
-    public record RequiredNeighbor(String namespace, String path, int minCount) {
-        public String key() {
-            return namespace + ":" + path;
-        }
+    /** A named set of biomes (the oceans, the forests) that a {@link BorderRequirement} can name; {@code members} are biome keys, {@code namespace:path}. */
+    public record GroupData(String name, List<String> members) {
     }
 
     /** Mirrors {@link AdjacencyRule}, flattened to scalars for JSON. */

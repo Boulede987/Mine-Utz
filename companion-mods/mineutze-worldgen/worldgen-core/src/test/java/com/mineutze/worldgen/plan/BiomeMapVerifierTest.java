@@ -13,6 +13,8 @@ import static com.mineutze.worldgen.plan.ToroidalTestTables.B;
 import static com.mineutze.worldgen.plan.ToroidalTestTables.C;
 import static com.mineutze.worldgen.plan.ToroidalTestTables.fullyLegalTableRequiring;
 import static com.mineutze.worldgen.plan.ToroidalTestTables.fullyLegalTableWithWidths;
+import static com.mineutze.worldgen.plan.ToroidalTestTables.withGroup;
+import static com.mineutze.worldgen.plan.ToroidalTestTables.withRequirementText;
 import static com.mineutze.worldgen.plan.ToroidalTestTables.tableWithNoLegalTriangle;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -227,17 +229,12 @@ class BiomeMapVerifierTest {
 
     /** Two column bands in a 10-wide map share two seams of 10 rows: 40 contacts, and a border is measured as contacts x blocks per sample / 2 (about two contacts per sample length of a straight seam), 200 blocks here. */
     @Test
-    void aRegionSharingLessBorderThanItsRequirementNeedsIsReportedWithBothLengths() {
+    void aRegionSharingLessBorderThanItsRequirementNeedsIsReportedWithTheRequirementText() {
         RawRuleTable table = fullyLegalTableRequiring(250, 400, A, B, 3, A, B, C);
 
         BiomeMapVerifier.Report report = BiomeMapVerifier.verify(columns(0, 1, 5), table, TOLERANCE, null, 100);
 
-        assertEquals(1, report.borderShortfalls().size());
-        BiomeMapVerifier.BorderShortfall shortfall = report.borderShortfalls().get(0);
-        assertEquals(A, shortfall.biome());
-        assertEquals(B, shortfall.required());
-        assertEquals(200, shortfall.lengthBlocks(), 1e-9, "40 contacts x 10 blocks per sample / 2");
-        assertEquals(300, shortfall.neededBlocks(), 1e-9, "3 edges x 100 blocks");
+        assertEquals(List.of(new BiomeMapVerifier.BorderShortfall(A, "test:b >= 3")), report.borderShortfalls(), "200 blocks shared, 3 edges x 100 blocks needed");
     }
 
     @Test
@@ -250,13 +247,10 @@ class BiomeMapVerifierTest {
     }
 
     @Test
-    void aRegionTouchingNoneOfTheRequiredBiomeIsReportedWithZeroLength() {
+    void aRegionTouchingNoneOfTheRequiredBiomeIsReported() {
         RawRuleTable table = fullyLegalTableRequiring(250, 400, A, C, 1, A, B, C);
 
-        BiomeMapVerifier.Report report = BiomeMapVerifier.verify(columns(0, 1, 5), table, TOLERANCE, null, 100);
-
-        assertEquals(1, report.borderShortfalls().size());
-        assertEquals(0.0, report.borderShortfalls().get(0).lengthBlocks(), 1e-9);
+        assertEquals(1, BiomeMapVerifier.verify(columns(0, 1, 5), table, TOLERANCE, null, 100).borderShortfalls().size());
     }
 
     @Test
@@ -273,5 +267,28 @@ class BiomeMapVerifierTest {
         RawRuleTable table = fullyLegalTableWithWidths(250, 400, A, B, C);
 
         assertTrue(BiomeMapVerifier.verify(columns(0, 1, 5), table, TOLERANCE, null, 100).borderShortfalls().isEmpty());
+    }
+
+    private static BiomeMapVerifier.Report verifyRequirementOfA(String text, int firstBiome, int secondBiome) {
+        RawRuleTable table = RawRuleTable.from(withRequirementText(withGroup(ToroidalTestTables.fullyLegalCatalog(250, 400, A, B, C), "bc", B, C), A, text));
+        return BiomeMapVerifier.verify(columns(firstBiome, secondBiome, 5), table, TOLERANCE, null, 100);
+    }
+
+    @Test
+    void aGroupCountsTheBorderSharedWithAnyOfItsMembers() {
+        assertTrue(verifyRequirementOfA("bc >= 2", 0, 1).borderShortfalls().isEmpty(), "200 blocks with B alone meet 2 edges of the group");
+        assertEquals(1, verifyRequirementOfA("bc >= 3", 0, 1).borderShortfalls().size());
+    }
+
+    @Test
+    void anOrIsMetWhenOnePartIs() {
+        assertTrue(verifyRequirementOfA("test:c >= 1 or test:b >= 2", 0, 1).borderShortfalls().isEmpty());
+        assertEquals(1, verifyRequirementOfA("test:c >= 1 or test:b >= 3", 0, 1).borderShortfalls().size());
+    }
+
+    @Test
+    void anAndNeedsEveryPart() {
+        assertEquals(1, verifyRequirementOfA("test:b >= 2 and test:c >= 1", 0, 1).borderShortfalls().size(), "no C anywhere near A");
+        assertTrue(verifyRequirementOfA("test:b >= 2 and test:b >= 1", 0, 1).borderShortfalls().isEmpty());
     }
 }

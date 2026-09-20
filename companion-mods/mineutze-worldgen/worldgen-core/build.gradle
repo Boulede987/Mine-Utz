@@ -11,13 +11,6 @@ java {
     toolchain.languageVersion = JavaLanguageVersion.of(21)
 }
 
-tasks.register('graphEditorSeed', JavaExec) {
-    group = 'application'
-    description = 'One-off: writes ModBiomeGraph.OVERWORLD out to the graph editor\'s own data file (src/main/resources/biomegraph/biome-graph.json). Only needed once, or to reset the editor back to a known-good in-memory graph. Run with: ./gradlew :worldgen-core:graphEditorSeed'
-    classpath = sourceSets.main.runtimeClasspath
-    mainClass = 'com.mineutze.worldgen.tooling.graphedit.GraphDataSeeder'
-}
-
 tasks.register('graphEditor', JavaExec) {
     group = 'application'
     description = 'Local web app for editing the biome adjacency graph (add/remove biomes and adjacencies, live rule-consistency warnings, on-demand solve check) - reads/writes the SAME file ModBiomeGraph.OVERWORLD loads, so edits here are production changes. Run with: ./gradlew :worldgen-core:graphEditor, then open http://localhost:8842'

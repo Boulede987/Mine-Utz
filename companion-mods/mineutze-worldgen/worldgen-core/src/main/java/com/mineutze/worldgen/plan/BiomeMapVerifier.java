@@ -8,6 +8,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
+import java.util.function.ToDoubleFunction;
 
 /**
  * Checks a rendered biome map directly, without trusting any theory about the warp that made it
@@ -31,8 +32,8 @@ final class BiomeMapVerifier {
     record AreaViolation(BiomeId biome, double areaBlocks2, double allowedMinBlocks2, double allowedMaxBlocks2) {
     }
 
-    /** A region that shares less border with a biome it requires than its biome demands: how much it has and how much it needs, in blocks. */
-    record BorderShortfall(BiomeId biome, BiomeId required, double lengthBlocks, double neededBlocks) {
+    /** A region whose real borders do not meet the requirement of its biome, written as text. */
+    record BorderShortfall(BiomeId biome, String requirement) {
     }
 
     /**
@@ -185,18 +186,16 @@ final class BiomeMapVerifier {
     }
 
     /**
-     * For each region whose biome requires borders, how much border it really shares with each required biome. A border is measured by its contacts (touching sample pairs of the
+     * The regions whose borders do not meet the requirement of their biome. A border is measured by its contacts (touching sample pairs of the
      * six-neighbor lattice): a straight seam has about two contacts per sample spacing, so its length is {@code contacts * blocksPerSample / 2}.
      */
     private static List<BorderShortfall> borderShortfalls(BiomeMap map, RawRuleTable table, int[] parent, List<Integer> regionRoots, double requiredBlocksPerEdge) {
         int biomeCount = map.biomes().size();
-        int[][] minEdges = new int[biomeCount][biomeCount];
+        List<ResolvedBorderRequirement> requirementOfBiome = new ArrayList<>();
         boolean anyRequirement = false;
-        for (int biome = 0; biome < biomeCount; biome++) {
-            for (Map.Entry<BiomeId, Integer> requirement : table.requiredNeighborsOf(map.biomes().get(biome)).entrySet()) {
-                minEdges[biome][map.biomes().indexOf(requirement.getKey())] = requirement.getValue();
-                anyRequirement = true;
-            }
+        for (BiomeId biome : map.biomes()) {
+            requirementOfBiome.add(table.requirementOf(biome).orElse(null));
+            anyRequirement |= requirementOfBiome.get(requirementOfBiome.size() - 1) != null;
         }
         if (!anyRequirement) {
             return List.of();
@@ -215,10 +214,10 @@ final class BiomeMapVerifier {
                     if (here == there) {
                         continue;
                     }
-                    if (minEdges[here][there] > 0) {
+                    if (requirementOfBiome.get(here) != null) {
                         contactsByRegionAndBiome.merge((long) find(parent, sample) * biomeCount + there, 1, Integer::sum);
                     }
-                    if (minEdges[there][here] > 0) {
+                    if (requirementOfBiome.get(there) != null) {
                         contactsByRegionAndBiome.merge((long) find(parent, neighbor) * biomeCount + here, 1, Integer::sum);
                     }
                 }
@@ -227,16 +226,13 @@ final class BiomeMapVerifier {
 
         List<BorderShortfall> shortfalls = new ArrayList<>();
         for (int root : regionRoots) {
-            int biome = biomeIndices[root];
-            for (int required = 0; required < biomeCount; required++) {
-                if (minEdges[biome][required] == 0) {
-                    continue;
-                }
-                double length = contactsByRegionAndBiome.getOrDefault((long) root * biomeCount + required, 0) * map.blocksPerSample() / 2;
-                double needed = minEdges[biome][required] * requiredBlocksPerEdge;
-                if (length < needed) {
-                    shortfalls.add(new BorderShortfall(map.biomes().get(biome), map.biomes().get(required), length, needed));
-                }
+            ResolvedBorderRequirement requirement = requirementOfBiome.get(biomeIndices[root]);
+            if (requirement == null) {
+                continue;
+            }
+            ToDoubleFunction<BiomeId> sharedBlocksWith = other -> contactsByRegionAndBiome.getOrDefault((long) root * biomeCount + map.biomes().indexOf(other), 0) * map.blocksPerSample() / 2;
+            if (!requirement.isMetBy(sharedBlocksWith, requiredBlocksPerEdge)) {
+                shortfalls.add(new BorderShortfall(map.biomes().get(biomeIndices[root]), requirement.toString()));
             }
         }
         return shortfalls;
