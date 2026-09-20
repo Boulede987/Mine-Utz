@@ -3,8 +3,6 @@ package com.mineutze.worldgen.integration;
 import com.mineutze.worldgen.biomegraph.BiomeId;
 import com.mineutze.worldgen.biomegraph.BiomeNode;
 import com.mineutze.worldgen.biomegraph.ModBiomeGraph;
-import com.mineutze.worldgen.regionsolve.MacroCellPos;
-import com.mineutze.worldgen.regionsolve.MacroGridConfig;
 import com.mojang.logging.LogUtils;
 import com.mojang.serialization.DataResult;
 import com.mojang.serialization.DynamicOps;
@@ -30,15 +28,15 @@ import java.util.Optional;
 import java.util.stream.Stream;
 
 /**
- * Reports whichever biome the region solver assigned to a column's
- * macro-cell — nothing here samples climate noise to pick a biome (doc/
- * ARCHITECTURE.md "What replaces vanilla's multi-noise biome source").
+ * Reports the biome the world's {@link com.mineutze.worldgen.coherence.WorldBiomePlan} holds for a
+ * column - nothing here samples climate noise to pick a biome.
  * Registered via {@link ModBiomeSources} and selected by the
  * data/minecraft/dimension/overworld.json datapack override.
  */
 public class ModOverworldBiomeSource extends BiomeSource {
 
     private static final Logger LOGGER = LogUtils.getLogger();
+    private static final int QUART_CENTER_OFFSET_BLOCKS = 2;
 
     /**
      * {@code RecordCodecBuilder}'s own {@code .group()}/{@code .apply()} tuple machinery
@@ -116,44 +114,37 @@ public class ModOverworldBiomeSource extends BiomeSource {
     }
 
     /**
-     * A wrapping try/catch purely for logging, not recovery - this method still rethrows
-     * unconditionally. Found necessary the hard way (2026-09-04): a real in-game CSP
-     * dead end thrown from here, reached via {@code /locate biome}, left NO trace in
-     * either {@code latest.log} or {@code debug.log} - vanilla's own command-error
-     * handling reports a bare "An unexpected error occurred trying to execute that
-     * command" to chat and never logs the underlying exception to any file at all. This
-     * is the one point in the whole call chain from Minecraft's own biome-sampling code
-     * down into {@code worldgen-core} (deliberately dependency-free, no logger available
-     * there - see that module's own build.gradle doc) that both HAS a real logger and
-     * sits BEFORE whatever downstream Minecraft code might silently swallow the
-     * exception - so this is where the guarantee has to live, not further up a call
-     * chain we don't control.
+     * Looks the column up in the world's {@link WorldBiomePlan}: one array read, no solving. A quart is a
+     * 4x4-block cell, so the point asked about is the CENTER of that cell, two blocks in. Y is ignored -
+     * this mod's biomes are flat, one per column.
+     *
+     * <p>A wrapping try/catch purely for logging, not recovery - this method still rethrows
+     * unconditionally. Found necessary the hard way (2026-09-04): an exception thrown from here, reached
+     * via {@code /locate biome}, left NO trace in either {@code latest.log} or {@code debug.log} - vanilla's
+     * own command-error handling reports a bare "An unexpected error occurred trying to execute that
+     * command" to chat and never logs the underlying exception at all. This is the one point in the call
+     * chain that both HAS a real logger and sits BEFORE whatever downstream Minecraft code might silently
+     * swallow the exception (worldgen-core deliberately has no logger).
      */
     @Override
     public Holder<Biome> getNoiseBiome(int quartX, int quartY, int quartZ, Climate.Sampler sampler) {
-        MacroGridConfig grid = MacroGridConfig.DEFAULT;
-        MacroCellPos cell = new MacroCellPos(
-            Math.floorDiv(QuartPos.toBlock(quartX), grid.macroCellSizeBlocks()),
-            Math.floorDiv(QuartPos.toBlock(quartZ), grid.macroCellSizeBlocks())
-        );
+        double blockX = QuartPos.toBlock(quartX) + QUART_CENTER_OFFSET_BLOCKS;
+        double blockZ = QuartPos.toBlock(quartZ) + QUART_CENTER_OFFSET_BLOCKS;
 
         BiomeId biomeId;
         try {
-            biomeId = RegionCacheHolder.get().biomeAt(cell);
+            biomeId = WorldBiomePlanHolder.get().biomeAt(blockX, blockZ);
         } catch (RuntimeException e) {
-            LOGGER.error("[mineutze_worldgen] getNoiseBiome failed at cell {} (quart {},{},{})", cell, quartX, quartY, quartZ, e);
+            LOGGER.error("[mineutze_worldgen] getNoiseBiome failed at block {},{} (quart {},{},{})", blockX, blockZ, quartX, quartY, quartZ, e);
             throw e;
         }
         Holder<Biome> resolved = biomesById.get(BiomeIdAdapter.toResourceLocation(biomeId));
         if (resolved == null) {
-            // Should be unreachable: the solver only ever assigns biomes from
-            // ModBiomeGraph.OVERWORLD's own node set, which is exactly this class's own
-            // registered biome set (see overworldBiomeKeys, sourced from that same graph).
-            // No silent fallback (there's no more universal filler to fall back to anyway,
-            // see BiomeGraph's own doc) - a biome id this class doesn't recognize means the
-            // graph and this registration have drifted apart, a real bug worth surfacing
-            // immediately.
-            throw new IllegalStateException("Region solver assigned " + biomeId + " at " + cell + ", which ModOverworldBiomeSource has no registered Holder<Biome> for.");
+            // Unreachable while this class's registered biome set and the plan's palette both come from
+            // the same catalog. No silent fallback: a biome id this class does not know means the catalog
+            // and this registration have drifted apart (or a saved plan came from another catalog) - a
+            // real bug worth surfacing immediately.
+            throw new IllegalStateException("The biome plan holds " + biomeId + " at block " + blockX + "," + blockZ + ", which ModOverworldBiomeSource has no registered Holder<Biome> for.");
         }
         return resolved;
     }
