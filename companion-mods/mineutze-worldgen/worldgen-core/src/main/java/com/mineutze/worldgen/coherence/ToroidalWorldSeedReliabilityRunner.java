@@ -12,6 +12,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.TreeMap;
 
@@ -111,17 +112,17 @@ public final class ToroidalWorldSeedReliabilityRunner {
             tally.realizationSeconds.add(realizationSeconds);
             tally.worldsPerStrength.merge(selection.strength(), 1, Integer::sum);
             tally.worstAbsoluteDrift = Math.max(tally.worstAbsoluteDrift, Arrays.stream(selection.report().driftRatios()).map(Math::abs).max().orElse(0));
-            record(worldSeed, "solved", generated.seedIndex() + 1, patternSeconds, String.valueOf(selection.strength()), selection.candidatesTried(), String.format("%.1f", realizationSeconds), "");
+            record(worldSeed, "solved", generated.seedIndex() + 1, patternSeconds, String.valueOf(selection.strength()), selection.candidatesTried(), String.format(Locale.ROOT, "%.1f", realizationSeconds), "");
         } catch (IllegalStateException failure) {
             tally.realizationFailures.add(worldSeed);
-            record(worldSeed, "REALIZATION FAILED", generated.seedIndex() + 1, patternSeconds, "", -1, String.format("%.1f", secondsSince(realizationStart)), failure.getMessage());
+            record(worldSeed, "REALIZATION FAILED", generated.seedIndex() + 1, patternSeconds, "", -1, String.format(Locale.ROOT, "%.1f", secondsSince(realizationStart)), failure.getMessage());
         }
     }
 
     private static void report(Tally tally, int worldCount, int threadCount) {
         System.out.println("WORLDS " + tally.patternsSolved + " of " + worldCount + " world seeds produced a verified PATTERN, and " + tally.realized + " of " + worldCount
             + " a verified REALIZED MAP (" + GRID_SIZE + "x" + GRID_SIZE + ", perimeter ratio " + PERIMETER_RATIO + ", " + threadCount + " threads; up to " + ToroidalSizedPatternGenerator.DEFAULT_MAX_SEEDS
-            + " pattern attempts of " + String.format("%,d", ToroidalSizedPatternGenerator.DEFAULT_STEPS_PER_SEED) + " steps; map checked at " + VERIFICATION_SAMPLES_PER_SIDE + "x" + VERIFICATION_SAMPLES_PER_SIDE
+            + " pattern attempts of " + String.format(Locale.ROOT, "%,d", ToroidalSizedPatternGenerator.DEFAULT_STEPS_PER_SEED) + " steps; map checked at " + VERIFICATION_SAMPLES_PER_SIDE + "x" + VERIFICATION_SAMPLES_PER_SIDE
             + " samples, size tolerance " + (int) (100 * SIZE_TOLERANCE_OF_MINIMUM) + "% of the minimum)");
         if (!tally.patternFailures.isEmpty()) {
             System.out.println("WORLDS PATTERN FAILED for world seeds " + tally.patternFailures);
@@ -133,15 +134,15 @@ public final class ToroidalWorldSeedReliabilityRunner {
             Collections.sort(tally.attemptsUsed);
             Collections.sort(tally.patternSeconds);
             System.out.println("WORLDS pattern attempts needed: median " + percentile(tally.attemptsUsed, 0.5) + ", p90 " + percentile(tally.attemptsUsed, 0.9) + ", max " + percentile(tally.attemptsUsed, 1.0));
-            System.out.println("WORLDS pattern seconds per world: median " + String.format("%.1f", percentile(tally.patternSeconds, 0.5)) + ", p90 " + String.format("%.1f", percentile(tally.patternSeconds, 0.9))
-                + ", max " + String.format("%.1f", percentile(tally.patternSeconds, 1.0)));
+            System.out.println("WORLDS pattern seconds per world: median " + String.format(Locale.ROOT, "%.1f", percentile(tally.patternSeconds, 0.5)) + ", p90 " + String.format(Locale.ROOT, "%.1f", percentile(tally.patternSeconds, 0.9))
+                + ", max " + String.format(Locale.ROOT, "%.1f", percentile(tally.patternSeconds, 1.0)));
         }
         if (!tally.realizationSeconds.isEmpty()) {
             Collections.sort(tally.realizationSeconds);
-            System.out.println("WORLDS realization seconds per world: median " + String.format("%.1f", percentile(tally.realizationSeconds, 0.5)) + ", p90 "
-                + String.format("%.1f", percentile(tally.realizationSeconds, 0.9)) + ", max " + String.format("%.1f", percentile(tally.realizationSeconds, 1.0)));
+            System.out.println("WORLDS realization seconds per world: median " + String.format(Locale.ROOT, "%.1f", percentile(tally.realizationSeconds, 0.5)) + ", p90 "
+                + String.format(Locale.ROOT, "%.1f", percentile(tally.realizationSeconds, 0.9)) + ", max " + String.format(Locale.ROOT, "%.1f", percentile(tally.realizationSeconds, 1.0)));
             System.out.println("WORLDS warp strength chosen (strongest that verified), worlds per strength: " + tally.worldsPerStrength);
-            System.out.println("WORLDS worst area drift of any region in any chosen map: " + String.format("%.1f%%", 100 * tally.worstAbsoluteDrift));
+            System.out.println("WORLDS worst area drift of any region in any chosen map: " + String.format(Locale.ROOT, "%.1f%%", 100 * tally.worstAbsoluteDrift));
         }
         System.out.println("WORLDS per-world data: " + CSV.toAbsolutePath() + " ; patterns: " + PATTERN_DIRECTORY.toAbsolutePath());
     }
@@ -164,7 +165,7 @@ public final class ToroidalWorldSeedReliabilityRunner {
     }
 
     private static void record(long worldSeed, String outcome, int patternAttempts, double patternSeconds, String warpStrength, int strengthsTried, String realizationSeconds, String failureMessage) {
-        String line = worldSeed + "," + outcome + "," + patternAttempts + "," + String.format("%.1f", patternSeconds) + "," + warpStrength + "," + strengthsTried + "," + realizationSeconds + ","
+        String line = worldSeed + "," + outcome + "," + patternAttempts + "," + String.format(Locale.ROOT, "%.1f", patternSeconds) + "," + warpStrength + "," + strengthsTried + "," + realizationSeconds + ","
             + failureMessage.replace(',', ';').replace('\n', ' ');
         System.out.println("WORLD " + line);
         try {
