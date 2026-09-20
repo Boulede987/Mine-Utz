@@ -219,3 +219,25 @@ Each stage ends with tests green, a commit, and the acceptance check named.
   across two processes, solver pattern identical to the one a study saved days earlier.
 - The facade lives in the `coherence` package for now; the package is renamed when the dead code
   around it is deleted.
+
+- Stage 3 and 5 (mod wiring, in-game verification) done on a real dev server (seed 42, the modpack's
+  Biomes O' Plenty / Biomes We've Gone jars added to `runs/server/mods`, driven by console commands):
+  - New world: plan created in 32 s on 11 threads (pattern attempt 1, warp strength 26), saved with the
+    world (`data/mineutze_worldgen_plan.dat`), server "Done" in 33 s. Restart: plan restored, "Done" in
+    0.4 s, no solving. Spawn-area preparation after the plan took about 2 s.
+  - `/locate biome` is exact and instant: desert 4,071 blocks away, mushroom fields 22, a Biomes We've
+    Gone biome 4,618.
+  - Acceptance check (`/mineutzeworldgen exportbiomes <radius> <step>`): the biomes stored in generated
+    chunk data equal the plan at every quart (0 mismatches in 251,001 exhaustive checks); the blended
+    `level.getBiome` differs from the plan at about 0.8-0.95% of samples, ALL explained by vanilla's own
+    jitter between neighboring quarts (0 unexplained in 251,001 + 564,001 + 564,001 samples).
+  - Facts settled: the server watchdog is NOT running during `LevelEvent.Load` (a 32 s creation there is
+    safe) but IS running during commands (an export over 60 s on the server thread killed the server).
+  - Found only by running the game: (1) the saved data was never written because it was not marked dirty;
+    (2) the dev-run needed one asm version, both source sets declared as one mod group, and stdin
+    forwarded. The old integration had not compiled since an earlier package reorganisation.
+- Still open: unit tests for the mod-side save format (NeoGradle's JUnit hook did not start; the in-game
+  save/restore is the check for now); the game-grid speck check and the minimum-width check of section
+  4.7; deleting the old system (regionsolve, reachability, obsolete export/coherence classes, editor
+  Deep-check and Coherence-proof buttons) and renaming the package; re-running the 104-seed study through
+  `WorldBiomePlan`; DECISIONS.md entries.
