@@ -151,4 +151,14 @@ class BorderRequirementTest {
 
         assertTrue(failure.getMessage().contains("&"), failure.getMessage());
     }
+
+    @Test
+    void theWordsAndOrMayBeWrittenInAnyCase() {
+        assertEquals(parse("a >= 1 and b >= 1 or c >= 1"), parse("a >= 1 AND b >= 1 Or c >= 1"));
+    }
+
+    @Test
+    void aKeywordInAnyCaseCannotBeASubject() {
+        assertThrows(IllegalArgumentException.class, () -> BorderRequirement.parse("OR >= 1"));
+    }
 }

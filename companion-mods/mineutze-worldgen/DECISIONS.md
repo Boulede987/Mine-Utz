@@ -1,5 +1,38 @@
 # Decisions
 
+## 2026-09-20 — Groups of biomes and and/or border requirements
+
+**Context:** A requirement named ONE biome, but a beach may touch `ocean` or `lukewarm_ocean`, so one
+name was too narrow. The author asked for rules like "one within this group", "one within this group
+and one within that group", "one within this group or one within that group", and more.
+
+**Decision:** The catalog gets named `groups` (a name and member biome ids). Each biome's
+`requirement` is one text over groups and biome ids: `oceans >= 2 and (forests >= 1 or plains >= 1)`;
+`and` binds tighter than `or`, parentheses group, a subject with a colon is a single biome. A share
+counts the edges shared with ALL biomes of the group added together. This replaces the flat
+`requiredNeighbors` list (a file still holding a non-empty one is refused, never silently dropped).
+The search cost stays exact and integer: a share is short by what it lacks, an "and" by the sum of its
+parts' shortfalls, an "or" by the smallest of them. The map verifier reads the same requirement over
+real border lengths. A requirement that can never be met is rejected unless another "or" branch can
+still be met. In the editor, groups and the requirement text are edited in two panels, unreadable
+names or text block saving, and removing a group or biome that a requirement still names is refused.
+The obsolete graph seeder was deleted: it rewrote the catalog from itself and would have wiped the new fields.
+
+**Alternatives considered:**
+- Count the strongest single member of a group instead of the sum: rejected, a beach beside both oceans
+  is still a beach on a coast.
+- A structured JSON tree for requirements: rejected for a text a person can read and edit in one box;
+  it is stored in its canonical printed form and re-read on load.
+- Renaming or nesting groups: not built, a group is a flat list and a rename is delete-and-recreate.
+
+**Evidence:** 355 unit tests, including a fuzz test that the search's compiled shortfall equals the
+plain reference reading for 300 random requirements, and an HTTP run of every editor endpoint against a
+temp copy of the catalog. Stress catalog with three groups and five requirements (beach: warm waters;
+snowy beach: cold waters; stony shore: cold ocean; dacite shore: cold waters and a taiga; mangrove
+swamp: swamp or floodplain): 16 of 16 world seeds solved and realized (pattern attempts median 3, max 33
+of 200; 0.4% worst area drift); an independent script over the saved patterns found all 89 constrained
+clusters meeting their requirement, the "or" met through both branches.
+
 ## 2026-09-20 — Required borders: a biome's clusters must share a stretch of border with a named biome
 
 **Context:** `requiredNeighbors` (a beach beside the ocean) existed in the catalog schema and the
@@ -31,8 +64,7 @@ stony_shore-cold_ocean, dacite_shore-frozen_ocean): 20 of 20 world seeds solved 
 attempts median 8, max 34 of 200; pattern seconds median 27.5); an independent script over the
 saved patterns found all 92 shore clusters at 2 or more shared edges, half their outline on average.
 
-**Known limits:** A requirement names ONE biome, but a beach may touch `ocean` or `lukewarm_ocean`;
-"any of these" groups are the natural next step. A shore cannot be narrower than one cell (300 blocks
+**Known limits:** (One-biome requirements were widened to groups and and/or in the entry above.) A shore cannot be narrower than one cell (300 blocks
 across); a genuinely thin beach needs a border fringe drawn when the map is rendered.
 
 ## 2026-09-20 — One solved biome plan per world replaces the hex-mesh region solver
