@@ -1,84 +1,14 @@
 // Pure Java, no Minecraft/NeoForge dependency on purpose: this module holds
-// the biome graph model and (later) the region-solve algorithm. Keeping it
+// the biome graph model and the per-world biome plan (solver and map). Keeping it
 // free of Minecraft classes means its tests run as plain fast JUnit instead
 // of NeoForge's "unit testing mode", which boots a full Minecraft instance
 // for the whole test task.
 plugins {
     id 'java'
-    id 'application'
 }
 
 java {
     toolchain.languageVersion = JavaLanguageVersion.of(21)
-}
-
-application {
-    // Standalone region-solve export (PNG/ASCII/JSON) — run with:
-    //   ./gradlew :worldgen-core:run --args="<worldSeed> <regionSpan> <outputDir>"
-    mainClass = 'com.mineutze.worldgen.export.ExportCli'
-}
-
-tasks.register('triangleFieldExport', JavaExec) {
-    group = 'application'
-    description = 'Visual of the live hex-mesh region-solve path (HexMeshBuilder -> FaceAdjacency -> fused CSP -> WeightedVertexPlacement -> EdgeDisplacementRasterizer -> raster), against the real ModBiomeGraph.DEFAULT. Run with: ./gradlew :worldgen-core:triangleFieldExport --args="<worldSeed> <outputDir>"'
-    classpath = sourceSets.main.runtimeClasspath
-    mainClass = 'com.mineutze.worldgen.export.triangle.TriangleFieldRegionExportCli'
-}
-
-tasks.register('biomeGraphCompletenessReport', JavaExec) {
-    group = 'verification'
-    description = 'Exhaustively checks every biome-neighbor combination against ModBiomeGraph.OVERWORLD for a universal legal candidate, caching against the rule set\'s own fingerprint (doc/biome-graph-completeness-cache.txt) - re-run after any real AdjacencyRule change via the Excel planner. Run with: ./gradlew :worldgen-core:biomeGraphCompletenessReport'
-    classpath = sourceSets.main.runtimeClasspath
-    mainClass = 'com.mineutze.worldgen.export.BiomeGraphCompletenessReport'
-}
-
-tasks.register('deadEndFrequencySimulation', JavaExec) {
-    group = 'verification'
-    description = 'Real dead-end FREQUENCY (not just existence) against ModBiomeGraph.OVERWORLD - RING_PROBE (deliberate worst case, structure-search-style) and ORGANIC_WALK (real player movement pattern), 100,000 trials each, plus STRUCTURE_RING_SWEEP (many points sharing one cache per trial, mirrors real structure/stronghold placement, small trial count for now), parallel. Run with: ./gradlew :worldgen-core:deadEndFrequencySimulation'
-    classpath = sourceSets.main.runtimeClasspath
-    mainClass = 'com.mineutze.worldgen.export.hex.DeadEndFrequencySimulation'
-}
-
-tasks.register('liveDeadEndDiagnosticReport', JavaExec) {
-    group = 'verification'
-    description = 'Sweeps the real live query path (SeedMeshCache) across 50 seeds for REAL, reachable dead ends - a much smaller, much more actionable list than biomeGraphCompletenessReport\'s own exhaustive abstract sweep. Self-explanatory report (doc/live-dead-end-diagnostic-report.txt): every entry explains the problem and proposes a concrete, verifiable AdjacencyRule fix. Run with: ./gradlew :worldgen-core:liveDeadEndDiagnosticReport'
-    classpath = sourceSets.main.runtimeClasspath
-    mainClass = 'com.mineutze.worldgen.export.LiveDeadEndDiagnosticReport'
-}
-
-tasks.register('geometricFeasibilityProof', JavaExec) {
-    group = 'verification'
-    description = 'Exhaustive (not sampled) geometric feasibility proof, one level beyond biomeGraphCompletenessReport: checks every real, physically-placeable partial neighborhood with few abstract legal candidates against the REAL production identity+size solver, at both width extremes (exact bound via WeightedVertexPlacement\'s proven area-monotonicity theorem, not a sampled approximation). Run with: ./gradlew :worldgen-core:geometricFeasibilityProof'
-    classpath = sourceSets.main.runtimeClasspath
-    mainClass = 'com.mineutze.worldgen.export.GeometricFeasibilityProof'
-}
-
-tasks.register('graphCoherenceExtendabilityProof', JavaExec) {
-    group = 'verification'
-    description = 'The "escape hatch" extendability theorem (see com.mineutze.worldgen.coherence.EscapeHatchExtendabilityProof\'s own doc): finds the same periodic witness as graphCoherenceExistenceProof, then independently re-verifies every row-to-row transition, proving any construction that reaches a witness-aligned state can continue forever - a real, restricted, honest result, NOT a claim that every valid state is extendable (already known false from real production dead ends). Run with: ./gradlew :worldgen-core:graphCoherenceExtendabilityProof'
-    classpath = sourceSets.main.runtimeClasspath
-    mainClass = 'com.mineutze.worldgen.coherence.EscapeHatchExtendabilityProof'
-}
-
-tasks.register('graphCoherenceReachabilityScouting', JavaExec) {
-    group = 'verification'
-    description = 'Two CHEAP checks before investing in the full reachability proof (see com.mineutze.worldgen.coherence.ReachabilityScoutingChecks\'s own doc): is any witness row a universal sink (always-safe next row regardless of context), and can an adversarial low-degree-biome row be built with NO legal successor at all. Neither is the reachability proof itself - a fast sanity pass to see if the question resolves trivially before committing real effort. Run with: ./gradlew :worldgen-core:graphCoherenceReachabilityScouting'
-    classpath = sourceSets.main.runtimeClasspath
-    mainClass = 'com.mineutze.worldgen.coherence.ReachabilityScoutingChecks'
-}
-
-tasks.register('graphCoherenceConstructivePathfinding', JavaExec) {
-    group = 'verification'
-    description = 'Option 1 from the reachability menu (see com.mineutze.worldgen.coherence.ConstructivePathfindingProof\'s own doc): for a real sample of starting rows (adversarial low-degree + regular), searches for an explicit, replayable path of legal rows reaching a SafeStates-aligned row. Each success is a real individual certificate, NOT a universal reachability proof. Run with: ./gradlew :worldgen-core:graphCoherenceConstructivePathfinding'
-    classpath = sourceSets.main.runtimeClasspath
-    mainClass = 'com.mineutze.worldgen.coherence.ConstructivePathfindingProof'
-}
-
-tasks.register('graphCoherenceFailureModeCharacterization', JavaExec) {
-    group = 'verification'
-    description = 'Option 2 from the reachability menu (see com.mineutze.worldgen.coherence.FailureModeCharacterization\'s own doc): mines a cheap, reusable "this row looks risky" screen from real search results, validated against BOTH the real catalog and a deliberately pathological synthetic graph guaranteed to fail. A correlate, not a proof, same discipline as BridgeMotifChecker. Run with: ./gradlew :worldgen-core:graphCoherenceFailureModeCharacterization'
-    classpath = sourceSets.main.runtimeClasspath
-    mainClass = 'com.mineutze.worldgen.coherence.FailureModeCharacterization'
 }
 
 tasks.register('graphEditorSeed', JavaExec) {
@@ -90,86 +20,9 @@ tasks.register('graphEditorSeed', JavaExec) {
 
 tasks.register('graphEditor', JavaExec) {
     group = 'application'
-    description = 'Local web app for editing the biome adjacency graph (add/remove biomes and adjacencies, live rule-consistency warnings, on-demand deep geometric-feasibility check) - reads/writes the SAME file ModBiomeGraph.OVERWORLD loads, so edits here are production changes. Run with: ./gradlew :worldgen-core:graphEditor, then open http://localhost:8842'
+    description = 'Local web app for editing the biome adjacency graph (add/remove biomes and adjacencies, live rule-consistency warnings, on-demand solve check) - reads/writes the SAME file ModBiomeGraph.OVERWORLD loads, so edits here are production changes. Run with: ./gradlew :worldgen-core:graphEditor, then open http://localhost:8842'
     classpath = sourceSets.main.runtimeClasspath
     mainClass = 'com.mineutze.worldgen.tooling.graphedit.GraphEditorServer'
-}
-
-tasks.register('graphCoherenceExistenceProof', JavaExec) {
-    group = 'verification'
-    description = 'Independent existence proof (see com.mineutze.worldgen.coherence\'s own doc): does NOT use the live hex mesh/CSP/geometry code at all - builds its own periodic "brick wall" substrate from scratch and searches for a toroidal patch satisfying every real constraint (adjacency legality, required-neighbor minimums, full-catalog coverage). A success is a complete, definitive, reproducible proof (see doc/graph-coherence-existence-proof-report.txt); a failure is inconclusive, never a claim of impossibility. Run with: ./gradlew :worldgen-core:graphCoherenceExistenceProof'
-    classpath = sourceSets.main.runtimeClasspath
-    mainClass = 'com.mineutze.worldgen.coherence.PeriodicCoherenceProof'
-}
-
-tasks.register('realGeometryExhaustiveOrderSweep', JavaExec) {
-    group = 'verification'
-    description = 'Real-geometry, EXHAUSTIVE (not sampled) complement to deadEndFrequencySimulation\'s own STRUCTURE_RING_SWEEP - every permutation of query order for a small (N=7) real, densely-spaced point set, run through the REAL SeedMeshCache/live algorithm (a handful of worldSeeds, not exhaustive there too). Run with: ./gradlew :worldgen-core:realGeometryExhaustiveOrderSweep'
-    classpath = sourceSets.main.runtimeClasspath
-    mainClass = 'com.mineutze.worldgen.export.hex.RealGeometryExhaustiveOrderSweep'
-}
-
-tasks.register('jointClusterReachabilityProof', JavaExec) {
-    group = 'verification'
-    description = 'Abstract reproduction of the real STRUCTURE_RING_SWEEP mechanism (see com.mineutze.worldgen.reachability\'s own doc): faithful simulation of the live promotion/two-attempt-cluster-growth mechanics (NOT the real geometry/CSP code) against ModBiomeGraph.OVERWORLD, run at sparse vs dense query spacing plus a spacing sweep, to check whether the abstract model reproduces the real joint-cluster-infeasibility mechanism and characterize where the failure transition sits. Run with: ./gradlew :worldgen-core:jointClusterReachabilityProof'
-    classpath = sourceSets.main.runtimeClasspath
-    mainClass = 'com.mineutze.worldgen.reachability.JointClusterReachabilityProof'
-}
-
-tasks.register('sizeAwareJointClusterReachabilityProof', JavaExec) {
-    group = 'verification'
-    description = 'Same multi-origin stress shape as jointClusterReachabilityProof, plus a SIZE dimension via self-adjacency-as-clustering (see com.mineutze.worldgen.reachability.SizeAwareHexPromotionSimulator\'s own doc) - deliberately an INDEPENDENT size model, not the live power-diagram mechanism, since this proves properties of the abstract rule graph, not of the specific live algorithm. Run with: ./gradlew :worldgen-core:sizeAwareJointClusterReachabilityProof'
-    classpath = sourceSets.main.runtimeClasspath
-    mainClass = 'com.mineutze.worldgen.reachability.SizeAwareJointClusterReachabilityProof'
-}
-
-tasks.register('seedDrivenPatchGenerator', JavaExec) {
-    group = 'verification'
-    description = 'Demonstrates com.mineutze.worldgen.coherence.PeriodicCoherenceProof\'s own construction search driven by a real worldSeed instead of its fixed internal seed - a handful of sample worldSeeds, each producing its own distinct periodic witness. Run with: ./gradlew :worldgen-core:seedDrivenPatchGenerator'
-    classpath = sourceSets.main.runtimeClasspath
-    mainClass = 'com.mineutze.worldgen.coherence.SeedDrivenPatchGenerator'
-}
-
-tasks.register('patternDiversityLowerBound', JavaExec) {
-    group = 'verification'
-    description = 'Real, constructive lower bound on how many distinct periodic witnesses the rule graph admits (see com.mineutze.worldgen.coherence.PatternDiversityLowerBound\'s own doc) - independent, non-adjacent row substitution, verified end to end against a real sample via ConstraintChecker, compared against the real 2^64 worldSeed space. Run with: ./gradlew :worldgen-core:patternDiversityLowerBound'
-    classpath = sourceSets.main.runtimeClasspath
-    mainClass = 'com.mineutze.worldgen.coherence.PatternDiversityLowerBound'
-}
-
-tasks.register('widthScalingExperiment', JavaExec) {
-    group = 'verification'
-    description = 'Real, computed answer to how far the periodic patch\'s circumference (its "width") can scale - runs PeriodicCoherenceProof\'s own real search at several real maxCellsPerRow settings against the real catalog, now that cell-level backtracking can help long rows. Run with: ./gradlew :worldgen-core:widthScalingExperiment'
-    classpath = sourceSets.main.runtimeClasspath
-    mainClass = 'com.mineutze.worldgen.coherence.WidthScalingExperiment'
-}
-
-tasks.register('toroidalPatchPrototype', JavaExec) {
-    group = 'verification'
-    description = 'Real, timed prototype of a genuinely 2D (wide AND tall) periodic patch substrate - a finite toroidal hex grid of small fixed-size cells, real-adjacency-cluster sizing, sequential fill with cell-level backtracking, against the real catalog. Run with: ./gradlew :worldgen-core:toroidalPatchPrototype'
-    classpath = sourceSets.main.runtimeClasspath
-    mainClass = 'com.mineutze.worldgen.coherence.ToroidalPatchPrototype'
-}
-
-tasks.register('toroidalIdentityCoverageProof', JavaExec) {
-    group = 'verification'
-    description = 'Real, timed test of decoupled identity-only coverage on the toroidal grid - no clustering, no sizing, just real adjacency legality + full 66-biome coverage. Run with: ./gradlew :worldgen-core:toroidalIdentityCoverageProof'
-    classpath = sourceSets.main.runtimeClasspath
-    mainClass = 'com.mineutze.worldgen.coherence.ToroidalIdentityCoverageProofRunner'
-}
-
-tasks.register('toroidalIdentityLocalSearch', JavaExec) {
-    group = 'verification'
-    description = 'Real, timed min-conflicts local search for identity-only toroidal coverage - full assignments repaired in place, no commitment order to get stuck in. Run with: ./gradlew :worldgen-core:toroidalIdentityLocalSearch'
-    classpath = sourceSets.main.runtimeClasspath
-    mainClass = 'com.mineutze.worldgen.coherence.ToroidalIdentityLocalSearchRunner'
-}
-
-tasks.register('toroidalSizedLocalSearch', JavaExec) {
-    group = 'verification'
-    description = 'Real, timed test of joint identity + size + roundness solving on a fine toroidal lattice, where a biome is a connected cluster of small cells - against the real catalog. Run with: ./gradlew :worldgen-core:toroidalSizedLocalSearch'
-    classpath = sourceSets.main.runtimeClasspath
-    mainClass = 'com.mineutze.worldgen.coherence.ToroidalSizedLocalSearchRunner'
 }
 
 tasks.register('toroidalSolvability', JavaExec) {
@@ -200,18 +53,11 @@ tasks.register('worldBiomePlanCheck', JavaExec) {
     mainClass = 'com.mineutze.worldgen.coherence.WorldBiomePlanCheckRunner'
 }
 
-tasks.register('graphEditorDeepCheck', JavaExec) {
+tasks.register('graphEditorSolveCheck', JavaExec) {
     group = 'verification'
-    description = 'The graph editor\'s "Deep check" button - runs the real exhaustive GeometricFeasibilityProof against the editor\'s currently SAVED graph (not the hardcoded catalog directly, though it\'s the same file now). Run with: ./gradlew :worldgen-core:graphEditorDeepCheck'
+    description = 'The graph editor Solve check button - builds real WorldBiomePlans (the pipeline a new world runs) from the editor currently SAVED graph for a few world seeds and reports per seed whether it solved; exits non-zero if any did not. Takes minutes. Run with: ./gradlew :worldgen-core:graphEditorSolveCheck'
     classpath = sourceSets.main.runtimeClasspath
-    mainClass = 'com.mineutze.worldgen.tooling.graphedit.GraphEditorDeepCheck'
-}
-
-tasks.register('graphEditorCoherenceCheck', JavaExec) {
-    group = 'verification'
-    description = 'The graph editor\'s "Coherence proof" button - runs com.mineutze.worldgen.coherence\'s independent existence-proof search (no live hex mesh/CSP/geometry code at all) against the editor\'s currently SAVED graph. Run with: ./gradlew :worldgen-core:graphEditorCoherenceCheck'
-    classpath = sourceSets.main.runtimeClasspath
-    mainClass = 'com.mineutze.worldgen.tooling.graphedit.GraphEditorCoherenceCheck'
+    mainClass = 'com.mineutze.worldgen.tooling.graphedit.GraphEditorSolveCheck'
 }
 
 repositories {

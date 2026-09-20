@@ -34,9 +34,9 @@ import java.util.concurrent.Executors;
  * POC" after choosing data-file-backed graph (see {@link BiomeGraphData}'s own doc) + a
  * local web app over a CLI or JavaFX desktop tool): add ONE biome or ONE adjacency at a
  * time, live warnings reusing {@link GraphValidation} (itself reusing this session's own
- * real {@link com.mineutze.worldgen.biomegraph.BiomeGraph} construction checks and {@link
- * com.mineutze.worldgen.export.BridgeMotifChecker}), and a button that launches this
- * repo's own real tests. Two view modes (2026-09-14, real user feedback: the full-graph
+ * real {@link com.mineutze.worldgen.biomegraph.BiomeGraph} construction checks), a button that
+ * launches this repo's own real tests, and a "Solve check" button that builds real worlds
+ * from the saved graph. Two view modes (2026-09-14, real user feedback: the full-graph
  * overview was "unreadable" for real editing) - OVERVIEW (every node/edge, bird's-eye
  * only) and FOCUS (pick one biome, hub-and-spoke re-center to ONLY its own real
  * neighbors/edges - the actual working view). Adjacencies can be removed too (2026-09-15,
@@ -83,8 +83,7 @@ public final class GraphEditorServer {
         server.createContext("/api/edges/remove", GraphEditorServer::handleRemoveEdge);
         server.createContext("/api/validate", GraphEditorServer::handleValidate);
         server.createContext("/api/tests", GraphEditorServer::handleRunTests);
-        server.createContext("/api/deepcheck", GraphEditorServer::handleDeepCheck);
-        server.createContext("/api/coherencecheck", GraphEditorServer::handleCoherenceCheck);
+        server.createContext("/api/solvecheck", GraphEditorServer::handleSolveCheck);
         server.createContext("/api/requiredneighbors", GraphEditorServer::handleAddRequiredNeighbor);
         server.createContext("/api/requiredneighbors/remove", GraphEditorServer::handleRemoveRequiredNeighbor);
         server.start();
@@ -130,8 +129,7 @@ public final class GraphEditorServer {
     /**
      * Changes ONE existing biome's size range (2026-09-19, real user request: edit the
      * focused biome's min/max from the UI). Despite the field names, the two numbers are an
-     * AREA written as the width of a regular hexagon with that same area (see {@link
-     * com.mineutze.worldgen.regionsolve.topology.HexGeometry}) - the UI labels say so.
+     * AREA written as the width of a regular hexagon with that same area - the UI labels say so.
      * Re-validates before saving, same as every other mutation: an inverted or non-positive
      * range is rejected by {@code BiomeSizeRange} during validation and never written.
      */
@@ -147,7 +145,7 @@ public final class GraphEditorServer {
         if (!(body.get("minWidthBlocks") instanceof Double minSize) || !(body.get("maxWidthBlocks") instanceof Double maxSize)) {
             respondJson(exchange, 200, MinimalJson.writeObject(Map.of(
                 "constructs", false, "constructionError", "Both a minimum and a maximum size are required, as numbers.",
-                "errors", List.of(), "motifWarnings", List.of()
+                "errors", List.of()
             )));
             return;
         }
@@ -157,7 +155,7 @@ public final class GraphEditorServer {
         if (proposed.isEmpty()) {
             respondJson(exchange, 200, MinimalJson.writeObject(Map.of(
                 "constructs", false, "constructionError", "No such biome: " + namespace + ":" + path,
-                "errors", List.of(), "motifWarnings", List.of()
+                "errors", List.of()
             )));
             return;
         }
@@ -230,7 +228,7 @@ public final class GraphEditorServer {
         if (withoutEdge.size() == current.edges().size()) {
             respondJson(exchange, 200, MinimalJson.writeObject(Map.of(
                 "constructs", false, "constructionError", "No such adjacency exists: " + toRemove.aKey() + " <-> " + toRemove.bKey(),
-                "errors", List.of(), "motifWarnings", List.of()
+                "errors", List.of()
             )));
             return;
         }
@@ -259,33 +257,19 @@ public final class GraphEditorServer {
     }
 
     /**
-     * Runs {@code graphEditorDeepCheck} - {@link GraphEditorDeepCheck}'s own doc for why
-     * this is a separate gradle task/process, not an in-process call, and why it checks
-     * THIS tool's saved data file, not {@code ModBiomeGraph.OVERWORLD}. Real, exhaustive,
-     * genuinely slower than the quick/full test buttons - see that class's own doc for
-     * what's still NOT covered even by this ({@code DeadEndFrequencySimulation}).
+     * Runs {@code graphEditorSolveCheck} - {@link GraphEditorSolveCheck}'s own doc for what it builds
+     * and why it is a separate gradle task/process, not an in-process call. Real and slow (minutes):
+     * it solves complete worlds from THIS tool's saved data file.
      */
-    private static void handleDeepCheck(HttpExchange exchange) throws IOException {
-        runGradleTaskAndRespond(exchange, List.of("../gradlew.bat", ":worldgen-core:graphEditorDeepCheck"));
-    }
-
-    /**
-     * Runs {@code graphEditorCoherenceCheck} - {@link com.mineutze.worldgen.coherence}'s own
-     * independent existence-proof search against THIS tool's saved graph. Unlike Deep
-     * Check, this one never touches the live hex mesh/CSP/geometry code at all - see that
-     * package's own doc for why, and {@code GraphEditorCoherenceCheck}'s own doc for the
-     * process-separation reasoning (shared with the Deep Check button).
-     */
-    private static void handleCoherenceCheck(HttpExchange exchange) throws IOException {
-        runGradleTaskAndRespond(exchange, List.of("../gradlew.bat", ":worldgen-core:graphEditorCoherenceCheck"));
+    private static void handleSolveCheck(HttpExchange exchange) throws IOException {
+        runGradleTaskAndRespond(exchange, List.of("../gradlew.bat", ":worldgen-core:graphEditorSolveCheck"));
     }
 
     /**
      * Adds (or, if one already exists for the same required biome, REPLACES the minCount
      * of) one "this biome must have at least N real neighbors that are exactly that other
      * biome" requirement - schema-only today (see {@link BiomeGraphData.NodeData}'s own
-     * doc: nothing in the live solver enforces this yet), but real, saved, and checked by
-     * the coherence proof. Re-validates before saving, same discipline as every other
+     * doc: the world generator does not enforce this), but real and saved. Re-validates before saving, same discipline as every other
      * mutation here.
      */
     @SuppressWarnings("unchecked")
@@ -305,7 +289,7 @@ public final class GraphEditorServer {
         if (current.nodes().stream().noneMatch(node -> node.namespace().equals(namespace) && node.path().equals(path))) {
             respondJson(exchange, 200, MinimalJson.writeObject(Map.of(
                 "constructs", false, "constructionError", "No such biome: " + namespace + ":" + path,
-                "errors", List.of(), "motifWarnings", List.of()
+                "errors", List.of()
             )));
             return;
         }
@@ -375,7 +359,7 @@ public final class GraphEditorServer {
     /**
      * Shells out to the gradle wrapper, waits for it to finish, and responds with its
      * exit code + full stdout - shared by every button that runs a real gradle task
-     * (tests, deep check) so the JAVA_HOME fix (see below) and process-handling only
+     * (tests, solve check) so the JAVA_HOME fix (see below) and process-handling only
      * exist in one place.
      */
     private static void runGradleTaskAndRespond(HttpExchange exchange, List<String> command) throws IOException {
@@ -419,7 +403,6 @@ public final class GraphEditorServer {
         json.put("constructs", result.constructs());
         json.put("constructionError", result.constructionError());
         json.put("errors", result.errors());
-        json.put("motifWarnings", result.motifWarnings());
         json.put("saved", result.constructs());
         json.put("graph", Map.of("nodes", proposed.nodes().size(), "edges", proposed.edges().size()));
         return MinimalJson.writeObject(json);
@@ -540,8 +523,7 @@ public final class GraphEditorServer {
           <h3>Tests</h3>
           <button onclick="runTests(false)">Run quick check (BiomeGraphTest)</button>
           <button onclick="runTests(true)">Run full worldgen-core suite</button>
-          <button onclick="runDeepCheck()">Deep check (real solver, slower)</button>
-          <button onclick="runCoherenceCheck()">Coherence proof (independent, no live algorithm)</button>
+          <button onclick="runSolveCheck()">Solve check (builds real worlds, minutes)</button>
           <div id="testStatus"></div>
           <div id="testReportLinks"></div>
           <pre id="testOutput"></pre>
@@ -599,7 +581,7 @@ public final class GraphEditorServer {
           return graph.nodes.find(n => keyOf(n) === focusKey) || null;
         }
 
-        // Same formula as HexGeometry: a regular hexagon's area is 3*sqrt(3)/2 times its circumradius squared, and the
+        // A regular hexagon's area is 3*sqrt(3)/2 times its circumradius squared, and the
         // "size" number is the hexagon's width, i.e. twice the circumradius. The size is an area, entered as that width.
         function areaOfHexagonWidth(widthBlocks) {
           const circumradius = widthBlocks / 2;
@@ -813,22 +795,16 @@ public final class GraphEditorServer {
           savedEl.textContent = (saved ? 'Saved. ' : 'Structurally valid. ')
             + 'Graph has ' + result.graph.nodes + ' biomes, ' + result.graph.edges + ' adjacencies.';
           div.appendChild(savedEl);
-          if (result.errors.length === 0 && result.motifWarnings.length === 0) {
+          if (result.errors.length === 0) {
             const el = document.createElement('div');
             el.className = 'ok';
-            el.textContent = 'No errors, no warnings.';
+            el.textContent = 'No errors.';
             div.appendChild(el);
           }
           result.errors.forEach(e => {
             const el = document.createElement('div');
             el.className = 'error';
             el.textContent = e;
-            div.appendChild(el);
-          });
-          result.motifWarnings.forEach(w => {
-            const el = document.createElement('div');
-            el.className = 'warning';
-            el.textContent = w;
             div.appendChild(el);
           });
         }
@@ -874,12 +850,8 @@ public final class GraphEditorServer {
           await runGradleTaskAndRender('/api/tests?scope=' + (full ? 'full' : 'quick'));
         }
 
-        async function runDeepCheck() {
-          await runGradleTaskAndRender('/api/deepcheck');
-        }
-
-        async function runCoherenceCheck() {
-          await runGradleTaskAndRender('/api/coherencecheck');
+        async function runSolveCheck() {
+          await runGradleTaskAndRender('/api/solvecheck');
         }
 
         async function runGradleTaskAndRender(endpoint) {

@@ -2,11 +2,8 @@ package com.mineutze.worldgen.tooling.graphedit;
 
 import com.mineutze.worldgen.biomegraph.BiomeGraph;
 import com.mineutze.worldgen.biomegraph.BiomeGraphData;
-import com.mineutze.worldgen.biomegraph.BiomeGraphData.EdgeData;
-import com.mineutze.worldgen.biomegraph.BiomeGraphData.NodeData;
 import com.mineutze.worldgen.biomegraph.BiomeGraphJson;
 import com.mineutze.worldgen.biomegraph.BiomeId;
-import com.mineutze.worldgen.export.BridgeMotifChecker;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -16,10 +13,10 @@ import java.util.List;
  * staying an Excel sheet. Reuses the REAL checking code this session already built and
  * measured, never a second copy of the rules: {@link BiomeGraph}'s own constructor
  * (bridgeability etc. - whatever it enforces IS the ground truth, this class doesn't need
- * to know every rule by name), {@link BiomeGraphJson#toBiomeGraph} for the node/rule
- * conversion (shared with {@code ModBiomeGraph.OVERWORLD}'s own production loader), and
- * {@link BridgeMotifChecker}'s two arithmetic motif screens (Rule 1/2 from this session's
- * own graph audit).
+ * to know every rule by name) and {@link BiomeGraphJson#toBiomeGraph} for the node/rule
+ * conversion (shared with {@code ModBiomeGraph.OVERWORLD}'s own production loader).
+ * Whether the graph can actually be SOLVED is not checked live - that takes minutes and is
+ * the editor's "Solve check" button ({@link GraphEditorSolveCheck}).
  */
 final class GraphValidation {
 
@@ -40,14 +37,10 @@ final class GraphValidation {
     }
 
     /**
-     * Real user finding (2026-09-15): under-connection was originally folded into {@code
-     * motifWarnings}, and the user correctly pushed back - "I believe they should [be
-     * errors]." Unlike the two {@link BridgeMotifChecker} motifs (real but explicitly
-     * NOT proofs - "verify with the real solver before trusting"), under-connection is a
-     * direct mirror of a check {@link BiomeGraph#forProduction} genuinely, unconditionally
-     * enforces - production WOULD reject this graph. That's a real error, not a soft
-     * correlate, even though (see {@link #MIN_LEGAL_NEIGHBORS}'s own doc) it doesn't block
-     * saving mid-edit the way {@code constructs=false} does.
+     * Real user finding (2026-09-15): under-connection is an error, not a soft warning - it is a
+     * direct mirror of a check {@link BiomeGraph#forProduction} genuinely, unconditionally enforces,
+     * so production WOULD reject this graph. It still doesn't block saving mid-edit the way
+     * {@code constructs=false} does (see {@link #MIN_LEGAL_NEIGHBORS}'s own doc).
      *
      * @param constructs        whether {@link BiomeGraph}'s own bare constructor accepted
      *                          this data as-is - {@code false} means a genuinely malformed
@@ -55,21 +48,11 @@ final class GraphValidation {
      *                          saving outright.
      * @param constructionError {@link BiomeGraph}'s own real exception message when {@code
      *                          constructs} is false, {@code null} otherwise.
-     * @param errors             real violations of a check production WOULD enforce
-     *                          (today: under-connection) - never blocks saving (see this
-     *                          record's own doc for why), but a real problem, not a
-     *                          suggestion. Empty when {@code constructs} is false.
-     * @param motifWarnings     soft warnings - real, data-validated correlates of geometric
-     *                          infeasibility (see {@link BridgeMotifChecker}'s own doc:
-     *                          "verify with the real solver before trusting," not a proof).
-     *                          Does NOT include Motif 3 (Crowded-Ring) or anything from
-     *                          {@code GeometricFeasibilityProof}/{@code
-     *                          DeadEndFrequencySimulation} - those are real but too slow
-     *                          for live editing, on-demand only (see {@code
-     *                          GraphEditorServer}'s "Deep check" button). Empty when
-     *                          {@code constructs} is false.
+     * @param errors            real violations of a check production WOULD enforce
+     *                          (today: under-connection) - never blocks saving, but a real
+     *                          problem, not a suggestion. Empty when {@code constructs} is false.
      */
-    record ValidationResult(boolean constructs, String constructionError, List<String> errors, List<String> motifWarnings) {
+    record ValidationResult(boolean constructs, String constructionError, List<String> errors) {
     }
 
     static ValidationResult validate(BiomeGraphData data) {
@@ -77,9 +60,9 @@ final class GraphValidation {
         try {
             graph = BiomeGraphJson.toBiomeGraph(data);
         } catch (IllegalArgumentException e) {
-            return new ValidationResult(false, e.getMessage(), List.of(), List.of());
+            return new ValidationResult(false, e.getMessage(), List.of());
         }
-        return new ValidationResult(true, null, underConnectedErrors(graph, data), motifWarnings(graph, data));
+        return new ValidationResult(true, null, underConnectedErrors(graph, data));
     }
 
     /**
@@ -101,40 +84,5 @@ final class GraphValidation {
             }
         }
         return errors;
-    }
-
-    private static List<String> motifWarnings(BiomeGraph graph, BiomeGraphData data) {
-        List<String> warnings = new ArrayList<>();
-        for (NodeData node : data.nodes()) {
-            BiomeId id = new BiomeId(node.namespace(), node.path());
-            List<BiomeId> neighbors = neighborsOf(id, data);
-            if (neighbors.isEmpty()) {
-                continue;
-            }
-            if (BridgeMotifChecker.triggersDominantNeighborMotif(graph, neighbors)) {
-                warnings.add(id + ": Motif 1 (Dominant Neighbor) - a real neighbor's own declared minimum already exceeds the "
-                    + "650-block baseline, which can squeeze this biome's achievable size regardless of every other neighbor. "
-                    + "Verify with the real solver before trusting.");
-            }
-            if (BridgeMotifChecker.triggersFragileNarrowTierMotif(graph, id, neighbors)) {
-                warnings.add(id + ": Motif 2 (Fragile Narrow Tier) - this biome's own range sits entirely below the 650-block "
-                    + "baseline with 2+ real neighbors present, at compounding risk even though no single neighbor dominates. "
-                    + "Verify with the real solver before trusting.");
-            }
-        }
-        return warnings;
-    }
-
-    private static List<BiomeId> neighborsOf(BiomeId id, BiomeGraphData data) {
-        String key = id.namespace() + ":" + id.path();
-        List<BiomeId> neighbors = new ArrayList<>();
-        for (EdgeData edge : data.edges()) {
-            if (edge.aKey().equals(key)) {
-                neighbors.add(new BiomeId(edge.bNamespace(), edge.bPath()));
-            } else if (edge.bKey().equals(key)) {
-                neighbors.add(new BiomeId(edge.aNamespace(), edge.aPath()));
-            }
-        }
-        return neighbors;
     }
 }
