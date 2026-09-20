@@ -22,7 +22,8 @@ import java.util.Locale;
  * agree, and if they ever do not, that difference is the bug - plus how the plan was made.
  *
  * <p>{@code /mineutzeworldgen exportbiomes [radiusBlocks] [stepBlocks]} draws the biomes the game
- * REALLY generates around the position (see {@link WorldBiomeExporter}).
+ * REALLY generates around the position (see {@link WorldBiomeExporter}). It runs on the server thread, so
+ * keep an export under a few tens of seconds: past 60 s the vanilla watchdog stops the server.
  */
 public final class PlanDebugCommand {
 
@@ -83,6 +84,14 @@ public final class PlanDebugCommand {
         WorldBiomeExporter.Result result = WorldBiomeExporter.exportAroundPosition(level, position, radiusBlocks, stepBlocks);
 
         source.sendSuccess(() -> Component.literal("Wrote " + result.samples() + " samples to " + result.imageFile() + " (legend: " + result.legendFile() + ")"), false);
+        source.sendSuccess(() -> Component.literal(
+            "Blended lookup (level.getBiome): " + result.differentFromOwnQuart() + " of " + result.samples() + " samples differ from the plan at their own quart (vanilla's border blending), of which "
+                + result.unexplainedDifferences() + " are not explained by a neighboring quart" + (result.unexplainedDifferences() == 0 ? " - OK" : " - BUG")
+        ), false);
+        source.sendSuccess(() -> Component.literal(
+            result.storedBiomeChecks() == 0 ? "Stored chunk biomes: not checked (export too large)"
+                : "Stored chunk biomes: " + result.storedBiomeMismatches() + " mismatches with the plan in " + result.storedBiomeChecks() + " checks" + (result.storedBiomeMismatches() == 0 ? " - OK" : " - BUG")
+        ), false);
         return result.samples();
     }
 }

@@ -69,8 +69,13 @@ public final class WorldBiomePlanHolder {
 
         LOGGER.info("[mineutze_worldgen] New world (seed {}): creating its biome plan before any chunk is generated", seed);
         WorldBiomePlan plan = create(catalog, seed);
-        storage.set(WorldBiomePlanSavedData.SAVE_NAME, new WorldBiomePlanSavedData(plan.toSnapshot()));
+        WorldBiomePlanSavedData data = new WorldBiomePlanSavedData(plan.toSnapshot());
+        // Minecraft only writes data that is marked dirty; without this the plan would never reach the disk
+        // and every start of the world would silently solve it again (found by the first real dev-server run).
+        data.setDirty();
+        storage.set(WorldBiomePlanSavedData.SAVE_NAME, data);
         storage.save();
+        LOGGER.info("[mineutze_worldgen] Saved the biome plan with the world ({})", WorldBiomePlanSavedData.SAVE_NAME);
         return plan;
     }
 
