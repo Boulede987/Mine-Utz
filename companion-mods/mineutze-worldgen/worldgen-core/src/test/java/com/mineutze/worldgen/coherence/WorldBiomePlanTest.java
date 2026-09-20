@@ -174,6 +174,12 @@ class WorldBiomePlanTest {
     }
 
     @Test
+    void thePublicFingerprintIsWhatAPlanRecords() {
+        assertEquals(WorldBiomePlan.fingerprintOf(CATALOG), plan(1L).toSnapshot().catalogFingerprint());
+        assertNotEquals(WorldBiomePlan.fingerprintOf(CATALOG), WorldBiomePlan.fingerprintOf(fullyLegalCatalog(500, 800, A, B, C)));
+    }
+
+    @Test
     void progressIsReportedAtEachStage() {
         List<String> messages = new ArrayList<>();
 

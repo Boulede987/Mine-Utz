@@ -261,7 +261,8 @@ public final class WorldBiomePlan {
         return new BiomeId(name.substring(0, colon), name.substring(colon + 1));
     }
 
-    private static String fingerprintOf(BiomeGraphData catalog) {
+    /** Hash of a catalog, the same value a plan made from it records: how a saved plan is checked against the catalog the game is running now. */
+    public static String fingerprintOf(BiomeGraphData catalog) {
         try {
             byte[] digest = MessageDigest.getInstance("SHA-256").digest(BiomeGraphJson.toJson(catalog).getBytes(StandardCharsets.UTF_8));
             return HexFormat.of().formatHex(digest);
