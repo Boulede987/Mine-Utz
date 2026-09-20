@@ -77,18 +77,18 @@ final class DivergenceFreeWarp {
         this.phase = new double[count];
 
         Random random = new Random(seed);
-        double logShortest = Math.log(settings.shortestWavelengthBlocks());
-        double logLongest = Math.log(settings.longestWavelengthBlocks());
+        double logShortest = StrictMath.log(settings.shortestWavelengthBlocks());
+        double logLongest = StrictMath.log(settings.longestWavelengthBlocks());
         double sum = 0;
         for (int wave = 0; wave < count; wave++) {
             double[] snapped = drawTileWaveNumber(geometry, random, logShortest, logLongest);
-            double waveNumber = Math.hypot(snapped[0], snapped[1]);
+            double waveNumber = StrictMath.hypot(snapped[0], snapped[1]);
             waveNumberX[wave] = snapped[0];
             waveNumberY[wave] = snapped[1];
             directionX[wave] = -snapped[1] / waveNumber;
             directionY[wave] = snapped[0] / waveNumber;
             double wavelength = 2 * Math.PI / waveNumber;
-            amplitude[wave] = settings.displacementAtLongestWavelengthBlocks() * Math.pow(wavelength / settings.longestWavelengthBlocks(), settings.roughness());
+            amplitude[wave] = settings.displacementAtLongestWavelengthBlocks() * StrictMath.pow(wavelength / settings.longestWavelengthBlocks(), settings.roughness());
             phase[wave] = random.nextDouble() * 2 * Math.PI;
             sum += amplitude[wave];
         }
@@ -123,10 +123,10 @@ final class DivergenceFreeWarp {
         double by = geometry.tileVectorBY();
         double determinant = ax * by - ay * bx;
         while (true) {
-            double wavelength = Math.exp(logShortest + random.nextDouble() * (logLongest - logShortest));
+            double wavelength = StrictMath.exp(logShortest + random.nextDouble() * (logLongest - logShortest));
             double angle = random.nextDouble() * 2 * Math.PI;
-            double kx = 2 * Math.PI / wavelength * Math.cos(angle);
-            double ky = 2 * Math.PI / wavelength * Math.sin(angle);
+            double kx = 2 * Math.PI / wavelength * StrictMath.cos(angle);
+            double ky = 2 * Math.PI / wavelength * StrictMath.sin(angle);
             long alongA = Math.round((kx * ax + ky * ay) / (2 * Math.PI));
             long alongB = Math.round((kx * bx + ky * by) / (2 * Math.PI));
             if (alongA == 0 && alongB == 0) {
@@ -180,7 +180,7 @@ final class DivergenceFreeWarp {
         double displacementX = 0;
         double displacementY = 0;
         for (int wave = 0; wave < amplitude.length; wave++) {
-            double value = amplitude[wave] * Math.sin(waveNumberX[wave] * x + waveNumberY[wave] * y + phase[wave]);
+            double value = amplitude[wave] * DeterministicTrig.sin(waveNumberX[wave] * x + waveNumberY[wave] * y + phase[wave]);
             displacementX += value * directionX[wave];
             displacementY += value * directionY[wave];
         }
@@ -199,7 +199,7 @@ final class DivergenceFreeWarp {
         double dydx = 0;
         double dydy = 0;
         for (int wave = 0; wave < amplitude.length; wave++) {
-            double slope = amplitude[wave] * Math.cos(waveNumberX[wave] * x + waveNumberY[wave] * y + phase[wave]);
+            double slope = amplitude[wave] * DeterministicTrig.cos(waveNumberX[wave] * x + waveNumberY[wave] * y + phase[wave]);
             dxdx += slope * directionX[wave] * waveNumberX[wave];
             dxdy += slope * directionX[wave] * waveNumberY[wave];
             dydx += slope * directionY[wave] * waveNumberX[wave];

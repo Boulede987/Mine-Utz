@@ -41,7 +41,7 @@ final class BiomeMapRasterizer {
             }
         });
 
-        double blocksPerSample = Math.hypot(tileAx, tileAy) / samplesPerSide;
+        double blocksPerSample = Math.sqrt(tileAx * tileAx + tileAy * tileAy) / samplesPerSide;
         return new BiomeMap(samplesPerSide, biomeIndices, cells, biomeOrder, geometry.tileAreaBlocks2() / ((double) samplesPerSide * samplesPerSide), blocksPerSample);
     }
 }

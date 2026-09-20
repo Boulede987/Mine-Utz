@@ -38,8 +38,8 @@ final class ClusterSizeModel {
         for (int index = 0; index < biomes.size(); index++) {
             BiomeId biome = biomes.get(index);
             RawRuleTable.SizeRange range = table.sizeRangeOf(biome);
-            double minAtoms = Math.pow(range.minWidthBlocks() / atomWidthBlocks, 2);
-            double maxAtoms = Math.pow(range.maxWidthBlocks() / atomWidthBlocks, 2);
+            double minAtoms = squared(range.minWidthBlocks() / atomWidthBlocks);
+            double maxAtoms = squared(range.maxWidthBlocks() / atomWidthBlocks);
             minCells[index] = (int) Math.ceil(minAtoms - ROUNDING_TOLERANCE);
             maxCells[index] = (int) Math.floor(maxAtoms + ROUNDING_TOLERANCE);
             if (minCells[index] > maxCells[index]) {
@@ -50,6 +50,10 @@ final class ClusterSizeModel {
             }
             indexOf.put(biome, index);
         }
+    }
+
+    private static double squared(double value) {
+        return value * value;
     }
 
     int minCells(BiomeId biome) {

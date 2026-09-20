@@ -122,7 +122,7 @@ final class ToroidalSizedLocalSearch {
         }
 
         double temperatureAtLevel(int level) {
-            return highTemperature * Math.pow(lowTemperature / highTemperature, level / (double) (SCHEDULE_LEVELS - 1));
+            return highTemperature * StrictMath.pow(lowTemperature / highTemperature, level / (double) (SCHEDULE_LEVELS - 1));
         }
 
         int levelAtStep(long step) {
@@ -325,7 +325,7 @@ final class ToroidalSizedLocalSearch {
             for (int level = 0; level < SCHEDULE_LEVELS; level++) {
                 double temperature = schedule.temperatureAtLevel(level);
                 for (int delta = 1; delta < ACCEPTANCE_TABLE_SIZE; delta++) {
-                    acceptanceProbabilityByLevel[level][delta] = Math.exp(-delta / temperature);
+                    acceptanceProbabilityByLevel[level][delta] = StrictMath.exp(-delta / temperature);
                 }
             }
             this.acceptanceProbability = acceptanceProbabilityByLevel[0];
