@@ -46,6 +46,12 @@ public final class BiomeRealizationPrototypeRunner {
         new Preset("flow-55", new DivergenceFreeWarp.Settings(40, 40, 1_200, 55, 0.8, FLOW_STEPS)),
         new Preset("flow-80", new DivergenceFreeWarp.Settings(40, 40, 1_200, 80, 0.8, FLOW_STEPS)),
     };
+    private static final DivergenceFreeWarp.Settings SEAM_DEMONSTRATION_SETTINGS = new DivergenceFreeWarp.Settings(40, 40, 1_200, 22, 0.8, FLOW_STEPS);
+    private static final double WINDOW_LEFT = -5_000;
+    private static final double WINDOW_TOP = -4_000;
+    private static final double WINDOW_WIDTH = 21_000;
+    private static final double WINDOW_HEIGHT = 15_000;
+    private static final double WINDOW_BLOCKS_PER_PIXEL = 12;
     private static final int CROP_SCALE = 3;
     private static final int CROP_LEFT = 1_800;
     private static final int CROP_TOP = 1_000;
@@ -71,6 +77,21 @@ public final class BiomeRealizationPrototypeRunner {
             DivergenceFreeWarp warp = preset.settings() == null ? DivergenceFreeWarp.none(geometry) : new DivergenceFreeWarp(geometry, WARP_SEED, preset.settings());
             realize(preset, table, grid, pattern, clusters, geometry, biomeOrder, warp);
         }
+        showTilesMeetingWithoutASeam(grid, pattern, geometry, biomeOrder);
+    }
+
+    /** Draws a window several tiles wide, once plain and once with the tile edges in red, to show by eye that tiles meet without a seam. */
+    private static void showTilesMeetingWithoutASeam(
+        ToroidalGrid grid, Map<ToroidalPos, BiomeId> pattern, HexTorusGeometry geometry, List<BiomeId> biomeOrder
+    ) {
+        DivergenceFreeWarp warp = new DivergenceFreeWarp(geometry, WARP_SEED, SEAM_DEMONSTRATION_SETTINGS);
+        RealizedBiomeField field = new RealizedBiomeField(grid, pattern, geometry, warp, biomeOrder);
+        Path plain = OUTPUT_DIRECTORY.resolve("world-window-plain.png");
+        Path marked = OUTPUT_DIRECTORY.resolve("world-window-tile-edges-marked.png");
+        PlaneWindowPngExporter.export(field, geometry, plain, WINDOW_LEFT, WINDOW_TOP, WINDOW_WIDTH, WINDOW_HEIGHT, WINDOW_BLOCKS_PER_PIXEL, false);
+        PlaneWindowPngExporter.export(field, geometry, marked, WINDOW_LEFT, WINDOW_TOP, WINDOW_WIDTH, WINDOW_HEIGHT, WINDOW_BLOCKS_PER_PIXEL, true);
+        System.out.println("PROTOTYPE seams: a " + (int) WINDOW_WIDTH + "x" + (int) WINDOW_HEIGHT + " block window of the world (several tiles): plain " + plain.toAbsolutePath()
+            + " ; same view with tile edges in red " + marked.toAbsolutePath());
     }
 
     private static void realize(
