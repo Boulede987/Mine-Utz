@@ -83,7 +83,7 @@ public final class WorldBiomePlan {
         }
         ToroidalGrid grid = new ToroidalGrid(settings.gridSize(), settings.gridSize());
         HexTorusGeometry geometry = new HexTorusGeometry(settings.gridSize(), settings.gridSize(), settings.atomWidthBlocks());
-        ClusterSizeModel model = new ClusterSizeModel(table, settings.atomWidthBlocks(), new ShapeRule(settings.perimeterRatio(), Integer.MAX_VALUE, Integer.MAX_VALUE, 2));
+        ClusterSizeModel model = modelOf(table, settings);
 
         progress.report(
             "solving the biome pattern for world seed " + worldSeed + " on " + threads + " threads (" + biomes.size() + " biomes, " + settings.gridSize() + "x" + settings.gridSize()
@@ -109,6 +109,18 @@ public final class WorldBiomePlan {
             worldSeed, fingerprintOf(catalog), settings.gridSize(), settings.gridSize(), settings.atomWidthBlocks(), selection.strength(), generated.seedIndex() + 1,
             selection.candidatesTried(), biomes.stream().map(BiomeId::toString).toList(), settings.rasterSamplesPerSide(), raster
         );
+    }
+
+    /**
+     * Throws {@link IllegalArgumentException}, saying why, if {@link #create} would reject {@code catalog} outright: a size range holding no whole cell, or a border requirement that
+     * no cluster could ever meet. Cheap - it solves nothing - so the graph editor can run it on every edit. It cannot say whether the catalog is solvable; only solving does.
+     */
+    public static void requireCatalogAcceptable(BiomeGraphData catalog) {
+        modelOf(RawRuleTable.from(catalog), PlanSettings.DEFAULT);
+    }
+
+    private static ClusterSizeModel modelOf(RawRuleTable table, PlanSettings settings) {
+        return new ClusterSizeModel(table, settings.atomWidthBlocks(), new ShapeRule(settings.perimeterRatio(), Integer.MAX_VALUE, Integer.MAX_VALUE, 2));
     }
 
     /** Restores a saved plan exactly. Anything that does not add up (unknown format, wrong raster length, an index outside the palette) is rejected, never guessed at. */

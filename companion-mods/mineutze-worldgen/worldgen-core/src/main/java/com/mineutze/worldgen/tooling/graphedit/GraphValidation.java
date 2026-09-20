@@ -4,6 +4,7 @@ import com.mineutze.worldgen.biomegraph.BiomeGraph;
 import com.mineutze.worldgen.biomegraph.BiomeGraphData;
 import com.mineutze.worldgen.biomegraph.BiomeGraphJson;
 import com.mineutze.worldgen.biomegraph.BiomeId;
+import com.mineutze.worldgen.plan.WorldBiomePlan;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -62,7 +63,19 @@ final class GraphValidation {
         } catch (IllegalArgumentException e) {
             return new ValidationResult(false, e.getMessage(), List.of());
         }
-        return new ValidationResult(true, null, underConnectedErrors(graph, data));
+        List<String> errors = underConnectedErrors(graph, data);
+        errors.addAll(generatorRejections(data));
+        return new ValidationResult(true, null, errors);
+    }
+
+    /** What the world generator itself says about the rules (a size range with no whole cell, a border requirement nothing could meet): what it would throw at world creation, shown live instead. */
+    private static List<String> generatorRejections(BiomeGraphData data) {
+        try {
+            WorldBiomePlan.requireCatalogAcceptable(data);
+            return List.of();
+        } catch (IllegalArgumentException rejection) {
+            return List.of("The world generator would reject this graph: " + rejection.getMessage());
+        }
     }
 
     /**

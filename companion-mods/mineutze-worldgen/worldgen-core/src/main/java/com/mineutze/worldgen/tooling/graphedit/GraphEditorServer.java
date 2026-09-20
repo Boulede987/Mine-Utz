@@ -323,10 +323,9 @@ public final class GraphEditorServer {
 
     /**
      * Adds (or, if one already exists for the same required biome, REPLACES the minCount
-     * of) one "this biome must have at least N real neighbors that are exactly that other
-     * biome" requirement - schema-only today (see {@link BiomeGraphData.NodeData}'s own
-     * doc: the world generator does not enforce this), but real and saved. Re-validates before saving, same discipline as every other
-     * mutation here.
+     * of) one "every cluster of this biome must share at least N cell-edges with that other
+     * biome" requirement, which the world generator enforces (see {@link BiomeGraphData.NodeData}).
+     * Re-validates before saving, same discipline as every other mutation here.
      */
     @SuppressWarnings("unchecked")
     private static void handleAddRequiredNeighbor(HttpExchange exchange) throws IOException {
@@ -569,11 +568,11 @@ public final class GraphEditorServer {
             <button onclick="addEdge()">Add adjacency</button>
           </fieldset>
 
-          <h3 id="requiredNeighborsHeading">Required neighbors (focus a biome first)</h3>
+          <h3 id="requiredNeighborsHeading">Required borders (focus a biome first)</h3>
           <ul id="requiredNeighborsList"></ul>
           <fieldset>
-            <label>Must have at least this many neighbors of:</label><select id="reqTarget"></select>
-            <label>Minimum count</label><input id="reqMinCount" type="number" value="1" min="1">
+            <label>Every cluster of it must share a border with:</label><select id="reqTarget"></select>
+            <label>Minimum shared border, in cell edges (one edge is about 150 blocks)</label><input id="reqMinCount" type="number" value="1" min="1">
             <button onclick="addRequiredNeighbor()">Add requirement (to focused biome)</button>
           </fieldset>
 
@@ -723,15 +722,15 @@ public final class GraphEditorServer {
           list.innerHTML = '';
           const node = focusedNode();
           if (!node) {
-            heading.textContent = 'Required neighbors (focus a biome first)';
+            heading.textContent = 'Required borders (focus a biome first)';
             return;
           }
           const requirements = node.requiredNeighbors || [];
-          heading.textContent = focusKey + ' — ' + requirements.length + ' required neighbor rule' + (requirements.length === 1 ? '' : 's');
+          heading.textContent = focusKey + ' — ' + requirements.length + ' required border' + (requirements.length === 1 ? '' : 's');
           requirements.forEach(r => {
             const li = document.createElement('li');
             const label = document.createElement('span');
-            label.textContent = 'needs >= ' + r.minCount + ' ' + r.namespace + ':' + r.path + ' ';
+            label.textContent = 'needs >= ' + r.minCount + ' shared edge' + (r.minCount === 1 ? '' : 's') + ' (about ' + (r.minCount * 150) + ' blocks) with ' + r.namespace + ':' + r.path + ' ';
             li.appendChild(label);
             const removeBtn = document.createElement('button');
             removeBtn.textContent = 'Remove';

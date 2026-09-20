@@ -19,9 +19,9 @@ public record BiomeGraphData(List<NodeData> nodes, List<EdgeData> edges) {
 
     /**
      * Mirrors {@link BiomeNode} + its {@link BiomeId}, flattened to scalars for JSON, plus
-     * {@code requiredNeighbors} - not part of {@link BiomeNode}, and NOT enforced by the
-     * world generator today (schema-only; no catalog biome sets it). Defaults to empty -
-     * every existing saved graph still loads unchanged.
+     * {@code requiredNeighbors} - not part of {@link BiomeNode}: borders every cluster of this
+     * biome must share with other biomes (a beach with the ocean), enforced by the world
+     * generator. Defaults to empty - every existing saved graph still loads unchanged.
      */
     public record NodeData(
         String namespace, String path, int minWidthBlocks, int maxWidthBlocks, int selfAdjacencyLimit,
@@ -32,7 +32,7 @@ public record BiomeGraphData(List<NodeData> nodes, List<EdgeData> edges) {
         }
     }
 
-    /** One "this biome must have at least {@code minCount} real neighbors that are exactly this other biome" rule. */
+    /** One "every cluster of this biome must share at least {@code minCount} cell-edges (about 150 blocks each) with this other biome" rule. One-way: the other biome asks nothing back. */
     public record RequiredNeighbor(String namespace, String path, int minCount) {
         public String key() {
             return namespace + ":" + path;
