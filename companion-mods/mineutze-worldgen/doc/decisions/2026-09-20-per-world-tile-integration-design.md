@@ -196,22 +196,28 @@ Each stage ends with tests green, a commit, and the acceptance check named.
 7. **Re-run the 104-seed study through the facade**, and record the decisions of section 7 in
    `DECISIONS.md` in this repo's existing format.
 
-## 7. Decisions needed from the author
+## 7. Decisions (answered by the author, 2026-09-20)
 
-1. **"No reseeding."** `doc/DESIGN.md` says: "No reseeding. We don't 'try until we make it'. We
-   make it work... when we fail, we fail loud." The new generator runs up to 200 independent
-   attempts derived deterministically from the world seed and takes the lowest that solves (median
-   5, max 30 of 200 in the study). It never changes the world seed, is fully deterministic and
-   fails loud if all 200 fail. Is that inside the principle, or is it the thing the principle
-   forbids? If the latter, the alternative is a much stronger single-run solver (not available
-   today) or a pool of pre-solved patterns.
-2. **Start-up time.** `DESIGN.md`: "Several minutes of solving is hardly acceptable." This session
-   accepted "5 minutes is not a big deal". What is the slowest machine that must work, and what
-   is the acceptable wait there? Section 5 gives the derived numbers.
-3. **Visible repetition** every ~10.4 km. Accept, or grow the tile (48x48 gives ~12.5 km at a
-   cost in solving time that has not been measured)?
-4. **Existing worlds and catalog edits.** Section 4.4 keeps an existing world's snapshot even if
-   the catalog changes, and refuses worlds from the old system. Agree?
-5. **Package naming and the size of the deletion** in stage 6 (section 2's last rows). Agree to
-   delete the failed system entirely once the new one is verified in-game, rather than keep it
-   behind a switch?
+1. Two worlds generated from the same seed must be the same world. The deterministic attempt
+   sequence (lowest solving attempt wins) satisfies that; it is not "reseeding" in the sense
+   of DESIGN.md. Verified: the same seed gives a byte-identical map across separate processes.
+2. Solving time matters while the player is exploring (nobody waits in place for the next
+   chunk), not at world creation. A one-time world creation of about 5 minutes is acceptable.
+   Nothing may be solved lazily during play - which the tile design guarantees.
+3. The world repeating every ~10 km (10,000 blocks) is accepted.
+4. No backward compatibility: worlds made by the old system are not supported. The legacy-shard
+   refusal proposed in section 4.4 (step 2) is therefore DROPPED. An existing world made by the
+   NEW system keeps its saved plan verbatim, with a loud warning if the catalog has changed.
+5. No dead code is kept. The old system is deleted (it lives on in git history), as soon as the
+   new one is verified in-game rather than left behind a switch.
+
+## 8. Progress
+
+- Stage 1 (core facade) done: `WorldBiomePlan`, `PlanSnapshot`, `BlockPosition`,
+  `DeterministicTrig` (machine-independent sine and cosine), `ReproducibilityRulesTest`. Real-scale
+  check (`./gradlew :worldgen-core:worldBiomePlanCheck`, seed 1094, 12 threads): plan created in
+  22 s, 26.5 million lookups per second, `nearest()` 5 ms per biome, snapshot round trip exact,
+  tile repeat exact over 2 million random points up to +-1,000,000 blocks, raster SHA-256 identical
+  across two processes, solver pattern identical to the one a study saved days earlier.
+- The facade lives in the `coherence` package for now; the package is renamed when the dead code
+  around it is deleted.

@@ -193,6 +193,13 @@ tasks.register('biomeRealizationPrototype', JavaExec) {
     mainClass = 'com.mineutze.worldgen.coherence.BiomeRealizationPrototypeRunner'
 }
 
+tasks.register('worldBiomePlanCheck', JavaExec) {
+    group = 'verification'
+    description = 'Real-scale check of WorldBiomePlan against the real catalog: creation time, lookup speed, tile repeat, snapshot round trip, a raster hash to compare between runs, and a comparison of the solved pattern with the one the reliability study saved. Run with: ./gradlew :worldgen-core:worldBiomePlanCheck'
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'com.mineutze.worldgen.coherence.WorldBiomePlanCheckRunner'
+}
+
 tasks.register('graphEditorDeepCheck', JavaExec) {
     group = 'verification'
     description = 'The graph editor\'s "Deep check" button - runs the real exhaustive GeometricFeasibilityProof against the editor\'s currently SAVED graph (not the hardcoded catalog directly, though it\'s the same file now). Run with: ./gradlew :worldgen-core:graphEditorDeepCheck'
