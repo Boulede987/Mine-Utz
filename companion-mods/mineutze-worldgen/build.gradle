@@ -14,9 +14,36 @@ java {
     toolchain.languageVersion = JavaLanguageVersion.of(21)
 }
 
+// NeoGradle merges vanilla's own dependency list (asm 9.5) into the dev-run classpath next to NeoForge's
+// (asm 9.8), and NeoForge's module loader refuses to start when the same asm module appears at two versions:
+// "Module named org.objectweb.asm.tree.analysis was already on the JVMs module path". One version everywhere,
+// including the configurations NeoGradle creates itself.
+configurations.configureEach {
+    resolutionStrategy.eachDependency { details ->
+        if (details.requested.group == 'org.ow2.asm') {
+            details.useVersion '9.8'
+        }
+    }
+}
+
+// A dev server reads its console from standard input; without this Gradle hands it an empty stream, the
+// console sees end-of-input and stops the server at once, and no command can be typed or piped in.
+tasks.withType(JavaExec).configureEach {
+    standardInput = System.in
+}
+
 runs {
     configureEach {
         systemProperty 'forge.logging.console.level', 'debug'
+        // Dev runs load a mod's classes through NeoForge's own module loader, which only sees the
+        // sources declared as the mod's. worldgen-core is bundled INTO the real jar (see jar {} below),
+        // so in a dev run both source sets have to be declared as ONE mod - the same group id - or its
+        // classes are not found (ClassNotFoundException: com.mineutze.worldgen.biomegraph.ModBiomeGraph),
+        // and declared separately it is taken for a second mod and rejected ("not a valid mod file").
+        modSources {
+            add 'mineutze_worldgen', project.sourceSets.main
+            add 'mineutze_worldgen', project(':worldgen-core').sourceSets.main
+        }
     }
     server { }
 }
