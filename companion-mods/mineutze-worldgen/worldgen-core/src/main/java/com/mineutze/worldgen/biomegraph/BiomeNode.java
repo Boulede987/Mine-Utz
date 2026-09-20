@@ -5,15 +5,10 @@ package com.mineutze.worldgen.biomegraph;
  * filler-like one) equally restrictable (see {@link BiomeGraph}'s own doc:
  * "universal filler" concept removed).
  *
- * @param selfAdjacencyLimit how many of this biome's own ≤6 mesh neighbors may also be
- *                           same biome - default {@link Integer#MAX_VALUE} (no artificial
- *                           cap; a face has ≤6 mesh neighbors anyway, so the hex mesh
- *                           itself is the only real limit). Lets any biome span multiple
- *                           hexes as one felt region instead of stretching one hex's
- *                           geometry - "keep adding couches as long as there isn't enough
- *                           space." See DECISIONS.md 2026-09-14. Count enforced by {@link
- *                           com.mineutze.worldgen.regionsolve.topology.identity.TriangleIdentitySizeAssignment},
- *                           not here - this is just the cap it reads.
+ * @param selfAdjacencyLimit whether this biome may be next to itself at all (0 = never,
+ *                           anything above = yes). The pattern solver does not count
+ *                           neighbors: a same-biome cluster is one biome, size range
+ *                           decides how big.
  */
 public record BiomeNode(
     BiomeId id,

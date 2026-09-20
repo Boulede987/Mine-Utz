@@ -19,11 +19,8 @@ public record BiomeGraphData(List<NodeData> nodes, List<EdgeData> edges) {
 
     /**
      * Mirrors {@link BiomeNode} + its {@link BiomeId}, flattened to scalars for JSON, plus
-     * {@code requiredNeighbors} - not part of {@link BiomeNode}/the live algorithm at all
-     * (2026-09-16: no such constraint exists anywhere in the real solver, confirmed by
-     * grep before adding this - it was only ever in the original design statement). Added
-     * here, schema-only, for {@code com.mineutze.worldgen.coherence}'s own existence proof,
-     * which needs to check it even though nothing today authors it. Defaults to empty -
+     * {@code requiredNeighbors} - not part of {@link BiomeNode}, and NOT enforced by the
+     * world generator today (schema-only; no catalog biome sets it). Defaults to empty -
      * every existing saved graph still loads unchanged.
      */
     public record NodeData(

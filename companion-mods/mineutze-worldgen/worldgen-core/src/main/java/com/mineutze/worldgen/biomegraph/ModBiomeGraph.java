@@ -3,14 +3,11 @@ package com.mineutze.worldgen.biomegraph;
 import java.util.List;
 
 /**
- * First real BiomeGraph, matching DESIGN.md's worked example. Widths/blend width here
- * are placeholders to tune from logged solve output, same as grid constants in {@link
- * com.mineutze.worldgen.regionsolve.MacroGridConfig}.
+ * The shipped biome graph, loaded from {@code /biomegraph/biome-graph.json}.
  *
  * Lives in worldgen-core (not the mod module) despite the "Mod" name - {@link BiomeId}
  * deliberately not Minecraft's ResourceLocation, so no Minecraft/NeoForge dependency
- * here either, and both mod + standalone export CLI ({@code com.mineutze.worldgen.export})
- * need the same graph instance.
+ * here either, and both mod + graph editor need the same graph instance.
  */
 public final class ModBiomeGraph {
 

@@ -20,9 +20,8 @@ import java.util.function.BooleanSupplier;
  * cells it covers and size coupling between neighbors is exact and automatic - a bigger biome
  * literally consumes more of the shared tile, and touches more neighbors, which a fixed
  * one-cell-per-region pattern cannot express. This is the joint alternative to solving identity
- * first and fitting sizes afterwards, made possible by {@link ToroidalIdentityLocalSearch}'s
- * result that local search, unlike the complete backtracking that failed on the earlier
- * clustering model, solves this kind of pattern quickly.
+ * first and fitting sizes afterwards. Local search, unlike the complete backtracking that
+ * failed on the earlier clustering model, solves this kind of pattern quickly.
  *
  * <p>A pattern is VALID when: every edge between two DIFFERENT biomes is legal (same-biome
  * adjacency is just the inside of a cluster); every cluster's cell count is inside its biome's

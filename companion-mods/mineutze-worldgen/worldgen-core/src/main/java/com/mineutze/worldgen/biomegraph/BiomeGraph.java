@@ -16,24 +16,16 @@ import java.util.function.Consumer;
  *
  * No node ever universally legal. Cell with no legal biome given neighbors = graph
  * misconfiguration (e.g. 3 mutually-incompatible biomes meeting at a point) - fails
- * loud via whichever CSP is live ({@link
- * com.mineutze.worldgen.regionsolve.topology.identity.TriangleIdentitySizeAssignment}
- * today). See {@link #requireEveryLocalNeighborhoodSolvable} (proves this unreachable
- * offline for well-formed graph). See DECISIONS.md 2026-08-07.
+ * loud in the pattern solver. See DECISIONS.md 2026-08-07.
  */
 public final class BiomeGraph {
 
     private final Map<BiomeId, BiomeNode> nodesById;
     private final Map<UnorderedBiomePair, AdjacencyRule> rulesByPair;
 
-    // Biome with too few legal neighbors gets starved by TriangleIdentitySizeAssignment's
-    // fairness-quota ordering: fairness only reorders already-legal candidates, can't
-    // invent legality. Starvation depends on real mesh placement, not just rules - so this
-    // floor is a cheap heuristic, not a derived guarantee (real proof for
-    // ModBiomeGraph.DEFAULT: ModBiomeGraphTest.noBiomeIsStarvedOnARealProductionScaleSolve).
+    // Cheap heuristic floor, not a derived guarantee - whether a graph solves is the solve check's job.
     // NOT enforced in constructor - some unit tests deliberately build narrow chain/bridge
-    // graphs (degree 1-2) to isolate CSP behaviors; real graphs go through forProduction,
-    // which enforces this. See DECISIONS.md (undated, pre-2026-08).
+    // graphs (degree 1-2); real graphs go through forProduction, which enforces this.
     private static final int MIN_LEGAL_NEIGHBORS = 3;
 
     public BiomeGraph(Collection<BiomeNode> nodes, Collection<AdjacencyRule> rules) {
@@ -435,15 +427,8 @@ public final class BiomeGraph {
 
     /**
      * Default-deny for a biome next to itself - EXCEPT a biome whose own {@link
-     * BiomeNode#selfAdjacencyLimit} raised above 0 (see that field's doc: lets biome span
-     * multiple hexes as one felt region, no old growth/merge pipeline mechanism - each hex
-     * still gets own independent identity+size CSP assignment + own independent {@link
-     * com.mineutze.worldgen.regionsolve.topology.placement.WeightedVertexPlacement}
-     * geometry). Only makes self-adjacency TOPOLOGICALLY possible - actual COUNT is a
-     * separate stateful check in {@link
-     * com.mineutze.worldgen.regionsolve.topology.identity.TriangleIdentitySizeAssignment}
-     * (this method is pure state-free pairwise predicate; cardinality depends on how many
-     * neighbors already assigned, not just whether pair allowed).
+     * BiomeNode#selfAdjacencyLimit} raised above 0 (see that field's doc). Pure state-free
+     * pairwise predicate - only says self-adjacency is possible, not how many.
      */
     public boolean isAllowed(BiomeId a, BiomeId b) {
         if (a.equals(b)) {

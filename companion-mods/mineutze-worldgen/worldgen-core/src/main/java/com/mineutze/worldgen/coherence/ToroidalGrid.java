@@ -62,9 +62,8 @@ final class ToroidalGrid {
      * Row-major (r outer, q inner) - the specific order that makes the two wraparound
      * seams (q=width-1 back to q=0 within a row; r=height-1 back to r=0 across the whole
      * grid) always check against an ALREADY-DECIDED neighbor, never a not-yet-reached one -
-     * real, necessary property (same lesson {@code PeriodicCoherenceProof}'s own row-stack
-     * substrate already learned the hard way: a wraparound conflict discovered only AFTER
-     * full construction wastes enormous search effort - see this class's own doc history).
+     * real, necessary property: a wraparound conflict discovered only AFTER full
+     * construction wastes enormous search effort.
      */
     List<ToroidalPos> allPositionsInFillOrder() {
         List<ToroidalPos> all = new ArrayList<>(cellCount());
