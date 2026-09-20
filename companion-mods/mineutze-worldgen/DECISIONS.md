@@ -1,5 +1,37 @@
 # Decisions
 
+## 2026-09-20 — One solved biome plan per world replaces the hex-mesh region solver
+
+**Context:** The hex-mesh generator solved regions lazily while the player explored, and could not
+be made to succeed reliably for every world seed: dead ends appeared under certain queries and were
+only ever worked around. Every entry below this one that mentions `regionsolve`, the region CSP,
+`WeightedVertexPlacement`, the completeness checks or the dead-end simulations describes that
+removed system; it is kept as history, not as a description of the code.
+
+**Decision:** At world creation, solve the whole biome layout once from the world seed (a 40x40 hex
+torus of 300-block cells, min-conflicts local search over a joint identity+size model), warp it into
+natural borders (area-preserving, divergence-free), verify size, legality and topology on a
+2598x2598 raster (4 blocks per sample), and save the raster with the world. Biome lookups are one
+array read; the map repeats every 10,392 blocks. Same seed gives the same world. The old system was
+deleted (no dead code, no compatibility with old-system worlds); git history keeps it. The package
+is `com.mineutze.worldgen.plan`, entry point `WorldBiomePlan`. The graph editor's Deep check and
+Coherence proof buttons became one Solve check that builds real plans from the saved graph.
+
+**Alternatives considered:**
+- Keep solving lazily while exploring: rejected, several minutes of solving while the player waits
+  for chunks is unacceptable; a one-time wait at world creation is fine.
+- Complete backtracking or AC-3 on the pattern: never solved the size-coupled model; min-conflicts
+  local search does, in under a second at 24x24 and reliably at 40x40.
+- One remixed pattern for all seeds: rejected, per-seed solving was chosen and its reliability
+  proven instead (104 of 104 world seeds solved).
+
+**Evidence:** Dev-server run (seed 42): plan created in 32 s on 11 threads, restored in 0.4 s on
+restart, `/locate biome` exact and instant, the biomes stored in generated chunks equal the plan at
+every quart (0 mismatches in 251,001 checks). Same seed gives byte-identical raster across separate
+JVM processes (SHA-256 checked). The user generated a world in the dev-test instance: "generated
+quite well, and quickly". Solve check on the shipped catalog: 4 of 4 seeds solved, 16-64 s each.
+Design and progress: `doc/decisions/2026-09-20-per-world-tile-integration-design.md`.
+
 ## 2026-09-05 — `PRE_GENERATE_RADIUS_BLOCKS`/spawn-area pre-generation sweep
 
 **Context:** Vanilla's stronghold placement (`ConcentricRingsStructurePlacement`,

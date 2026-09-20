@@ -217,8 +217,7 @@ Each stage ends with tests green, a commit, and the acceptance check named.
   22 s, 26.5 million lookups per second, `nearest()` 5 ms per biome, snapshot round trip exact,
   tile repeat exact over 2 million random points up to +-1,000,000 blocks, raster SHA-256 identical
   across two processes, solver pattern identical to the one a study saved days earlier.
-- The facade lives in the `coherence` package for now; the package is renamed when the dead code
-  around it is deleted.
+- The facade lives in `com.mineutze.worldgen.plan` (renamed from `coherence` once the dead code around it was deleted).
 
 - Stage 3 and 5 (mod wiring, in-game verification) done on a real dev server (seed 42, the modpack's
   Biomes O' Plenty / Biomes We've Gone jars added to `runs/server/mods`, driven by console commands):
@@ -236,8 +235,14 @@ Each stage ends with tests green, a commit, and the acceptance check named.
   - Found only by running the game: (1) the saved data was never written because it was not marked dirty;
     (2) the dev-run needed one asm version, both source sets declared as one mod group, and stdin
     forwarded. The old integration had not compiled since an earlier package reorganisation.
+- Cleanup done (2026-09-20): the old system is deleted (regionsolve, reachability, export, 21 superseded
+  proof/prototype classes and their tests, their gradle tasks, export scripts, generated reports); the
+  package is renamed to `plan`; the graph editor's Deep check and Coherence proof are replaced by one
+  Solve check (`graphEditorSolveCheck`: real plans from the saved graph for 4 world seeds; 4 of 4 solved,
+  16-64 s each). 242 worldgen-core tests pass. DECISIONS.md has the entry.
 - Still open: unit tests for the mod-side save format (NeoGradle's JUnit hook did not start; the in-game
   save/restore is the check for now); the game-grid speck check and the minimum-width check of section
-  4.7; deleting the old system (regionsolve, reachability, obsolete export/coherence classes, editor
-  Deep-check and Coherence-proof buttons) and renaming the package; re-running the 104-seed study through
-  `WorldBiomePlan`; DECISIONS.md entries.
+  4.7; re-running the 104-seed study through `WorldBiomePlan`; `BiomeGraph`'s ring/neighborhood
+  completeness checks (`requireEveryLocalNeighborhoodSolvable` and relatives) are only used by their own
+  tests and belong to the old mesh - candidates for deletion; `requiredNeighbors` in the catalog schema
+  is not enforced by anything.
