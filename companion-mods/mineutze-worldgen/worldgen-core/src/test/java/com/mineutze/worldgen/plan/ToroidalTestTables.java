@@ -3,6 +3,7 @@ package com.mineutze.worldgen.plan;
 import com.mineutze.worldgen.biomegraph.BiomeGraphData;
 import com.mineutze.worldgen.biomegraph.BiomeGraphData.EdgeData;
 import com.mineutze.worldgen.biomegraph.BiomeGraphData.NodeData;
+import com.mineutze.worldgen.biomegraph.BiomeGraphData.RequiredNeighbor;
 import com.mineutze.worldgen.biomegraph.BiomeId;
 
 import java.util.ArrayList;
@@ -44,6 +45,22 @@ final class ToroidalTestTables {
         return new BiomeGraphData(nodes, edges);
     }
 
+    /** As {@link #fullyLegalTableWithWidths}, but {@code requirer} must share at least {@code minEdges} cell-edges with {@code required}. */
+    static RawRuleTable fullyLegalTableRequiring(int minWidthBlocks, int maxWidthBlocks, BiomeId requirer, BiomeId required, int minEdges, BiomeId... biomes) {
+        return RawRuleTable.from(withRequirement(fullyLegalCatalog(minWidthBlocks, maxWidthBlocks, biomes), requirer, required, minEdges));
+    }
+
+    /** {@code data} with a "shares at least {@code minEdges} edges with {@code required}" requirement added to {@code requirer}. */
+    static BiomeGraphData withRequirement(BiomeGraphData data, BiomeId requirer, BiomeId required, int minEdges) {
+        List<NodeData> nodes = data.nodes().stream()
+            .map(node -> node.namespace().equals(requirer.namespace()) && node.path().equals(requirer.path())
+                ? new NodeData(node.namespace(), node.path(), node.minWidthBlocks(), node.maxWidthBlocks(), node.selfAdjacencyLimit(),
+                    List.of(new RequiredNeighbor(required.namespace(), required.path(), minEdges)))
+                : node)
+            .toList();
+        return new BiomeGraphData(nodes, data.edges());
+    }
+
     /** Two mutually legal biomes with DIFFERENT size ranges, for tests where one biome's size must be pinned tightly and the other left loose. */
     static RawRuleTable legalPairWithSizes(BiomeId first, int firstMinWidth, int firstMaxWidth, BiomeId second, int secondMinWidth, int secondMaxWidth) {
         List<NodeData> nodes = List.of(
@@ -78,7 +95,11 @@ final class ToroidalTestTables {
     }
 
     static RawRuleTable tableWithNoLegalTriangle(int minWidthBlocks, int maxWidthBlocks) {
-        BiomeGraphData data = new BiomeGraphData(
+        return RawRuleTable.from(noLegalTriangleCatalog(minWidthBlocks, maxWidthBlocks));
+    }
+
+    static BiomeGraphData noLegalTriangleCatalog(int minWidthBlocks, int maxWidthBlocks) {
+        return new BiomeGraphData(
             List.of(
                 new NodeData(A.namespace(), A.path(), minWidthBlocks, maxWidthBlocks, Integer.MAX_VALUE, List.of()),
                 new NodeData(B.namespace(), B.path(), minWidthBlocks, maxWidthBlocks, Integer.MAX_VALUE, List.of()),
@@ -86,6 +107,5 @@ final class ToroidalTestTables {
             ),
             List.of(new EdgeData(A.namespace(), A.path(), B.namespace(), B.path(), 10))
         );
-        return RawRuleTable.from(data);
     }
 }

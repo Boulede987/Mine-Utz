@@ -89,12 +89,17 @@ class RealizationSelectorTest {
     }
 
     private static BiomeMapVerifier.Report report(int vanished, int split, int merged, int areaViolations, int illegalContactPairs) {
+        return report(vanished, split, merged, areaViolations, illegalContactPairs, 0);
+    }
+
+    private static BiomeMapVerifier.Report report(int vanished, int split, int merged, int areaViolations, int illegalContactPairs, int shortBorders) {
         List<BiomeMapVerifier.AreaViolation> violations = java.util.Collections.nCopies(areaViolations, new BiomeMapVerifier.AreaViolation(A, 1, 2, 3));
         Map<String, Integer> contacts = new java.util.TreeMap<>();
         for (int pair = 0; pair < illegalContactPairs; pair++) {
             contacts.put("pair" + pair, 1);
         }
-        return new BiomeMapVerifier.Report(5, violations, contacts, 100, new double[0], vanished, split, merged);
+        List<BiomeMapVerifier.BorderShortfall> shortfalls = java.util.Collections.nCopies(shortBorders, new BiomeMapVerifier.BorderShortfall(A, B, 1, 2));
+        return new BiomeMapVerifier.Report(5, violations, contacts, shortfalls, 100, new double[0], vanished, split, merged);
     }
 
     @Test
@@ -109,6 +114,7 @@ class RealizationSelectorTest {
         assertEquals(false, RealizationSelector.passes(report(0, 0, 1, 0, 0)), "a merged region");
         assertEquals(false, RealizationSelector.passes(report(0, 0, 0, 1, 0)), "a region outside its size range");
         assertEquals(false, RealizationSelector.passes(report(0, 0, 0, 0, 1)), "an illegal contact");
+        assertEquals(false, RealizationSelector.passes(report(0, 0, 0, 0, 0, 1)), "a region short of its required border");
     }
 
     /** Only A-B is legal, so the plain hexagon pattern already has A touching C and B touching C: no strength can pass. */
@@ -142,5 +148,24 @@ class RealizationSelectorTest {
         RealizationSelector.Selection selection = select(table(), NO_WARP_FIRST, 6L);
 
         assertEquals(List.copyOf(table().allBiomeIds()), selection.biomeOrder());
+    }
+
+    /** In the plain 3-coloring every A cell shares 3 edges with B; asking for 8 (half of that is still more than 3) can never be met, whatever the warp. */
+    @Test
+    void aPatternWhoseClusterHasTooLittleOfItsRequiredBorderIsRejected() {
+        RawRuleTable demanding = ToroidalTestTables.fullyLegalTableRequiring(300, 700, A, B, 8, A, B, C);
+
+        IllegalStateException failure = assertThrows(IllegalStateException.class, () -> select(demanding, new double[] {0}, 8L));
+
+        assertTrue(failure.getMessage().contains("short required borders 12"), failure.getMessage());
+    }
+
+    @Test
+    void aPatternWhoseClusterHasEnoughOfItsRequiredBorderIsChosen() {
+        RawRuleTable satisfied = ToroidalTestTables.fullyLegalTableRequiring(300, 700, A, B, 3, A, B, C);
+
+        RealizationSelector.Selection selection = select(satisfied, new double[] {0}, 9L);
+
+        assertTrue(selection.report().borderShortfalls().isEmpty(), selection.report().borderShortfalls().toString());
     }
 }

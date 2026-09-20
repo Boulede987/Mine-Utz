@@ -172,6 +172,7 @@ final class ToroidalSizedLocalSearch {
             BiomeId biome = assignment.get(start);
             Set<ToroidalPos> cluster = new HashSet<>();
             int perimeter = 0;
+            Map<BiomeId, Integer> edgesToBiome = new HashMap<>();
             Deque<ToroidalPos> frontier = new ArrayDeque<>();
             frontier.add(start);
             visited.add(start);
@@ -181,12 +182,13 @@ final class ToroidalSizedLocalSearch {
                 for (ToroidalPos neighbor : grid.neighborsOf(pos)) {
                     if (!biome.equals(assignment.get(neighbor))) {
                         perimeter++;
+                        edgesToBiome.merge(assignment.get(neighbor), 1, Integer::sum);
                     } else if (visited.add(neighbor)) {
                         frontier.add(neighbor);
                     }
                 }
             }
-            clusterViolation += model.violation(biome, cluster.size(), thinCellsOf(grid, model, cluster), perimeter);
+            clusterViolation += model.violation(biome, cluster.size(), thinCellsOf(grid, model, cluster), perimeter, borderShortfallOf(table, model, biome, edgesToBiome));
         }
 
         int missingBiomes = 0;
@@ -196,6 +198,17 @@ final class ToroidalSizedLocalSearch {
             }
         }
         return new Breakdown(illegalEdges, clusterViolation, missingBiomes);
+    }
+
+    /** Independent count of how many shared edges a cluster of {@code biome} is short of its required borders, given how many edges it shares with each other biome. */
+    private static int borderShortfallOf(RawRuleTable table, ClusterSizeModel model, BiomeId biome, Map<BiomeId, Integer> edgesToBiome) {
+        int biomeIndex = model.biomeIndex(biome);
+        int shortfall = 0;
+        for (int slot = 0; slot < model.requiredTargets(biomeIndex).length; slot++) {
+            BiomeId required = table.allBiomeIds().get(model.requiredTargets(biomeIndex)[slot]);
+            shortfall += Math.max(0, model.requiredMinEdges(biomeIndex)[slot] - edgesToBiome.getOrDefault(required, 0));
+        }
+        return shortfall;
     }
 
     /** Independent, set-based count of a cluster's thin cells (see {@link ShapeRule.Thickness}) - shares nothing with the search's array version. */
@@ -284,6 +297,11 @@ final class ToroidalSizedLocalSearch {
         private int exploredSize;
         private int exploredThinCells;
         private int exploredPerimeter;
+        private int exploredBorderShortfall;
+        private final boolean[] needsBorder;
+        private final int[] borderEdges;
+        private final int[] borderEdgesGeneration;
+        private int borderGeneration;
         private final int[] reachDistance;
         private final int[] reachQueue;
         private final double relabelProbability;
@@ -338,6 +356,12 @@ final class ToroidalSizedLocalSearch {
             this.reachQueue = new int[cellCount];
             this.changedCells = new int[cellCount];
             this.changedStamp = new int[cellCount];
+            this.needsBorder = new boolean[biomeCount];
+            for (int biome = 0; biome < biomeCount; biome++) {
+                needsBorder[biome] = model.hasRequirements(biome);
+            }
+            this.borderEdges = new int[biomeCount];
+            this.borderEdgesGeneration = new int[biomeCount];
             this.seenBiomeStamp = new int[biomeCount];
             this.seenBiomes = new int[biomeCount];
         }
@@ -503,7 +527,7 @@ final class ToroidalSizedLocalSearch {
             for (int cell = 0; cell < cellCount; cell++) {
                 if (visitStamp[cell] != stamp) {
                     exploreCluster(cell);
-                    total += model.violation(value[cell], exploredSize, exploredThinCells, exploredPerimeter);
+                    total += model.violation(value[cell], exploredSize, exploredThinCells, exploredPerimeter, exploredBorderShortfall);
                 }
             }
             return total + MISSING_BIOME_COST * missingBiomes;
@@ -661,12 +685,12 @@ final class ToroidalSizedLocalSearch {
                 int cell = changedCells[index];
                 if (visitStamp[cell] != stamp) {
                     exploreCluster(cell);
-                    total += model.violation(value[cell], exploredSize, exploredThinCells, exploredPerimeter);
+                    total += model.violation(value[cell], exploredSize, exploredThinCells, exploredPerimeter, exploredBorderShortfall);
                 }
                 for (int neighbor : neighbors[cell]) {
                     if (visitStamp[neighbor] != stamp) {
                         exploreCluster(neighbor);
-                        total += model.violation(value[neighbor], exploredSize, exploredThinCells, exploredPerimeter);
+                        total += model.violation(value[neighbor], exploredSize, exploredThinCells, exploredPerimeter, exploredBorderShortfall);
                     }
                 }
             }
@@ -708,29 +732,48 @@ final class ToroidalSizedLocalSearch {
             stamp++;
             int clustersBefore = 0;
             exploreCluster(cell);
-            clustersBefore += model.violation(old, exploredSize, exploredThinCells, exploredPerimeter);
+            clustersBefore += model.violation(old, exploredSize, exploredThinCells, exploredPerimeter, exploredBorderShortfall);
             for (int neighbor : cellNeighbors) {
                 if (value[neighbor] == candidate && visitStamp[neighbor] != stamp) {
                     exploreCluster(neighbor);
-                    clustersBefore += model.violation(candidate, exploredSize, exploredThinCells, exploredPerimeter);
+                    clustersBefore += model.violation(candidate, exploredSize, exploredThinCells, exploredPerimeter, exploredBorderShortfall);
                 }
             }
+            clustersBefore += requirementClustersBesideThatAreNeitherBiome(cellNeighbors, old, candidate);
 
             value[cell] = candidate;
             stamp++;
             int clustersAfter = 0;
             exploreCluster(cell);
-            clustersAfter += model.violation(candidate, exploredSize, exploredThinCells, exploredPerimeter);
+            clustersAfter += model.violation(candidate, exploredSize, exploredThinCells, exploredPerimeter, exploredBorderShortfall);
             for (int neighbor : cellNeighbors) {
                 if (value[neighbor] == old && visitStamp[neighbor] != stamp) {
                     exploreCluster(neighbor);
-                    clustersAfter += model.violation(old, exploredSize, exploredThinCells, exploredPerimeter);
+                    clustersAfter += model.violation(old, exploredSize, exploredThinCells, exploredPerimeter, exploredBorderShortfall);
                 }
             }
+            clustersAfter += requirementClustersBesideThatAreNeitherBiome(cellNeighbors, old, candidate);
             value[cell] = old;
 
             int missingChange = (usesOfBiome[old] == 1 ? MISSING_BIOME_COST : 0) - (usesOfBiome[candidate] == 0 ? MISSING_BIOME_COST : 0);
             return edgesAfter - edgesBefore + clustersAfter - clustersBefore + missingChange;
+        }
+
+        /**
+         * Violation of each cluster, of some third biome with border requirements, that touches the cell being changed from {@code old} to {@code candidate}. Its size and shape do not
+         * depend on the change, but the edges it shares with {@code old} or {@code candidate} do, so the move's cost change must include it. Uses the current stamp: a cluster already
+         * measured in this pass is not counted twice.
+         */
+        private int requirementClustersBesideThatAreNeitherBiome(int[] cellNeighbors, int old, int candidate) {
+            int total = 0;
+            for (int neighbor : cellNeighbors) {
+                int neighborValue = value[neighbor];
+                if (neighborValue != old && neighborValue != candidate && needsBorder[neighborValue] && visitStamp[neighbor] != stamp) {
+                    exploreCluster(neighbor);
+                    total += model.violation(neighborValue, exploredSize, exploredThinCells, exploredPerimeter, exploredBorderShortfall);
+                }
+            }
+            return total;
         }
 
         /** Breadth-first over the same-biome cluster containing {@code start}, marking it visited with the current stamp; leaves its cell count, perimeter (cell-edges to a different biome) and thin-cell count (see {@link ShapeRule}) in {@code exploredSize}/{@code exploredPerimeter}/{@code exploredThinCells}. */
@@ -741,11 +784,16 @@ final class ToroidalSizedLocalSearch {
             queue[tail++] = start;
             visitStamp[start] = stamp;
             int perimeter = 0;
+            boolean countsBorders = needsBorder[biome];
+            borderGeneration++;
             while (head < tail) {
                 int cell = queue[head++];
                 for (int neighbor : neighbors[cell]) {
                     if (value[neighbor] != biome) {
                         perimeter++;
+                        if (countsBorders) {
+                            countEdgeTo(value[neighbor]);
+                        }
                     } else if (visitStamp[neighbor] != stamp) {
                         visitStamp[neighbor] = stamp;
                         queue[tail++] = neighbor;
@@ -754,11 +802,33 @@ final class ToroidalSizedLocalSearch {
             }
             exploredSize = tail;
             exploredPerimeter = perimeter;
+            exploredBorderShortfall = countsBorders ? shortfallOfRequiredBorders(biome) : 0;
             exploredThinCells = switch (model.shape().thicknessRequiredFor(tail)) {
                 case NONE -> 0;
                 case TRIANGLE -> countCellsOutsideAnyTriangle(biome, tail);
                 case FLOWER -> countCellsBeyondReachOfAFlower(biome, tail);
             };
+        }
+
+        /** Counts one more edge of the cluster being explored towards {@code otherBiome}; counters restart lazily, once per exploration. */
+        private void countEdgeTo(int otherBiome) {
+            if (borderEdgesGeneration[otherBiome] != borderGeneration) {
+                borderEdgesGeneration[otherBiome] = borderGeneration;
+                borderEdges[otherBiome] = 0;
+            }
+            borderEdges[otherBiome]++;
+        }
+
+        /** How many shared edges the cluster just explored is short of the borders {@code biome} requires. */
+        private int shortfallOfRequiredBorders(int biome) {
+            int[] targets = model.requiredTargets(biome);
+            int[] minEdges = model.requiredMinEdges(biome);
+            int shortfall = 0;
+            for (int slot = 0; slot < targets.length; slot++) {
+                int shared = borderEdgesGeneration[targets[slot]] == borderGeneration ? borderEdges[targets[slot]] : 0;
+                shortfall += Math.max(0, minEdges[slot] - shared);
+            }
+            return shortfall;
         }
 
         /** Of the {@code clusterSize} cells in {@code queue}, how many have no two consecutive neighbors of the same cluster - i.e. are in no triangle. Neighbors are in ring order, so consecutive ones touch each other. */

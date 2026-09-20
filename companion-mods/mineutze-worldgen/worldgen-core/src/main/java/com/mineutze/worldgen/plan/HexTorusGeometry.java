@@ -47,6 +47,11 @@ final class HexTorusGeometry {
         return cellWidth;
     }
 
+    /** Length of one side of a cell: the hexagon's corner radius, the length of a border between two neighboring cells. */
+    double cellEdgeBlocks() {
+        return cornerRadius;
+    }
+
     double cellAreaBlocks2() {
         return cellWidth * rowHeight;
     }

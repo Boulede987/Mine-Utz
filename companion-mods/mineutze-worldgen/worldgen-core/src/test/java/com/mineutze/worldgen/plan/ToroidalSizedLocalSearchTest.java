@@ -10,10 +10,13 @@ import static com.mineutze.worldgen.plan.ToroidalTestTables.A;
 import static com.mineutze.worldgen.plan.ToroidalTestTables.B;
 import static com.mineutze.worldgen.plan.ToroidalTestTables.C;
 import static com.mineutze.worldgen.plan.ToroidalTestTables.everyCellHolds;
+import static com.mineutze.worldgen.plan.ToroidalTestTables.fullyLegalTableRequiring;
 import static com.mineutze.worldgen.plan.ToroidalTestTables.fullyLegalTableWithWidths;
 import static com.mineutze.worldgen.plan.ToroidalTestTables.legalPairWithSizes;
+import static com.mineutze.worldgen.plan.ToroidalTestTables.noLegalTriangleCatalog;
 import static com.mineutze.worldgen.plan.ToroidalTestTables.tableWithNoLegalTriangle;
 import static com.mineutze.worldgen.plan.ToroidalTestTables.threeColoring;
+import static com.mineutze.worldgen.plan.ToroidalTestTables.withRequirement;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -432,5 +435,95 @@ class ToroidalSizedLocalSearchTest {
     @Test
     void scheduleRejectsAnEmptyCycle() {
         assertThrows(IllegalArgumentException.class, () -> new ToroidalSizedLocalSearch.Schedule(0.5, 0.2, 0));
+    }
+
+    /** In the 3-coloring every cell has three neighbors of each other color, so a one-cell A shares exactly 3 edges with B. */
+    @Test
+    void aClusterBelowItsRequiredBorderCostsExactlyTheMissingEdgesForEachClusterOfIt() {
+        ToroidalGrid grid = new ToroidalGrid(6, 6);
+        RawRuleTable table = fullyLegalTableRequiring(300, 300, A, B, 4, A, B, C);
+
+        ToroidalSizedLocalSearch.Breakdown breakdown = ToroidalSizedLocalSearch.breakdown(table, grid, model(table), threeColoring(grid, A, B, C));
+
+        assertEquals(12, breakdown.clusterViolation(), "12 one-cell A clusters, each 1 edge short of 4");
+        assertEquals(0, breakdown.illegalEdges());
+        assertEquals(0, breakdown.missingBiomes());
+    }
+
+    @Test
+    void aClusterMeetingItsRequiredBorderCostsNothing() {
+        ToroidalGrid grid = new ToroidalGrid(6, 6);
+        RawRuleTable table = fullyLegalTableRequiring(300, 300, A, B, 3, A, B, C);
+
+        assertEquals(0, ToroidalSizedLocalSearch.cost(table, grid, model(table), threeColoring(grid, A, B, C)));
+    }
+
+    @Test
+    void theShortfallIsMeasuredAgainstTheRequiredBiomeNotAnyNeighbor() {
+        ToroidalGrid grid = new ToroidalGrid(6, 6);
+        RawRuleTable table = RawRuleTable.from(withRequirement(ToroidalTestTables.fullyLegalCatalog(300, 300, A, B, C), A, C, 5));
+
+        assertEquals(24, ToroidalSizedLocalSearch.breakdown(table, grid, model(table), threeColoring(grid, A, B, C)).clusterViolation(), "12 A cells, each 2 edges short of 5 with C");
+    }
+
+    /** Without the requirement almost any pattern is valid, so a solved state that verifies proves the search steered by it: verify() would throw otherwise. */
+    @Test
+    void searchSolvesAnInstanceWhereEveryAClusterMustShareABorderWithB() {
+        ToroidalGrid grid = new ToroidalGrid(8, 8);
+        RawRuleTable table = fullyLegalTableRequiring(500, 600, A, B, 4, A, B, C);
+
+        ToroidalSizedLocalSearch.Result result = ToroidalSizedLocalSearch.search(table, grid, model(table), SEED, GENEROUS_STEPS);
+
+        assertNotNull(result.assignment(), "3-4 cell A clusters can share 4 of their 9-12 outline edges with B");
+        assertDoesNotThrow(() -> ToroidalSizedLocalSearch.verify(table, grid, model(table), result.assignment()));
+    }
+
+    @Test
+    void verifyRejectsAPatternWhereARequiredBorderIsShort() {
+        ToroidalGrid grid = new ToroidalGrid(6, 6);
+        RawRuleTable table = fullyLegalTableRequiring(300, 300, A, B, 4, A, B, C);
+
+        String message = rejectionMessage(table, grid, threeColoring(grid, A, B, C));
+
+        assertFalse(message.contains("cluster violation=0"), message);
+    }
+
+    private static RawRuleTable unsolvableTableWithARequirement() {
+        return RawRuleTable.from(withRequirement(noLegalTriangleCatalog(300, 1200), A, B, 2));
+    }
+
+    /** No legal tiling exists, so the walk never ends early; single-cell moves must price the clusters of a THIRD biome whose required border a cell change takes away or adds. */
+    @Test
+    void trackedCostStaysExactUnderRequirementsForSingleCellMoves() {
+        ToroidalGrid grid = new ToroidalGrid(8, 8);
+        RawRuleTable table = unsolvableTableWithARequirement();
+
+        ToroidalSizedLocalSearch.Result result = ToroidalSizedLocalSearch.search(table, grid, model(table), SEED, 80_000, WARM, () -> false, 0.0);
+
+        assertNull(result.assignment());
+        assertEquals(result.bestCost(), ToroidalSizedLocalSearch.cost(table, grid, model(table), result.closestAssignment()));
+    }
+
+    @Test
+    void trackedCostStaysExactUnderRequirementsWhenRelabelsRunToo() {
+        ToroidalGrid grid = new ToroidalGrid(8, 8);
+        RawRuleTable table = unsolvableTableWithARequirement();
+
+        ToroidalSizedLocalSearch.Result result = ToroidalSizedLocalSearch.search(table, grid, model(table), SEED, 80_000, BOILING, () -> false, 0.5);
+
+        assertNull(result.assignment());
+        assertEquals(result.bestCost(), ToroidalSizedLocalSearch.cost(table, grid, model(table), result.closestAssignment()));
+    }
+
+    /** Every biome needs 25 cells on a 64-cell torus, so the walk churns through many clusters, most of them touching none of the required biome: a counter left over from an earlier cluster would show as drift. */
+    @Test
+    void trackedCostStaysExactWhenMostClustersTouchNoneOfTheRequiredBiome() {
+        ToroidalGrid grid = new ToroidalGrid(8, 8);
+        RawRuleTable table = fullyLegalTableRequiring(1500, 1500, A, B, 3, A, B, C);
+
+        ToroidalSizedLocalSearch.Result result = ToroidalSizedLocalSearch.search(table, grid, model(table), SEED, 80_000, BOILING, () -> false, 0.5);
+
+        assertNull(result.assignment());
+        assertEquals(result.bestCost(), ToroidalSizedLocalSearch.cost(table, grid, model(table), result.closestAssignment()));
     }
 }

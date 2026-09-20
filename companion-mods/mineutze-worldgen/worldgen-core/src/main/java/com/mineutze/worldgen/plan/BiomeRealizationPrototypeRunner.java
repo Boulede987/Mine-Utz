@@ -100,7 +100,7 @@ public final class BiomeRealizationPrototypeRunner {
     ) {
         long startNanos = System.nanoTime();
         BiomeMap map = BiomeMapRasterizer.rasterize(grid, pattern, geometry, warp, SAMPLES_PER_SIDE, biomeOrder);
-        BiomeMapVerifier.Report report = BiomeMapVerifier.verify(map, table, TOLERANCE_OF_MINIMUM, clusters);
+        BiomeMapVerifier.Report report = BiomeMapVerifier.verify(map, table, TOLERANCE_OF_MINIMUM, clusters, geometry.cellEdgeBlocks() * RealizationSelector.REALIZED_BORDER_FRACTION);
         double seconds = (System.nanoTime() - startNanos) / 1_000_000_000.0;
         double[] distortion = mapDistortion(geometry, warp);
 

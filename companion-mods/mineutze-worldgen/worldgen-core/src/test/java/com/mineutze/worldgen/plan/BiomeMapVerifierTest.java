@@ -11,6 +11,7 @@ import java.util.function.IntBinaryOperator;
 import static com.mineutze.worldgen.plan.ToroidalTestTables.A;
 import static com.mineutze.worldgen.plan.ToroidalTestTables.B;
 import static com.mineutze.worldgen.plan.ToroidalTestTables.C;
+import static com.mineutze.worldgen.plan.ToroidalTestTables.fullyLegalTableRequiring;
 import static com.mineutze.worldgen.plan.ToroidalTestTables.fullyLegalTableWithWidths;
 import static com.mineutze.worldgen.plan.ToroidalTestTables.tableWithNoLegalTriangle;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -222,5 +223,55 @@ class BiomeMapVerifierTest {
             pattern.put(pos, pos.r() == 0 ? A : B);
         }
         return pattern;
+    }
+
+    /** Two column bands in a 10-wide map share two seams of 10 rows: 40 contacts, and a border is measured as contacts x blocks per sample / 2 (about two contacts per sample length of a straight seam), 200 blocks here. */
+    @Test
+    void aRegionSharingLessBorderThanItsRequirementNeedsIsReportedWithBothLengths() {
+        RawRuleTable table = fullyLegalTableRequiring(250, 400, A, B, 3, A, B, C);
+
+        BiomeMapVerifier.Report report = BiomeMapVerifier.verify(columns(0, 1, 5), table, TOLERANCE, null, 100);
+
+        assertEquals(1, report.borderShortfalls().size());
+        BiomeMapVerifier.BorderShortfall shortfall = report.borderShortfalls().get(0);
+        assertEquals(A, shortfall.biome());
+        assertEquals(B, shortfall.required());
+        assertEquals(200, shortfall.lengthBlocks(), 1e-9, "40 contacts x 10 blocks per sample / 2");
+        assertEquals(300, shortfall.neededBlocks(), 1e-9, "3 edges x 100 blocks");
+    }
+
+    @Test
+    void aRegionSharingAsMuchBorderAsItsRequirementNeedsIsNotReported() {
+        RawRuleTable table = fullyLegalTableRequiring(250, 400, A, B, 2, A, B, C);
+
+        BiomeMapVerifier.Report report = BiomeMapVerifier.verify(columns(0, 1, 5), table, TOLERANCE, null, 100);
+
+        assertTrue(report.borderShortfalls().isEmpty(), report.borderShortfalls().toString());
+    }
+
+    @Test
+    void aRegionTouchingNoneOfTheRequiredBiomeIsReportedWithZeroLength() {
+        RawRuleTable table = fullyLegalTableRequiring(250, 400, A, C, 1, A, B, C);
+
+        BiomeMapVerifier.Report report = BiomeMapVerifier.verify(columns(0, 1, 5), table, TOLERANCE, null, 100);
+
+        assertEquals(1, report.borderShortfalls().size());
+        assertEquals(0.0, report.borderShortfalls().get(0).lengthBlocks(), 1e-9);
+    }
+
+    @Test
+    void theRequirementIsOneWayTheRequiredBiomeNeedsNothingBack() {
+        RawRuleTable table = fullyLegalTableRequiring(250, 400, A, B, 2, A, B, C);
+
+        BiomeMapVerifier.Report report = BiomeMapVerifier.verify(columns(1, 0, 5), table, TOLERANCE, null, 100);
+
+        assertTrue(report.borderShortfalls().isEmpty(), "B beside A is enough for A: " + report.borderShortfalls());
+    }
+
+    @Test
+    void withoutAnyRequirementNoShortfallIsEverReported() {
+        RawRuleTable table = fullyLegalTableWithWidths(250, 400, A, B, C);
+
+        assertTrue(BiomeMapVerifier.verify(columns(0, 1, 5), table, TOLERANCE, null, 100).borderShortfalls().isEmpty());
     }
 }

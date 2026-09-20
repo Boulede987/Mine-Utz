@@ -75,4 +75,10 @@ class HexTorusGeometryTest {
     void rejectsANonPositiveAtomWidth() {
         assertThrows(IllegalArgumentException.class, () -> new HexTorusGeometry(6, 6, 0));
     }
+
+    /** A regular hexagon's side equals its corner radius, half the corner-to-corner width: 150 blocks for 300-block cells. */
+    @Test
+    void aCellEdgeIsHalfTheCornerToCornerWidth() {
+        assertEquals(150.0, new HexTorusGeometry(40, 40, 300).cellEdgeBlocks(), 1e-12);
+    }
 }

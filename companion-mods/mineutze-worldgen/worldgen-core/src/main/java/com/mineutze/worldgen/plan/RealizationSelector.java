@@ -13,7 +13,7 @@ import java.util.SplittableRandom;
  * pattern, so the strength cannot be fixed in advance. Given candidate strengths, strongest first,
  * this rasterizes the world with each in turn, verifies the map directly ({@link BiomeMapVerifier})
  * and returns the FIRST that passes: every cluster still exactly one region, no region outside its
- * size range (with the tolerance), no biome touching one it may not. If none passes it fails with
+ * size range (with the tolerance), no biome touching one it may not, every required border still long enough. If none passes it fails with
  * every attempt's reason - a world is never given a map that was not checked.
  */
 final class RealizationSelector {
@@ -23,6 +23,8 @@ final class RealizationSelector {
     static final double LONGEST_WAVELENGTH_BLOCKS = 1_200;
     static final double ROUGHNESS = 0.8;
     static final int FLOW_STEPS = 8;
+    /** How much of a required border, planned in cell-edges, the finished map must still show: the warp bends and shortens borders, so the map is held to this share of the plan. */
+    static final double REALIZED_BORDER_FRACTION = 0.5;
 
     private static final long WORLD_SEED_SALT = 0x51AF_2D07_9C3B_E4A1L;
 
@@ -47,7 +49,7 @@ final class RealizationSelector {
             double strength = strengthsStrongestFirst[index];
             DivergenceFreeWarp warp = warpOfStrength(geometry, warpSeed, strength);
             BiomeMap map = BiomeMapRasterizer.rasterize(grid, pattern, geometry, warp, samplesPerSide, biomeOrder);
-            BiomeMapVerifier.Report report = BiomeMapVerifier.verify(map, table, toleranceOfMinimum, clusters);
+            BiomeMapVerifier.Report report = BiomeMapVerifier.verify(map, table, toleranceOfMinimum, clusters, geometry.cellEdgeBlocks() * REALIZED_BORDER_FRACTION);
             if (passes(report)) {
                 return new Selection(strength, warp, map, report, index + 1, biomeOrder);
             }
@@ -71,12 +73,13 @@ final class RealizationSelector {
     /** A map is acceptable only if every check is clean: no cluster vanished, split or merged, no region outside its size range, no illegal contact. */
     static boolean passes(BiomeMapVerifier.Report report) {
         return report.vanishedClusters() == 0 && report.splitClusters() == 0 && report.mergedComponents() == 0
-            && report.areaViolations().isEmpty() && report.illegalContactSamples().isEmpty();
+            && report.areaViolations().isEmpty() && report.illegalContactSamples().isEmpty() && report.borderShortfalls().isEmpty();
     }
 
     private static String whyItFailed(BiomeMapVerifier.Report report) {
         return "vanished " + report.vanishedClusters() + ", split " + report.splitClusters() + ", merged " + report.mergedComponents() + ", area violations "
-            + report.areaViolations().size() + ", illegal contact pairs " + report.illegalContactSamples().size();
+            + report.areaViolations().size() + ", illegal contact pairs " + report.illegalContactSamples().size()
+            + ", short required borders " + report.borderShortfalls().size();
     }
 
     private static String describe(double strength) {
