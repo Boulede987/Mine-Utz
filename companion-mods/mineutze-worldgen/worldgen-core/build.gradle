@@ -186,6 +186,13 @@ tasks.register('toroidalWorldSeedReliability', JavaExec) {
     mainClass = 'com.mineutze.worldgen.coherence.ToroidalWorldSeedReliabilityRunner'
 }
 
+tasks.register('biomeRealizationPrototype', JavaExec) {
+    group = 'verification'
+    description = 'Prototype: turn a solved 40x40 cell pattern into a map with natural borders via an area-preserving warp, verify it directly (areas, legality, topology) and write pictures to build/realization. Run with: ./gradlew :worldgen-core:biomeRealizationPrototype'
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'com.mineutze.worldgen.coherence.BiomeRealizationPrototypeRunner'
+}
+
 tasks.register('graphEditorDeepCheck', JavaExec) {
     group = 'verification'
     description = 'The graph editor\'s "Deep check" button - runs the real exhaustive GeometricFeasibilityProof against the editor\'s currently SAVED graph (not the hardcoded catalog directly, though it\'s the same file now). Run with: ./gradlew :worldgen-core:graphEditorDeepCheck'
