@@ -42,15 +42,27 @@ final class BiomeMapRasterizer {
         double tileAy = geometry.tileVectorAY();
         double tileBx = geometry.tileVectorBX();
         double tileBy = geometry.tileVectorBY();
-        IntStream.range(0, samplesPerSide).parallel().forEach(row -> {
-            double v = (row + 0.5) / samplesPerSide;
-            for (int column = 0; column < samplesPerSide; column++) {
-                double u = (column + 0.5) / samplesPerSide;
-                int cellIndex = field.cellIndexAt(u * tileAx + v * tileBx, u * tileAy + v * tileBy);
-                cells[row * samplesPerSide + column] = cellIndex;
-                biomeIndices[row * samplesPerSide + column] = field.biomeOfCell(cellIndex);
-            }
-        });
+        IntStream.range(0, samplesPerSide).parallel().forEach(
+            row -> sampleRowCells(field, samplesPerSide, tileAx, tileAy, tileBx, tileBy, cells, biomeIndices, row)
+        );
+    }
+
+    private static void sampleRowCells(
+        RealizedBiomeField field, int samplesPerSide, double tileAx, double tileAy, double tileBx, double tileBy, int[] cells, int[] biomeIndices, int row
+    ) {
+        double v = (row + 0.5) / samplesPerSide;
+        for (int column = 0; column < samplesPerSide; column++) {
+            double u = (column + 0.5) / samplesPerSide;
+            sampleCell(field, tileAx, tileAy, tileBx, tileBy, cells, biomeIndices, samplesPerSide, row, column, u, v);
+        }
+    }
+
+    private static void sampleCell(
+        RealizedBiomeField field, double tileAx, double tileAy, double tileBx, double tileBy, int[] cells, int[] biomeIndices, int samplesPerSide, int row, int column, double u, double v
+    ) {
+        int cellIndex = field.cellIndexAt(u * tileAx + v * tileBx, u * tileAy + v * tileBy);
+        cells[row * samplesPerSide + column] = cellIndex;
+        biomeIndices[row * samplesPerSide + column] = field.biomeOfCell(cellIndex);
     }
 
     private static double blocksPerSample(HexTorusGeometry geometry, int samplesPerSide) {

@@ -72,13 +72,11 @@ public final class WorldBiomePlanCheckRunner {
         int mismatches = 0;
         int different = 0;
         for (int lookup = 0; lookup < LOOKUPS; lookup++) {
-            double x = (random.nextDouble() - 0.5) * 2_000_000;
-            double z = (random.nextDouble() - 0.5) * 2_000_000;
-            BiomeId here = plan.biomeAt(x, z);
-            if (!here.equals(restored.biomeAt(x, z))) {
+            LookupResult result = checkOneLookup(plan, restored, random);
+            if (result.mismatch()) {
                 mismatches++;
             }
-            if (!here.equals(plan.biomeAt(x + 3 * plan.tileVectorAX() - 2 * plan.tileVectorBX(), z + 3 * plan.tileVectorAY() - 2 * plan.tileVectorBY()))) {
+            if (result.different()) {
                 different++;
             }
         }
@@ -87,16 +85,32 @@ public final class WorldBiomePlanCheckRunner {
             + String.format(Locale.ROOT, "%.0f", 3.0 * LOOKUPS / lookupSeconds) + " lookups per second; snapshot mismatches " + mismatches + "; tile-repeat mismatches " + different);
     }
 
+    private record LookupResult(boolean mismatch, boolean different) {
+    }
+
+    private static LookupResult checkOneLookup(WorldBiomePlan plan, WorldBiomePlan restored, Random random) {
+        double x = (random.nextDouble() - 0.5) * 2_000_000;
+        double z = (random.nextDouble() - 0.5) * 2_000_000;
+        BiomeId here = plan.biomeAt(x, z);
+        boolean mismatch = !here.equals(restored.biomeAt(x, z));
+        boolean different = !here.equals(plan.biomeAt(x + 3 * plan.tileVectorAX() - 2 * plan.tileVectorBX(), z + 3 * plan.tileVectorAY() - 2 * plan.tileVectorBY()));
+        return new LookupResult(mismatch, different);
+    }
+
     private static void reportNearest(WorldBiomePlan plan) {
         long start = System.nanoTime();
         int located = 0;
         for (BiomeId biome : plan.biomes()) {
-            if (plan.nearestPositionOf(biome, 12_345, -6_789).isPresent()) {
+            if (checkBiomeLocated(plan, biome)) {
                 located++;
             }
         }
         double nearestSeconds = seconds(start);
         System.out.println("CHECK nearestPositionOf() found " + located + " of " + plan.biomes().size() + " biomes, " + String.format(Locale.ROOT, "%.0f", 1000 * nearestSeconds / plan.biomes().size()) + " ms each");
+    }
+
+    private static boolean checkBiomeLocated(WorldBiomePlan plan, BiomeId biome) {
+        return plan.nearestPositionOf(biome, 12_345, -6_789).isPresent();
     }
 
     /** Solves the pattern again from the world seed and compares it with the one the reliability study saved earlier (a different process, a different day). */
@@ -113,12 +127,16 @@ public final class WorldBiomePlanCheckRunner {
         Map<ToroidalPos, BiomeId> saved = PatternCsv.read(SAVED_STUDY_PATTERN, grid);
         int differing = 0;
         for (Map.Entry<ToroidalPos, BiomeId> entry : saved.entrySet()) {
-            if (!entry.getValue().equals(solved.get(entry.getKey()))) {
+            if (countIfDifferent(entry, solved)) {
                 differing++;
             }
         }
         System.out.println("CHECK pattern solved now versus the pattern the study saved for world seed " + WORLD_SEED + ": " + differing + " of " + saved.size() + " cells differ"
             + (differing == 0 ? " (identical across processes and days)" : " (NOT identical - the solver is not reproducible)"));
+    }
+
+    private static boolean countIfDifferent(Map.Entry<ToroidalPos, BiomeId> entry, Map<ToroidalPos, BiomeId> solved) {
+        return !entry.getValue().equals(solved.get(entry.getKey()));
     }
 
     private static double seconds(long startNanos) {

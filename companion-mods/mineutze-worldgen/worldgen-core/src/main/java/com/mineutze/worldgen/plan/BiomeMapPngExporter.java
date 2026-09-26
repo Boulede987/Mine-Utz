@@ -50,21 +50,29 @@ final class BiomeMapPngExporter {
     private static int[][] sampleGrid(BiomeMap map, int pixelsPerSample, int left, int top, int width, int height) {
         int[][] biomeAtPixel = new int[height + 1][width + 1];
         for (int y = 0; y <= height; y++) {
-            for (int x = 0; x <= width; x++) {
-                biomeAtPixel[y][x] = biomeUnderPixel(map, pixelsPerSample, left + x, top + y);
-            }
+            fillRow(biomeAtPixel, map, pixelsPerSample, left, top, width, y);
         }
         return biomeAtPixel;
+    }
+
+    private static void fillRow(int[][] biomeAtPixel, BiomeMap map, int pixelsPerSample, int left, int top, int width, int y) {
+        for (int x = 0; x <= width; x++) {
+            biomeAtPixel[y][x] = biomeUnderPixel(map, pixelsPerSample, left + x, top + y);
+        }
     }
 
     private static BufferedImage renderImage(int[][] biomeAtPixel, int width, int height) {
         BufferedImage image = new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);
         for (int y = 0; y < height; y++) {
-            for (int x = 0; x < width; x++) {
-                image.setRGB(x, y, pixelColor(biomeAtPixel, x, y));
-            }
+            renderRow(image, biomeAtPixel, width, y);
         }
         return image;
+    }
+
+    private static void renderRow(BufferedImage image, int[][] biomeAtPixel, int width, int y) {
+        for (int x = 0; x < width; x++) {
+            image.setRGB(x, y, pixelColor(biomeAtPixel, x, y));
+        }
     }
 
     private static int pixelColor(int[][] biomeAtPixel, int x, int y) {

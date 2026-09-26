@@ -35,25 +35,40 @@ final class PlaneWindowPngExporter {
         int width = (int) Math.ceil(widthBlocks / blocksPerPixel);
         int height = (int) Math.ceil(heightBlocks / blocksPerPixel);
         int[][] biomeAtPixel = new int[height][width];
-        IntStream.range(0, height).parallel().forEach(row -> {
-            for (int column = 0; column < width; column++) {
-                biomeAtPixel[row][column] = field.biomeIndexAt(leftBlock + (column + 0.5) * blocksPerPixel, topBlock + (row + 0.5) * blocksPerPixel);
-            }
-        });
+        IntStream.range(0, height).parallel().forEach(row -> fillRowBiomeData(field, biomeAtPixel, leftBlock, topBlock, blocksPerPixel, width, row));
 
         BufferedImage image = new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);
         for (int row = 0; row < height; row++) {
-            for (int column = 0; column < width; column++) {
-                boolean border = (column + 1 < width && biomeAtPixel[row][column + 1] != biomeAtPixel[row][column])
-                    || (row + 1 < height && biomeAtPixel[row + 1][column] != biomeAtPixel[row][column]);
-                int rgb = border ? OUTLINE_RGB : ToroidalPatternPngExporter.colorOf(biomeAtPixel[row][column]).getRGB();
-                if (markTileEdges && isOnTileEdge(geometry, leftBlock + (column + 0.5) * blocksPerPixel, topBlock + (row + 0.5) * blocksPerPixel, blocksPerPixel)) {
-                    rgb = TILE_EDGE_RGB;
-                }
-                image.setRGB(column, row, rgb);
-            }
+            renderImageRow(image, biomeAtPixel, geometry, leftBlock, topBlock, blocksPerPixel, markTileEdges, width, height, row);
         }
         write(image, file);
+    }
+
+    private static void fillRowBiomeData(RealizedBiomeField field, int[][] biomeAtPixel, double leftBlock, double topBlock, double blocksPerPixel, int width, int row) {
+        for (int column = 0; column < width; column++) {
+            biomeAtPixel[row][column] = field.biomeIndexAt(leftBlock + (column + 0.5) * blocksPerPixel, topBlock + (row + 0.5) * blocksPerPixel);
+        }
+    }
+
+    private static void renderImageRow(
+        BufferedImage image, int[][] biomeAtPixel, HexTorusGeometry geometry, double leftBlock, double topBlock, double blocksPerPixel, boolean markTileEdges, int width, int height, int row
+    ) {
+        for (int column = 0; column < width; column++) {
+            renderPixel(image, biomeAtPixel, geometry, leftBlock, topBlock, blocksPerPixel, markTileEdges, width, height, row, column);
+        }
+    }
+
+    private static void renderPixel(
+        BufferedImage image, int[][] biomeAtPixel, HexTorusGeometry geometry, double leftBlock, double topBlock, double blocksPerPixel, boolean markTileEdges, int width, int height, int row,
+        int column
+    ) {
+        boolean border = (column + 1 < width && biomeAtPixel[row][column + 1] != biomeAtPixel[row][column])
+            || (row + 1 < height && biomeAtPixel[row + 1][column] != biomeAtPixel[row][column]);
+        int rgb = border ? OUTLINE_RGB : ToroidalPatternPngExporter.colorOf(biomeAtPixel[row][column]).getRGB();
+        if (markTileEdges && isOnTileEdge(geometry, leftBlock + (column + 0.5) * blocksPerPixel, topBlock + (row + 0.5) * blocksPerPixel, blocksPerPixel)) {
+            rgb = TILE_EDGE_RGB;
+        }
+        image.setRGB(column, row, rgb);
     }
 
     /**

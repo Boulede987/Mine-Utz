@@ -89,18 +89,22 @@ final class ToroidalPatternPngExporter {
         int centerX = centerXOf(pos);
         int centerY = centerYOf(pos);
         for (int[] delta : NEIGHBOR_DELTAS) {
-            ToroidalPos neighbor = grid.normalize(pos.q() + delta[0], pos.r() + delta[1]);
-            if (assignment.get(neighbor).equals(assignment.get(pos))) {
-                continue;
-            }
-            double facing = Math.atan2(ROW_HEIGHT_PIXELS * delta[1], HEX_WIDTH_PIXELS * (delta[0] + delta[1] / 2.0));
-            double first = facing - Math.toRadians(30);
-            double second = facing + Math.toRadians(30);
-            graphics.drawLine(
-                (int) Math.round(centerX + HEX_RADIUS_PIXELS * Math.cos(first)), (int) Math.round(centerY + HEX_RADIUS_PIXELS * Math.sin(first)),
-                (int) Math.round(centerX + HEX_RADIUS_PIXELS * Math.cos(second)), (int) Math.round(centerY + HEX_RADIUS_PIXELS * Math.sin(second))
-            );
+            drawEdgeIfDifferentBiome(graphics, grid, assignment, pos, centerX, centerY, delta);
         }
+    }
+
+    private static void drawEdgeIfDifferentBiome(Graphics2D graphics, ToroidalGrid grid, Map<ToroidalPos, BiomeId> assignment, ToroidalPos pos, int centerX, int centerY, int[] delta) {
+        ToroidalPos neighbor = grid.normalize(pos.q() + delta[0], pos.r() + delta[1]);
+        if (assignment.get(neighbor).equals(assignment.get(pos))) {
+            return;
+        }
+        double facing = Math.atan2(ROW_HEIGHT_PIXELS * delta[1], HEX_WIDTH_PIXELS * (delta[0] + delta[1] / 2.0));
+        double first = facing - Math.toRadians(30);
+        double second = facing + Math.toRadians(30);
+        graphics.drawLine(
+            (int) Math.round(centerX + HEX_RADIUS_PIXELS * Math.cos(first)), (int) Math.round(centerY + HEX_RADIUS_PIXELS * Math.sin(first)),
+            (int) Math.round(centerX + HEX_RADIUS_PIXELS * Math.cos(second)), (int) Math.round(centerY + HEX_RADIUS_PIXELS * Math.sin(second))
+        );
     }
 
     /** Spreads consecutive biome indices around the hue wheel by the golden ratio so neighbors in the order look different. */
