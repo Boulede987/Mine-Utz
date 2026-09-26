@@ -137,17 +137,23 @@ final class ToroidalSizedLocalSearch {
     static Map<String, Integer> illegalPairCounts(RawRuleTable table, ToroidalGrid grid, Map<ToroidalPos, BiomeId> assignment) {
         Map<String, Integer> counts = new TreeMap<>();
         for (Map.Entry<ToroidalPos, BiomeId> entry : assignment.entrySet()) {
-            for (ToroidalPos neighbor : grid.neighborsOf(entry.getKey())) {
-                boolean firstOfPair = entry.getKey().r() < neighbor.r() || (entry.getKey().r() == neighbor.r() && entry.getKey().q() < neighbor.q());
-                BiomeId neighborBiome = assignment.get(neighbor);
-                if (firstOfPair && !entry.getValue().equals(neighborBiome) && !table.isLegal(entry.getValue(), neighborBiome)) {
-                    BiomeId lower = entry.getValue().compareTo(neighborBiome) <= 0 ? entry.getValue() : neighborBiome;
-                    BiomeId higher = lower == entry.getValue() ? neighborBiome : entry.getValue();
-                    counts.merge(lower + " | " + higher, 1, Integer::sum);
-                }
-            }
+            tallyIllegalPairsFromCell(table, grid, assignment, counts, entry);
         }
         return counts;
+    }
+
+    private static void tallyIllegalPairsFromCell(
+        RawRuleTable table, ToroidalGrid grid, Map<ToroidalPos, BiomeId> assignment, Map<String, Integer> counts, Map.Entry<ToroidalPos, BiomeId> entry
+    ) {
+        for (ToroidalPos neighbor : grid.neighborsOf(entry.getKey())) {
+            boolean firstOfPair = entry.getKey().r() < neighbor.r() || (entry.getKey().r() == neighbor.r() && entry.getKey().q() < neighbor.q());
+            BiomeId neighborBiome = assignment.get(neighbor);
+            if (firstOfPair && !entry.getValue().equals(neighborBiome) && !table.isLegal(entry.getValue(), neighborBiome)) {
+                BiomeId lower = entry.getValue().compareTo(neighborBiome) <= 0 ? entry.getValue() : neighborBiome;
+                BiomeId higher = lower == entry.getValue() ? neighborBiome : entry.getValue();
+                counts.merge(lower + " | " + higher, 1, Integer::sum);
+            }
+        }
     }
 
     /** Independent, map-based recomputation of everything wrong with {@code assignment} - shares no bookkeeping with the search, so it is what the search's own accounting is checked against. */
@@ -158,18 +164,9 @@ final class ToroidalSizedLocalSearch {
         return new Breakdown(illegalEdges, clusterViolation, missingBiomes);
     }
 
+    /** Same traversal as {@link #illegalPairCounts}, just summed instead of tallied per pair - reuses it rather than repeating the walk. */
     private static int countIllegalEdges(RawRuleTable table, ToroidalGrid grid, Map<ToroidalPos, BiomeId> assignment) {
-        int illegalEdges = 0;
-        for (Map.Entry<ToroidalPos, BiomeId> entry : assignment.entrySet()) {
-            for (ToroidalPos neighbor : grid.neighborsOf(entry.getKey())) {
-                boolean firstOfPair = entry.getKey().r() < neighbor.r() || (entry.getKey().r() == neighbor.r() && entry.getKey().q() < neighbor.q());
-                BiomeId neighborBiome = assignment.get(neighbor);
-                if (firstOfPair && !entry.getValue().equals(neighborBiome) && !table.isLegal(entry.getValue(), neighborBiome)) {
-                    illegalEdges++;
-                }
-            }
-        }
-        return illegalEdges;
+        return illegalPairCounts(table, grid, assignment).values().stream().mapToInt(Integer::intValue).sum();
     }
 
     /** One same-biome cluster, breadth-first from {@code start}: its own cells, its perimeter, and how many perimeter edges go to each other biome. */
@@ -238,12 +235,7 @@ final class ToroidalSizedLocalSearch {
             case TRIANGLE:
                 int outsideTriangles = 0;
                 for (ToroidalPos pos : cluster) {
-                    List<ToroidalPos> ring = grid.neighborsOf(pos);
-                    boolean inTriangle = false;
-                    for (int corner = 0; corner < ring.size(); corner++) {
-                        inTriangle |= cluster.contains(ring.get(corner)) && cluster.contains(ring.get((corner + 1) % ring.size()));
-                    }
-                    if (!inTriangle) {
+                    if (isOutsideAnyTriangle(grid, cluster, pos)) {
                         outsideTriangles++;
                     }
                 }
@@ -252,23 +244,41 @@ final class ToroidalSizedLocalSearch {
                 Map<ToroidalPos, Integer> stepsFromFlowerCenter = new HashMap<>();
                 Deque<ToroidalPos> frontier = new ArrayDeque<>();
                 for (ToroidalPos pos : cluster) {
-                    if (cluster.containsAll(grid.neighborsOf(pos))) {
-                        stepsFromFlowerCenter.put(pos, 0);
-                        frontier.add(pos);
-                    }
+                    addIfFlowerCenter(grid, cluster, stepsFromFlowerCenter, frontier, pos);
                 }
                 while (!frontier.isEmpty()) {
-                    ToroidalPos pos = frontier.poll();
-                    int steps = stepsFromFlowerCenter.get(pos);
-                    if (steps < tailReachCells) {
-                        for (ToroidalPos neighbor : grid.neighborsOf(pos)) {
-                            if (cluster.contains(neighbor) && stepsFromFlowerCenter.putIfAbsent(neighbor, steps + 1) == null) {
-                                frontier.add(neighbor);
-                            }
-                        }
-                    }
+                    expandFlowerReach(grid, cluster, stepsFromFlowerCenter, frontier, tailReachCells, frontier.poll());
                 }
                 return cluster.size() - stepsFromFlowerCenter.size();
+        }
+    }
+
+    private static boolean isOutsideAnyTriangle(ToroidalGrid grid, Set<ToroidalPos> cluster, ToroidalPos pos) {
+        List<ToroidalPos> ring = grid.neighborsOf(pos);
+        boolean inTriangle = false;
+        for (int corner = 0; corner < ring.size(); corner++) {
+            inTriangle |= cluster.contains(ring.get(corner)) && cluster.contains(ring.get((corner + 1) % ring.size()));
+        }
+        return !inTriangle;
+    }
+
+    private static void addIfFlowerCenter(ToroidalGrid grid, Set<ToroidalPos> cluster, Map<ToroidalPos, Integer> stepsFromFlowerCenter, Deque<ToroidalPos> frontier, ToroidalPos pos) {
+        if (cluster.containsAll(grid.neighborsOf(pos))) {
+            stepsFromFlowerCenter.put(pos, 0);
+            frontier.add(pos);
+        }
+    }
+
+    private static void expandFlowerReach(
+        ToroidalGrid grid, Set<ToroidalPos> cluster, Map<ToroidalPos, Integer> stepsFromFlowerCenter, Deque<ToroidalPos> frontier, int tailReachCells, ToroidalPos pos
+    ) {
+        int steps = stepsFromFlowerCenter.get(pos);
+        if (steps < tailReachCells) {
+            for (ToroidalPos neighbor : grid.neighborsOf(pos)) {
+                if (cluster.contains(neighbor) && stepsFromFlowerCenter.putIfAbsent(neighbor, steps + 1) == null) {
+                    frontier.add(neighbor);
+                }
+            }
         }
     }
 
@@ -397,13 +407,9 @@ final class ToroidalSizedLocalSearch {
                 }
                 proposeAndMaybeApply();
                 if (step % BEST_TRACKING_INTERVAL_STEPS == 0) {
-                    acceptanceProbability = acceptanceProbabilityByLevel[schedule.levelAtStep(step)];
-                    collectConflictedCells();
-                    if (cost < bestCost) {
-                        bestCost = cost;
-                        System.arraycopy(value, 0, bestValue, 0, cellCount);
-                    }
-                    if (shouldStop.getAsBoolean()) {
+                    TrackResult tracked = trackBestAndCheckStop(step, bestCost, bestValue);
+                    bestCost = tracked.bestCost();
+                    if (tracked.stop()) {
                         stepsTaken = step + 1;
                         break;
                     }
@@ -420,6 +426,20 @@ final class ToroidalSizedLocalSearch {
             return new Result(null, toAssignment(bestValue), stepsTaken, bestCost);
         }
 
+        /** Refreshes the acceptance table and conflicted-cell snapshot for the level {@code step} falls in, updates {@code bestCost}/{@code bestValue} if the walk improved, and polls {@code shouldStop}. */
+        private record TrackResult(int bestCost, boolean stop) {
+        }
+
+        private TrackResult trackBestAndCheckStop(long step, int bestCost, int[] bestValue) {
+            acceptanceProbability = acceptanceProbabilityByLevel[schedule.levelAtStep(step)];
+            collectConflictedCells();
+            if (cost < bestCost) {
+                bestCost = cost;
+                System.arraycopy(value, 0, bestValue, 0, cellCount);
+            }
+            return new TrackResult(bestCost, shouldStop.getAsBoolean());
+        }
+
         /**
          * The search keeps its cost, per-biome cell counts and missing-biome count up to date move by
          * move. Recomputes all three from the cell values once at the end of a run and throws if
@@ -433,12 +453,7 @@ final class ToroidalSizedLocalSearch {
             }
             int recountedMissing = 0;
             for (int biome = 0; biome < biomeCount; biome++) {
-                if (recountedUses[biome] != usesOfBiome[biome]) {
-                    throw new IllegalStateException(
-                        "ToroidalSizedLocalSearch: cell count of " + biomes.get(biome) + " drifted: tracked " + usesOfBiome[biome] + ", actual " + recountedUses[biome]
-                    );
-                }
-                if (recountedUses[biome] == 0) {
+                if (validateBiomeCountAndCheckMissing(biome, recountedUses)) {
                     recountedMissing++;
                 }
             }
@@ -449,6 +464,16 @@ final class ToroidalSizedLocalSearch {
             if (recomputedCost != cost) {
                 throw new IllegalStateException("ToroidalSizedLocalSearch: cost drifted: tracked " + cost + ", recomputed from scratch " + recomputedCost);
             }
+        }
+
+        /** Throws if {@code biome}'s recounted cell total disagrees with the tracked one; otherwise returns whether it has become missing. */
+        private boolean validateBiomeCountAndCheckMissing(int biome, int[] recountedUses) {
+            if (recountedUses[biome] != usesOfBiome[biome]) {
+                throw new IllegalStateException(
+                    "ToroidalSizedLocalSearch: cell count of " + biomes.get(biome) + " drifted: tracked " + usesOfBiome[biome] + ", actual " + recountedUses[biome]
+                );
+            }
+            return recountedUses[biome] == 0;
         }
 
         private Result solved(long steps) {
@@ -492,16 +517,7 @@ final class ToroidalSizedLocalSearch {
             }
 
             for (int cell = 0; cell < cellCount; cell++) {
-                int nearestSeed = 0;
-                int nearestDistance = Integer.MAX_VALUE;
-                for (int seed = 0; seed < seedCount; seed++) {
-                    int distance = torusDistance(positions.get(cell), positions.get(shuffledCells[seed]));
-                    if (distance < nearestDistance) {
-                        nearestDistance = distance;
-                        nearestSeed = seed;
-                    }
-                }
-                value[cell] = seedBiome[nearestSeed];
+                assignNearestSeedBiome(shuffledCells, seedBiome, seedCount, cell);
             }
             for (int biome = 0; biome < biomeCount; biome++) {
                 usesOfBiome[biome] = 0;
@@ -511,10 +527,27 @@ final class ToroidalSizedLocalSearch {
             }
             missingBiomes = 0;
             for (int biome = 0; biome < biomeCount; biome++) {
-                if (usesOfBiome[biome] == 0) {
+                if (isBiomeMissing(biome)) {
                     missingBiomes++;
                 }
             }
+        }
+
+        private void assignNearestSeedBiome(int[] shuffledCells, int[] seedBiome, int seedCount, int cell) {
+            int nearestSeed = 0;
+            int nearestDistance = Integer.MAX_VALUE;
+            for (int seed = 0; seed < seedCount; seed++) {
+                int distance = torusDistance(positions.get(cell), positions.get(shuffledCells[seed]));
+                if (distance < nearestDistance) {
+                    nearestDistance = distance;
+                    nearestSeed = seed;
+                }
+            }
+            value[cell] = seedBiome[nearestSeed];
+        }
+
+        private boolean isBiomeMissing(int biome) {
+            return usesOfBiome[biome] == 0;
         }
 
         /** Hex distance on the wrapped grid: the smallest over the nine ways the torus can wrap the offset between the two cells. */
@@ -524,23 +557,23 @@ final class ToroidalSizedLocalSearch {
             int best = Integer.MAX_VALUE;
             for (int wrapQ = -1; wrapQ <= 1; wrapQ++) {
                 for (int wrapR = -1; wrapR <= 1; wrapR++) {
-                    int q = deltaQ + wrapQ * grid.width();
-                    int r = deltaR + wrapR * grid.height();
-                    best = Math.min(best, (Math.abs(q) + Math.abs(r) + Math.abs(q + r)) / 2);
+                    best = Math.min(best, wrappedDistanceCandidate(deltaQ, deltaR, wrapQ, wrapR));
                 }
             }
             return best;
+        }
+
+        private int wrappedDistanceCandidate(int deltaQ, int deltaR, int wrapQ, int wrapR) {
+            int q = deltaQ + wrapQ * grid.width();
+            int r = deltaR + wrapR * grid.height();
+            return (Math.abs(q) + Math.abs(r) + Math.abs(q + r)) / 2;
         }
 
         private int fullCost() {
             stamp++;
             int total = 0;
             for (int cell = 0; cell < cellCount; cell++) {
-                for (int neighbor : neighbors[cell]) {
-                    if (cell < neighbor && value[cell] != value[neighbor] && !legal[value[cell]][value[neighbor]]) {
-                        total++;
-                    }
-                }
+                total += countIllegalEdgesFromCell(cell);
             }
             for (int cell = 0; cell < cellCount; cell++) {
                 if (visitStamp[cell] != stamp) {
@@ -551,17 +584,33 @@ final class ToroidalSizedLocalSearch {
             return total + MISSING_BIOME_COST * missingBiomes;
         }
 
+        private int countIllegalEdgesFromCell(int cell) {
+            int count = 0;
+            for (int neighbor : neighbors[cell]) {
+                if (cell < neighbor && value[cell] != value[neighbor] && !legal[value[cell]][value[neighbor]]) {
+                    count++;
+                }
+            }
+            return count;
+        }
+
         /** Snapshot of the cells touching an illegal edge. It goes stale between refreshes, which only costs a wasted proposal - it is just where the walk looks, never a cost input. */
         private void collectConflictedCells() {
             conflictedCount = 0;
             for (int cell = 0; cell < cellCount; cell++) {
-                for (int neighbor : neighbors[cell]) {
-                    if (value[cell] != value[neighbor] && !legal[value[cell]][value[neighbor]]) {
-                        conflictedCells[conflictedCount++] = cell;
-                        break;
-                    }
+                if (cellHasConflict(cell)) {
+                    conflictedCells[conflictedCount++] = cell;
                 }
             }
+        }
+
+        private boolean cellHasConflict(int cell) {
+            for (int neighbor : neighbors[cell]) {
+                if (value[cell] != value[neighbor] && !legal[value[cell]][value[neighbor]]) {
+                    return true;
+                }
+            }
+            return false;
         }
 
         private void proposeAndMaybeApply() {
@@ -649,31 +698,44 @@ final class ToroidalSizedLocalSearch {
             int seenCount = 0;
             for (int index = 0; index < size; index++) {
                 for (int neighbor : neighbors[changedCells[index]]) {
-                    int neighborBiome = value[neighbor];
-                    if (neighborBiome != old && seenBiomeStamp[neighborBiome] != seenBiomeGeneration) {
-                        seenBiomeStamp[neighborBiome] = seenBiomeGeneration;
-                        seenBiomes[seenCount++] = neighborBiome;
-                    }
+                    seenCount = gatherNeighborBiome(neighbor, old, seenCount);
                 }
             }
-            int fitting = 0;
-            int chosen = -1;
+            FitCandidate fit = new FitCandidate(0, -1);
             for (int biome = 0; biome < biomeCount; biome++) {
-                if (biome == old || size < model.minCells(biome) || size > model.maxCells(biome)) {
-                    continue;
-                }
-                boolean legalBesideAll = true;
-                for (int index = 0; index < seenCount && legalBesideAll; index++) {
-                    legalBesideAll = seenBiomes[index] == biome || legal[biome][seenBiomes[index]];
-                }
-                if (legalBesideAll) {
-                    fitting++;
-                    if (random.nextInt(fitting) == 0) {
-                        chosen = biome;
-                    }
-                }
+                fit = considerBiomeAsFit(biome, old, size, seenCount, fit);
             }
-            return chosen;
+            return fit.chosen();
+        }
+
+        /** Records neighbor {@code neighbor}'s biome into {@code seenBiomes} if it is not {@code old} and not already recorded this generation; returns the updated count. */
+        private int gatherNeighborBiome(int neighbor, int old, int seenCount) {
+            int neighborBiome = value[neighbor];
+            if (neighborBiome != old && seenBiomeStamp[neighborBiome] != seenBiomeGeneration) {
+                seenBiomeStamp[neighborBiome] = seenBiomeGeneration;
+                seenBiomes[seenCount++] = neighborBiome;
+            }
+            return seenCount;
+        }
+
+        /** Reservoir sample over the fitting biomes seen so far, updated by whether {@code biome} itself fits. */
+        private record FitCandidate(int fitting, int chosen) {
+        }
+
+        private FitCandidate considerBiomeAsFit(int biome, int old, int size, int seenCount, FitCandidate soFar) {
+            if (biome == old || size < model.minCells(biome) || size > model.maxCells(biome)) {
+                return soFar;
+            }
+            boolean legalBesideAll = true;
+            for (int index = 0; index < seenCount && legalBesideAll; index++) {
+                legalBesideAll = seenBiomes[index] == biome || legal[biome][seenBiomes[index]];
+            }
+            if (!legalBesideAll) {
+                return soFar;
+            }
+            int fitting = soFar.fitting() + 1;
+            int chosen = random.nextInt(fitting) == 0 ? biome : soFar.chosen();
+            return new FitCandidate(fitting, chosen);
         }
 
         /**
@@ -690,26 +752,36 @@ final class ToroidalSizedLocalSearch {
             }
             int total = 0;
             for (int index = 0; index < changedSize; index++) {
-                int cell = changedCells[index];
-                for (int neighbor : neighbors[cell]) {
-                    boolean illegalEdge = value[cell] != value[neighbor] && !legal[value[cell]][value[neighbor]];
-                    if (illegalEdge && (changedStamp[neighbor] != changedGeneration || cell < neighbor)) {
-                        total++;
-                    }
-                }
+                total += countIllegalEdgesForChangedCell(changedCells[index]);
             }
             stamp++;
             for (int index = 0; index < changedSize; index++) {
-                int cell = changedCells[index];
-                if (visitStamp[cell] != stamp) {
-                    exploreCluster(cell);
-                    total += model.violation(value[cell], exploredSize, exploredThinCells, exploredPerimeter, exploredBorderShortfall);
+                total += clusterViolationForChangedCell(changedCells[index]);
+            }
+            return total;
+        }
+
+        private int countIllegalEdgesForChangedCell(int cell) {
+            int count = 0;
+            for (int neighbor : neighbors[cell]) {
+                boolean illegalEdge = value[cell] != value[neighbor] && !legal[value[cell]][value[neighbor]];
+                if (illegalEdge && (changedStamp[neighbor] != changedGeneration || cell < neighbor)) {
+                    count++;
                 }
-                for (int neighbor : neighbors[cell]) {
-                    if (visitStamp[neighbor] != stamp) {
-                        exploreCluster(neighbor);
-                        total += model.violation(value[neighbor], exploredSize, exploredThinCells, exploredPerimeter, exploredBorderShortfall);
-                    }
+            }
+            return count;
+        }
+
+        private int clusterViolationForChangedCell(int cell) {
+            int total = 0;
+            if (visitStamp[cell] != stamp) {
+                exploreCluster(cell);
+                total += model.violation(value[cell], exploredSize, exploredThinCells, exploredPerimeter, exploredBorderShortfall);
+            }
+            for (int neighbor : neighbors[cell]) {
+                if (visitStamp[neighbor] != stamp) {
+                    exploreCluster(neighbor);
+                    total += model.violation(value[neighbor], exploredSize, exploredThinCells, exploredPerimeter, exploredBorderShortfall);
                 }
             }
             return total;
@@ -814,9 +886,8 @@ final class ToroidalSizedLocalSearch {
                         if (countsBorders) {
                             countEdgeTo(value[neighbor]);
                         }
-                    } else if (visitStamp[neighbor] != stamp) {
-                        visitStamp[neighbor] = stamp;
-                        queue[tail++] = neighbor;
+                    } else {
+                        tail = enqueueIfUnvisited(neighbor, tail);
                     }
                 }
             }
@@ -828,6 +899,15 @@ final class ToroidalSizedLocalSearch {
                 case TRIANGLE -> countCellsOutsideAnyTriangle(biome, tail);
                 case FLOWER -> countCellsBeyondReachOfAFlower(biome, tail);
             };
+        }
+
+        /** Enqueues {@code neighbor} for the cluster BFS if not already visited this stamp; returns the updated queue tail. */
+        private int enqueueIfUnvisited(int neighbor, int tail) {
+            if (visitStamp[neighbor] != stamp) {
+                visitStamp[neighbor] = stamp;
+                queue[tail++] = neighbor;
+            }
+            return tail;
         }
 
         /** Counts one more edge of the cluster being explored towards {@code otherBiome}. */
@@ -851,16 +931,20 @@ final class ToroidalSizedLocalSearch {
         private int countCellsOutsideAnyTriangle(int biome, int clusterSize) {
             int outside = 0;
             for (int index = 0; index < clusterSize; index++) {
-                int[] ring = neighbors[queue[index]];
-                boolean inTriangle = false;
-                for (int corner = 0; corner < ring.length && !inTriangle; corner++) {
-                    inTriangle = value[ring[corner]] == biome && value[ring[(corner + 1) % ring.length]] == biome;
-                }
-                if (!inTriangle) {
+                if (cellIsOutsideAnyTriangle(queue[index], biome)) {
                     outside++;
                 }
             }
             return outside;
+        }
+
+        private boolean cellIsOutsideAnyTriangle(int cell, int biome) {
+            int[] ring = neighbors[cell];
+            boolean inTriangle = false;
+            for (int corner = 0; corner < ring.length && !inTriangle; corner++) {
+                inTriangle = value[ring[corner]] == biome && value[ring[(corner + 1) % ring.length]] == biome;
+            }
+            return !inTriangle;
         }
 
         /** Of the {@code clusterSize} cells in {@code queue}, how many are more than the tail reach of steps (through the cluster) from every flower center - a cell whose six neighbors are all in the cluster. With no flower at all, every cell counts. */
@@ -872,11 +956,7 @@ final class ToroidalSizedLocalSearch {
             int tail = 0;
             for (int index = 0; index < clusterSize; index++) {
                 int cell = queue[index];
-                boolean isFlowerCenter = true;
-                for (int neighbor : neighbors[cell]) {
-                    isFlowerCenter &= value[neighbor] == biome;
-                }
-                if (isFlowerCenter) {
+                if (isFlowerCenter(cell, biome)) {
                     reachDistance[cell] = 0;
                     reachQueue[tail++] = cell;
                 }
@@ -888,13 +968,26 @@ final class ToroidalSizedLocalSearch {
                     continue;
                 }
                 for (int neighbor : neighbors[cell]) {
-                    if (value[neighbor] == biome && reachDistance[neighbor] == -1) {
-                        reachDistance[neighbor] = reachDistance[cell] + 1;
-                        reachQueue[tail++] = neighbor;
-                    }
+                    tail = visitFlowerNeighborIfReachable(neighbor, reachDistance[cell], biome, tail);
                 }
             }
             return clusterSize - tail;
+        }
+
+        private boolean isFlowerCenter(int cell, int biome) {
+            boolean isFlowerCenter = true;
+            for (int neighbor : neighbors[cell]) {
+                isFlowerCenter &= value[neighbor] == biome;
+            }
+            return isFlowerCenter;
+        }
+
+        private int visitFlowerNeighborIfReachable(int neighbor, int distance, int biome, int tail) {
+            if (value[neighbor] == biome && reachDistance[neighbor] == -1) {
+                reachDistance[neighbor] = distance + 1;
+                reachQueue[tail++] = neighbor;
+            }
+            return tail;
         }
 
         private Map<ToroidalPos, BiomeId> toAssignment(int[] values) {
