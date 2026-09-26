@@ -53,15 +53,19 @@ final class BorderRequirementParser {
     private static List<BorderRequirement> flatten(List<BorderRequirement> parts, boolean intoAnyOf) {
         List<BorderRequirement> flat = new ArrayList<>();
         for (BorderRequirement part : parts) {
-            if (intoAnyOf && part instanceof AnyOf nested) {
-                flat.addAll(nested.parts());
-            } else if (!intoAnyOf && part instanceof AllOf nested) {
-                flat.addAll(nested.parts());
-            } else {
-                flat.add(part);
-            }
+            addFlattenedPart(flat, part, intoAnyOf);
         }
         return flat;
+    }
+
+    private static void addFlattenedPart(List<BorderRequirement> flat, BorderRequirement part, boolean intoAnyOf) {
+        if (intoAnyOf && part instanceof AnyOf nested) {
+            flat.addAll(nested.parts());
+        } else if (!intoAnyOf && part instanceof AllOf nested) {
+            flat.addAll(nested.parts());
+        } else {
+            flat.add(part);
+        }
     }
 
     private BorderRequirement parseAtom() {

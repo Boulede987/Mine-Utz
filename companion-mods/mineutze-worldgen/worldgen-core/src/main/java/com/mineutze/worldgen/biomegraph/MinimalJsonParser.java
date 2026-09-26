@@ -51,11 +51,7 @@ final class MinimalJsonParser {
             return result;
         }
         while (true) {
-            skipWhitespace();
-            String key = parseString();
-            skipWhitespace();
-            expect(':');
-            result.put(key, parseValue());
+            parseObjectEntry(result);
             skipWhitespace();
             char next = json.charAt(position++);
             if (next == '}') {
@@ -67,6 +63,14 @@ final class MinimalJsonParser {
         }
     }
 
+    private void parseObjectEntry(Map<String, Object> result) {
+        skipWhitespace();
+        String key = parseString();
+        skipWhitespace();
+        expect(':');
+        result.put(key, parseValue());
+    }
+
     private List<Object> parseArray() {
         List<Object> result = new ArrayList<>();
         expect('[');
@@ -76,7 +80,7 @@ final class MinimalJsonParser {
             return result;
         }
         while (true) {
-            result.add(parseValue());
+            result.add(parseArrayElement());
             skipWhitespace();
             char next = json.charAt(position++);
             if (next == ']') {
@@ -88,20 +92,32 @@ final class MinimalJsonParser {
         }
     }
 
+    private Object parseArrayElement() {
+        return parseValue();
+    }
+
     private String parseString() {
         expect('"');
         StringBuilder out = new StringBuilder();
-        while (true) {
-            char c = json.charAt(position++);
-            if (c == '"') {
-                return out.toString();
-            }
-            if (c == '\\') {
-                out.append(parseEscape());
-            } else {
-                out.append(c);
-            }
+        boolean closed = false;
+        while (!closed) {
+            closed = parseStringChar(out);
         }
+        return out.toString();
+    }
+
+    /** Reads one string character (following any escape) and appends it to {@code out}; returns true once the closing quote is consumed, appending nothing for it. */
+    private boolean parseStringChar(StringBuilder out) {
+        char c = json.charAt(position++);
+        if (c == '"') {
+            return true;
+        }
+        if (c == '\\') {
+            out.append(parseEscape());
+        } else {
+            out.append(c);
+        }
+        return false;
     }
 
     private char parseEscape() {

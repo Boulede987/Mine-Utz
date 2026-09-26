@@ -45,43 +45,58 @@ public final class BiomeGraph {
     /** Fail loud if any node has fewer than {@link #MIN_LEGAL_NEIGHBORS} legal neighbors - see that constant's own doc for why this is opt-in rather than always-on. Call this on every real/production graph. */
     public BiomeGraph requireMinLegalNeighbors() {
         for (BiomeId id : nodesById.keySet()) {
-            long legalNeighbors = nodesById.keySet().stream().filter(other -> !other.equals(id) && isAllowed(id, other)).count();
-            if (legalNeighbors < MIN_LEGAL_NEIGHBORS) {
-                throw new IllegalArgumentException(
-                    "BiomeGraph: " + id + " has only " + legalNeighbors + " legal neighbor(s), fewer than the "
-                        + "required minimum of " + MIN_LEGAL_NEIGHBORS + " - add more AdjacencyRules for it."
-                );
-            }
+            validateBiomeNeighbors(id);
         }
         return this;
+    }
+
+    private void validateBiomeNeighbors(BiomeId id) {
+        long legalNeighbors = nodesById.keySet().stream().filter(other -> !other.equals(id) && isAllowed(id, other)).count();
+        if (legalNeighbors < MIN_LEGAL_NEIGHBORS) {
+            throw new IllegalArgumentException(
+                "BiomeGraph: " + id + " has only " + legalNeighbors + " legal neighbor(s), fewer than the "
+                    + "required minimum of " + MIN_LEGAL_NEIGHBORS + " - add more AdjacencyRules for it."
+            );
+        }
     }
 
     private static Map<BiomeId, BiomeNode> indexNodes(Collection<BiomeNode> nodes) {
         Map<BiomeId, BiomeNode> indexed = new HashMap<>();
         for (BiomeNode node : nodes) {
-            if (indexed.put(node.id(), node) != null) {
-                throw new IllegalArgumentException("Duplicate BiomeNode id: " + node.id());
-            }
+            indexNode(indexed, node);
         }
         return Map.copyOf(indexed);
+    }
+
+    private static void indexNode(Map<BiomeId, BiomeNode> indexed, BiomeNode node) {
+        if (indexed.put(node.id(), node) != null) {
+            throw new IllegalArgumentException("Duplicate BiomeNode id: " + node.id());
+        }
     }
 
     private static Map<UnorderedBiomePair, AdjacencyRule> indexRules(Collection<AdjacencyRule> rules) {
         Map<UnorderedBiomePair, AdjacencyRule> indexed = new HashMap<>();
         for (AdjacencyRule rule : rules) {
-            if (indexed.put(rule.pair(), rule) != null) {
-                throw new IllegalArgumentException(
-                    "Duplicate AdjacencyRule for pair: " + rule.biomeA() + " / " + rule.biomeB());
-            }
+            indexRule(indexed, rule);
         }
         return Map.copyOf(indexed);
     }
 
+    private static void indexRule(Map<UnorderedBiomePair, AdjacencyRule> indexed, AdjacencyRule rule) {
+        if (indexed.put(rule.pair(), rule) != null) {
+            throw new IllegalArgumentException("Duplicate AdjacencyRule for pair: " + rule.biomeA() + " / " + rule.biomeB());
+        }
+    }
+
     private void requireAllRuleNodesKnown() {
         for (UnorderedBiomePair pair : rulesByPair.keySet()) {
-            requireKnownNode(pair.first());
-            requireKnownNode(pair.second());
+            validatePairNodesKnown(pair);
         }
+    }
+
+    private void validatePairNodesKnown(UnorderedBiomePair pair) {
+        requireKnownNode(pair.first());
+        requireKnownNode(pair.second());
     }
 
     private void requireKnownNode(BiomeId id) {

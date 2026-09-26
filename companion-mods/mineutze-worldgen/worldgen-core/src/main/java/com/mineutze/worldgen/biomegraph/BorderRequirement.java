@@ -80,9 +80,13 @@ public sealed interface BorderRequirement {
     private static String joined(List<BorderRequirement> parts, String separator, boolean parentIsAnd) {
         List<String> printed = new ArrayList<>();
         for (BorderRequirement part : parts) {
-            boolean needsParentheses = parentIsAnd ? !(part instanceof Share) : part instanceof AnyOf;
-            printed.add(needsParentheses ? "(" + print(part) + ")" : print(part));
+            printed.add(formatPart(part, parentIsAnd));
         }
         return String.join(separator, printed);
+    }
+
+    private static String formatPart(BorderRequirement part, boolean parentIsAnd) {
+        boolean needsParentheses = parentIsAnd ? !(part instanceof Share) : part instanceof AnyOf;
+        return needsParentheses ? "(" + print(part) + ")" : print(part);
     }
 }

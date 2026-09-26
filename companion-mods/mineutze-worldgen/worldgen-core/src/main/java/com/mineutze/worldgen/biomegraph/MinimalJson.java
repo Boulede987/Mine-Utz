@@ -28,16 +28,19 @@ public final class MinimalJson {
 
     public static String writeObject(Map<String, Object> fields) {
         StringBuilder out = new StringBuilder("{");
-        boolean first = true;
+        int index = 0;
         for (Map.Entry<String, Object> field : fields.entrySet()) {
-            if (!first) {
-                out.append(',');
-            }
-            first = false;
-            out.append(quote(field.getKey())).append(':');
-            writeValue(field.getValue(), out);
+            appendObjectField(out, field, index++);
         }
         return out.append('}').toString();
+    }
+
+    private static void appendObjectField(StringBuilder out, Map.Entry<String, Object> field, int index) {
+        if (index > 0) {
+            out.append(',');
+        }
+        out.append(quote(field.getKey())).append(':');
+        writeValue(field.getValue(), out);
     }
 
     public static String writeArray(List<?> items) {
@@ -49,12 +52,16 @@ public final class MinimalJson {
     private static void writeArray(List<?> items, StringBuilder out) {
         out.append('[');
         for (int i = 0; i < items.size(); i++) {
-            if (i > 0) {
-                out.append(',');
-            }
-            writeValue(items.get(i), out);
+            appendArrayElement(items, out, i);
         }
         out.append(']');
+    }
+
+    private static void appendArrayElement(List<?> items, StringBuilder out, int i) {
+        if (i > 0) {
+            out.append(',');
+        }
+        writeValue(items.get(i), out);
     }
 
     @SuppressWarnings("unchecked")
@@ -77,17 +84,20 @@ public final class MinimalJson {
     private static String quote(String value) {
         StringBuilder out = new StringBuilder("\"");
         for (int i = 0; i < value.length(); i++) {
-            char c = value.charAt(i);
-            switch (c) {
-                case '"' -> out.append("\\\"");
-                case '\\' -> out.append("\\\\");
-                case '\n' -> out.append("\\n");
-                case '\r' -> out.append("\\r");
-                case '\t' -> out.append("\\t");
-                default -> out.append(c);
-            }
+            appendEscapedChar(out, value.charAt(i));
         }
         return out.append('"').toString();
+    }
+
+    private static void appendEscapedChar(StringBuilder out, char c) {
+        switch (c) {
+            case '"' -> out.append("\\\"");
+            case '\\' -> out.append("\\\\");
+            case '\n' -> out.append("\\n");
+            case '\r' -> out.append("\\r");
+            case '\t' -> out.append("\\t");
+            default -> out.append(c);
+        }
     }
 
     // ---- reading ----
