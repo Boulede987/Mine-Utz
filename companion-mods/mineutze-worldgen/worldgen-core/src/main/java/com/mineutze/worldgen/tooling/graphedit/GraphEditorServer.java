@@ -437,39 +437,50 @@ public final class GraphEditorServer {
      * exist in one place.
      */
     private static void runGradleTaskAndRespond(HttpExchange exchange, List<String> command) throws IOException {
-        ProcessBuilder processBuilder = new ProcessBuilder(command).redirectErrorStream(true);
-        // The gradle wrapper's own JVM-version check runs BEFORE any toolchain
-        // resolution - it uses whatever JAVA_HOME/PATH the launched process inherits,
-        // NOT this project's configured JDK 21 toolchain. A child process here does NOT
-        // inherit whatever JAVA_HOME this server's own shell happened to have set - it
-        // gets the OS/user's raw default, which can be a much older JDK (real, measured:
-        // this exact "requires JVM 17, this build uses a Java 8 JVM" failure). Fix: pass
-        // through the CURRENT JVM's own java.home - this server is itself already
-        // running under whatever JDK gradle's toolchain resolved for the graphEditor
-        // task, so it's guaranteed suitable, no hardcoded path needed.
-        processBuilder.environment().put("JAVA_HOME", System.getProperty("java.home"));
         Process process;
         try {
-            process = processBuilder.start();
+            process = startGradleProcess(command);
         } catch (IOException e) {
             respondJson(exchange, 200, MinimalJson.writeObject(Map.of("exitCode", -1, "output", "Could not launch gradlew.bat: " + e.getMessage())));
             return;
         }
+        GradleResult result = waitForGradleProcess(process);
+        Map<String, Object> json = new LinkedHashMap<>();
+        json.put("exitCode", result.exitCode());
+        json.put("output", result.output());
+        respondJson(exchange, 200, MinimalJson.writeObject(json));
+    }
+
+    /**
+     * The gradle wrapper's own JVM-version check runs BEFORE any toolchain resolution - it
+     * uses whatever JAVA_HOME/PATH the launched process inherits, NOT this project's
+     * configured JDK 21 toolchain. A child process here does NOT inherit whatever JAVA_HOME
+     * this server's own shell happened to have set - it gets the OS/user's raw default,
+     * which can be a much older JDK (real, measured: this exact "requires JVM 17, this
+     * build uses a Java 8 JVM" failure). Fix: pass through the CURRENT JVM's own java.home -
+     * this server is itself already running under whatever JDK gradle's toolchain resolved
+     * for the graphEditor task, so it's guaranteed suitable, no hardcoded path needed.
+     */
+    private static Process startGradleProcess(List<String> command) throws IOException {
+        ProcessBuilder processBuilder = new ProcessBuilder(command).redirectErrorStream(true);
+        processBuilder.environment().put("JAVA_HOME", System.getProperty("java.home"));
+        return processBuilder.start();
+    }
+
+    private record GradleResult(int exitCode, String output) {
+    }
+
+    private static GradleResult waitForGradleProcess(Process process) throws IOException {
         String output;
         try (InputStream processOutput = process.getInputStream()) {
             output = new String(processOutput.readAllBytes(), StandardCharsets.UTF_8);
         }
-        int exitCode;
         try {
-            exitCode = process.waitFor();
+            return new GradleResult(process.waitFor(), output);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            exitCode = -1;
+            return new GradleResult(-1, output);
         }
-        Map<String, Object> json = new LinkedHashMap<>();
-        json.put("exitCode", exitCode);
-        json.put("output", output);
-        respondJson(exchange, 200, MinimalJson.writeObject(json));
     }
 
     private static String resultJson(ValidationResult result, BiomeGraphData proposed) {
