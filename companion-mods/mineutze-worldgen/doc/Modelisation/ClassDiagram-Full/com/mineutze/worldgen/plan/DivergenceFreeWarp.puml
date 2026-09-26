@@ -1,0 +1,64 @@
+@startuml DivergenceFreeWarp
+
+skinparam classAttributeIconSize 0
+skinparam shadowing false
+
+skinparam class {
+  BackgroundColor<<interface>> #D6EAF8
+  BorderColor<<interface>> #2E86C1
+}
+skinparam class {
+  BackgroundColor<<abstract>> #E8DAEF
+  BorderColor<<abstract>> #8E44AD
+}
+skinparam class {
+  BackgroundColor #D5F5E3
+  BorderColor #27AE60
+}
+skinparam class {
+  BackgroundColor<<record>> #FCF3CF
+  BorderColor<<record>> #B7950B
+}
+skinparam class {
+  BackgroundColor<<static>> #a7faa0
+  BorderColor<<static>> #38d610
+}
+skinparam class {
+  BackgroundColor<<enum>> #F5B7B1
+  BorderColor<<enum>> #C0392B
+}
+
+namespace com.mineutze.worldgen.plan {
+class DivergenceFreeWarp {
+  - waveNumberX : double[*]
+  - waveNumberY : double[*]
+  - directionX : double[*]
+  - directionY : double[*]
+  - amplitude : double[*]
+  - phase : double[*]
+  - sumOfAmplitudes : double
+  - flowSteps : int
+  - initializeWave(HexTorusGeometry, Random, double, double, Settings, int) : double
+  ~ {static} none(HexTorusGeometry) : DivergenceFreeWarp
+  - {static} drawTileWaveNumber(HexTorusGeometry, Random, double, double) : double[]
+  - {static} tryDrawValidWaveNumber(Random, double, double, double, double, double, double, double) : double[]
+  - rk4Step(double, double[], double[])
+  - fieldAt(double, double, double[])
+  - accumulateWaveContribution(double, double, int, double[])
+  - accumulateWaveGradient(double, double, int, double[])
+}
+class Settings <<record>> {
+  + waveCount : int
+  + shortestWavelengthBlocks : double
+  + longestWavelengthBlocks : double
+  + displacementAtLongestWavelengthBlocks : double
+  + roughness : double
+  + flowSteps : int
+}
+}
+
+com.mineutze.worldgen.plan.DivergenceFreeWarp ..> com.mineutze.worldgen.plan.DeterministicTrig
+com.mineutze.worldgen.plan.DivergenceFreeWarp ..> com.mineutze.worldgen.plan.HexTorusGeometry
+com.mineutze.worldgen.plan.DivergenceFreeWarp ..> com.mineutze.worldgen.plan.Settings
+
+@enduml

@@ -1,0 +1,29 @@
+namespace com.mineutze.worldgen.plan {
+class RealizationSelector {
+  ~ {static} WAVE_COUNT : int
+  ~ {static} SHORTEST_WAVELENGTH_BLOCKS : double
+  ~ {static} LONGEST_WAVELENGTH_BLOCKS : double
+  ~ {static} ROUGHNESS : double
+  ~ {static} FLOW_STEPS : int
+  ~ {static} REALIZED_BORDER_FRACTION : double
+  - {static} WORLD_SEED_SALT : long
+  ~ {static} select(RawRuleTable, ToroidalGrid, Map<ToroidalPos, BiomeId>, HexTorusGeometry, long, PlanSettings) : Selection
+  - {static} tryStrengthCandidate(RawRuleTable, ToroidalGrid, Map<ToroidalPos, BiomeId>, HexTorusGeometry, List<BiomeId>, PatternClusters, int, double, long, double, int, StringBuilder) : Optional<Selection>
+  - {static} warpOfStrength(HexTorusGeometry, long, double) : DivergenceFreeWarp
+  ~ {static} passes(BiomeMapVerifier.Report) : boolean
+  - {static} whyItFailed(BiomeMapVerifier.Report) : String
+  - {static} describe(double) : String
+}
+class Selection <<record>> {
+  + strength : double
+  + warp : DivergenceFreeWarp
+  + map : BiomeMap
+  + report : BiomeMapVerifier.Report
+  + candidatesTried : int
+}
+}
+
+com.mineutze.worldgen.plan.Selection *--> com.mineutze.worldgen.plan.BiomeMap
+com.mineutze.worldgen.plan.Selection *--> com.mineutze.worldgen.plan.BiomeMapVerifier
+com.mineutze.worldgen.plan.Selection *--> com.mineutze.worldgen.plan.DivergenceFreeWarp
+com.mineutze.worldgen.plan.Selection *--> com.mineutze.worldgen.plan.Report

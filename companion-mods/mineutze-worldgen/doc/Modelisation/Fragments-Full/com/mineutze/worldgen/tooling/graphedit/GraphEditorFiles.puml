@@ -1,0 +1,5 @@
+namespace com.mineutze.worldgen.tooling.graphedit {
+class GraphEditorFiles {
+  ~ {static} DATA_FILE : Path
+}
+}

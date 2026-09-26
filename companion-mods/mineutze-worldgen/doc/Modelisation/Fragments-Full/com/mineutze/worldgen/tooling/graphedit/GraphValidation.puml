@@ -1,0 +1,22 @@
+namespace com.mineutze.worldgen.tooling.graphedit {
+class GraphValidation {
+  - {static} MIN_LEGAL_NEIGHBORS : int
+  ~ {static} validate(BiomeGraphData) : ValidationResult
+  - {static} generatorRejections(BiomeGraphData) : List<String>
+  - {static} underConnectedErrors(BiomeGraph, BiomeGraphData) : List<String>
+  - {static} checkConnectivity(BiomeGraph, List<BiomeId>, List<String>, BiomeId)
+}
+class ValidationResult <<record>> {
+  + constructs : boolean
+  + constructionError : String
+  + errors : String[*]
+}
+}
+
+com.mineutze.worldgen.tooling.graphedit.GraphValidation ..> com.mineutze.worldgen.biomegraph.BiomeGraph
+com.mineutze.worldgen.tooling.graphedit.GraphValidation ..> com.mineutze.worldgen.biomegraph.BiomeGraphData
+com.mineutze.worldgen.tooling.graphedit.GraphValidation ..> com.mineutze.worldgen.biomegraph.BiomeGraphJson
+com.mineutze.worldgen.tooling.graphedit.GraphValidation ..> com.mineutze.worldgen.biomegraph.BiomeId
+com.mineutze.worldgen.tooling.graphedit.GraphValidation ..> com.mineutze.worldgen.plan.RawRuleTable
+com.mineutze.worldgen.tooling.graphedit.GraphValidation ..> com.mineutze.worldgen.tooling.graphedit.ValidationResult
+com.mineutze.worldgen.tooling.graphedit.GraphValidation ..> com.mineutze.worldgen.plan.WorldBiomePlan

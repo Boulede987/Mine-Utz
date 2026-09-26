@@ -1,0 +1,13 @@
+namespace com.mineutze.worldgen.tooling.graphedit {
+class GraphEditorSolveCheck {
+  - {static} WORLD_SEEDS : Long[*]
+  + {static} main(String[])
+  - {static} checkSeed(BiomeGraphData, int, long) : boolean
+  - {static} secondsSince(long) : String
+}
+}
+
+com.mineutze.worldgen.tooling.graphedit.GraphEditorSolveCheck ..> com.mineutze.worldgen.biomegraph.BiomeGraphData
+com.mineutze.worldgen.tooling.graphedit.GraphEditorSolveCheck ..> com.mineutze.worldgen.biomegraph.BiomeGraphJson
+com.mineutze.worldgen.tooling.graphedit.GraphEditorSolveCheck ..> com.mineutze.worldgen.tooling.graphedit.GraphEditorFiles
+com.mineutze.worldgen.tooling.graphedit.GraphEditorSolveCheck ..> com.mineutze.worldgen.plan.WorldBiomePlan

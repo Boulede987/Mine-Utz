@@ -1,0 +1,16 @@
+namespace com.mineutze.worldgen.plan {
+class PlanSnapshot <<record>> {
+  + schemaVersion : int
+  + worldSeed : long
+  + catalogFingerprint : String
+  + gridWidth : int
+  + gridHeight : int
+  + atomWidthBlocks : double
+  + warpStrength : double
+  + patternAttempts : int
+  + strengthsTried : int
+  + palette : String[*]
+  + rasterSize : int
+  + raster : byte[*]
+}
+}

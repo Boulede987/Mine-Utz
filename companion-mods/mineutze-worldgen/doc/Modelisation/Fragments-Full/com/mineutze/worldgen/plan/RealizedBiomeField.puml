@@ -1,0 +1,15 @@
+namespace com.mineutze.worldgen.plan {
+class RealizedBiomeField {
+  - geometry : HexTorusGeometry
+  - warp : DivergenceFreeWarp
+  - biomeOfCell : int[*]
+  - gridWidth : int
+  - assignCellBiome(ToroidalGrid, Map<ToroidalPos, BiomeId>, List<BiomeId>, int, int)
+}
+}
+
+com.mineutze.worldgen.plan.RealizedBiomeField --> com.mineutze.worldgen.plan.DivergenceFreeWarp
+com.mineutze.worldgen.plan.RealizedBiomeField --> com.mineutze.worldgen.plan.HexTorusGeometry
+com.mineutze.worldgen.plan.RealizedBiomeField ..> com.mineutze.worldgen.biomegraph.BiomeId
+com.mineutze.worldgen.plan.RealizedBiomeField ..> com.mineutze.worldgen.plan.ToroidalGrid
+com.mineutze.worldgen.plan.RealizedBiomeField ..> com.mineutze.worldgen.plan.ToroidalPos

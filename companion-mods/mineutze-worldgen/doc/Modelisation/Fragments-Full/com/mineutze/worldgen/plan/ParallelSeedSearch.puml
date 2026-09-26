@@ -1,0 +1,23 @@
+namespace com.mineutze.worldgen.plan {
+class ParallelSeedSearch {
+  ~ {static} search(RawRuleTable, ToroidalGrid, ClusterSizeModel, long, int, long, ToroidalSizedLocalSearch.Schedule, int) : Outcome
+  - {static} runSeed(RawRuleTable, ToroidalGrid, ClusterSizeModel, long, int, long, ToroidalSizedLocalSearch.Schedule, AtomicInteger) : ToroidalSizedLocalSearch.Result
+  - {static} pickOutcome(long, List<Future<ToroidalSizedLocalSearch.Result>>) : Outcome
+  - {static} processRunResult(long, List<Future<ToroidalSizedLocalSearch.Result>>, int, Outcome) : Outcome
+  - {static} resultOf(long, Future<ToroidalSizedLocalSearch.Result>) : ToroidalSizedLocalSearch.Result
+}
+class Outcome <<record>> {
+  + seed : long
+  + result : ToroidalSizedLocalSearch.Result
+}
+}
+
+com.mineutze.worldgen.plan.Outcome *--> com.mineutze.worldgen.plan.Result
+com.mineutze.worldgen.plan.Outcome *--> com.mineutze.worldgen.plan.ToroidalSizedLocalSearch
+com.mineutze.worldgen.plan.ParallelSeedSearch ..> com.mineutze.worldgen.plan.ClusterSizeModel
+com.mineutze.worldgen.plan.ParallelSeedSearch ..> com.mineutze.worldgen.plan.Outcome
+com.mineutze.worldgen.plan.ParallelSeedSearch ..> com.mineutze.worldgen.plan.RawRuleTable
+com.mineutze.worldgen.plan.ParallelSeedSearch ..> com.mineutze.worldgen.plan.Result
+com.mineutze.worldgen.plan.ParallelSeedSearch ..> com.mineutze.worldgen.plan.Schedule
+com.mineutze.worldgen.plan.ParallelSeedSearch ..> com.mineutze.worldgen.plan.ToroidalGrid
+com.mineutze.worldgen.plan.ParallelSeedSearch ..> com.mineutze.worldgen.plan.ToroidalSizedLocalSearch

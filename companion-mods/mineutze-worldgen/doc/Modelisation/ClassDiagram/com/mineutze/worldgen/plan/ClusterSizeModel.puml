@@ -1,0 +1,66 @@
+@startuml ClusterSizeModel
+
+skinparam classAttributeIconSize 0
+skinparam shadowing false
+
+skinparam class {
+  BackgroundColor<<interface>> #D6EAF8
+  BorderColor<<interface>> #2E86C1
+}
+skinparam class {
+  BackgroundColor<<abstract>> #E8DAEF
+  BorderColor<<abstract>> #8E44AD
+}
+skinparam class {
+  BackgroundColor #D5F5E3
+  BorderColor #27AE60
+}
+skinparam class {
+  BackgroundColor<<record>> #FCF3CF
+  BorderColor<<record>> #B7950B
+}
+skinparam class {
+  BackgroundColor<<static>> #a7faa0
+  BorderColor<<static>> #38d610
+}
+skinparam class {
+  BackgroundColor<<enum>> #F5B7B1
+  BorderColor<<enum>> #C0392B
+}
+
+namespace com.mineutze.worldgen.plan {
+class ClusterSizeModel {
+  - {static} ROUNDING_TOLERANCE : double
+  - {static} STRAIGHT_LINE_OUTLINE_PER_CELL : int
+  - {static} STRAIGHT_LINE_OUTLINE_EXTRA : int
+  - biomes : BiomeId[*]
+  - indexOf : Map<BiomeId, Integer>
+  - minCells : int[*]
+  - maxCells : int[*]
+  - requirements : CompiledRequirement[*]
+  - shape : ShapeRule
+  - initializeBiomeSizeConstraints(RawRuleTable, double, int)
+  - readRequirements(RawRuleTable, int)
+  - whyNeverMet(RawRuleTable, BiomeId, ResolvedBorderRequirement, int) : String
+  - anyOfNeverMetReason(RawRuleTable, BiomeId, ResolvedBorderRequirement.AnyOf, int) : String
+  - checkAlternativePart(RawRuleTable, BiomeId, ResolvedBorderRequirement, int, List<String>) : boolean
+  - whyShareNeverMet(RawRuleTable, BiomeId, ResolvedBorderRequirement.Share, int) : String
+  - compile(ResolvedBorderRequirement) : CompiledRequirement
+  - {static} squared(double) : double
+}
+class CompiledRequirement <<static>> {
+  - kind : Kind
+  - minEdges : int
+  - biomes : int[*]
+  - parts : CompiledRequirement[*]
+}
+enum Kind <<enum>> {
+  SHARE
+  ALL
+  ANY
+}
+}
+
+com.mineutze.worldgen.plan.ClusterSizeModel *--> "0..*" com.mineutze.worldgen.plan.CompiledRequirement
+
+@enduml

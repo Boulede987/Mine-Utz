@@ -1,0 +1,60 @@
+@startuml DeterministicTrig
+
+skinparam classAttributeIconSize 0
+skinparam shadowing false
+
+skinparam class {
+  BackgroundColor<<interface>> #D6EAF8
+  BorderColor<<interface>> #2E86C1
+}
+skinparam class {
+  BackgroundColor<<abstract>> #E8DAEF
+  BorderColor<<abstract>> #8E44AD
+}
+skinparam class {
+  BackgroundColor #D5F5E3
+  BorderColor #27AE60
+}
+skinparam class {
+  BackgroundColor<<record>> #FCF3CF
+  BorderColor<<record>> #B7950B
+}
+skinparam class {
+  BackgroundColor<<static>> #a7faa0
+  BorderColor<<static>> #38d610
+}
+skinparam class {
+  BackgroundColor<<enum>> #F5B7B1
+  BorderColor<<enum>> #C0392B
+}
+
+namespace com.mineutze.worldgen.plan {
+class DeterministicTrig {
+  - {static} LARGEST_ARGUMENT : double
+  - {static} TWO_OVER_PI : double
+  - {static} QUARTER_TURN_FIRST : double
+  - {static} QUARTER_TURN_SECOND : double
+  - {static} QUARTER_TURN_THIRD : double
+  - {static} SINE_1 : double
+  - {static} SINE_2 : double
+  - {static} SINE_3 : double
+  - {static} SINE_4 : double
+  - {static} SINE_5 : double
+  - {static} SINE_6 : double
+  - {static} COSINE_1 : double
+  - {static} COSINE_2 : double
+  - {static} COSINE_3 : double
+  - {static} COSINE_4 : double
+  - {static} COSINE_5 : double
+  - {static} COSINE_6 : double
+  ~ {static} sin(double) : double
+  ~ {static} cos(double) : double
+  - {static} quarterTurns(double) : long
+  - {static} reduce(double) : double
+  - {static} sineKernel(double) : double
+  - {static} cosineKernel(double) : double
+}
+}
+
+
+@enduml

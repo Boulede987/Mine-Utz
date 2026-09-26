@@ -1,0 +1,10 @@
+namespace com.mineutze.worldgen.biomegraph {
+class BiomeNode <<record>> {
+  + id : BiomeId
+  + sizeRange : BiomeSizeRange
+  + selfAdjacencyLimit : int
+}
+}
+
+com.mineutze.worldgen.biomegraph.BiomeNode *--> com.mineutze.worldgen.biomegraph.BiomeId
+com.mineutze.worldgen.biomegraph.BiomeNode *--> com.mineutze.worldgen.biomegraph.BiomeSizeRange

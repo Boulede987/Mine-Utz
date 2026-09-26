@@ -1,0 +1,19 @@
+namespace com.mineutze.worldgen.plan {
+class BiomeMapPngExporter {
+  - {static} OUTSIDE_TILE : int
+  - {static} OUTLINE_RGB : int
+  - {static} BACKGROUND_RGB : int
+  - {static} ROW_HEIGHT : double
+  ~ {static} exportFull(BiomeMap, Path, int)
+  ~ {static} exportRegion(BiomeMap, Path, int, int, int, int, int)
+  - {static} requirePositive(int, int, int)
+  - {static} sampleGrid(BiomeMap, int, int, int, int, int) : int[][]
+  - {static} fillRow(int[][], BiomeMap, int, int, int, int, int)
+  - {static} renderImage(int[][], int, int) : BufferedImage
+  - {static} renderRow(BufferedImage, int[][], int, int)
+  - {static} pixelColor(int[][], int, int) : int
+  - {static} isBorder(int[][], int, int) : boolean
+  - {static} biomeUnderPixel(BiomeMap, int, int, int) : int
+  - {static} write(BufferedImage, Path)
+}
+}

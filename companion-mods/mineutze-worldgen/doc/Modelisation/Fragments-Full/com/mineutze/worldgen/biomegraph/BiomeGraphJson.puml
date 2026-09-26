@@ -1,0 +1,32 @@
+namespace com.mineutze.worldgen.biomegraph {
+class BiomeGraphJson {
+  + {static} load(Path) : BiomeGraphData
+  + {static} save(Path, BiomeGraphData)
+  + {static} loadResource(Class<?>, String) : BiomeGraphData
+  + {static} toBiomeGraph(BiomeGraphData) : BiomeGraph
+  + {static} toProductionBiomeGraph(BiomeGraphData) : BiomeGraph
+  - {static} nodesOf(BiomeGraphData) : List<BiomeNode>
+  - {static} rulesOf(BiomeGraphData) : List<AdjacencyRule>
+  + {static} toJson(BiomeGraphData) : String
+  + {static} fromJson(String) : BiomeGraphData
+  - {static} groupToJson(GroupData) : Map<String, Object>
+  - {static} groupFromJson(Map<String, Object>) : GroupData
+  - {static} nodeToJson(NodeData) : Map<String, Object>
+  + {static} nodeFromJson(Map<String, Object>) : NodeData
+  - {static} edgeToJson(EdgeData) : Map<String, Object>
+  + {static} edgeFromJson(Map<String, Object>) : EdgeData
+  - {static} stringField(Map<String, Object>, String) : String
+  - {static} intField(Map<String, Object>, String) : int
+}
+}
+
+com.mineutze.worldgen.biomegraph.BiomeGraphJson ..> com.mineutze.worldgen.biomegraph.AdjacencyRule
+com.mineutze.worldgen.biomegraph.BiomeGraphJson ..> com.mineutze.worldgen.biomegraph.BiomeGraph
+com.mineutze.worldgen.biomegraph.BiomeGraphJson ..> com.mineutze.worldgen.biomegraph.BiomeGraphData
+com.mineutze.worldgen.biomegraph.BiomeGraphJson ..> com.mineutze.worldgen.biomegraph.BiomeId
+com.mineutze.worldgen.biomegraph.BiomeGraphJson ..> com.mineutze.worldgen.biomegraph.BiomeNode
+com.mineutze.worldgen.biomegraph.BiomeGraphJson ..> com.mineutze.worldgen.biomegraph.BiomeSizeRange
+com.mineutze.worldgen.biomegraph.BiomeGraphJson ..> com.mineutze.worldgen.biomegraph.EdgeData
+com.mineutze.worldgen.biomegraph.BiomeGraphJson ..> com.mineutze.worldgen.biomegraph.GroupData
+com.mineutze.worldgen.biomegraph.BiomeGraphJson ..> com.mineutze.worldgen.biomegraph.MinimalJson
+com.mineutze.worldgen.biomegraph.BiomeGraphJson ..> com.mineutze.worldgen.biomegraph.NodeData

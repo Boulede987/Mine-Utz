@@ -1,0 +1,42 @@
+namespace com.mineutze.worldgen.plan {
+class RawRuleTable {
+  - {static} LEGAL_GROUP_NAME : String
+  - allBiomeIds : BiomeId[*]
+  - sizeRangeById : Map<BiomeId, SizeRange>
+  - legalPairs : UnorderedPair[*]
+  - requirementById : Map<BiomeId, ResolvedBorderRequirement>
+  + {static} from(BiomeGraphData) : RawRuleTable
+  - {static} processNode(List<BiomeId>, Map<BiomeId, SizeRange>, NodeData)
+  - {static} addLegalEdge(Set<UnorderedPair>, EdgeData)
+  - {static} addResolvedRequirement(Map<BiomeId, ResolvedBorderRequirement>, Map<String, List<BiomeId>>, Set<BiomeId>, NodeData)
+  - {static} groupsOf(BiomeGraphData, Set<BiomeId>) : Map<String, List<BiomeId>>
+  - {static} processGroupData(Map<String, List<BiomeId>>, Set<BiomeId>, GroupData)
+  - {static} validateAndAddMember(List<BiomeId>, Set<BiomeId>, String, String)
+  - {static} biomeOfKey(String) : BiomeId
+  - {static} resolveRequirement(BiomeId, String, Map<String, List<BiomeId>>, Set<BiomeId>) : Optional<ResolvedBorderRequirement>
+  - {static} resolve(BiomeId, BorderRequirement, Map<String, List<BiomeId>>, Set<BiomeId>) : ResolvedBorderRequirement
+  - {static} biomesOfSubject(BiomeId, String, Map<String, List<BiomeId>>, Set<BiomeId>) : List<BiomeId>
+  + allBiomeIds() : List<BiomeId>
+  + sizeRangeOf(BiomeId) : SizeRange
+  + isLegal(BiomeId, BiomeId) : boolean
+}
+class SizeRange <<record>> {
+  + minWidthBlocks : int
+  + maxWidthBlocks : int
+}
+class UnorderedPair <<record>> {
+  + a : BiomeId
+  + b : BiomeId
+}
+}
+
+com.mineutze.worldgen.plan.RawRuleTable *--> "0..*" com.mineutze.worldgen.biomegraph.BiomeId
+com.mineutze.worldgen.plan.RawRuleTable *--> com.mineutze.worldgen.plan.SizeRange
+com.mineutze.worldgen.plan.RawRuleTable *--> "0..*" com.mineutze.worldgen.plan.UnorderedPair
+com.mineutze.worldgen.plan.UnorderedPair *--> com.mineutze.worldgen.biomegraph.BiomeId
+com.mineutze.worldgen.plan.RawRuleTable --> com.mineutze.worldgen.plan.ResolvedBorderRequirement
+com.mineutze.worldgen.plan.RawRuleTable ..> com.mineutze.worldgen.biomegraph.BiomeGraphData
+com.mineutze.worldgen.plan.RawRuleTable ..> com.mineutze.worldgen.biomegraph.BorderRequirement
+com.mineutze.worldgen.plan.RawRuleTable ..> com.mineutze.worldgen.biomegraph.EdgeData
+com.mineutze.worldgen.plan.RawRuleTable ..> com.mineutze.worldgen.biomegraph.GroupData
+com.mineutze.worldgen.plan.RawRuleTable ..> com.mineutze.worldgen.biomegraph.NodeData

@@ -1,0 +1,58 @@
+@startuml WorldBiomePlanSavedData
+
+skinparam classAttributeIconSize 0
+skinparam shadowing false
+
+skinparam class {
+  BackgroundColor<<interface>> #D6EAF8
+  BorderColor<<interface>> #2E86C1
+}
+skinparam class {
+  BackgroundColor<<abstract>> #E8DAEF
+  BorderColor<<abstract>> #8E44AD
+}
+skinparam class {
+  BackgroundColor #D5F5E3
+  BorderColor #27AE60
+}
+skinparam class {
+  BackgroundColor<<record>> #FCF3CF
+  BorderColor<<record>> #B7950B
+}
+skinparam class {
+  BackgroundColor<<static>> #a7faa0
+  BorderColor<<static>> #38d610
+}
+skinparam class {
+  BackgroundColor<<enum>> #F5B7B1
+  BorderColor<<enum>> #C0392B
+}
+
+namespace com.mineutze.worldgen.integration {
+class WorldBiomePlanSavedData {
+  ~ {static} SAVE_NAME : String
+  - {static} NBT_SCHEMA : int
+  - {static} NBT_SCHEMA_KEY : String
+  - {static} PLAN_SCHEMA_KEY : String
+  - {static} WORLD_SEED_KEY : String
+  - {static} CATALOG_FINGERPRINT_KEY : String
+  - {static} GRID_WIDTH_KEY : String
+  - {static} GRID_HEIGHT_KEY : String
+  - {static} ATOM_WIDTH_KEY : String
+  - {static} WARP_STRENGTH_KEY : String
+  - {static} PATTERN_ATTEMPTS_KEY : String
+  - {static} STRENGTHS_TRIED_KEY : String
+  - {static} PALETTE_KEY : String
+  - {static} RASTER_SIZE_KEY : String
+  - {static} RASTER_KEY : String
+  - snapshot : PlanSnapshot
+  ~ {static} factory() : SavedData.Factory<WorldBiomePlanSavedData>
+  + save(CompoundTag, HolderLookup.Provider) : CompoundTag
+  ~ {static} load(CompoundTag, HolderLookup.Provider) : WorldBiomePlanSavedData
+}
+}
+
+com.mineutze.worldgen.integration.WorldBiomePlanSavedData --|> net.minecraft.world.level.saveddata.SavedData
+com.mineutze.worldgen.integration.WorldBiomePlanSavedData *--> com.mineutze.worldgen.plan.PlanSnapshot
+
+@enduml

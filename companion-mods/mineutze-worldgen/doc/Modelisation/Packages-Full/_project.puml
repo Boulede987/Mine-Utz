@@ -1,0 +1,1292 @@
+@startuml _project
+
+skinparam classAttributeIconSize 0
+skinparam shadowing false
+
+skinparam class {
+  BackgroundColor<<interface>> #D6EAF8
+  BorderColor<<interface>> #2E86C1
+}
+skinparam class {
+  BackgroundColor<<abstract>> #E8DAEF
+  BorderColor<<abstract>> #8E44AD
+}
+skinparam class {
+  BackgroundColor #D5F5E3
+  BorderColor #27AE60
+}
+skinparam class {
+  BackgroundColor<<record>> #FCF3CF
+  BorderColor<<record>> #B7950B
+}
+skinparam class {
+  BackgroundColor<<static>> #a7faa0
+  BorderColor<<static>> #38d610
+}
+skinparam class {
+  BackgroundColor<<enum>> #F5B7B1
+  BorderColor<<enum>> #C0392B
+}
+
+namespace com.mineutze.worldgen {
+class WorldgenMod {
+  + {static} MOD_ID : String
+}
+}
+namespace com.mineutze.worldgen.biomegraph {
+class AdjacencyRule <<record>> {
+  + biomeA : BiomeId
+  + biomeB : BiomeId
+  + blendWidthBlocks : int
+  + {static} allow(BiomeId, BiomeId, int) : AdjacencyRule
+}
+class BiomeGraph {
+  - nodesById : Map<BiomeId, BiomeNode>
+  - rulesByPair : Map<UnorderedBiomePair, AdjacencyRule>
+  - {static} MIN_LEGAL_NEIGHBORS : int
+  + {static} forProduction(Collection<BiomeNode>, Collection<AdjacencyRule>) : BiomeGraph
+  + requireMinLegalNeighbors() : BiomeGraph
+  - validateBiomeNeighbors(BiomeId)
+  - {static} indexNodes(Collection<BiomeNode>) : Map<BiomeId, BiomeNode>
+  - {static} indexNode(Map<BiomeId, BiomeNode>, BiomeNode)
+  - {static} indexRules(Collection<AdjacencyRule>) : Map<UnorderedBiomePair, AdjacencyRule>
+  - {static} indexRule(Map<UnorderedBiomePair, AdjacencyRule>, AdjacencyRule)
+  - requireAllRuleNodesKnown()
+  - validatePairNodesKnown(UnorderedBiomePair)
+  - requireKnownNode(BiomeId)
+  + node(BiomeId) : BiomeNode
+  + nodes() : Collection<BiomeNode>
+  + isAllowed(BiomeId, BiomeId) : boolean
+  + rule(BiomeId, BiomeId) : AdjacencyRule
+}
+class BiomeGraphData <<record>> {
+  + nodes : NodeData[*]
+  + edges : EdgeData[*]
+  + groups : GroupData[*]
+}
+class NodeData <<record>> {
+  + namespace : String
+  + path : String
+  + minWidthBlocks : int
+  + maxWidthBlocks : int
+  + selfAdjacencyLimit : int
+  + requirement : String
+  + key() : String
+}
+class GroupData <<record>> {
+  + name : String
+  + members : String[*]
+}
+class EdgeData <<record>> {
+  + aNamespace : String
+  + aPath : String
+  + bNamespace : String
+  + bPath : String
+  + blendWidthBlocks : int
+  + aKey() : String
+  + bKey() : String
+}
+class BiomeGraphJson {
+  + {static} load(Path) : BiomeGraphData
+  + {static} save(Path, BiomeGraphData)
+  + {static} loadResource(Class<?>, String) : BiomeGraphData
+  + {static} toBiomeGraph(BiomeGraphData) : BiomeGraph
+  + {static} toProductionBiomeGraph(BiomeGraphData) : BiomeGraph
+  - {static} nodesOf(BiomeGraphData) : List<BiomeNode>
+  - {static} rulesOf(BiomeGraphData) : List<AdjacencyRule>
+  + {static} toJson(BiomeGraphData) : String
+  + {static} fromJson(String) : BiomeGraphData
+  - {static} groupToJson(GroupData) : Map<String, Object>
+  - {static} groupFromJson(Map<String, Object>) : GroupData
+  - {static} nodeToJson(NodeData) : Map<String, Object>
+  + {static} nodeFromJson(Map<String, Object>) : NodeData
+  - {static} edgeToJson(EdgeData) : Map<String, Object>
+  + {static} edgeFromJson(Map<String, Object>) : EdgeData
+  - {static} stringField(Map<String, Object>, String) : String
+  - {static} intField(Map<String, Object>, String) : int
+}
+class BiomeId <<record>> {
+  + namespace : String
+  + path : String
+  + compareTo(BiomeId) : int
+  + toString() : String
+}
+class BiomeNode <<record>> {
+  + id : BiomeId
+  + sizeRange : BiomeSizeRange
+  + selfAdjacencyLimit : int
+}
+class BiomeSizeRange <<record>> {
+  + minWidthBlocks : int
+  + maxWidthBlocks : int
+}
+interface BorderRequirement <<interface>> {
+  + parse(String) : Optional<BorderRequirement>
+  + print(BorderRequirement) : String
+  + joined(List<BorderRequirement>, String, boolean) : private static String
+  + formatPart(BorderRequirement, boolean) : private static String
+}
+class Share <<record>> {
+  + subject : String
+  + minSharedEdges : int
+  + toString() : String
+}
+class AllOf <<record>> {
+  + parts : BorderRequirement[*]
+  + toString() : String
+}
+class AnyOf <<record>> {
+  + parts : BorderRequirement[*]
+  + toString() : String
+}
+class BorderRequirementParser {
+  - text : String
+  - position : int
+  ~ {static} parse(String) : BorderRequirement
+  - parseWholeText() : BorderRequirement
+  - parseAnyOf() : BorderRequirement
+  - parseAllOf() : BorderRequirement
+  - {static} flatten(List<BorderRequirement>, boolean) : List<BorderRequirement>
+  - {static} addFlattenedPart(List<BorderRequirement>, BorderRequirement, boolean)
+  - parseAtom() : BorderRequirement
+  - consumeKeyword(String) : boolean
+  - {static} isKeyword(String) : boolean
+  - readWord() : String
+  - {static} isWordCharacter(char) : boolean
+  - skipSpaces()
+  - failure(String) : IllegalArgumentException
+}
+class MinimalJson {
+  + {static} writeObject(Map<String, Object>) : String
+  - {static} appendObjectField(StringBuilder, Map.Entry<String, Object>, int)
+  + {static} writeArray(List<?>) : String
+  - {static} writeArray(List<?>, StringBuilder)
+  - {static} appendArrayElement(List<?>, StringBuilder, int)
+  - {static} writeValue(Object, StringBuilder)
+  - {static} quote(String) : String
+}
+class MinimalJsonParser {
+  - json : String
+  - position : int
+  - parseStringChar(StringBuilder) : boolean
+}
+class ModBiomeGraph {
+  + {static} OVERWORLD : BiomeGraph
+}
+class UnorderedBiomePair <<record>> {
+  + first : BiomeId
+  + second : BiomeId
+  ~ {static} of(BiomeId, BiomeId) : UnorderedBiomePair
+}
+}
+namespace com.mineutze.worldgen.integration {
+class BiomeIdAdapter {
+  + {static} toBiomeId(ResourceLocation) : BiomeId
+  + {static} toResourceLocation(BiomeId) : ResourceLocation
+}
+class LocateBiomeOverride {
+  - {static} ERROR_BIOME_NOT_FOUND : DynamicCommandExceptionType
+  + {static} register(RegisterCommandsEvent)
+  - {static} locateBiome(CommandSourceStack, ResourceOrTagArgument.Result<Biome>) : int
+  - {static} findClosestBiome(ServerLevel, BlockPos, ResourceOrTagArgument.Result<Biome>) : Pair<BlockPos, Holder<Biome>>
+  - {static} processCandidate(Registry<Biome>, BlockPos, ResourceOrTagArgument.Result<Biome>, WorldBiomePlan, BiomeId, BestBiome) : BestBiome
+}
+class BestBiome <<record>> {
+  + pair : Pair<BlockPos, Holder<Biome>>
+  + squaredDistance : double
+}
+class ModBiomeSources {
+  + {static} CUSTOM_OVERWORLD_ID : String
+  + {static} register(RegisterEvent)
+}
+class ModOverworldBiomeSource {
+  - {static} LOGGER : Logger
+  - {static} QUART_CENTER_OFFSET_BLOCKS : int
+  + {static} CODEC : MapCodec<ModOverworldBiomeSource>
+  - biomesById : Map<ResourceLocation, Holder<Biome>>
+  - {static} overworldBiomeKeys() : List<ResourceKey<Biome>>
+  - {static} mapCodecFor(List<ResourceKey<Biome>>) : MapCodec<ModOverworldBiomeSource>
+  # collectPossibleBiomes() : Stream<Holder<Biome>>
+  # codec() : MapCodec<? extends BiomeSource>
+  + getNoiseBiome(int, int, int, Climate.Sampler) : Holder<Biome>
+}
+class PlanDebugCommand {
+  - {static} SERVER_OPERATOR_PERMISSION_LEVEL : int
+  - {static} DEFAULT_RADIUS_BLOCKS : int
+  - {static} MAX_RADIUS_BLOCKS : int
+  - {static} DEFAULT_STEP_BLOCKS : int
+  - {static} MAX_STEP_BLOCKS : int
+  + {static} register(RegisterCommandsEvent)
+  - {static} describePlanAtSource(CommandContext<CommandSourceStack>) : int
+  - {static} exportBiomes(CommandContext<CommandSourceStack>, int, int) : int
+}
+class WorldBiomeExporter {
+  - {static} OUTPUT_DIR_NAME : String
+  - {static} GOLDEN_RATIO_CONJUGATE : double
+  - {static} STORED_BIOME_CHECK_MAX_SAMPLES : int
+  - {static} QUART_BLOCKS : int
+  - {static} QUART_CENTER_OFFSET : int
+  ~ {static} exportAroundPosition(ServerLevel, Vec3, int, int) : Result
+  - {static} planBiomeAtQuart(WorldBiomePlan, int, int) : String
+  - {static} explainedByANeighboringQuart(WorldBiomePlan, int, int, String) : boolean
+  - {static} nameOf(Holder<Biome>) : String
+  - {static} colorOf(int) : Color
+}
+class Result <<record>> {
+  + imageFile : Path
+  + legendFile : Path
+  + samples : int
+  + differentFromOwnQuart : int
+  + unexplainedDifferences : int
+  + storedBiomeMismatches : int
+  + storedBiomeChecks : int
+}
+class WorldBiomePlanHolder {
+  - {static} LOGGER : Logger
+  - {static} READY_TIMEOUT_MINUTES : long
+  - {static} HEARTBEAT_SECONDS : long
+  - {static} READY : CountDownLatch
+  - {static} current : WorldBiomePlan
+  + {static} onLevelLoad(LevelEvent.Load)
+  + {static} get() : WorldBiomePlan
+  - {static} loadOrCreate(ServerLevel) : WorldBiomePlan
+  - {static} restore(PlanSnapshot, BiomeGraphData, long) : WorldBiomePlan
+  - {static} create(BiomeGraphData, long) : WorldBiomePlan
+  - {static} elapsedSeconds(long) : long
+  - {static} awaitReady()
+}
+class WorldBiomePlanSavedData {
+  ~ {static} SAVE_NAME : String
+  - {static} NBT_SCHEMA : int
+  - {static} NBT_SCHEMA_KEY : String
+  - {static} PLAN_SCHEMA_KEY : String
+  - {static} WORLD_SEED_KEY : String
+  - {static} CATALOG_FINGERPRINT_KEY : String
+  - {static} GRID_WIDTH_KEY : String
+  - {static} GRID_HEIGHT_KEY : String
+  - {static} ATOM_WIDTH_KEY : String
+  - {static} WARP_STRENGTH_KEY : String
+  - {static} PATTERN_ATTEMPTS_KEY : String
+  - {static} STRENGTHS_TRIED_KEY : String
+  - {static} PALETTE_KEY : String
+  - {static} RASTER_SIZE_KEY : String
+  - {static} RASTER_KEY : String
+  - snapshot : PlanSnapshot
+  ~ {static} factory() : SavedData.Factory<WorldBiomePlanSavedData>
+  + save(CompoundTag, HolderLookup.Provider) : CompoundTag
+  ~ {static} load(CompoundTag, HolderLookup.Provider) : WorldBiomePlanSavedData
+}
+}
+namespace com.mineutze.worldgen.plan {
+class BiomeMap {
+  - size : int
+  - biomeIndices : int[*]
+  - cells : int[*]
+  - biomes : BiomeId[*]
+  - sampleAreaBlocks2 : double
+  - blocksPerSample : double
+}
+class BiomeMapPngExporter {
+  - {static} OUTSIDE_TILE : int
+  - {static} OUTLINE_RGB : int
+  - {static} BACKGROUND_RGB : int
+  - {static} ROW_HEIGHT : double
+  ~ {static} exportFull(BiomeMap, Path, int)
+  ~ {static} exportRegion(BiomeMap, Path, int, int, int, int, int)
+  - {static} requirePositive(int, int, int)
+  - {static} sampleGrid(BiomeMap, int, int, int, int, int) : int[][]
+  - {static} fillRow(int[][], BiomeMap, int, int, int, int, int)
+  - {static} renderImage(int[][], int, int) : BufferedImage
+  - {static} renderRow(BufferedImage, int[][], int, int)
+  - {static} pixelColor(int[][], int, int) : int
+  - {static} isBorder(int[][], int, int) : boolean
+  - {static} biomeUnderPixel(BiomeMap, int, int, int) : int
+  - {static} write(BufferedImage, Path)
+}
+class BiomeMapRasterizer {
+  ~ {static} rasterize(ToroidalGrid, Map<ToroidalPos, BiomeId>, HexTorusGeometry, DivergenceFreeWarp, int, List<BiomeId>) : BiomeMap
+  - {static} requirePositive(int)
+  - {static} sampleTile(RealizedBiomeField, HexTorusGeometry, int, int[], int[])
+  - {static} sampleRowCells(RealizedBiomeField, int, double, double, double, double, int[], int[], int)
+  - {static} sampleCell(RealizedBiomeField, double, double, double, double, int[], int[], int, int, int, double, double)
+  - {static} blocksPerSample(HexTorusGeometry, int) : double
+}
+class BiomeMapVerifier {
+  ~ {static} verify(BiomeMap, RawRuleTable, double) : Report
+  ~ {static} verify(BiomeMap, RawRuleTable, double, PatternClusters) : Report
+  ~ {static} verify(BiomeMap, RawRuleTable, double, PatternClusters, double) : Report
+  - {static} scanContacts(BiomeMap, boolean[][], UnionFind) : ContactTally
+  - {static} recordContactAndUnion(BiomeMap, boolean[][], UnionFind, int[], int, int, int) : int
+  - {static} regionRootsOf(UnionFind, int) : RegionRoots
+  - {static} checkRootForInclusion(int[], List<Integer>, int)
+  - {static} allowedArea(RawRuleTable.SizeRange, double) : AllowedArea
+  - {static} areaViolations(BiomeMap, RawRuleTable, double, RegionRoots) : List<AreaViolation>
+  - {static} checkRegionArea(BiomeMap, RawRuleTable, double, RegionRoots, List<AreaViolation>, int)
+  - {static} borderShortfalls(BiomeMap, RawRuleTable, UnionFind, List<Integer>, double) : List<BorderShortfall>
+  - {static} requirementsByBiomeIndex(BiomeMap, RawRuleTable) : List<ResolvedBorderRequirement>
+  - {static} tallyContactsWithRequiredBiomes(BiomeMap, UnionFind, List<ResolvedBorderRequirement>) : Map<Long, Integer>
+  - {static} tallyOneContact(UnionFind, List<ResolvedBorderRequirement>, int[], int, int, int, Map<Long, Integer>)
+  - {static} shortfallsOf(BiomeMap, List<Integer>, List<ResolvedBorderRequirement>, Map<Long, Integer>, double) : List<BorderShortfall>
+  - {static} checkBorderRequirement(BiomeMap, int[], List<ResolvedBorderRequirement>, Map<Long, Integer>, int, double, List<BorderShortfall>, int)
+  - {static} withClusterComparison(BiomeMap, RegionRoots, UnionFind, PatternClusters, List<AreaViolation>, Map<String, Integer>, List<BorderShortfall>, int) : Report
+  - {static} mapRegionsToClusters(BiomeMap, UnionFind, PatternClusters, int) : RegionClusters
+  - {static} assignClusterToRegion(UnionFind, PatternClusters, int[], int[], boolean[], int)
+  - {static} fillDriftAndClusterCounts(BiomeMap, RegionRoots, PatternClusters, RegionClusters, int[], double[]) : int
+  - {static} accumulateRegionDrift(BiomeMap, RegionRoots, PatternClusters, RegionClusters, int[], double[], double, int) : boolean
+  - {static} countWhere(int[], IntPredicate) : int
+  - {static} accumulateMatchingValue(IntPredicate, int) : int
+  - {static} legalityBetweenBiomes(BiomeMap, RawRuleTable) : boolean[][]
+  - {static} illegalContactsByName(BiomeMap, int[]) : Map<String, Integer>
+  - {static} tallyIllegalContactPair(BiomeMap, int[], int, Map<String, Integer>, int, int)
+}
+class AreaViolation <<record>> {
+  + biome : BiomeId
+  + areaBlocks2 : double
+  + allowedMinBlocks2 : double
+  + allowedMaxBlocks2 : double
+}
+class BorderShortfall <<record>> {
+  + biome : BiomeId
+  + requirement : String
+}
+class Report <<record>> {
+  + componentCount : int
+  + areaViolations : AreaViolation[*]
+  + illegalContactSamples : Map<String, Integer>
+  + borderShortfalls : BorderShortfall[*]
+  + legalContactSamples : int
+  + driftRatios : double[*]
+  + vanishedClusters : int
+  + splitClusters : int
+  + mergedComponents : int
+}
+class RegionRoots <<record>> {
+  + samplesInRegion : int[*]
+  + roots : Integer[*]
+}
+class ContactTally <<record>> {
+  + illegalContactCounts : int[*]
+  + legalContacts : int
+}
+class RegionClusters <<record>> {
+  + clusterOfRegion : int[*]
+  + regionIsMerged : boolean[*]
+}
+class AllowedArea <<record>> {
+  + minimum : double
+  + maximum : double
+}
+class BiomeRealizationPrototypeRunner {
+  - {static} ATOM_WIDTH_BLOCKS : double
+  - {static} OFF : int
+  - {static} GRID_SIZE : int
+  - {static} PERIMETER_RATIO : double
+  - {static} WORLD_SEED : long
+  - {static} SAMPLES_PER_SIDE : int
+  - {static} TOLERANCE_OF_MINIMUM : double
+  - {static} WARP_SEED : long
+  - {static} FLOW_STEPS : int
+  - {static} SEAM_DEMONSTRATION_SETTINGS : DivergenceFreeWarp.Settings
+  - {static} WINDOW_LEFT : double
+  - {static} WINDOW_TOP : double
+  - {static} WINDOW_WIDTH : double
+  - {static} WINDOW_HEIGHT : double
+  - {static} WINDOW_BLOCKS_PER_PIXEL : double
+  - {static} CROP_SCALE : int
+  - {static} CROP_LEFT : int
+  - {static} CROP_TOP : int
+  - {static} CROP_WIDTH : int
+  - {static} CROP_HEIGHT : int
+  - {static} OUTPUT_DIRECTORY : Path
+  + {static} main(String[])
+  - {static} showTilesMeetingWithoutASeam(ToroidalGrid, Map<ToroidalPos, BiomeId>, HexTorusGeometry, List<BiomeId>)
+  - {static} realize(Preset, RawRuleTable, ToroidalGrid, Map<ToroidalPos, BiomeId>, PatternClusters, HexTorusGeometry, List<BiomeId>, DivergenceFreeWarp)
+  - {static} reportDrift(String, double[])
+  - {static} mapDistortion(HexTorusGeometry, DivergenceFreeWarp) : double[]
+  - {static} computeRowDistortion(HexTorusGeometry, DivergenceFreeWarp, double, int, double[], double[], double[], int)
+  - {static} processGridPoint(HexTorusGeometry, DivergenceFreeWarp, double, int, double[], int, int, double, double[], double[], double[], double[]) : double
+  - {static} patternForWorldSeed(RawRuleTable, ToroidalGrid) : Map<ToroidalPos, BiomeId>
+  - {static} writePattern(Path, Map<ToroidalPos, BiomeId>)
+  - {static} readPattern(Path, ToroidalGrid) : Map<ToroidalPos, BiomeId>
+  - {static} parsePatternLine(Map<ToroidalPos, BiomeId>, String)
+}
+class Preset <<record>> {
+  + name : String
+  + settings : DivergenceFreeWarp.Settings
+}
+class BlockPosition <<record>> {
+  + x : int
+  + z : int
+}
+class ClusterSizeModel {
+  - {static} ROUNDING_TOLERANCE : double
+  - {static} STRAIGHT_LINE_OUTLINE_PER_CELL : int
+  - {static} STRAIGHT_LINE_OUTLINE_EXTRA : int
+  - biomes : BiomeId[*]
+  - indexOf : Map<BiomeId, Integer>
+  - minCells : int[*]
+  - maxCells : int[*]
+  - requirements : CompiledRequirement[*]
+  - shape : ShapeRule
+  - initializeBiomeSizeConstraints(RawRuleTable, double, int)
+  - readRequirements(RawRuleTable, int)
+  - whyNeverMet(RawRuleTable, BiomeId, ResolvedBorderRequirement, int) : String
+  - anyOfNeverMetReason(RawRuleTable, BiomeId, ResolvedBorderRequirement.AnyOf, int) : String
+  - checkAlternativePart(RawRuleTable, BiomeId, ResolvedBorderRequirement, int, List<String>) : boolean
+  - whyShareNeverMet(RawRuleTable, BiomeId, ResolvedBorderRequirement.Share, int) : String
+  - compile(ResolvedBorderRequirement) : CompiledRequirement
+  - {static} squared(double) : double
+}
+class CompiledRequirement <<static>> {
+  - kind : Kind
+  - minEdges : int
+  - biomes : int[*]
+  - parts : CompiledRequirement[*]
+}
+enum Kind <<enum>> {
+  SHARE
+  ALL
+  ANY
+}
+class DeterministicTrig {
+  - {static} LARGEST_ARGUMENT : double
+  - {static} TWO_OVER_PI : double
+  - {static} QUARTER_TURN_FIRST : double
+  - {static} QUARTER_TURN_SECOND : double
+  - {static} QUARTER_TURN_THIRD : double
+  - {static} SINE_1 : double
+  - {static} SINE_2 : double
+  - {static} SINE_3 : double
+  - {static} SINE_4 : double
+  - {static} SINE_5 : double
+  - {static} SINE_6 : double
+  - {static} COSINE_1 : double
+  - {static} COSINE_2 : double
+  - {static} COSINE_3 : double
+  - {static} COSINE_4 : double
+  - {static} COSINE_5 : double
+  - {static} COSINE_6 : double
+  ~ {static} sin(double) : double
+  ~ {static} cos(double) : double
+  - {static} quarterTurns(double) : long
+  - {static} reduce(double) : double
+  - {static} sineKernel(double) : double
+  - {static} cosineKernel(double) : double
+}
+class DivergenceFreeWarp {
+  - waveNumberX : double[*]
+  - waveNumberY : double[*]
+  - directionX : double[*]
+  - directionY : double[*]
+  - amplitude : double[*]
+  - phase : double[*]
+  - sumOfAmplitudes : double
+  - flowSteps : int
+  - initializeWave(HexTorusGeometry, Random, double, double, Settings, int) : double
+  ~ {static} none(HexTorusGeometry) : DivergenceFreeWarp
+  - {static} drawTileWaveNumber(HexTorusGeometry, Random, double, double) : double[]
+  - {static} tryDrawValidWaveNumber(Random, double, double, double, double, double, double, double) : double[]
+  - rk4Step(double, double[], double[])
+  - fieldAt(double, double, double[])
+  - accumulateWaveContribution(double, double, int, double[])
+  - accumulateWaveGradient(double, double, int, double[])
+}
+class Settings <<record>> {
+  + waveCount : int
+  + shortestWavelengthBlocks : double
+  + longestWavelengthBlocks : double
+  + displacementAtLongestWavelengthBlocks : double
+  + roughness : double
+  + flowSteps : int
+}
+class HexTorusGeometry {
+  - width : int
+  - height : int
+  - cornerRadius : double
+  - cellWidth : double
+  - rowHeight : double
+  ~ {static} areaOfHexagonWidth(double) : double
+}
+class ParallelSeedSearch {
+  ~ {static} search(RawRuleTable, ToroidalGrid, ClusterSizeModel, long, int, long, ToroidalSizedLocalSearch.Schedule, int) : Outcome
+  - {static} runSeed(RawRuleTable, ToroidalGrid, ClusterSizeModel, long, int, long, ToroidalSizedLocalSearch.Schedule, AtomicInteger) : ToroidalSizedLocalSearch.Result
+  - {static} pickOutcome(long, List<Future<ToroidalSizedLocalSearch.Result>>) : Outcome
+  - {static} processRunResult(long, List<Future<ToroidalSizedLocalSearch.Result>>, int, Outcome) : Outcome
+  - {static} resultOf(long, Future<ToroidalSizedLocalSearch.Result>) : ToroidalSizedLocalSearch.Result
+}
+class Outcome <<record>> {
+  + seed : long
+  + result : ToroidalSizedLocalSearch.Result
+}
+class PatternClusters {
+  - clusterOfCell : int[*]
+  - cellsInCluster : int[*]
+  ~ {static} of(ToroidalGrid, Map<ToroidalPos, BiomeId>) : PatternClusters
+  - {static} growClusterFrom(ToroidalGrid, Map<ToroidalPos, BiomeId>, int[], int[], ToroidalPos, int)
+  - {static} processFrontierNode(ToroidalGrid, Map<ToroidalPos, BiomeId>, int[], Deque<ToroidalPos>, BiomeId, ToroidalPos, int)
+  - {static} addIfUnvisited(ToroidalGrid, Map<ToroidalPos, BiomeId>, int[], Deque<ToroidalPos>, BiomeId, ToroidalPos, int)
+  - {static} indexOf(ToroidalGrid, ToroidalPos) : int
+}
+class PatternCsv {
+  ~ {static} write(Path, Map<ToroidalPos, BiomeId>)
+  ~ {static} read(Path, ToroidalGrid) : Map<ToroidalPos, BiomeId>
+  - {static} parseCsvLine(Path, ToroidalGrid, Map<ToroidalPos, BiomeId>, String)
+}
+class PlaneWindowPngExporter {
+  ~ {static} TILE_EDGE_RGB : int
+  - {static} OUTLINE_RGB : int
+  ~ {static} export(RealizedBiomeField, HexTorusGeometry, Path, double, double, double, double, double, boolean)
+  - {static} fillRowBiomeData(RealizedBiomeField, int[][], double, double, double, int, int)
+  - {static} renderImageRow(BufferedImage, int[][], HexTorusGeometry, double, double, double, boolean, int, int, int)
+  - {static} renderPixel(BufferedImage, int[][], HexTorusGeometry, double, double, double, boolean, int, int, int, int)
+  - {static} isOnTileEdge(HexTorusGeometry, double, double, double) : boolean
+  - {static} write(BufferedImage, Path)
+}
+class PlanSettings <<record>> {
+  + gridSize : int
+  + atomWidthBlocks : double
+  + perimeterRatio : double
+  + warpStrengthsStrongestFirst : double[*]
+  + rasterSamplesPerSide : int
+  + sizeToleranceOfMinimum : double
+  + patternStepsPerAttempt : long
+  + maxPatternAttempts : int
+  + patternSchedule : ToroidalSizedLocalSearch.Schedule
+}
+class PlanSnapshot <<record>> {
+  + schemaVersion : int
+  + worldSeed : long
+  + catalogFingerprint : String
+  + gridWidth : int
+  + gridHeight : int
+  + atomWidthBlocks : double
+  + warpStrength : double
+  + patternAttempts : int
+  + strengthsTried : int
+  + palette : String[*]
+  + rasterSize : int
+  + raster : byte[*]
+}
+class RawRuleTable {
+  - {static} LEGAL_GROUP_NAME : String
+  - allBiomeIds : BiomeId[*]
+  - sizeRangeById : Map<BiomeId, SizeRange>
+  - legalPairs : UnorderedPair[*]
+  - requirementById : Map<BiomeId, ResolvedBorderRequirement>
+  + {static} from(BiomeGraphData) : RawRuleTable
+  - {static} processNode(List<BiomeId>, Map<BiomeId, SizeRange>, NodeData)
+  - {static} addLegalEdge(Set<UnorderedPair>, EdgeData)
+  - {static} addResolvedRequirement(Map<BiomeId, ResolvedBorderRequirement>, Map<String, List<BiomeId>>, Set<BiomeId>, NodeData)
+  - {static} groupsOf(BiomeGraphData, Set<BiomeId>) : Map<String, List<BiomeId>>
+  - {static} processGroupData(Map<String, List<BiomeId>>, Set<BiomeId>, GroupData)
+  - {static} validateAndAddMember(List<BiomeId>, Set<BiomeId>, String, String)
+  - {static} biomeOfKey(String) : BiomeId
+  - {static} resolveRequirement(BiomeId, String, Map<String, List<BiomeId>>, Set<BiomeId>) : Optional<ResolvedBorderRequirement>
+  - {static} resolve(BiomeId, BorderRequirement, Map<String, List<BiomeId>>, Set<BiomeId>) : ResolvedBorderRequirement
+  - {static} biomesOfSubject(BiomeId, String, Map<String, List<BiomeId>>, Set<BiomeId>) : List<BiomeId>
+  + allBiomeIds() : List<BiomeId>
+  + sizeRangeOf(BiomeId) : SizeRange
+  + isLegal(BiomeId, BiomeId) : boolean
+}
+class SizeRange <<record>> {
+  + minWidthBlocks : int
+  + maxWidthBlocks : int
+}
+class UnorderedPair <<record>> {
+  + a : BiomeId
+  + b : BiomeId
+}
+class RealizationSelector {
+  ~ {static} WAVE_COUNT : int
+  ~ {static} SHORTEST_WAVELENGTH_BLOCKS : double
+  ~ {static} LONGEST_WAVELENGTH_BLOCKS : double
+  ~ {static} ROUGHNESS : double
+  ~ {static} FLOW_STEPS : int
+  ~ {static} REALIZED_BORDER_FRACTION : double
+  - {static} WORLD_SEED_SALT : long
+  ~ {static} select(RawRuleTable, ToroidalGrid, Map<ToroidalPos, BiomeId>, HexTorusGeometry, long, PlanSettings) : Selection
+  - {static} tryStrengthCandidate(RawRuleTable, ToroidalGrid, Map<ToroidalPos, BiomeId>, HexTorusGeometry, List<BiomeId>, PatternClusters, int, double, long, double, int, StringBuilder) : Optional<Selection>
+  - {static} warpOfStrength(HexTorusGeometry, long, double) : DivergenceFreeWarp
+  ~ {static} passes(BiomeMapVerifier.Report) : boolean
+  - {static} whyItFailed(BiomeMapVerifier.Report) : String
+  - {static} describe(double) : String
+}
+class Selection <<record>> {
+  + strength : double
+  + warp : DivergenceFreeWarp
+  + map : BiomeMap
+  + report : BiomeMapVerifier.Report
+  + candidatesTried : int
+}
+class RealizedBiomeField {
+  - geometry : HexTorusGeometry
+  - warp : DivergenceFreeWarp
+  - biomeOfCell : int[*]
+  - gridWidth : int
+  - assignCellBiome(ToroidalGrid, Map<ToroidalPos, BiomeId>, List<BiomeId>, int, int)
+}
+interface ResolvedBorderRequirement <<interface>> {
+  + shortfall(ToIntFunction<BiomeId>) : int
+  + isMetBy(ToDoubleFunction<BiomeId>, double) : boolean
+  + leaves() : List<Share>
+  + collectLeaves(ResolvedBorderRequirement, List<Share>) : private static void
+  + print(ResolvedBorderRequirement) : String
+}
+class Share <<record>> {
+  + subject : String
+  + biomes : BiomeId[*]
+  + minEdges : int
+  + toString() : String
+}
+class AllOf <<record>> {
+  + parts : ResolvedBorderRequirement[*]
+  + toString() : String
+}
+class AnyOf <<record>> {
+  + parts : ResolvedBorderRequirement[*]
+  + toString() : String
+}
+class ShapeRule <<record>> {
+  + perimeterRatio : double
+  + smallestClusterNeedingATriangle : int
+  + smallestClusterNeedingAFlower : int
+  + tailReachCells : int
+  ~ {static} NO_PERIMETER_LIMIT : double
+  - {static} SMALLEST_CLUSTER_ABLE_TO_HOLD_A_TRIANGLE : int
+  - {static} SMALLEST_CLUSTER_ABLE_TO_HOLD_A_FLOWER : int
+  - {static} ROUNDING_TOLERANCE : double
+  ~ {static} minimumPerimeter(int) : int
+}
+enum Thickness <<enum>> {
+  NONE
+  TRIANGLE
+  FLOWER
+}
+class SolveStatistics {
+  ~ {static} UNSOLVED : long
+  - {static} Z_FOR_95_PERCENT_TWO_SIDED : double
+  - trialCount : int
+  - solvedSteps : long[*]
+  - solvedWithin(long) : int
+}
+class ToroidalGrid {
+  - width : int
+  - height : int
+  - fillRowToPositions(List<ToroidalPos>, int)
+}
+class ToroidalPatternPngExporter {
+  ~ {static} HEX_RADIUS_PIXELS : int
+  - {static} MARGIN_PIXELS : int
+  - {static} HEX_WIDTH_PIXELS : double
+  - {static} ROW_HEIGHT_PIXELS : double
+  - {static} GOLDEN_RATIO_CONJUGATE : double
+  ~ {static} export(ToroidalGrid, Map<ToroidalPos, BiomeId>, List<BiomeId>, Path)
+  ~ {static} centerXOf(ToroidalPos) : int
+  ~ {static} centerYOf(ToroidalPos) : int
+  - {static} hexagonAround(int, int) : Polygon
+  - {static} drawOutlineEdges(Graphics2D, ToroidalGrid, Map<ToroidalPos, BiomeId>, ToroidalPos)
+  - {static} drawEdgeIfDifferentBiome(Graphics2D, ToroidalGrid, Map<ToroidalPos, BiomeId>, ToroidalPos, int, int, int[])
+  ~ {static} colorOf(int) : Color
+  - {static} write(BufferedImage, Path)
+}
+class ToroidalPos <<record>> {
+  + q : int
+  + r : int
+}
+class ToroidalSizedLocalSearch {
+  - {static} MISSING_BIOME_COST : int
+  - {static} NUCLEATION_PROBABILITY : double
+  - {static} MISSING_NUCLEATION_SHARE : double
+  - {static} BEST_TRACKING_INTERVAL_STEPS : int
+  - {static} ACCEPTANCE_TABLE_SIZE : int
+  - {static} SCHEDULE_LEVELS : int
+  - {static} FOCUS_PROBABILITY : double
+  ~ {static} DEFAULT_RELABEL_PROBABILITY : double
+  ~ {static} DEFAULT_TEMPERATURE : double
+  ~ {static} search(RawRuleTable, ToroidalGrid, ClusterSizeModel, long, long) : Result
+  ~ {static} search(RawRuleTable, ToroidalGrid, ClusterSizeModel, long, long, double) : Result
+  ~ {static} search(RawRuleTable, ToroidalGrid, ClusterSizeModel, long, long, Schedule) : Result
+  ~ {static} search(RawRuleTable, ToroidalGrid, ClusterSizeModel, long, long, Schedule, BooleanSupplier) : Result
+  ~ {static} search(RawRuleTable, ToroidalGrid, ClusterSizeModel, long, long, Schedule, BooleanSupplier, double) : Result
+  ~ {static} cost(RawRuleTable, ToroidalGrid, ClusterSizeModel, Map<ToroidalPos, BiomeId>) : int
+  ~ {static} illegalPairCounts(RawRuleTable, ToroidalGrid, Map<ToroidalPos, BiomeId>) : Map<String, Integer>
+  - {static} tallyIllegalPairsFromCell(RawRuleTable, ToroidalGrid, Map<ToroidalPos, BiomeId>, Map<String, Integer>, Map.Entry<ToroidalPos, BiomeId>)
+  ~ {static} breakdown(RawRuleTable, ToroidalGrid, ClusterSizeModel, Map<ToroidalPos, BiomeId>) : Breakdown
+  - {static} countIllegalEdges(RawRuleTable, ToroidalGrid, Map<ToroidalPos, BiomeId>) : int
+  - {static} exploreCluster(ToroidalGrid, Map<ToroidalPos, BiomeId>, ToroidalPos, Set<ToroidalPos>) : ExploredCluster
+  - {static} sumClusterViolations(RawRuleTable, ToroidalGrid, ClusterSizeModel, Map<ToroidalPos, BiomeId>) : int
+  - {static} countMissingBiomes(RawRuleTable, Map<ToroidalPos, BiomeId>) : int
+  - {static} borderShortfallOf(RawRuleTable, BiomeId, Map<BiomeId, Integer>) : int
+  - {static} thinCellsOf(ToroidalGrid, ClusterSizeModel, Set<ToroidalPos>) : int
+  - {static} isOutsideAnyTriangle(ToroidalGrid, Set<ToroidalPos>, ToroidalPos) : boolean
+  - {static} addIfFlowerCenter(ToroidalGrid, Set<ToroidalPos>, Map<ToroidalPos, Integer>, Deque<ToroidalPos>, ToroidalPos)
+  - {static} expandFlowerReach(ToroidalGrid, Set<ToroidalPos>, Map<ToroidalPos, Integer>, Deque<ToroidalPos>, int, ToroidalPos)
+  ~ {static} verify(RawRuleTable, ToroidalGrid, ClusterSizeModel, Map<ToroidalPos, BiomeId>)
+}
+class Result <<record>> {
+  + assignment : Map<ToroidalPos, BiomeId>
+  + closestAssignment : Map<ToroidalPos, BiomeId>
+  + steps : long
+  + bestCost : int
+}
+class Breakdown <<record>> {
+  + illegalEdges : int
+  + clusterViolation : int
+  + missingBiomes : int
+}
+class Schedule <<record>> {
+  + highTemperature : double
+  + lowTemperature : double
+  + cycleSteps : long
+  ~ {static} constant(double) : Schedule
+}
+class ExploredCluster <<record>> {
+  + biome : BiomeId
+  + cells : ToroidalPos[*]
+  + perimeter : int
+  + edgesToBiome : Map<BiomeId, Integer>
+}
+class Search <<static>> {
+  - table : RawRuleTable
+  - grid : ToroidalGrid
+  - model : ClusterSizeModel
+  - random : Random
+  - biomes : BiomeId[*]
+  - positions : ToroidalPos[*]
+  - biomeCount : int
+  - cellCount : int
+  - legal : boolean[][*]
+  - neighbors : int[][*]
+  - schedule : Schedule
+  - shouldStop : BooleanSupplier
+  - acceptanceProbabilityByLevel : double[][*]
+  - acceptanceProbability : double[*]
+  - value : int[*]
+  - conflictedCells : int[*]
+  - conflictedCount : int
+  - usesOfBiome : int[*]
+  - missingBiomes : int
+  - cost : int
+  - visitStamp : int[*]
+  - queue : int[*]
+  - stamp : int
+  - exploredSize : int
+  - exploredThinCells : int
+  - exploredPerimeter : int
+  - exploredBorderShortfall : int
+  - needsBorder : boolean[*]
+  - borderEdges : int[*]
+  - borderEdgeBiomes : int[*]
+  - borderEdgeBiomeCount : int
+  - reachDistance : int[*]
+  - reachQueue : int[*]
+  - relabelProbability : double
+  - changedCells : int[*]
+  - changedStamp : int[*]
+  - changedGeneration : int
+  - seenBiomeStamp : int[*]
+  - seenBiomes : int[*]
+  - seenBiomeGeneration : int
+  - trackBestAndCheckStop(long, int, int[]) : TrackResult
+  - failIfBookkeepingDrifted()
+  - validateBiomeCountAndCheckMissing(int, int[]) : boolean
+  - solved(long) : Result
+  - initializeFromRandomVoronoi()
+  - assignNearestSeedBiome(int[], int[], int, int)
+  - isBiomeMissing(int) : boolean
+  - torusDistance(ToroidalPos, ToroidalPos) : int
+  - wrappedDistanceCandidate(int, int, int, int) : int
+  - fullCost() : int
+  - countIllegalEdgesFromCell(int) : int
+  - collectConflictedCells()
+  - cellHasConflict(int) : boolean
+  - proposeAndMaybeApply()
+  - proposeWholeClusterRelabel()
+  - setChangedCells(int, int)
+  - randomBiomeFittingClusterAndItsSurroundings(int, int) : int
+  - gatherNeighborBiome(int, int, int) : int
+  - considerBiomeAsFit(int, int, int, int, FitCandidate) : FitCandidate
+  - localCost(int) : int
+  - countIllegalEdgesForChangedCell(int) : int
+  - clusterViolationForChangedCell(int) : int
+  - randomMissingBiome() : int
+  - costChangeOfReassigning(int, int, int) : int
+  - edgeCountDelta(int[], int, int) : int
+  - clusterCostBesideCell(int, int[], int, int, int) : int
+  - requirementClustersBesideThatAreNeitherBiome(int[], int, int) : int
+  - exploreCluster(int)
+  - enqueueIfUnvisited(int, int) : int
+  - countEdgeTo(int)
+  - borderShortfallOfExploredCluster(int) : int
+  - countCellsOutsideAnyTriangle(int, int) : int
+  - cellIsOutsideAnyTriangle(int, int) : boolean
+  - countCellsBeyondReachOfAFlower(int, int) : int
+  - isFlowerCenter(int, int) : boolean
+  - visitFlowerNeighborIfReachable(int, int, int, int) : int
+  - toAssignment(int[]) : Map<ToroidalPos, BiomeId>
+}
+class TrackResult <<record>> {
+  + bestCost : int
+  + stop : boolean
+}
+class FitCandidate <<record>> {
+  + fitting : int
+  + chosen : int
+}
+class ToroidalSizedPatternGenerator {
+  ~ {static} DEFAULT_STEPS_PER_SEED : long
+  ~ {static} DEFAULT_MAX_SEEDS : int
+  ~ {static} DEFAULT_SCHEDULE : ToroidalSizedLocalSearch.Schedule
+  - {static} WORLD_SEED_SALT : long
+  - {static} STUCK_PAIRS_IN_FAILURE_MESSAGE : int
+  ~ {static} generate(RawRuleTable, ToroidalGrid, ClusterSizeModel, long, int) : Generated
+  ~ {static} generate(RawRuleTable, ToroidalGrid, ClusterSizeModel, long, long, int, ToroidalSizedLocalSearch.Schedule, int) : Generated
+  ~ {static} baseSeedOf(long) : long
+  - {static} failureMessage(RawRuleTable, ToroidalGrid, ClusterSizeModel, long, long, int, ParallelSeedSearch.Outcome) : String
+}
+class Generated <<record>> {
+  + pattern : Map<ToroidalPos, BiomeId>
+  + seedIndex : int
+}
+class ToroidalSolvabilityRunner {
+  - {static} ATOM_WIDTH_BLOCKS : double
+  - {static} OFF : int
+  - {static} TRIAL_COUNT : int
+  - {static} BUDGET_STEPS : long
+  - {static} BASE_SEED : long
+  - {static} OUTPUT_DIRECTORY : Path
+  + {static} main(String[])
+  - {static} studyConfiguration(RawRuleTable, Configuration)
+  - {static} study(RawRuleTable, ToroidalGrid, ClusterSizeModel, Configuration)
+  - {static} reportStuckPairs(String, List<Trial>)
+  - {static} reportTrialFailures(Trial, Map<String, Integer>, Map<String, Integer>) : boolean
+  - {static} reportBudget(String, SolveStatistics, long)
+  - {static} restartsOrNone(SolveStatistics, double, long) : String
+  - {static} runTrials(RawRuleTable, ToroidalGrid, ClusterSizeModel, ToroidalSizedLocalSearch.Schedule, int) : List<Trial>
+  - {static} submitTrial(ExecutorService, RawRuleTable, ToroidalGrid, ClusterSizeModel, ToroidalSizedLocalSearch.Schedule, int) : Future<Trial>
+  - {static} runOneTrial(RawRuleTable, ToroidalGrid, ClusterSizeModel, ToroidalSizedLocalSearch.Schedule, long) : Trial
+  - {static} writeCsv(long[], Configuration) : Path
+}
+class Configuration <<record>> {
+  + label : String
+  + gridSize : int
+  + perimeterRatio : double
+  + schedule : ToroidalSizedLocalSearch.Schedule
+}
+class Trial <<record>> {
+  + steps : long
+  + stuckPairs : Map<String, Integer>
+}
+class ToroidalWorldSeedReliabilityRunner {
+  - {static} SETTINGS : PlanSettings
+  - {static} OFF : int
+  - {static} WORLD_SEED_COUNT : int
+  - {static} FIRST_ORDINARY_WORLD_SEED : long
+  - {static} OUTPUT_DIRECTORY : Path
+  - {static} CSV : Path
+  - {static} PATTERN_DIRECTORY : Path
+  + {static} main(String[])
+  - {static} processWorld(long, RawRuleTable, ToroidalGrid, HexTorusGeometry, ClusterSizeModel, int, Tally)
+  - {static} report(Tally, int, int)
+  - {static} percentile(List<T>, double) : T
+  - {static} secondsSince(long) : double
+  - {static} startCsv()
+}
+class Tally <<static>> {
+  - patternsSolved : int
+  - realized : int
+  - attemptsUsed : Integer[*]
+  - patternSeconds : Double[*]
+  - realizationSeconds : Double[*]
+  - worldsPerStrength : Map<Double, Integer>
+  - worstAbsoluteDrift : double
+  - patternFailures : Long[*]
+  - realizationFailures : Long[*]
+}
+class UnionFind {
+  - parent : int[*]
+}
+class WorldBiomePlan {
+  ~ {static} SCHEMA_VERSION : int
+  - {static} LARGEST_PALETTE : int
+  - worldSeed : long
+  - catalogFingerprint : String
+  - gridWidth : int
+  - gridHeight : int
+  - atomWidthBlocks : double
+  - warpStrength : double
+  - patternAttempts : int
+  - strengthsTried : int
+  - paletteNames : String[*]
+  - palette : BiomeId[*]
+  - rasterSize : int
+  - raster : byte[*]
+  - geometry : HexTorusGeometry
+  + {static} create(BiomeGraphData, long, int, ProgressListener) : WorldBiomePlan
+  ~ {static} create(BiomeGraphData, long, int, ProgressListener, PlanSettings) : WorldBiomePlan
+  - {static} toByteRaster(int[]) : byte[]
+  + {static} requireCatalogAcceptable(BiomeGraphData)
+  - {static} modelOf(RawRuleTable, PlanSettings) : ClusterSizeModel
+  + {static} fromSnapshot(PlanSnapshot) : WorldBiomePlan
+  - {static} validateRasterIndex(byte, List<String>)
+  + toSnapshot() : PlanSnapshot
+  + biomeAt(double, double) : BiomeId
+  + nearestPositionOf(BiomeId, double, double) : Optional<BlockPosition>
+  - candidateOffsetAt(int, int, int, double[], double, double, double, double) : Optional<WrappedOffset>
+  - {static} closerOf(WrappedOffset, Optional<WrappedOffset>) : WrappedOffset
+  - {static} closestWrappedOffset(double, double, double, double, double, double) : WrappedOffset
+  - {static} updateBestIfCloser(WrappedOffset, double, double) : WrappedOffset
+  + biomes() : List<BiomeId>
+  + worldSeed() : long
+  + catalogFingerprint() : String
+  + warpStrength() : double
+  + patternAttempts() : int
+  + strengthsTried() : int
+  + tileSideBlocks() : double
+  - tileCoordinates(double, double) : double[]
+  - {static} biomeIdOf(String) : BiomeId
+  + {static} fingerprintOf(BiomeGraphData) : String
+}
+interface ProgressListener <<interface>> {
+  + report(String) : void
+}
+class WrappedOffset <<record>> {
+  + x : double
+  + z : double
+  + distanceSquared : double
+}
+class WorldBiomePlanCheckRunner {
+  - {static} WORLD_SEED : long
+  - {static} SAVED_STUDY_PATTERN : Path
+  - {static} LOOKUPS : int
+  + {static} main(String[])
+  - {static} createAndReport(BiomeGraphData, int) : WorldBiomePlan
+  - {static} reportSnapshot(WorldBiomePlan) : PlanSnapshot
+  - {static} restoreAndReport(PlanSnapshot) : WorldBiomePlan
+  - {static} reportLookups(WorldBiomePlan, WorldBiomePlan)
+  - {static} checkOneLookup(WorldBiomePlan, WorldBiomePlan, Random) : LookupResult
+  - {static} reportNearest(WorldBiomePlan)
+  - {static} checkBiomeLocated(WorldBiomePlan, BiomeId) : boolean
+  - {static} comparePatternWithTheStudy(BiomeGraphData, int)
+  - {static} countIfDifferent(Map.Entry<ToroidalPos, BiomeId>, Map<ToroidalPos, BiomeId>) : boolean
+  - {static} seconds(long) : double
+}
+class LookupResult <<record>> {
+  + mismatch : boolean
+  + different : boolean
+}
+}
+namespace com.mineutze.worldgen.tooling.graphedit {
+class GraphEditorFiles {
+  ~ {static} DATA_FILE : Path
+}
+class GraphEditorServer {
+  - {static} DEFAULT_PORT : int
+  + {static} main(String[])
+}
+class GraphEditorSolveCheck {
+  - {static} WORLD_SEEDS : Long[*]
+  + {static} main(String[])
+  - {static} checkSeed(BiomeGraphData, int, long) : boolean
+  - {static} secondsSince(long) : String
+}
+class GraphValidation {
+  - {static} MIN_LEGAL_NEIGHBORS : int
+  ~ {static} validate(BiomeGraphData) : ValidationResult
+  - {static} generatorRejections(BiomeGraphData) : List<String>
+  - {static} underConnectedErrors(BiomeGraph, BiomeGraphData) : List<String>
+  - {static} checkConnectivity(BiomeGraph, List<BiomeId>, List<String>, BiomeId)
+}
+class ValidationResult <<record>> {
+  + constructs : boolean
+  + constructionError : String
+  + errors : String[*]
+}
+}
+
+com.mineutze.worldgen.biomegraph.AdjacencyRule *--> com.mineutze.worldgen.biomegraph.BiomeId
+com.mineutze.worldgen.biomegraph.AdjacencyRule ..> com.mineutze.worldgen.biomegraph.UnorderedBiomePair
+com.mineutze.worldgen.biomegraph.BiomeGraph --> com.mineutze.worldgen.biomegraph.AdjacencyRule
+com.mineutze.worldgen.biomegraph.BiomeGraph --> com.mineutze.worldgen.biomegraph.BiomeId
+com.mineutze.worldgen.biomegraph.BiomeGraph --> com.mineutze.worldgen.biomegraph.BiomeNode
+com.mineutze.worldgen.biomegraph.BiomeGraph --> com.mineutze.worldgen.biomegraph.UnorderedBiomePair
+com.mineutze.worldgen.biomegraph.BiomeGraphData *--> "0..*" com.mineutze.worldgen.biomegraph.EdgeData
+com.mineutze.worldgen.biomegraph.BiomeGraphData *--> "0..*" com.mineutze.worldgen.biomegraph.GroupData
+com.mineutze.worldgen.biomegraph.BiomeGraphData *--> "0..*" com.mineutze.worldgen.biomegraph.NodeData
+com.mineutze.worldgen.biomegraph.BiomeGraphJson ..> com.mineutze.worldgen.biomegraph.AdjacencyRule
+com.mineutze.worldgen.biomegraph.BiomeGraphJson ..> com.mineutze.worldgen.biomegraph.BiomeGraph
+com.mineutze.worldgen.biomegraph.BiomeGraphJson ..> com.mineutze.worldgen.biomegraph.BiomeGraphData
+com.mineutze.worldgen.biomegraph.BiomeGraphJson ..> com.mineutze.worldgen.biomegraph.BiomeId
+com.mineutze.worldgen.biomegraph.BiomeGraphJson ..> com.mineutze.worldgen.biomegraph.BiomeNode
+com.mineutze.worldgen.biomegraph.BiomeGraphJson ..> com.mineutze.worldgen.biomegraph.BiomeSizeRange
+com.mineutze.worldgen.biomegraph.BiomeGraphJson ..> com.mineutze.worldgen.biomegraph.EdgeData
+com.mineutze.worldgen.biomegraph.BiomeGraphJson ..> com.mineutze.worldgen.biomegraph.GroupData
+com.mineutze.worldgen.biomegraph.BiomeGraphJson ..> com.mineutze.worldgen.biomegraph.MinimalJson
+com.mineutze.worldgen.biomegraph.BiomeGraphJson ..> com.mineutze.worldgen.biomegraph.NodeData
+com.mineutze.worldgen.biomegraph.BiomeId ..|> Comparable
+com.mineutze.worldgen.biomegraph.BiomeNode *--> com.mineutze.worldgen.biomegraph.BiomeId
+com.mineutze.worldgen.biomegraph.BiomeNode *--> com.mineutze.worldgen.biomegraph.BiomeSizeRange
+com.mineutze.worldgen.biomegraph.Share ..|> com.mineutze.worldgen.biomegraph.BorderRequirement
+com.mineutze.worldgen.biomegraph.AllOf ..|> com.mineutze.worldgen.biomegraph.BorderRequirement
+com.mineutze.worldgen.biomegraph.AnyOf ..|> com.mineutze.worldgen.biomegraph.BorderRequirement
+com.mineutze.worldgen.biomegraph.BorderRequirementParser ..> com.mineutze.worldgen.biomegraph.AllOf
+com.mineutze.worldgen.biomegraph.BorderRequirementParser ..> com.mineutze.worldgen.biomegraph.AnyOf
+com.mineutze.worldgen.biomegraph.BorderRequirementParser ..> com.mineutze.worldgen.biomegraph.BorderRequirement
+com.mineutze.worldgen.biomegraph.BorderRequirementParser ..> com.mineutze.worldgen.biomegraph.Share
+com.mineutze.worldgen.biomegraph.UnorderedBiomePair *--> com.mineutze.worldgen.biomegraph.BiomeId
+com.mineutze.worldgen.integration.BiomeIdAdapter ..> com.mineutze.worldgen.biomegraph.BiomeId
+com.mineutze.worldgen.integration.LocateBiomeOverride ..> com.mineutze.worldgen.integration.BestBiome
+com.mineutze.worldgen.integration.LocateBiomeOverride ..> com.mineutze.worldgen.biomegraph.BiomeId
+com.mineutze.worldgen.integration.LocateBiomeOverride ..> com.mineutze.worldgen.integration.BiomeIdAdapter
+com.mineutze.worldgen.integration.LocateBiomeOverride ..> com.mineutze.worldgen.plan.BlockPosition
+com.mineutze.worldgen.integration.LocateBiomeOverride ..> com.mineutze.worldgen.integration.Result
+com.mineutze.worldgen.integration.LocateBiomeOverride ..> com.mineutze.worldgen.plan.WorldBiomePlan
+com.mineutze.worldgen.integration.LocateBiomeOverride ..> com.mineutze.worldgen.integration.WorldBiomePlanHolder
+com.mineutze.worldgen.integration.ModBiomeSources ..> com.mineutze.worldgen.integration.ModOverworldBiomeSource
+com.mineutze.worldgen.integration.ModBiomeSources ..> com.mineutze.worldgen.WorldgenMod
+com.mineutze.worldgen.integration.ModOverworldBiomeSource --|> net.minecraft.world.level.biome.BiomeSource
+com.mineutze.worldgen.integration.ModOverworldBiomeSource ..> com.mineutze.worldgen.biomegraph.BiomeId
+com.mineutze.worldgen.integration.ModOverworldBiomeSource ..> com.mineutze.worldgen.integration.BiomeIdAdapter
+com.mineutze.worldgen.integration.ModOverworldBiomeSource ..> com.mineutze.worldgen.biomegraph.ModBiomeGraph
+com.mineutze.worldgen.integration.ModOverworldBiomeSource ..> com.mineutze.worldgen.integration.WorldBiomePlanHolder
+com.mineutze.worldgen.integration.PlanDebugCommand ..> com.mineutze.worldgen.integration.WorldBiomeExporter
+com.mineutze.worldgen.integration.PlanDebugCommand ..> com.mineutze.worldgen.plan.WorldBiomePlan
+com.mineutze.worldgen.integration.PlanDebugCommand ..> com.mineutze.worldgen.integration.WorldBiomePlanHolder
+com.mineutze.worldgen.integration.WorldBiomeExporter ..> com.mineutze.worldgen.integration.Result
+com.mineutze.worldgen.integration.WorldBiomeExporter ..> com.mineutze.worldgen.plan.WorldBiomePlan
+com.mineutze.worldgen.integration.WorldBiomeExporter ..> com.mineutze.worldgen.integration.WorldBiomePlanHolder
+com.mineutze.worldgen.integration.WorldBiomePlanHolder --> com.mineutze.worldgen.plan.WorldBiomePlan
+com.mineutze.worldgen.integration.WorldBiomePlanHolder ..> com.mineutze.worldgen.biomegraph.BiomeGraphData
+com.mineutze.worldgen.integration.WorldBiomePlanHolder ..> com.mineutze.worldgen.biomegraph.BiomeGraphJson
+com.mineutze.worldgen.integration.WorldBiomePlanHolder ..> com.mineutze.worldgen.biomegraph.ModBiomeGraph
+com.mineutze.worldgen.integration.WorldBiomePlanHolder ..> com.mineutze.worldgen.plan.PlanSnapshot
+com.mineutze.worldgen.integration.WorldBiomePlanHolder ..> com.mineutze.worldgen.integration.WorldBiomePlanSavedData
+com.mineutze.worldgen.integration.WorldBiomePlanSavedData --|> net.minecraft.world.level.saveddata.SavedData
+com.mineutze.worldgen.integration.WorldBiomePlanSavedData *--> com.mineutze.worldgen.plan.PlanSnapshot
+com.mineutze.worldgen.plan.BiomeMap --> "0..*" com.mineutze.worldgen.biomegraph.BiomeId
+com.mineutze.worldgen.plan.BiomeMapPngExporter ..> com.mineutze.worldgen.plan.BiomeMap
+com.mineutze.worldgen.plan.BiomeMapPngExporter ..> com.mineutze.worldgen.plan.ToroidalPatternPngExporter
+com.mineutze.worldgen.plan.BiomeMapRasterizer ..> com.mineutze.worldgen.biomegraph.BiomeId
+com.mineutze.worldgen.plan.BiomeMapRasterizer ..> com.mineutze.worldgen.plan.BiomeMap
+com.mineutze.worldgen.plan.BiomeMapRasterizer ..> com.mineutze.worldgen.plan.DivergenceFreeWarp
+com.mineutze.worldgen.plan.BiomeMapRasterizer ..> com.mineutze.worldgen.plan.HexTorusGeometry
+com.mineutze.worldgen.plan.BiomeMapRasterizer ..> com.mineutze.worldgen.plan.RealizedBiomeField
+com.mineutze.worldgen.plan.BiomeMapRasterizer ..> com.mineutze.worldgen.plan.ToroidalGrid
+com.mineutze.worldgen.plan.BiomeMapRasterizer ..> com.mineutze.worldgen.plan.ToroidalPos
+com.mineutze.worldgen.plan.AreaViolation *--> com.mineutze.worldgen.biomegraph.BiomeId
+com.mineutze.worldgen.plan.BorderShortfall *--> com.mineutze.worldgen.biomegraph.BiomeId
+com.mineutze.worldgen.plan.Report *--> "0..*" com.mineutze.worldgen.plan.AreaViolation
+com.mineutze.worldgen.plan.Report *--> "0..*" com.mineutze.worldgen.plan.BorderShortfall
+com.mineutze.worldgen.plan.BiomeMapVerifier ..> com.mineutze.worldgen.plan.AllowedArea
+com.mineutze.worldgen.plan.BiomeMapVerifier ..> com.mineutze.worldgen.plan.AreaViolation
+com.mineutze.worldgen.plan.BiomeMapVerifier ..> com.mineutze.worldgen.biomegraph.BiomeId
+com.mineutze.worldgen.plan.BiomeMapVerifier ..> com.mineutze.worldgen.plan.BiomeMap
+com.mineutze.worldgen.plan.BiomeMapVerifier ..> com.mineutze.worldgen.plan.BorderShortfall
+com.mineutze.worldgen.plan.BiomeMapVerifier ..> com.mineutze.worldgen.plan.ContactTally
+com.mineutze.worldgen.plan.BiomeMapVerifier ..> com.mineutze.worldgen.plan.HexTorusGeometry
+com.mineutze.worldgen.plan.BiomeMapVerifier ..> com.mineutze.worldgen.plan.PatternClusters
+com.mineutze.worldgen.plan.BiomeMapVerifier ..> com.mineutze.worldgen.plan.RawRuleTable
+com.mineutze.worldgen.plan.BiomeMapVerifier ..> com.mineutze.worldgen.plan.RegionClusters
+com.mineutze.worldgen.plan.BiomeMapVerifier ..> com.mineutze.worldgen.plan.RegionRoots
+com.mineutze.worldgen.plan.BiomeMapVerifier ..> com.mineutze.worldgen.plan.Report
+com.mineutze.worldgen.plan.BiomeMapVerifier ..> com.mineutze.worldgen.plan.ResolvedBorderRequirement
+com.mineutze.worldgen.plan.BiomeMapVerifier ..> com.mineutze.worldgen.plan.SizeRange
+com.mineutze.worldgen.plan.BiomeMapVerifier ..> com.mineutze.worldgen.plan.UnionFind
+com.mineutze.worldgen.plan.Preset *--> com.mineutze.worldgen.plan.DivergenceFreeWarp
+com.mineutze.worldgen.plan.Preset *--> com.mineutze.worldgen.plan.Settings
+com.mineutze.worldgen.plan.BiomeRealizationPrototypeRunner ..> com.mineutze.worldgen.biomegraph.BiomeGraphData
+com.mineutze.worldgen.plan.BiomeRealizationPrototypeRunner ..> com.mineutze.worldgen.biomegraph.BiomeGraphJson
+com.mineutze.worldgen.plan.BiomeRealizationPrototypeRunner ..> com.mineutze.worldgen.biomegraph.BiomeId
+com.mineutze.worldgen.plan.BiomeRealizationPrototypeRunner ..> com.mineutze.worldgen.plan.BiomeMap
+com.mineutze.worldgen.plan.BiomeRealizationPrototypeRunner ..> com.mineutze.worldgen.plan.BiomeMapPngExporter
+com.mineutze.worldgen.plan.BiomeRealizationPrototypeRunner ..> com.mineutze.worldgen.plan.BiomeMapRasterizer
+com.mineutze.worldgen.plan.BiomeRealizationPrototypeRunner ..> com.mineutze.worldgen.plan.BiomeMapVerifier
+com.mineutze.worldgen.plan.BiomeRealizationPrototypeRunner ..> com.mineutze.worldgen.plan.ClusterSizeModel
+com.mineutze.worldgen.plan.BiomeRealizationPrototypeRunner ..> com.mineutze.worldgen.plan.DivergenceFreeWarp
+com.mineutze.worldgen.plan.BiomeRealizationPrototypeRunner ..> com.mineutze.worldgen.plan.HexTorusGeometry
+com.mineutze.worldgen.plan.BiomeRealizationPrototypeRunner ..> com.mineutze.worldgen.plan.PatternClusters
+com.mineutze.worldgen.plan.BiomeRealizationPrototypeRunner ..> com.mineutze.worldgen.plan.PlaneWindowPngExporter
+com.mineutze.worldgen.plan.BiomeRealizationPrototypeRunner ..> com.mineutze.worldgen.plan.Preset
+com.mineutze.worldgen.plan.BiomeRealizationPrototypeRunner ..> com.mineutze.worldgen.plan.RawRuleTable
+com.mineutze.worldgen.plan.BiomeRealizationPrototypeRunner ..> com.mineutze.worldgen.plan.RealizationSelector
+com.mineutze.worldgen.plan.BiomeRealizationPrototypeRunner ..> com.mineutze.worldgen.plan.RealizedBiomeField
+com.mineutze.worldgen.plan.BiomeRealizationPrototypeRunner ..> com.mineutze.worldgen.plan.ShapeRule
+com.mineutze.worldgen.plan.BiomeRealizationPrototypeRunner ..> com.mineutze.worldgen.plan.ToroidalGrid
+com.mineutze.worldgen.plan.BiomeRealizationPrototypeRunner ..> com.mineutze.worldgen.plan.ToroidalPos
+com.mineutze.worldgen.plan.BiomeRealizationPrototypeRunner ..> com.mineutze.worldgen.plan.ToroidalSizedPatternGenerator
+com.mineutze.worldgen.plan.ClusterSizeModel *--> "0..*" com.mineutze.worldgen.plan.CompiledRequirement
+com.mineutze.worldgen.plan.ClusterSizeModel --> "0..*" com.mineutze.worldgen.biomegraph.BiomeId
+com.mineutze.worldgen.plan.ClusterSizeModel --> com.mineutze.worldgen.plan.ShapeRule
+com.mineutze.worldgen.plan.ClusterSizeModel ..> com.mineutze.worldgen.plan.AnyOf
+com.mineutze.worldgen.plan.ClusterSizeModel ..> com.mineutze.worldgen.plan.RawRuleTable
+com.mineutze.worldgen.plan.ClusterSizeModel ..> com.mineutze.worldgen.plan.ResolvedBorderRequirement
+com.mineutze.worldgen.plan.ClusterSizeModel ..> com.mineutze.worldgen.plan.Share
+com.mineutze.worldgen.plan.CompiledRequirement --> com.mineutze.worldgen.plan.Kind
+com.mineutze.worldgen.plan.DivergenceFreeWarp ..> com.mineutze.worldgen.plan.DeterministicTrig
+com.mineutze.worldgen.plan.DivergenceFreeWarp ..> com.mineutze.worldgen.plan.HexTorusGeometry
+com.mineutze.worldgen.plan.DivergenceFreeWarp ..> com.mineutze.worldgen.plan.Settings
+com.mineutze.worldgen.plan.HexTorusGeometry ..> com.mineutze.worldgen.plan.ToroidalPos
+com.mineutze.worldgen.plan.Outcome *--> com.mineutze.worldgen.plan.Result
+com.mineutze.worldgen.plan.Outcome *--> com.mineutze.worldgen.plan.ToroidalSizedLocalSearch
+com.mineutze.worldgen.plan.ParallelSeedSearch ..> com.mineutze.worldgen.plan.ClusterSizeModel
+com.mineutze.worldgen.plan.ParallelSeedSearch ..> com.mineutze.worldgen.plan.Outcome
+com.mineutze.worldgen.plan.ParallelSeedSearch ..> com.mineutze.worldgen.plan.RawRuleTable
+com.mineutze.worldgen.plan.ParallelSeedSearch ..> com.mineutze.worldgen.plan.Result
+com.mineutze.worldgen.plan.ParallelSeedSearch ..> com.mineutze.worldgen.plan.Schedule
+com.mineutze.worldgen.plan.ParallelSeedSearch ..> com.mineutze.worldgen.plan.ToroidalGrid
+com.mineutze.worldgen.plan.ParallelSeedSearch ..> com.mineutze.worldgen.plan.ToroidalSizedLocalSearch
+com.mineutze.worldgen.plan.PatternClusters ..> com.mineutze.worldgen.biomegraph.BiomeId
+com.mineutze.worldgen.plan.PatternClusters ..> com.mineutze.worldgen.plan.ToroidalGrid
+com.mineutze.worldgen.plan.PatternClusters ..> com.mineutze.worldgen.plan.ToroidalPos
+com.mineutze.worldgen.plan.PatternCsv ..> com.mineutze.worldgen.biomegraph.BiomeId
+com.mineutze.worldgen.plan.PatternCsv ..> com.mineutze.worldgen.plan.ToroidalGrid
+com.mineutze.worldgen.plan.PatternCsv ..> com.mineutze.worldgen.plan.ToroidalPos
+com.mineutze.worldgen.plan.PlaneWindowPngExporter ..> com.mineutze.worldgen.plan.HexTorusGeometry
+com.mineutze.worldgen.plan.PlaneWindowPngExporter ..> com.mineutze.worldgen.plan.RealizedBiomeField
+com.mineutze.worldgen.plan.PlaneWindowPngExporter ..> com.mineutze.worldgen.plan.ToroidalPatternPngExporter
+com.mineutze.worldgen.plan.PlanSettings *--> com.mineutze.worldgen.plan.Schedule
+com.mineutze.worldgen.plan.PlanSettings *--> com.mineutze.worldgen.plan.ToroidalSizedLocalSearch
+com.mineutze.worldgen.plan.RawRuleTable *--> "0..*" com.mineutze.worldgen.biomegraph.BiomeId
+com.mineutze.worldgen.plan.RawRuleTable *--> com.mineutze.worldgen.plan.SizeRange
+com.mineutze.worldgen.plan.RawRuleTable *--> "0..*" com.mineutze.worldgen.plan.UnorderedPair
+com.mineutze.worldgen.plan.UnorderedPair *--> com.mineutze.worldgen.biomegraph.BiomeId
+com.mineutze.worldgen.plan.RawRuleTable --> com.mineutze.worldgen.plan.ResolvedBorderRequirement
+com.mineutze.worldgen.plan.RawRuleTable ..> com.mineutze.worldgen.biomegraph.BiomeGraphData
+com.mineutze.worldgen.plan.RawRuleTable ..> com.mineutze.worldgen.biomegraph.BorderRequirement
+com.mineutze.worldgen.plan.RawRuleTable ..> com.mineutze.worldgen.biomegraph.EdgeData
+com.mineutze.worldgen.plan.RawRuleTable ..> com.mineutze.worldgen.biomegraph.GroupData
+com.mineutze.worldgen.plan.RawRuleTable ..> com.mineutze.worldgen.biomegraph.NodeData
+com.mineutze.worldgen.plan.Selection *--> com.mineutze.worldgen.plan.BiomeMap
+com.mineutze.worldgen.plan.Selection *--> com.mineutze.worldgen.plan.BiomeMapVerifier
+com.mineutze.worldgen.plan.Selection *--> com.mineutze.worldgen.plan.DivergenceFreeWarp
+com.mineutze.worldgen.plan.Selection *--> com.mineutze.worldgen.plan.Report
+com.mineutze.worldgen.plan.RealizationSelector ..> com.mineutze.worldgen.biomegraph.BiomeId
+com.mineutze.worldgen.plan.RealizationSelector ..> com.mineutze.worldgen.plan.BiomeMap
+com.mineutze.worldgen.plan.RealizationSelector ..> com.mineutze.worldgen.plan.BiomeMapRasterizer
+com.mineutze.worldgen.plan.RealizationSelector ..> com.mineutze.worldgen.plan.BiomeMapVerifier
+com.mineutze.worldgen.plan.RealizationSelector ..> com.mineutze.worldgen.plan.DivergenceFreeWarp
+com.mineutze.worldgen.plan.RealizationSelector ..> com.mineutze.worldgen.plan.HexTorusGeometry
+com.mineutze.worldgen.plan.RealizationSelector ..> com.mineutze.worldgen.plan.PatternClusters
+com.mineutze.worldgen.plan.RealizationSelector ..> com.mineutze.worldgen.plan.PlanSettings
+com.mineutze.worldgen.plan.RealizationSelector ..> com.mineutze.worldgen.plan.RawRuleTable
+com.mineutze.worldgen.plan.RealizationSelector ..> com.mineutze.worldgen.plan.Report
+com.mineutze.worldgen.plan.RealizationSelector ..> com.mineutze.worldgen.plan.Selection
+com.mineutze.worldgen.plan.RealizationSelector ..> com.mineutze.worldgen.plan.ToroidalGrid
+com.mineutze.worldgen.plan.RealizationSelector ..> com.mineutze.worldgen.plan.ToroidalPos
+com.mineutze.worldgen.plan.RealizedBiomeField --> com.mineutze.worldgen.plan.DivergenceFreeWarp
+com.mineutze.worldgen.plan.RealizedBiomeField --> com.mineutze.worldgen.plan.HexTorusGeometry
+com.mineutze.worldgen.plan.RealizedBiomeField ..> com.mineutze.worldgen.biomegraph.BiomeId
+com.mineutze.worldgen.plan.RealizedBiomeField ..> com.mineutze.worldgen.plan.ToroidalGrid
+com.mineutze.worldgen.plan.RealizedBiomeField ..> com.mineutze.worldgen.plan.ToroidalPos
+com.mineutze.worldgen.plan.Share ..|> com.mineutze.worldgen.plan.ResolvedBorderRequirement
+com.mineutze.worldgen.plan.AllOf ..|> com.mineutze.worldgen.plan.ResolvedBorderRequirement
+com.mineutze.worldgen.plan.AnyOf ..|> com.mineutze.worldgen.plan.ResolvedBorderRequirement
+com.mineutze.worldgen.plan.Share *--> "0..*" com.mineutze.worldgen.biomegraph.BiomeId
+com.mineutze.worldgen.plan.ShapeRule ..> com.mineutze.worldgen.plan.Thickness
+com.mineutze.worldgen.plan.ToroidalGrid ..> com.mineutze.worldgen.plan.ToroidalPos
+com.mineutze.worldgen.plan.ToroidalPatternPngExporter ..> com.mineutze.worldgen.biomegraph.BiomeId
+com.mineutze.worldgen.plan.ToroidalPatternPngExporter ..> com.mineutze.worldgen.plan.ToroidalGrid
+com.mineutze.worldgen.plan.ToroidalPatternPngExporter ..> com.mineutze.worldgen.plan.ToroidalPos
+com.mineutze.worldgen.plan.Result *--> com.mineutze.worldgen.biomegraph.BiomeId
+com.mineutze.worldgen.plan.Result *--> com.mineutze.worldgen.plan.ToroidalPos
+com.mineutze.worldgen.plan.ExploredCluster *--> com.mineutze.worldgen.biomegraph.BiomeId
+com.mineutze.worldgen.plan.ExploredCluster *--> "0..*" com.mineutze.worldgen.plan.ToroidalPos
+com.mineutze.worldgen.plan.ToroidalSizedLocalSearch ..> com.mineutze.worldgen.biomegraph.BiomeId
+com.mineutze.worldgen.plan.ToroidalSizedLocalSearch ..> com.mineutze.worldgen.plan.Breakdown
+com.mineutze.worldgen.plan.ToroidalSizedLocalSearch ..> com.mineutze.worldgen.plan.ClusterSizeModel
+com.mineutze.worldgen.plan.ToroidalSizedLocalSearch ..> com.mineutze.worldgen.plan.ExploredCluster
+com.mineutze.worldgen.plan.ToroidalSizedLocalSearch ..> com.mineutze.worldgen.plan.RawRuleTable
+com.mineutze.worldgen.plan.ToroidalSizedLocalSearch ..> com.mineutze.worldgen.plan.Result
+com.mineutze.worldgen.plan.ToroidalSizedLocalSearch ..> com.mineutze.worldgen.plan.Schedule
+com.mineutze.worldgen.plan.ToroidalSizedLocalSearch ..> com.mineutze.worldgen.plan.Search
+com.mineutze.worldgen.plan.ToroidalSizedLocalSearch ..> com.mineutze.worldgen.plan.ToroidalGrid
+com.mineutze.worldgen.plan.ToroidalSizedLocalSearch ..> com.mineutze.worldgen.plan.ToroidalPos
+com.mineutze.worldgen.plan.Search --> "0..*" com.mineutze.worldgen.biomegraph.BiomeId
+com.mineutze.worldgen.plan.Search --> com.mineutze.worldgen.plan.ClusterSizeModel
+com.mineutze.worldgen.plan.Search --> com.mineutze.worldgen.plan.RawRuleTable
+com.mineutze.worldgen.plan.Search --> com.mineutze.worldgen.plan.Schedule
+com.mineutze.worldgen.plan.Search --> com.mineutze.worldgen.plan.ToroidalGrid
+com.mineutze.worldgen.plan.Search --> "0..*" com.mineutze.worldgen.plan.ToroidalPos
+com.mineutze.worldgen.plan.Search ..> com.mineutze.worldgen.plan.FitCandidate
+com.mineutze.worldgen.plan.Search ..> com.mineutze.worldgen.plan.Result
+com.mineutze.worldgen.plan.Search ..> com.mineutze.worldgen.plan.TrackResult
+com.mineutze.worldgen.plan.Generated *--> com.mineutze.worldgen.biomegraph.BiomeId
+com.mineutze.worldgen.plan.Generated *--> com.mineutze.worldgen.plan.ToroidalPos
+com.mineutze.worldgen.plan.ToroidalSizedPatternGenerator ..> com.mineutze.worldgen.biomegraph.BiomeId
+com.mineutze.worldgen.plan.ToroidalSizedPatternGenerator ..> com.mineutze.worldgen.plan.ClusterSizeModel
+com.mineutze.worldgen.plan.ToroidalSizedPatternGenerator ..> com.mineutze.worldgen.plan.Generated
+com.mineutze.worldgen.plan.ToroidalSizedPatternGenerator ..> com.mineutze.worldgen.plan.Outcome
+com.mineutze.worldgen.plan.ToroidalSizedPatternGenerator ..> com.mineutze.worldgen.plan.ParallelSeedSearch
+com.mineutze.worldgen.plan.ToroidalSizedPatternGenerator ..> com.mineutze.worldgen.plan.RawRuleTable
+com.mineutze.worldgen.plan.ToroidalSizedPatternGenerator ..> com.mineutze.worldgen.plan.Schedule
+com.mineutze.worldgen.plan.ToroidalSizedPatternGenerator ..> com.mineutze.worldgen.plan.ToroidalGrid
+com.mineutze.worldgen.plan.ToroidalSizedPatternGenerator ..> com.mineutze.worldgen.plan.ToroidalPos
+com.mineutze.worldgen.plan.ToroidalSizedPatternGenerator ..> com.mineutze.worldgen.plan.ToroidalSizedLocalSearch
+com.mineutze.worldgen.plan.Configuration *--> com.mineutze.worldgen.plan.Schedule
+com.mineutze.worldgen.plan.Configuration *--> com.mineutze.worldgen.plan.ToroidalSizedLocalSearch
+com.mineutze.worldgen.plan.ToroidalSolvabilityRunner ..> com.mineutze.worldgen.biomegraph.BiomeGraphData
+com.mineutze.worldgen.plan.ToroidalSolvabilityRunner ..> com.mineutze.worldgen.biomegraph.BiomeGraphJson
+com.mineutze.worldgen.plan.ToroidalSolvabilityRunner ..> com.mineutze.worldgen.plan.ClusterSizeModel
+com.mineutze.worldgen.plan.ToroidalSolvabilityRunner ..> com.mineutze.worldgen.plan.Configuration
+com.mineutze.worldgen.plan.ToroidalSolvabilityRunner ..> com.mineutze.worldgen.plan.RawRuleTable
+com.mineutze.worldgen.plan.ToroidalSolvabilityRunner ..> com.mineutze.worldgen.plan.Schedule
+com.mineutze.worldgen.plan.ToroidalSolvabilityRunner ..> com.mineutze.worldgen.plan.ShapeRule
+com.mineutze.worldgen.plan.ToroidalSolvabilityRunner ..> com.mineutze.worldgen.plan.SolveStatistics
+com.mineutze.worldgen.plan.ToroidalSolvabilityRunner ..> com.mineutze.worldgen.plan.ToroidalGrid
+com.mineutze.worldgen.plan.ToroidalSolvabilityRunner ..> com.mineutze.worldgen.plan.ToroidalSizedLocalSearch
+com.mineutze.worldgen.plan.ToroidalSolvabilityRunner ..> com.mineutze.worldgen.plan.Trial
+com.mineutze.worldgen.plan.ToroidalWorldSeedReliabilityRunner --> com.mineutze.worldgen.plan.PlanSettings
+com.mineutze.worldgen.plan.ToroidalWorldSeedReliabilityRunner ..> com.mineutze.worldgen.biomegraph.BiomeGraphData
+com.mineutze.worldgen.plan.ToroidalWorldSeedReliabilityRunner ..> com.mineutze.worldgen.biomegraph.BiomeGraphJson
+com.mineutze.worldgen.plan.ToroidalWorldSeedReliabilityRunner ..> com.mineutze.worldgen.plan.ClusterSizeModel
+com.mineutze.worldgen.plan.ToroidalWorldSeedReliabilityRunner ..> com.mineutze.worldgen.plan.HexTorusGeometry
+com.mineutze.worldgen.plan.ToroidalWorldSeedReliabilityRunner ..> com.mineutze.worldgen.plan.PatternCsv
+com.mineutze.worldgen.plan.ToroidalWorldSeedReliabilityRunner ..> com.mineutze.worldgen.plan.RawRuleTable
+com.mineutze.worldgen.plan.ToroidalWorldSeedReliabilityRunner ..> com.mineutze.worldgen.plan.RealizationSelector
+com.mineutze.worldgen.plan.ToroidalWorldSeedReliabilityRunner ..> com.mineutze.worldgen.plan.ShapeRule
+com.mineutze.worldgen.plan.ToroidalWorldSeedReliabilityRunner ..> com.mineutze.worldgen.plan.Tally
+com.mineutze.worldgen.plan.ToroidalWorldSeedReliabilityRunner ..> com.mineutze.worldgen.plan.ToroidalGrid
+com.mineutze.worldgen.plan.ToroidalWorldSeedReliabilityRunner ..> com.mineutze.worldgen.plan.ToroidalSizedPatternGenerator
+com.mineutze.worldgen.plan.WorldBiomePlan *--> "0..*" com.mineutze.worldgen.biomegraph.BiomeId
+com.mineutze.worldgen.plan.WorldBiomePlan *--> com.mineutze.worldgen.plan.HexTorusGeometry
+com.mineutze.worldgen.plan.WorldBiomePlan ..> com.mineutze.worldgen.biomegraph.BiomeGraphData
+com.mineutze.worldgen.plan.WorldBiomePlan ..> com.mineutze.worldgen.biomegraph.BiomeGraphJson
+com.mineutze.worldgen.plan.WorldBiomePlan ..> com.mineutze.worldgen.plan.BlockPosition
+com.mineutze.worldgen.plan.WorldBiomePlan ..> com.mineutze.worldgen.plan.ClusterSizeModel
+com.mineutze.worldgen.plan.WorldBiomePlan ..> com.mineutze.worldgen.plan.PlanSettings
+com.mineutze.worldgen.plan.WorldBiomePlan ..> com.mineutze.worldgen.plan.PlanSnapshot
+com.mineutze.worldgen.plan.WorldBiomePlan ..> com.mineutze.worldgen.plan.ProgressListener
+com.mineutze.worldgen.plan.WorldBiomePlan ..> com.mineutze.worldgen.plan.RawRuleTable
+com.mineutze.worldgen.plan.WorldBiomePlan ..> com.mineutze.worldgen.plan.RealizationSelector
+com.mineutze.worldgen.plan.WorldBiomePlan ..> com.mineutze.worldgen.plan.ShapeRule
+com.mineutze.worldgen.plan.WorldBiomePlan ..> com.mineutze.worldgen.plan.ToroidalGrid
+com.mineutze.worldgen.plan.WorldBiomePlan ..> com.mineutze.worldgen.plan.ToroidalSizedPatternGenerator
+com.mineutze.worldgen.plan.WorldBiomePlan ..> com.mineutze.worldgen.plan.WrappedOffset
+com.mineutze.worldgen.plan.WorldBiomePlanCheckRunner ..> com.mineutze.worldgen.biomegraph.BiomeGraphData
+com.mineutze.worldgen.plan.WorldBiomePlanCheckRunner ..> com.mineutze.worldgen.biomegraph.BiomeGraphJson
+com.mineutze.worldgen.plan.WorldBiomePlanCheckRunner ..> com.mineutze.worldgen.biomegraph.BiomeId
+com.mineutze.worldgen.plan.WorldBiomePlanCheckRunner ..> com.mineutze.worldgen.plan.ClusterSizeModel
+com.mineutze.worldgen.plan.WorldBiomePlanCheckRunner ..> com.mineutze.worldgen.plan.LookupResult
+com.mineutze.worldgen.plan.WorldBiomePlanCheckRunner ..> com.mineutze.worldgen.plan.PatternCsv
+com.mineutze.worldgen.plan.WorldBiomePlanCheckRunner ..> com.mineutze.worldgen.plan.PlanSettings
+com.mineutze.worldgen.plan.WorldBiomePlanCheckRunner ..> com.mineutze.worldgen.plan.PlanSnapshot
+com.mineutze.worldgen.plan.WorldBiomePlanCheckRunner ..> com.mineutze.worldgen.plan.RawRuleTable
+com.mineutze.worldgen.plan.WorldBiomePlanCheckRunner ..> com.mineutze.worldgen.plan.ShapeRule
+com.mineutze.worldgen.plan.WorldBiomePlanCheckRunner ..> com.mineutze.worldgen.plan.ToroidalGrid
+com.mineutze.worldgen.plan.WorldBiomePlanCheckRunner ..> com.mineutze.worldgen.plan.ToroidalPos
+com.mineutze.worldgen.plan.WorldBiomePlanCheckRunner ..> com.mineutze.worldgen.plan.ToroidalSizedPatternGenerator
+com.mineutze.worldgen.plan.WorldBiomePlanCheckRunner ..> com.mineutze.worldgen.plan.WorldBiomePlan
+com.mineutze.worldgen.tooling.graphedit.GraphEditorServer ..> com.mineutze.worldgen.tooling.graphedit.GraphEditorFiles
+com.mineutze.worldgen.tooling.graphedit.GraphEditorSolveCheck ..> com.mineutze.worldgen.biomegraph.BiomeGraphData
+com.mineutze.worldgen.tooling.graphedit.GraphEditorSolveCheck ..> com.mineutze.worldgen.biomegraph.BiomeGraphJson
+com.mineutze.worldgen.tooling.graphedit.GraphEditorSolveCheck ..> com.mineutze.worldgen.tooling.graphedit.GraphEditorFiles
+com.mineutze.worldgen.tooling.graphedit.GraphEditorSolveCheck ..> com.mineutze.worldgen.plan.WorldBiomePlan
+com.mineutze.worldgen.tooling.graphedit.GraphValidation ..> com.mineutze.worldgen.biomegraph.BiomeGraph
+com.mineutze.worldgen.tooling.graphedit.GraphValidation ..> com.mineutze.worldgen.biomegraph.BiomeGraphData
+com.mineutze.worldgen.tooling.graphedit.GraphValidation ..> com.mineutze.worldgen.biomegraph.BiomeGraphJson
+com.mineutze.worldgen.tooling.graphedit.GraphValidation ..> com.mineutze.worldgen.biomegraph.BiomeId
+com.mineutze.worldgen.tooling.graphedit.GraphValidation ..> com.mineutze.worldgen.plan.RawRuleTable
+com.mineutze.worldgen.tooling.graphedit.GraphValidation ..> com.mineutze.worldgen.tooling.graphedit.ValidationResult
+com.mineutze.worldgen.tooling.graphedit.GraphValidation ..> com.mineutze.worldgen.plan.WorldBiomePlan
+
+@enduml

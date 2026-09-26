@@ -1,0 +1,16 @@
+namespace com.mineutze.worldgen.plan {
+class PlanSettings <<record>> {
+  + gridSize : int
+  + atomWidthBlocks : double
+  + perimeterRatio : double
+  + warpStrengthsStrongestFirst : double[*]
+  + rasterSamplesPerSide : int
+  + sizeToleranceOfMinimum : double
+  + patternStepsPerAttempt : long
+  + maxPatternAttempts : int
+  + patternSchedule : ToroidalSizedLocalSearch.Schedule
+}
+}
+
+com.mineutze.worldgen.plan.PlanSettings *--> com.mineutze.worldgen.plan.Schedule
+com.mineutze.worldgen.plan.PlanSettings *--> com.mineutze.worldgen.plan.ToroidalSizedLocalSearch

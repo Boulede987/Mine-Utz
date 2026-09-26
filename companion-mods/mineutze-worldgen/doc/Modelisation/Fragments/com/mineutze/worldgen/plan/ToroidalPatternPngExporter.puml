@@ -1,0 +1,17 @@
+namespace com.mineutze.worldgen.plan {
+class ToroidalPatternPngExporter {
+  ~ {static} HEX_RADIUS_PIXELS : int
+  - {static} MARGIN_PIXELS : int
+  - {static} HEX_WIDTH_PIXELS : double
+  - {static} ROW_HEIGHT_PIXELS : double
+  - {static} GOLDEN_RATIO_CONJUGATE : double
+  ~ {static} export(ToroidalGrid, Map<ToroidalPos, BiomeId>, List<BiomeId>, Path)
+  ~ {static} centerXOf(ToroidalPos) : int
+  ~ {static} centerYOf(ToroidalPos) : int
+  - {static} hexagonAround(int, int) : Polygon
+  - {static} drawOutlineEdges(Graphics2D, ToroidalGrid, Map<ToroidalPos, BiomeId>, ToroidalPos)
+  - {static} drawEdgeIfDifferentBiome(Graphics2D, ToroidalGrid, Map<ToroidalPos, BiomeId>, ToroidalPos, int, int, int[])
+  ~ {static} colorOf(int) : Color
+  - {static} write(BufferedImage, Path)
+}
+}

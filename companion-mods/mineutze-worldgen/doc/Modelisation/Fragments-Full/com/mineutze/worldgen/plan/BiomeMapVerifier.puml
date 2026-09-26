@@ -1,0 +1,87 @@
+namespace com.mineutze.worldgen.plan {
+class BiomeMapVerifier {
+  ~ {static} verify(BiomeMap, RawRuleTable, double) : Report
+  ~ {static} verify(BiomeMap, RawRuleTable, double, PatternClusters) : Report
+  ~ {static} verify(BiomeMap, RawRuleTable, double, PatternClusters, double) : Report
+  - {static} scanContacts(BiomeMap, boolean[][], UnionFind) : ContactTally
+  - {static} recordContactAndUnion(BiomeMap, boolean[][], UnionFind, int[], int, int, int) : int
+  - {static} regionRootsOf(UnionFind, int) : RegionRoots
+  - {static} checkRootForInclusion(int[], List<Integer>, int)
+  - {static} allowedArea(RawRuleTable.SizeRange, double) : AllowedArea
+  - {static} areaViolations(BiomeMap, RawRuleTable, double, RegionRoots) : List<AreaViolation>
+  - {static} checkRegionArea(BiomeMap, RawRuleTable, double, RegionRoots, List<AreaViolation>, int)
+  - {static} borderShortfalls(BiomeMap, RawRuleTable, UnionFind, List<Integer>, double) : List<BorderShortfall>
+  - {static} requirementsByBiomeIndex(BiomeMap, RawRuleTable) : List<ResolvedBorderRequirement>
+  - {static} tallyContactsWithRequiredBiomes(BiomeMap, UnionFind, List<ResolvedBorderRequirement>) : Map<Long, Integer>
+  - {static} tallyOneContact(UnionFind, List<ResolvedBorderRequirement>, int[], int, int, int, Map<Long, Integer>)
+  - {static} shortfallsOf(BiomeMap, List<Integer>, List<ResolvedBorderRequirement>, Map<Long, Integer>, double) : List<BorderShortfall>
+  - {static} checkBorderRequirement(BiomeMap, int[], List<ResolvedBorderRequirement>, Map<Long, Integer>, int, double, List<BorderShortfall>, int)
+  - {static} withClusterComparison(BiomeMap, RegionRoots, UnionFind, PatternClusters, List<AreaViolation>, Map<String, Integer>, List<BorderShortfall>, int) : Report
+  - {static} mapRegionsToClusters(BiomeMap, UnionFind, PatternClusters, int) : RegionClusters
+  - {static} assignClusterToRegion(UnionFind, PatternClusters, int[], int[], boolean[], int)
+  - {static} fillDriftAndClusterCounts(BiomeMap, RegionRoots, PatternClusters, RegionClusters, int[], double[]) : int
+  - {static} accumulateRegionDrift(BiomeMap, RegionRoots, PatternClusters, RegionClusters, int[], double[], double, int) : boolean
+  - {static} countWhere(int[], IntPredicate) : int
+  - {static} accumulateMatchingValue(IntPredicate, int) : int
+  - {static} legalityBetweenBiomes(BiomeMap, RawRuleTable) : boolean[][]
+  - {static} illegalContactsByName(BiomeMap, int[]) : Map<String, Integer>
+  - {static} tallyIllegalContactPair(BiomeMap, int[], int, Map<String, Integer>, int, int)
+}
+class AreaViolation <<record>> {
+  + biome : BiomeId
+  + areaBlocks2 : double
+  + allowedMinBlocks2 : double
+  + allowedMaxBlocks2 : double
+}
+class BorderShortfall <<record>> {
+  + biome : BiomeId
+  + requirement : String
+}
+class Report <<record>> {
+  + componentCount : int
+  + areaViolations : AreaViolation[*]
+  + illegalContactSamples : Map<String, Integer>
+  + borderShortfalls : BorderShortfall[*]
+  + legalContactSamples : int
+  + driftRatios : double[*]
+  + vanishedClusters : int
+  + splitClusters : int
+  + mergedComponents : int
+}
+class RegionRoots <<record>> {
+  + samplesInRegion : int[*]
+  + roots : Integer[*]
+}
+class ContactTally <<record>> {
+  + illegalContactCounts : int[*]
+  + legalContacts : int
+}
+class RegionClusters <<record>> {
+  + clusterOfRegion : int[*]
+  + regionIsMerged : boolean[*]
+}
+class AllowedArea <<record>> {
+  + minimum : double
+  + maximum : double
+}
+}
+
+com.mineutze.worldgen.plan.AreaViolation *--> com.mineutze.worldgen.biomegraph.BiomeId
+com.mineutze.worldgen.plan.BorderShortfall *--> com.mineutze.worldgen.biomegraph.BiomeId
+com.mineutze.worldgen.plan.Report *--> "0..*" com.mineutze.worldgen.plan.AreaViolation
+com.mineutze.worldgen.plan.Report *--> "0..*" com.mineutze.worldgen.plan.BorderShortfall
+com.mineutze.worldgen.plan.BiomeMapVerifier ..> com.mineutze.worldgen.plan.AllowedArea
+com.mineutze.worldgen.plan.BiomeMapVerifier ..> com.mineutze.worldgen.plan.AreaViolation
+com.mineutze.worldgen.plan.BiomeMapVerifier ..> com.mineutze.worldgen.biomegraph.BiomeId
+com.mineutze.worldgen.plan.BiomeMapVerifier ..> com.mineutze.worldgen.plan.BiomeMap
+com.mineutze.worldgen.plan.BiomeMapVerifier ..> com.mineutze.worldgen.plan.BorderShortfall
+com.mineutze.worldgen.plan.BiomeMapVerifier ..> com.mineutze.worldgen.plan.ContactTally
+com.mineutze.worldgen.plan.BiomeMapVerifier ..> com.mineutze.worldgen.plan.HexTorusGeometry
+com.mineutze.worldgen.plan.BiomeMapVerifier ..> com.mineutze.worldgen.plan.PatternClusters
+com.mineutze.worldgen.plan.BiomeMapVerifier ..> com.mineutze.worldgen.plan.RawRuleTable
+com.mineutze.worldgen.plan.BiomeMapVerifier ..> com.mineutze.worldgen.plan.RegionClusters
+com.mineutze.worldgen.plan.BiomeMapVerifier ..> com.mineutze.worldgen.plan.RegionRoots
+com.mineutze.worldgen.plan.BiomeMapVerifier ..> com.mineutze.worldgen.plan.Report
+com.mineutze.worldgen.plan.BiomeMapVerifier ..> com.mineutze.worldgen.plan.ResolvedBorderRequirement
+com.mineutze.worldgen.plan.BiomeMapVerifier ..> com.mineutze.worldgen.plan.SizeRange
+com.mineutze.worldgen.plan.BiomeMapVerifier ..> com.mineutze.worldgen.plan.UnionFind

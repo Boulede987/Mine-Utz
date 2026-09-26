@@ -1,0 +1,26 @@
+namespace com.mineutze.worldgen.biomegraph {
+class BiomeGraph {
+  - nodesById : Map<BiomeId, BiomeNode>
+  - rulesByPair : Map<UnorderedBiomePair, AdjacencyRule>
+  - {static} MIN_LEGAL_NEIGHBORS : int
+  + {static} forProduction(Collection<BiomeNode>, Collection<AdjacencyRule>) : BiomeGraph
+  + requireMinLegalNeighbors() : BiomeGraph
+  - validateBiomeNeighbors(BiomeId)
+  - {static} indexNodes(Collection<BiomeNode>) : Map<BiomeId, BiomeNode>
+  - {static} indexNode(Map<BiomeId, BiomeNode>, BiomeNode)
+  - {static} indexRules(Collection<AdjacencyRule>) : Map<UnorderedBiomePair, AdjacencyRule>
+  - {static} indexRule(Map<UnorderedBiomePair, AdjacencyRule>, AdjacencyRule)
+  - requireAllRuleNodesKnown()
+  - validatePairNodesKnown(UnorderedBiomePair)
+  - requireKnownNode(BiomeId)
+  + node(BiomeId) : BiomeNode
+  + nodes() : Collection<BiomeNode>
+  + isAllowed(BiomeId, BiomeId) : boolean
+  + rule(BiomeId, BiomeId) : AdjacencyRule
+}
+}
+
+com.mineutze.worldgen.biomegraph.BiomeGraph --> com.mineutze.worldgen.biomegraph.AdjacencyRule
+com.mineutze.worldgen.biomegraph.BiomeGraph --> com.mineutze.worldgen.biomegraph.BiomeId
+com.mineutze.worldgen.biomegraph.BiomeGraph --> com.mineutze.worldgen.biomegraph.BiomeNode
+com.mineutze.worldgen.biomegraph.BiomeGraph --> com.mineutze.worldgen.biomegraph.UnorderedBiomePair

@@ -1,0 +1,99 @@
+@startuml WorldBiomePlan
+
+skinparam classAttributeIconSize 0
+skinparam shadowing false
+
+skinparam class {
+  BackgroundColor<<interface>> #D6EAF8
+  BorderColor<<interface>> #2E86C1
+}
+skinparam class {
+  BackgroundColor<<abstract>> #E8DAEF
+  BorderColor<<abstract>> #8E44AD
+}
+skinparam class {
+  BackgroundColor #D5F5E3
+  BorderColor #27AE60
+}
+skinparam class {
+  BackgroundColor<<record>> #FCF3CF
+  BorderColor<<record>> #B7950B
+}
+skinparam class {
+  BackgroundColor<<static>> #a7faa0
+  BorderColor<<static>> #38d610
+}
+skinparam class {
+  BackgroundColor<<enum>> #F5B7B1
+  BorderColor<<enum>> #C0392B
+}
+
+namespace com.mineutze.worldgen.plan {
+class WorldBiomePlan {
+  ~ {static} SCHEMA_VERSION : int
+  - {static} LARGEST_PALETTE : int
+  - worldSeed : long
+  - catalogFingerprint : String
+  - gridWidth : int
+  - gridHeight : int
+  - atomWidthBlocks : double
+  - warpStrength : double
+  - patternAttempts : int
+  - strengthsTried : int
+  - paletteNames : String[*]
+  - palette : BiomeId[*]
+  - rasterSize : int
+  - raster : byte[*]
+  - geometry : HexTorusGeometry
+  + {static} create(BiomeGraphData, long, int, ProgressListener) : WorldBiomePlan
+  ~ {static} create(BiomeGraphData, long, int, ProgressListener, PlanSettings) : WorldBiomePlan
+  - {static} toByteRaster(int[]) : byte[]
+  + {static} requireCatalogAcceptable(BiomeGraphData)
+  - {static} modelOf(RawRuleTable, PlanSettings) : ClusterSizeModel
+  + {static} fromSnapshot(PlanSnapshot) : WorldBiomePlan
+  - {static} validateRasterIndex(byte, List<String>)
+  + toSnapshot() : PlanSnapshot
+  + biomeAt(double, double) : BiomeId
+  + nearestPositionOf(BiomeId, double, double) : Optional<BlockPosition>
+  - candidateOffsetAt(int, int, int, double[], double, double, double, double) : Optional<WrappedOffset>
+  - {static} closerOf(WrappedOffset, Optional<WrappedOffset>) : WrappedOffset
+  - {static} closestWrappedOffset(double, double, double, double, double, double) : WrappedOffset
+  - {static} updateBestIfCloser(WrappedOffset, double, double) : WrappedOffset
+  + biomes() : List<BiomeId>
+  + worldSeed() : long
+  + catalogFingerprint() : String
+  + warpStrength() : double
+  + patternAttempts() : int
+  + strengthsTried() : int
+  + tileSideBlocks() : double
+  - tileCoordinates(double, double) : double[]
+  - {static} biomeIdOf(String) : BiomeId
+  + {static} fingerprintOf(BiomeGraphData) : String
+}
+interface ProgressListener <<interface>> {
+  + report(String) : void
+}
+class WrappedOffset <<record>> {
+  + x : double
+  + z : double
+  + distanceSquared : double
+}
+}
+
+com.mineutze.worldgen.plan.WorldBiomePlan *--> "0..*" com.mineutze.worldgen.biomegraph.BiomeId
+com.mineutze.worldgen.plan.WorldBiomePlan *--> com.mineutze.worldgen.plan.HexTorusGeometry
+com.mineutze.worldgen.plan.WorldBiomePlan ..> com.mineutze.worldgen.biomegraph.BiomeGraphData
+com.mineutze.worldgen.plan.WorldBiomePlan ..> com.mineutze.worldgen.biomegraph.BiomeGraphJson
+com.mineutze.worldgen.plan.WorldBiomePlan ..> com.mineutze.worldgen.plan.BlockPosition
+com.mineutze.worldgen.plan.WorldBiomePlan ..> com.mineutze.worldgen.plan.ClusterSizeModel
+com.mineutze.worldgen.plan.WorldBiomePlan ..> com.mineutze.worldgen.plan.PlanSettings
+com.mineutze.worldgen.plan.WorldBiomePlan ..> com.mineutze.worldgen.plan.PlanSnapshot
+com.mineutze.worldgen.plan.WorldBiomePlan ..> com.mineutze.worldgen.plan.ProgressListener
+com.mineutze.worldgen.plan.WorldBiomePlan ..> com.mineutze.worldgen.plan.RawRuleTable
+com.mineutze.worldgen.plan.WorldBiomePlan ..> com.mineutze.worldgen.plan.RealizationSelector
+com.mineutze.worldgen.plan.WorldBiomePlan ..> com.mineutze.worldgen.plan.ShapeRule
+com.mineutze.worldgen.plan.WorldBiomePlan ..> com.mineutze.worldgen.plan.ToroidalGrid
+com.mineutze.worldgen.plan.WorldBiomePlan ..> com.mineutze.worldgen.plan.ToroidalSizedPatternGenerator
+com.mineutze.worldgen.plan.WorldBiomePlan ..> com.mineutze.worldgen.plan.WrappedOffset
+
+@enduml

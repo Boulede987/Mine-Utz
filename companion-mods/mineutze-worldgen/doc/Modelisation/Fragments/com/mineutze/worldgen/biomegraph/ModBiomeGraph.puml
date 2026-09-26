@@ -1,0 +1,5 @@
+namespace com.mineutze.worldgen.biomegraph {
+class ModBiomeGraph {
+  + {static} OVERWORLD : BiomeGraph
+}
+}

@@ -1,0 +1,141 @@
+@startuml integration
+
+skinparam classAttributeIconSize 0
+skinparam shadowing false
+
+skinparam class {
+  BackgroundColor<<interface>> #D6EAF8
+  BorderColor<<interface>> #2E86C1
+}
+skinparam class {
+  BackgroundColor<<abstract>> #E8DAEF
+  BorderColor<<abstract>> #8E44AD
+}
+skinparam class {
+  BackgroundColor #D5F5E3
+  BorderColor #27AE60
+}
+skinparam class {
+  BackgroundColor<<record>> #FCF3CF
+  BorderColor<<record>> #B7950B
+}
+skinparam class {
+  BackgroundColor<<static>> #a7faa0
+  BorderColor<<static>> #38d610
+}
+skinparam class {
+  BackgroundColor<<enum>> #F5B7B1
+  BorderColor<<enum>> #C0392B
+}
+
+skinparam class {
+  BackgroundColor<<external>> #EAECEE
+  BorderColor<<external>> #839192
+}
+
+namespace com.mineutze.worldgen.integration {
+class BiomeIdAdapter {
+  + {static} toBiomeId(ResourceLocation) : BiomeId
+  + {static} toResourceLocation(BiomeId) : ResourceLocation
+}
+class LocateBiomeOverride {
+  - {static} ERROR_BIOME_NOT_FOUND : DynamicCommandExceptionType
+  + {static} register(RegisterCommandsEvent)
+  - {static} locateBiome(CommandSourceStack, ResourceOrTagArgument.Result<Biome>) : int
+  - {static} findClosestBiome(ServerLevel, BlockPos, ResourceOrTagArgument.Result<Biome>) : Pair<BlockPos, Holder<Biome>>
+  - {static} processCandidate(Registry<Biome>, BlockPos, ResourceOrTagArgument.Result<Biome>, WorldBiomePlan, BiomeId, BestBiome) : BestBiome
+}
+class BestBiome <<record>> {
+  + pair : Pair<BlockPos, Holder<Biome>>
+  + squaredDistance : double
+}
+class ModBiomeSources {
+  + {static} CUSTOM_OVERWORLD_ID : String
+  + {static} register(RegisterEvent)
+}
+class ModOverworldBiomeSource {
+  - {static} LOGGER : Logger
+  - {static} QUART_CENTER_OFFSET_BLOCKS : int
+  + {static} CODEC : MapCodec<ModOverworldBiomeSource>
+  - biomesById : Map<ResourceLocation, Holder<Biome>>
+  - {static} overworldBiomeKeys() : List<ResourceKey<Biome>>
+  - {static} mapCodecFor(List<ResourceKey<Biome>>) : MapCodec<ModOverworldBiomeSource>
+  # collectPossibleBiomes() : Stream<Holder<Biome>>
+  # codec() : MapCodec<? extends BiomeSource>
+  + getNoiseBiome(int, int, int, Climate.Sampler) : Holder<Biome>
+}
+class PlanDebugCommand {
+  - {static} SERVER_OPERATOR_PERMISSION_LEVEL : int
+  - {static} DEFAULT_RADIUS_BLOCKS : int
+  - {static} MAX_RADIUS_BLOCKS : int
+  - {static} DEFAULT_STEP_BLOCKS : int
+  - {static} MAX_STEP_BLOCKS : int
+  + {static} register(RegisterCommandsEvent)
+  - {static} describePlanAtSource(CommandContext<CommandSourceStack>) : int
+  - {static} exportBiomes(CommandContext<CommandSourceStack>, int, int) : int
+}
+class WorldBiomeExporter {
+  - {static} OUTPUT_DIR_NAME : String
+  - {static} GOLDEN_RATIO_CONJUGATE : double
+  - {static} STORED_BIOME_CHECK_MAX_SAMPLES : int
+  - {static} QUART_BLOCKS : int
+  - {static} QUART_CENTER_OFFSET : int
+  ~ {static} exportAroundPosition(ServerLevel, Vec3, int, int) : Result
+  - {static} planBiomeAtQuart(WorldBiomePlan, int, int) : String
+  - {static} explainedByANeighboringQuart(WorldBiomePlan, int, int, String) : boolean
+  - {static} nameOf(Holder<Biome>) : String
+  - {static} colorOf(int) : Color
+}
+class Result <<record>> {
+  + imageFile : Path
+  + legendFile : Path
+  + samples : int
+  + differentFromOwnQuart : int
+  + unexplainedDifferences : int
+  + storedBiomeMismatches : int
+  + storedBiomeChecks : int
+}
+class WorldBiomePlanHolder {
+  - {static} LOGGER : Logger
+  - {static} READY_TIMEOUT_MINUTES : long
+  - {static} HEARTBEAT_SECONDS : long
+  - {static} READY : CountDownLatch
+  - {static} current : WorldBiomePlan
+  + {static} onLevelLoad(LevelEvent.Load)
+  + {static} get() : WorldBiomePlan
+  - {static} loadOrCreate(ServerLevel) : WorldBiomePlan
+  - {static} restore(PlanSnapshot, BiomeGraphData, long) : WorldBiomePlan
+  - {static} create(BiomeGraphData, long) : WorldBiomePlan
+  - {static} elapsedSeconds(long) : long
+  - {static} awaitReady()
+}
+class WorldBiomePlanSavedData {
+  ~ {static} SAVE_NAME : String
+  - {static} NBT_SCHEMA : int
+  - {static} NBT_SCHEMA_KEY : String
+  - {static} PLAN_SCHEMA_KEY : String
+  - {static} WORLD_SEED_KEY : String
+  - {static} CATALOG_FINGERPRINT_KEY : String
+  - {static} GRID_WIDTH_KEY : String
+  - {static} GRID_HEIGHT_KEY : String
+  - {static} ATOM_WIDTH_KEY : String
+  - {static} WARP_STRENGTH_KEY : String
+  - {static} PATTERN_ATTEMPTS_KEY : String
+  - {static} STRENGTHS_TRIED_KEY : String
+  - {static} PALETTE_KEY : String
+  - {static} RASTER_SIZE_KEY : String
+  - {static} RASTER_KEY : String
+  - snapshot : PlanSnapshot
+  ~ {static} factory() : SavedData.Factory<WorldBiomePlanSavedData>
+  + save(CompoundTag, HolderLookup.Provider) : CompoundTag
+  ~ {static} load(CompoundTag, HolderLookup.Provider) : WorldBiomePlanSavedData
+}
+}
+class com.mineutze.worldgen.plan.PlanSnapshot <<external>> [[plan.svg]] {
+}
+
+com.mineutze.worldgen.integration.ModOverworldBiomeSource --|> net.minecraft.world.level.biome.BiomeSource
+com.mineutze.worldgen.integration.WorldBiomePlanSavedData --|> net.minecraft.world.level.saveddata.SavedData
+com.mineutze.worldgen.integration.WorldBiomePlanSavedData *--> com.mineutze.worldgen.plan.PlanSnapshot
+
+@enduml

@@ -1,0 +1,34 @@
+namespace com.mineutze.worldgen.plan {
+class ClusterSizeModel {
+  - {static} ROUNDING_TOLERANCE : double
+  - {static} STRAIGHT_LINE_OUTLINE_PER_CELL : int
+  - {static} STRAIGHT_LINE_OUTLINE_EXTRA : int
+  - biomes : BiomeId[*]
+  - indexOf : Map<BiomeId, Integer>
+  - minCells : int[*]
+  - maxCells : int[*]
+  - requirements : CompiledRequirement[*]
+  - shape : ShapeRule
+  - initializeBiomeSizeConstraints(RawRuleTable, double, int)
+  - readRequirements(RawRuleTable, int)
+  - whyNeverMet(RawRuleTable, BiomeId, ResolvedBorderRequirement, int) : String
+  - anyOfNeverMetReason(RawRuleTable, BiomeId, ResolvedBorderRequirement.AnyOf, int) : String
+  - checkAlternativePart(RawRuleTable, BiomeId, ResolvedBorderRequirement, int, List<String>) : boolean
+  - whyShareNeverMet(RawRuleTable, BiomeId, ResolvedBorderRequirement.Share, int) : String
+  - compile(ResolvedBorderRequirement) : CompiledRequirement
+  - {static} squared(double) : double
+}
+class CompiledRequirement <<static>> {
+  - kind : Kind
+  - minEdges : int
+  - biomes : int[*]
+  - parts : CompiledRequirement[*]
+}
+enum Kind <<enum>> {
+  SHARE
+  ALL
+  ANY
+}
+}
+
+com.mineutze.worldgen.plan.ClusterSizeModel *--> "0..*" com.mineutze.worldgen.plan.CompiledRequirement

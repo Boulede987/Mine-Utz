@@ -1,0 +1,7 @@
+namespace com.mineutze.worldgen.plan {
+class PatternCsv {
+  ~ {static} write(Path, Map<ToroidalPos, BiomeId>)
+  ~ {static} read(Path, ToroidalGrid) : Map<ToroidalPos, BiomeId>
+  - {static} parseCsvLine(Path, ToroidalGrid, Map<ToroidalPos, BiomeId>, String)
+}
+}

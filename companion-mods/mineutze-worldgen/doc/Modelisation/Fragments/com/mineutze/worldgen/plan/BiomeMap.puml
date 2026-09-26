@@ -1,0 +1,10 @@
+namespace com.mineutze.worldgen.plan {
+class BiomeMap {
+  - size : int
+  - biomeIndices : int[*]
+  - cells : int[*]
+  - biomes : BiomeId[*]
+  - sampleAreaBlocks2 : double
+  - blocksPerSample : double
+}
+}

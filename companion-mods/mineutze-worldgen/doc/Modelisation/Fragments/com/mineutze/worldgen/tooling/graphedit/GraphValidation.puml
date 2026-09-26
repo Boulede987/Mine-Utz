@@ -1,0 +1,14 @@
+namespace com.mineutze.worldgen.tooling.graphedit {
+class GraphValidation {
+  - {static} MIN_LEGAL_NEIGHBORS : int
+  ~ {static} validate(BiomeGraphData) : ValidationResult
+  - {static} generatorRejections(BiomeGraphData) : List<String>
+  - {static} underConnectedErrors(BiomeGraph, BiomeGraphData) : List<String>
+  - {static} checkConnectivity(BiomeGraph, List<BiomeId>, List<String>, BiomeId)
+}
+class ValidationResult <<record>> {
+  + constructs : boolean
+  + constructionError : String
+  + errors : String[*]
+}
+}

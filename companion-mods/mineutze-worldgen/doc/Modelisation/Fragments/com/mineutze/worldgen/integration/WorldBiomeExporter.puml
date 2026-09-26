@@ -1,0 +1,23 @@
+namespace com.mineutze.worldgen.integration {
+class WorldBiomeExporter {
+  - {static} OUTPUT_DIR_NAME : String
+  - {static} GOLDEN_RATIO_CONJUGATE : double
+  - {static} STORED_BIOME_CHECK_MAX_SAMPLES : int
+  - {static} QUART_BLOCKS : int
+  - {static} QUART_CENTER_OFFSET : int
+  ~ {static} exportAroundPosition(ServerLevel, Vec3, int, int) : Result
+  - {static} planBiomeAtQuart(WorldBiomePlan, int, int) : String
+  - {static} explainedByANeighboringQuart(WorldBiomePlan, int, int, String) : boolean
+  - {static} nameOf(Holder<Biome>) : String
+  - {static} colorOf(int) : Color
+}
+class Result <<record>> {
+  + imageFile : Path
+  + legendFile : Path
+  + samples : int
+  + differentFromOwnQuart : int
+  + unexplainedDifferences : int
+  + storedBiomeMismatches : int
+  + storedBiomeChecks : int
+}
+}

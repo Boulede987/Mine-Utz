@@ -1,0 +1,43 @@
+namespace com.mineutze.worldgen.plan {
+class BiomeRealizationPrototypeRunner {
+  - {static} ATOM_WIDTH_BLOCKS : double
+  - {static} OFF : int
+  - {static} GRID_SIZE : int
+  - {static} PERIMETER_RATIO : double
+  - {static} WORLD_SEED : long
+  - {static} SAMPLES_PER_SIDE : int
+  - {static} TOLERANCE_OF_MINIMUM : double
+  - {static} WARP_SEED : long
+  - {static} FLOW_STEPS : int
+  - {static} SEAM_DEMONSTRATION_SETTINGS : DivergenceFreeWarp.Settings
+  - {static} WINDOW_LEFT : double
+  - {static} WINDOW_TOP : double
+  - {static} WINDOW_WIDTH : double
+  - {static} WINDOW_HEIGHT : double
+  - {static} WINDOW_BLOCKS_PER_PIXEL : double
+  - {static} CROP_SCALE : int
+  - {static} CROP_LEFT : int
+  - {static} CROP_TOP : int
+  - {static} CROP_WIDTH : int
+  - {static} CROP_HEIGHT : int
+  - {static} OUTPUT_DIRECTORY : Path
+  + {static} main(String[])
+  - {static} showTilesMeetingWithoutASeam(ToroidalGrid, Map<ToroidalPos, BiomeId>, HexTorusGeometry, List<BiomeId>)
+  - {static} realize(Preset, RawRuleTable, ToroidalGrid, Map<ToroidalPos, BiomeId>, PatternClusters, HexTorusGeometry, List<BiomeId>, DivergenceFreeWarp)
+  - {static} reportDrift(String, double[])
+  - {static} mapDistortion(HexTorusGeometry, DivergenceFreeWarp) : double[]
+  - {static} computeRowDistortion(HexTorusGeometry, DivergenceFreeWarp, double, int, double[], double[], double[], int)
+  - {static} processGridPoint(HexTorusGeometry, DivergenceFreeWarp, double, int, double[], int, int, double, double[], double[], double[], double[]) : double
+  - {static} patternForWorldSeed(RawRuleTable, ToroidalGrid) : Map<ToroidalPos, BiomeId>
+  - {static} writePattern(Path, Map<ToroidalPos, BiomeId>)
+  - {static} readPattern(Path, ToroidalGrid) : Map<ToroidalPos, BiomeId>
+  - {static} parsePatternLine(Map<ToroidalPos, BiomeId>, String)
+}
+class Preset <<record>> {
+  + name : String
+  + settings : DivergenceFreeWarp.Settings
+}
+}
+
+com.mineutze.worldgen.plan.Preset *--> com.mineutze.worldgen.plan.DivergenceFreeWarp
+com.mineutze.worldgen.plan.Preset *--> com.mineutze.worldgen.plan.Settings

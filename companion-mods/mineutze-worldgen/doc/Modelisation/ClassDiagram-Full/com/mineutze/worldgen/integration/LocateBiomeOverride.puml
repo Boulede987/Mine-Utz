@@ -1,0 +1,53 @@
+@startuml LocateBiomeOverride
+
+skinparam classAttributeIconSize 0
+skinparam shadowing false
+
+skinparam class {
+  BackgroundColor<<interface>> #D6EAF8
+  BorderColor<<interface>> #2E86C1
+}
+skinparam class {
+  BackgroundColor<<abstract>> #E8DAEF
+  BorderColor<<abstract>> #8E44AD
+}
+skinparam class {
+  BackgroundColor #D5F5E3
+  BorderColor #27AE60
+}
+skinparam class {
+  BackgroundColor<<record>> #FCF3CF
+  BorderColor<<record>> #B7950B
+}
+skinparam class {
+  BackgroundColor<<static>> #a7faa0
+  BorderColor<<static>> #38d610
+}
+skinparam class {
+  BackgroundColor<<enum>> #F5B7B1
+  BorderColor<<enum>> #C0392B
+}
+
+namespace com.mineutze.worldgen.integration {
+class LocateBiomeOverride {
+  - {static} ERROR_BIOME_NOT_FOUND : DynamicCommandExceptionType
+  + {static} register(RegisterCommandsEvent)
+  - {static} locateBiome(CommandSourceStack, ResourceOrTagArgument.Result<Biome>) : int
+  - {static} findClosestBiome(ServerLevel, BlockPos, ResourceOrTagArgument.Result<Biome>) : Pair<BlockPos, Holder<Biome>>
+  - {static} processCandidate(Registry<Biome>, BlockPos, ResourceOrTagArgument.Result<Biome>, WorldBiomePlan, BiomeId, BestBiome) : BestBiome
+}
+class BestBiome <<record>> {
+  + pair : Pair<BlockPos, Holder<Biome>>
+  + squaredDistance : double
+}
+}
+
+com.mineutze.worldgen.integration.LocateBiomeOverride ..> com.mineutze.worldgen.integration.BestBiome
+com.mineutze.worldgen.integration.LocateBiomeOverride ..> com.mineutze.worldgen.biomegraph.BiomeId
+com.mineutze.worldgen.integration.LocateBiomeOverride ..> com.mineutze.worldgen.integration.BiomeIdAdapter
+com.mineutze.worldgen.integration.LocateBiomeOverride ..> com.mineutze.worldgen.plan.BlockPosition
+com.mineutze.worldgen.integration.LocateBiomeOverride ..> com.mineutze.worldgen.integration.Result
+com.mineutze.worldgen.integration.LocateBiomeOverride ..> com.mineutze.worldgen.plan.WorldBiomePlan
+com.mineutze.worldgen.integration.LocateBiomeOverride ..> com.mineutze.worldgen.integration.WorldBiomePlanHolder
+
+@enduml

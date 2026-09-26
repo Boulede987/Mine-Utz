@@ -1,0 +1,37 @@
+namespace com.mineutze.worldgen.plan {
+class WorldBiomePlanCheckRunner {
+  - {static} WORLD_SEED : long
+  - {static} SAVED_STUDY_PATTERN : Path
+  - {static} LOOKUPS : int
+  + {static} main(String[])
+  - {static} createAndReport(BiomeGraphData, int) : WorldBiomePlan
+  - {static} reportSnapshot(WorldBiomePlan) : PlanSnapshot
+  - {static} restoreAndReport(PlanSnapshot) : WorldBiomePlan
+  - {static} reportLookups(WorldBiomePlan, WorldBiomePlan)
+  - {static} checkOneLookup(WorldBiomePlan, WorldBiomePlan, Random) : LookupResult
+  - {static} reportNearest(WorldBiomePlan)
+  - {static} checkBiomeLocated(WorldBiomePlan, BiomeId) : boolean
+  - {static} comparePatternWithTheStudy(BiomeGraphData, int)
+  - {static} countIfDifferent(Map.Entry<ToroidalPos, BiomeId>, Map<ToroidalPos, BiomeId>) : boolean
+  - {static} seconds(long) : double
+}
+class LookupResult <<record>> {
+  + mismatch : boolean
+  + different : boolean
+}
+}
+
+com.mineutze.worldgen.plan.WorldBiomePlanCheckRunner ..> com.mineutze.worldgen.biomegraph.BiomeGraphData
+com.mineutze.worldgen.plan.WorldBiomePlanCheckRunner ..> com.mineutze.worldgen.biomegraph.BiomeGraphJson
+com.mineutze.worldgen.plan.WorldBiomePlanCheckRunner ..> com.mineutze.worldgen.biomegraph.BiomeId
+com.mineutze.worldgen.plan.WorldBiomePlanCheckRunner ..> com.mineutze.worldgen.plan.ClusterSizeModel
+com.mineutze.worldgen.plan.WorldBiomePlanCheckRunner ..> com.mineutze.worldgen.plan.LookupResult
+com.mineutze.worldgen.plan.WorldBiomePlanCheckRunner ..> com.mineutze.worldgen.plan.PatternCsv
+com.mineutze.worldgen.plan.WorldBiomePlanCheckRunner ..> com.mineutze.worldgen.plan.PlanSettings
+com.mineutze.worldgen.plan.WorldBiomePlanCheckRunner ..> com.mineutze.worldgen.plan.PlanSnapshot
+com.mineutze.worldgen.plan.WorldBiomePlanCheckRunner ..> com.mineutze.worldgen.plan.RawRuleTable
+com.mineutze.worldgen.plan.WorldBiomePlanCheckRunner ..> com.mineutze.worldgen.plan.ShapeRule
+com.mineutze.worldgen.plan.WorldBiomePlanCheckRunner ..> com.mineutze.worldgen.plan.ToroidalGrid
+com.mineutze.worldgen.plan.WorldBiomePlanCheckRunner ..> com.mineutze.worldgen.plan.ToroidalPos
+com.mineutze.worldgen.plan.WorldBiomePlanCheckRunner ..> com.mineutze.worldgen.plan.ToroidalSizedPatternGenerator
+com.mineutze.worldgen.plan.WorldBiomePlanCheckRunner ..> com.mineutze.worldgen.plan.WorldBiomePlan

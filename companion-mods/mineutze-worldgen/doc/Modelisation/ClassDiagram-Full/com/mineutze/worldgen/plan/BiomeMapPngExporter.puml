@@ -1,0 +1,54 @@
+@startuml BiomeMapPngExporter
+
+skinparam classAttributeIconSize 0
+skinparam shadowing false
+
+skinparam class {
+  BackgroundColor<<interface>> #D6EAF8
+  BorderColor<<interface>> #2E86C1
+}
+skinparam class {
+  BackgroundColor<<abstract>> #E8DAEF
+  BorderColor<<abstract>> #8E44AD
+}
+skinparam class {
+  BackgroundColor #D5F5E3
+  BorderColor #27AE60
+}
+skinparam class {
+  BackgroundColor<<record>> #FCF3CF
+  BorderColor<<record>> #B7950B
+}
+skinparam class {
+  BackgroundColor<<static>> #a7faa0
+  BorderColor<<static>> #38d610
+}
+skinparam class {
+  BackgroundColor<<enum>> #F5B7B1
+  BorderColor<<enum>> #C0392B
+}
+
+namespace com.mineutze.worldgen.plan {
+class BiomeMapPngExporter {
+  - {static} OUTSIDE_TILE : int
+  - {static} OUTLINE_RGB : int
+  - {static} BACKGROUND_RGB : int
+  - {static} ROW_HEIGHT : double
+  ~ {static} exportFull(BiomeMap, Path, int)
+  ~ {static} exportRegion(BiomeMap, Path, int, int, int, int, int)
+  - {static} requirePositive(int, int, int)
+  - {static} sampleGrid(BiomeMap, int, int, int, int, int) : int[][]
+  - {static} fillRow(int[][], BiomeMap, int, int, int, int, int)
+  - {static} renderImage(int[][], int, int) : BufferedImage
+  - {static} renderRow(BufferedImage, int[][], int, int)
+  - {static} pixelColor(int[][], int, int) : int
+  - {static} isBorder(int[][], int, int) : boolean
+  - {static} biomeUnderPixel(BiomeMap, int, int, int) : int
+  - {static} write(BufferedImage, Path)
+}
+}
+
+com.mineutze.worldgen.plan.BiomeMapPngExporter ..> com.mineutze.worldgen.plan.BiomeMap
+com.mineutze.worldgen.plan.BiomeMapPngExporter ..> com.mineutze.worldgen.plan.ToroidalPatternPngExporter
+
+@enduml

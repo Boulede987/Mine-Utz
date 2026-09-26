@@ -1,0 +1,6 @@
+namespace com.mineutze.worldgen.tooling.graphedit {
+class GraphEditorServer {
+  - {static} DEFAULT_PORT : int
+  + {static} main(String[])
+}
+}

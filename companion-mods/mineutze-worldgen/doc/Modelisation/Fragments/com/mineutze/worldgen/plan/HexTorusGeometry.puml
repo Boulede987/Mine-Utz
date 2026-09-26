@@ -1,0 +1,10 @@
+namespace com.mineutze.worldgen.plan {
+class HexTorusGeometry {
+  - width : int
+  - height : int
+  - cornerRadius : double
+  - cellWidth : double
+  - rowHeight : double
+  ~ {static} areaOfHexagonWidth(double) : double
+}
+}

@@ -1,0 +1,214 @@
+@startuml biomegraph
+
+skinparam classAttributeIconSize 0
+skinparam shadowing false
+
+skinparam class {
+  BackgroundColor<<interface>> #D6EAF8
+  BorderColor<<interface>> #2E86C1
+}
+skinparam class {
+  BackgroundColor<<abstract>> #E8DAEF
+  BorderColor<<abstract>> #8E44AD
+}
+skinparam class {
+  BackgroundColor #D5F5E3
+  BorderColor #27AE60
+}
+skinparam class {
+  BackgroundColor<<record>> #FCF3CF
+  BorderColor<<record>> #B7950B
+}
+skinparam class {
+  BackgroundColor<<static>> #a7faa0
+  BorderColor<<static>> #38d610
+}
+skinparam class {
+  BackgroundColor<<enum>> #F5B7B1
+  BorderColor<<enum>> #C0392B
+}
+
+skinparam class {
+  BackgroundColor<<external>> #EAECEE
+  BorderColor<<external>> #839192
+}
+
+namespace com.mineutze.worldgen.biomegraph {
+class AdjacencyRule <<record>> {
+  + biomeA : BiomeId
+  + biomeB : BiomeId
+  + blendWidthBlocks : int
+  + {static} allow(BiomeId, BiomeId, int) : AdjacencyRule
+}
+class BiomeGraph {
+  - nodesById : Map<BiomeId, BiomeNode>
+  - rulesByPair : Map<UnorderedBiomePair, AdjacencyRule>
+  - {static} MIN_LEGAL_NEIGHBORS : int
+  + {static} forProduction(Collection<BiomeNode>, Collection<AdjacencyRule>) : BiomeGraph
+  + requireMinLegalNeighbors() : BiomeGraph
+  - validateBiomeNeighbors(BiomeId)
+  - {static} indexNodes(Collection<BiomeNode>) : Map<BiomeId, BiomeNode>
+  - {static} indexNode(Map<BiomeId, BiomeNode>, BiomeNode)
+  - {static} indexRules(Collection<AdjacencyRule>) : Map<UnorderedBiomePair, AdjacencyRule>
+  - {static} indexRule(Map<UnorderedBiomePair, AdjacencyRule>, AdjacencyRule)
+  - requireAllRuleNodesKnown()
+  - validatePairNodesKnown(UnorderedBiomePair)
+  - requireKnownNode(BiomeId)
+  + node(BiomeId) : BiomeNode
+  + nodes() : Collection<BiomeNode>
+  + isAllowed(BiomeId, BiomeId) : boolean
+  + rule(BiomeId, BiomeId) : AdjacencyRule
+}
+class BiomeGraphData <<record>> {
+  + nodes : NodeData[*]
+  + edges : EdgeData[*]
+  + groups : GroupData[*]
+}
+class NodeData <<record>> {
+  + namespace : String
+  + path : String
+  + minWidthBlocks : int
+  + maxWidthBlocks : int
+  + selfAdjacencyLimit : int
+  + requirement : String
+  + key() : String
+}
+class GroupData <<record>> {
+  + name : String
+  + members : String[*]
+}
+class EdgeData <<record>> {
+  + aNamespace : String
+  + aPath : String
+  + bNamespace : String
+  + bPath : String
+  + blendWidthBlocks : int
+  + aKey() : String
+  + bKey() : String
+}
+class BiomeGraphJson {
+  + {static} load(Path) : BiomeGraphData
+  + {static} save(Path, BiomeGraphData)
+  + {static} loadResource(Class<?>, String) : BiomeGraphData
+  + {static} toBiomeGraph(BiomeGraphData) : BiomeGraph
+  + {static} toProductionBiomeGraph(BiomeGraphData) : BiomeGraph
+  - {static} nodesOf(BiomeGraphData) : List<BiomeNode>
+  - {static} rulesOf(BiomeGraphData) : List<AdjacencyRule>
+  + {static} toJson(BiomeGraphData) : String
+  + {static} fromJson(String) : BiomeGraphData
+  - {static} groupToJson(GroupData) : Map<String, Object>
+  - {static} groupFromJson(Map<String, Object>) : GroupData
+  - {static} nodeToJson(NodeData) : Map<String, Object>
+  + {static} nodeFromJson(Map<String, Object>) : NodeData
+  - {static} edgeToJson(EdgeData) : Map<String, Object>
+  + {static} edgeFromJson(Map<String, Object>) : EdgeData
+  - {static} stringField(Map<String, Object>, String) : String
+  - {static} intField(Map<String, Object>, String) : int
+}
+class BiomeId <<record>> {
+  + namespace : String
+  + path : String
+  + compareTo(BiomeId) : int
+  + toString() : String
+}
+class BiomeNode <<record>> {
+  + id : BiomeId
+  + sizeRange : BiomeSizeRange
+  + selfAdjacencyLimit : int
+}
+class BiomeSizeRange <<record>> {
+  + minWidthBlocks : int
+  + maxWidthBlocks : int
+}
+interface BorderRequirement <<interface>> {
+  + parse(String) : Optional<BorderRequirement>
+  + print(BorderRequirement) : String
+  + joined(List<BorderRequirement>, String, boolean) : private static String
+  + formatPart(BorderRequirement, boolean) : private static String
+}
+class Share <<record>> {
+  + subject : String
+  + minSharedEdges : int
+  + toString() : String
+}
+class AllOf <<record>> {
+  + parts : BorderRequirement[*]
+  + toString() : String
+}
+class AnyOf <<record>> {
+  + parts : BorderRequirement[*]
+  + toString() : String
+}
+class BorderRequirementParser {
+  - text : String
+  - position : int
+  ~ {static} parse(String) : BorderRequirement
+  - parseWholeText() : BorderRequirement
+  - parseAnyOf() : BorderRequirement
+  - parseAllOf() : BorderRequirement
+  - {static} flatten(List<BorderRequirement>, boolean) : List<BorderRequirement>
+  - {static} addFlattenedPart(List<BorderRequirement>, BorderRequirement, boolean)
+  - parseAtom() : BorderRequirement
+  - consumeKeyword(String) : boolean
+  - {static} isKeyword(String) : boolean
+  - readWord() : String
+  - {static} isWordCharacter(char) : boolean
+  - skipSpaces()
+  - failure(String) : IllegalArgumentException
+}
+class MinimalJson {
+  + {static} writeObject(Map<String, Object>) : String
+  - {static} appendObjectField(StringBuilder, Map.Entry<String, Object>, int)
+  + {static} writeArray(List<?>) : String
+  - {static} writeArray(List<?>, StringBuilder)
+  - {static} appendArrayElement(List<?>, StringBuilder, int)
+  - {static} writeValue(Object, StringBuilder)
+  - {static} quote(String) : String
+}
+class MinimalJsonParser {
+  - json : String
+  - position : int
+  - parseStringChar(StringBuilder) : boolean
+}
+class ModBiomeGraph {
+  + {static} OVERWORLD : BiomeGraph
+}
+class UnorderedBiomePair <<record>> {
+  + first : BiomeId
+  + second : BiomeId
+  ~ {static} of(BiomeId, BiomeId) : UnorderedBiomePair
+}
+}
+
+com.mineutze.worldgen.biomegraph.AdjacencyRule *--> com.mineutze.worldgen.biomegraph.BiomeId
+com.mineutze.worldgen.biomegraph.AdjacencyRule ..> com.mineutze.worldgen.biomegraph.UnorderedBiomePair
+com.mineutze.worldgen.biomegraph.BiomeGraph --> com.mineutze.worldgen.biomegraph.AdjacencyRule
+com.mineutze.worldgen.biomegraph.BiomeGraph --> com.mineutze.worldgen.biomegraph.BiomeId
+com.mineutze.worldgen.biomegraph.BiomeGraph --> com.mineutze.worldgen.biomegraph.BiomeNode
+com.mineutze.worldgen.biomegraph.BiomeGraph --> com.mineutze.worldgen.biomegraph.UnorderedBiomePair
+com.mineutze.worldgen.biomegraph.BiomeGraphData *--> "0..*" com.mineutze.worldgen.biomegraph.EdgeData
+com.mineutze.worldgen.biomegraph.BiomeGraphData *--> "0..*" com.mineutze.worldgen.biomegraph.GroupData
+com.mineutze.worldgen.biomegraph.BiomeGraphData *--> "0..*" com.mineutze.worldgen.biomegraph.NodeData
+com.mineutze.worldgen.biomegraph.BiomeGraphJson ..> com.mineutze.worldgen.biomegraph.AdjacencyRule
+com.mineutze.worldgen.biomegraph.BiomeGraphJson ..> com.mineutze.worldgen.biomegraph.BiomeGraph
+com.mineutze.worldgen.biomegraph.BiomeGraphJson ..> com.mineutze.worldgen.biomegraph.BiomeGraphData
+com.mineutze.worldgen.biomegraph.BiomeGraphJson ..> com.mineutze.worldgen.biomegraph.BiomeId
+com.mineutze.worldgen.biomegraph.BiomeGraphJson ..> com.mineutze.worldgen.biomegraph.BiomeNode
+com.mineutze.worldgen.biomegraph.BiomeGraphJson ..> com.mineutze.worldgen.biomegraph.BiomeSizeRange
+com.mineutze.worldgen.biomegraph.BiomeGraphJson ..> com.mineutze.worldgen.biomegraph.EdgeData
+com.mineutze.worldgen.biomegraph.BiomeGraphJson ..> com.mineutze.worldgen.biomegraph.GroupData
+com.mineutze.worldgen.biomegraph.BiomeGraphJson ..> com.mineutze.worldgen.biomegraph.MinimalJson
+com.mineutze.worldgen.biomegraph.BiomeGraphJson ..> com.mineutze.worldgen.biomegraph.NodeData
+com.mineutze.worldgen.biomegraph.BiomeId ..|> Comparable
+com.mineutze.worldgen.biomegraph.BiomeNode *--> com.mineutze.worldgen.biomegraph.BiomeId
+com.mineutze.worldgen.biomegraph.BiomeNode *--> com.mineutze.worldgen.biomegraph.BiomeSizeRange
+com.mineutze.worldgen.biomegraph.Share ..|> com.mineutze.worldgen.biomegraph.BorderRequirement
+com.mineutze.worldgen.biomegraph.AllOf ..|> com.mineutze.worldgen.biomegraph.BorderRequirement
+com.mineutze.worldgen.biomegraph.AnyOf ..|> com.mineutze.worldgen.biomegraph.BorderRequirement
+com.mineutze.worldgen.biomegraph.BorderRequirementParser ..> com.mineutze.worldgen.biomegraph.AllOf
+com.mineutze.worldgen.biomegraph.BorderRequirementParser ..> com.mineutze.worldgen.biomegraph.AnyOf
+com.mineutze.worldgen.biomegraph.BorderRequirementParser ..> com.mineutze.worldgen.biomegraph.BorderRequirement
+com.mineutze.worldgen.biomegraph.BorderRequirementParser ..> com.mineutze.worldgen.biomegraph.Share
+com.mineutze.worldgen.biomegraph.UnorderedBiomePair *--> com.mineutze.worldgen.biomegraph.BiomeId
+
+@enduml

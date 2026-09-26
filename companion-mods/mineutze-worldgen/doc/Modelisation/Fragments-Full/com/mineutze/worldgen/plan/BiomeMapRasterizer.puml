@@ -1,0 +1,18 @@
+namespace com.mineutze.worldgen.plan {
+class BiomeMapRasterizer {
+  ~ {static} rasterize(ToroidalGrid, Map<ToroidalPos, BiomeId>, HexTorusGeometry, DivergenceFreeWarp, int, List<BiomeId>) : BiomeMap
+  - {static} requirePositive(int)
+  - {static} sampleTile(RealizedBiomeField, HexTorusGeometry, int, int[], int[])
+  - {static} sampleRowCells(RealizedBiomeField, int, double, double, double, double, int[], int[], int)
+  - {static} sampleCell(RealizedBiomeField, double, double, double, double, int[], int[], int, int, int, double, double)
+  - {static} blocksPerSample(HexTorusGeometry, int) : double
+}
+}
+
+com.mineutze.worldgen.plan.BiomeMapRasterizer ..> com.mineutze.worldgen.biomegraph.BiomeId
+com.mineutze.worldgen.plan.BiomeMapRasterizer ..> com.mineutze.worldgen.plan.BiomeMap
+com.mineutze.worldgen.plan.BiomeMapRasterizer ..> com.mineutze.worldgen.plan.DivergenceFreeWarp
+com.mineutze.worldgen.plan.BiomeMapRasterizer ..> com.mineutze.worldgen.plan.HexTorusGeometry
+com.mineutze.worldgen.plan.BiomeMapRasterizer ..> com.mineutze.worldgen.plan.RealizedBiomeField
+com.mineutze.worldgen.plan.BiomeMapRasterizer ..> com.mineutze.worldgen.plan.ToroidalGrid
+com.mineutze.worldgen.plan.BiomeMapRasterizer ..> com.mineutze.worldgen.plan.ToroidalPos

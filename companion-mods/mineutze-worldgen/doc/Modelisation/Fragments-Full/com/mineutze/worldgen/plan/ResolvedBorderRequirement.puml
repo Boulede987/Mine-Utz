@@ -1,0 +1,28 @@
+namespace com.mineutze.worldgen.plan {
+interface ResolvedBorderRequirement <<interface>> {
+  + shortfall(ToIntFunction<BiomeId>) : int
+  + isMetBy(ToDoubleFunction<BiomeId>, double) : boolean
+  + leaves() : List<Share>
+  + collectLeaves(ResolvedBorderRequirement, List<Share>) : private static void
+  + print(ResolvedBorderRequirement) : String
+}
+class Share <<record>> {
+  + subject : String
+  + biomes : BiomeId[*]
+  + minEdges : int
+  + toString() : String
+}
+class AllOf <<record>> {
+  + parts : ResolvedBorderRequirement[*]
+  + toString() : String
+}
+class AnyOf <<record>> {
+  + parts : ResolvedBorderRequirement[*]
+  + toString() : String
+}
+}
+
+com.mineutze.worldgen.plan.Share ..|> com.mineutze.worldgen.plan.ResolvedBorderRequirement
+com.mineutze.worldgen.plan.AllOf ..|> com.mineutze.worldgen.plan.ResolvedBorderRequirement
+com.mineutze.worldgen.plan.AnyOf ..|> com.mineutze.worldgen.plan.ResolvedBorderRequirement
+com.mineutze.worldgen.plan.Share *--> "0..*" com.mineutze.worldgen.biomegraph.BiomeId

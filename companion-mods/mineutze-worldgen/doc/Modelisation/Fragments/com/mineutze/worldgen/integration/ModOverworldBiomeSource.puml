@@ -1,0 +1,15 @@
+namespace com.mineutze.worldgen.integration {
+class ModOverworldBiomeSource {
+  - {static} LOGGER : Logger
+  - {static} QUART_CENTER_OFFSET_BLOCKS : int
+  + {static} CODEC : MapCodec<ModOverworldBiomeSource>
+  - biomesById : Map<ResourceLocation, Holder<Biome>>
+  - {static} overworldBiomeKeys() : List<ResourceKey<Biome>>
+  - {static} mapCodecFor(List<ResourceKey<Biome>>) : MapCodec<ModOverworldBiomeSource>
+  # collectPossibleBiomes() : Stream<Holder<Biome>>
+  # codec() : MapCodec<? extends BiomeSource>
+  + getNoiseBiome(int, int, int, Climate.Sampler) : Holder<Biome>
+}
+}
+
+com.mineutze.worldgen.integration.ModOverworldBiomeSource --|> net.minecraft.world.level.biome.BiomeSource

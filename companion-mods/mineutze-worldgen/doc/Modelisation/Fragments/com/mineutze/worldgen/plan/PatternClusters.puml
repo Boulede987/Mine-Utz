@@ -1,0 +1,11 @@
+namespace com.mineutze.worldgen.plan {
+class PatternClusters {
+  - clusterOfCell : int[*]
+  - cellsInCluster : int[*]
+  ~ {static} of(ToroidalGrid, Map<ToroidalPos, BiomeId>) : PatternClusters
+  - {static} growClusterFrom(ToroidalGrid, Map<ToroidalPos, BiomeId>, int[], int[], ToroidalPos, int)
+  - {static} processFrontierNode(ToroidalGrid, Map<ToroidalPos, BiomeId>, int[], Deque<ToroidalPos>, BiomeId, ToroidalPos, int)
+  - {static} addIfUnvisited(ToroidalGrid, Map<ToroidalPos, BiomeId>, int[], Deque<ToroidalPos>, BiomeId, ToroidalPos, int)
+  - {static} indexOf(ToroidalGrid, ToroidalPos) : int
+}
+}

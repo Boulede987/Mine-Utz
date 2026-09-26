@@ -1,0 +1,18 @@
+namespace com.mineutze.worldgen.plan {
+class ShapeRule <<record>> {
+  + perimeterRatio : double
+  + smallestClusterNeedingATriangle : int
+  + smallestClusterNeedingAFlower : int
+  + tailReachCells : int
+  ~ {static} NO_PERIMETER_LIMIT : double
+  - {static} SMALLEST_CLUSTER_ABLE_TO_HOLD_A_TRIANGLE : int
+  - {static} SMALLEST_CLUSTER_ABLE_TO_HOLD_A_FLOWER : int
+  - {static} ROUNDING_TOLERANCE : double
+  ~ {static} minimumPerimeter(int) : int
+}
+enum Thickness <<enum>> {
+  NONE
+  TRIANGLE
+  FLOWER
+}
+}

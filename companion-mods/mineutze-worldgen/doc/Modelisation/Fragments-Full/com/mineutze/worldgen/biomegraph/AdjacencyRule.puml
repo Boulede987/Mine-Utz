@@ -1,0 +1,11 @@
+namespace com.mineutze.worldgen.biomegraph {
+class AdjacencyRule <<record>> {
+  + biomeA : BiomeId
+  + biomeB : BiomeId
+  + blendWidthBlocks : int
+  + {static} allow(BiomeId, BiomeId, int) : AdjacencyRule
+}
+}
+
+com.mineutze.worldgen.biomegraph.AdjacencyRule *--> com.mineutze.worldgen.biomegraph.BiomeId
+com.mineutze.worldgen.biomegraph.AdjacencyRule ..> com.mineutze.worldgen.biomegraph.UnorderedBiomePair

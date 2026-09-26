@@ -1,0 +1,16 @@
+namespace com.mineutze.worldgen.integration {
+class WorldBiomePlanHolder {
+  - {static} LOGGER : Logger
+  - {static} READY_TIMEOUT_MINUTES : long
+  - {static} HEARTBEAT_SECONDS : long
+  - {static} READY : CountDownLatch
+  - {static} current : WorldBiomePlan
+  + {static} onLevelLoad(LevelEvent.Load)
+  + {static} get() : WorldBiomePlan
+  - {static} loadOrCreate(ServerLevel) : WorldBiomePlan
+  - {static} restore(PlanSnapshot, BiomeGraphData, long) : WorldBiomePlan
+  - {static} create(BiomeGraphData, long) : WorldBiomePlan
+  - {static} elapsedSeconds(long) : long
+  - {static} awaitReady()
+}
+}

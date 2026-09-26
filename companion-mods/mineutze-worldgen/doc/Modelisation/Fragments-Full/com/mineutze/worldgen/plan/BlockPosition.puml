@@ -1,0 +1,6 @@
+namespace com.mineutze.worldgen.plan {
+class BlockPosition <<record>> {
+  + x : int
+  + z : int
+}
+}

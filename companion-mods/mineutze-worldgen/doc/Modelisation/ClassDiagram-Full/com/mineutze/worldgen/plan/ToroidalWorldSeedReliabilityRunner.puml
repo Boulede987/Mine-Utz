@@ -1,0 +1,73 @@
+@startuml ToroidalWorldSeedReliabilityRunner
+
+skinparam classAttributeIconSize 0
+skinparam shadowing false
+
+skinparam class {
+  BackgroundColor<<interface>> #D6EAF8
+  BorderColor<<interface>> #2E86C1
+}
+skinparam class {
+  BackgroundColor<<abstract>> #E8DAEF
+  BorderColor<<abstract>> #8E44AD
+}
+skinparam class {
+  BackgroundColor #D5F5E3
+  BorderColor #27AE60
+}
+skinparam class {
+  BackgroundColor<<record>> #FCF3CF
+  BorderColor<<record>> #B7950B
+}
+skinparam class {
+  BackgroundColor<<static>> #a7faa0
+  BorderColor<<static>> #38d610
+}
+skinparam class {
+  BackgroundColor<<enum>> #F5B7B1
+  BorderColor<<enum>> #C0392B
+}
+
+namespace com.mineutze.worldgen.plan {
+class ToroidalWorldSeedReliabilityRunner {
+  - {static} SETTINGS : PlanSettings
+  - {static} OFF : int
+  - {static} WORLD_SEED_COUNT : int
+  - {static} FIRST_ORDINARY_WORLD_SEED : long
+  - {static} OUTPUT_DIRECTORY : Path
+  - {static} CSV : Path
+  - {static} PATTERN_DIRECTORY : Path
+  + {static} main(String[])
+  - {static} processWorld(long, RawRuleTable, ToroidalGrid, HexTorusGeometry, ClusterSizeModel, int, Tally)
+  - {static} report(Tally, int, int)
+  - {static} percentile(List<T>, double) : T
+  - {static} secondsSince(long) : double
+  - {static} startCsv()
+}
+class Tally <<static>> {
+  - patternsSolved : int
+  - realized : int
+  - attemptsUsed : Integer[*]
+  - patternSeconds : Double[*]
+  - realizationSeconds : Double[*]
+  - worldsPerStrength : Map<Double, Integer>
+  - worstAbsoluteDrift : double
+  - patternFailures : Long[*]
+  - realizationFailures : Long[*]
+}
+}
+
+com.mineutze.worldgen.plan.ToroidalWorldSeedReliabilityRunner --> com.mineutze.worldgen.plan.PlanSettings
+com.mineutze.worldgen.plan.ToroidalWorldSeedReliabilityRunner ..> com.mineutze.worldgen.biomegraph.BiomeGraphData
+com.mineutze.worldgen.plan.ToroidalWorldSeedReliabilityRunner ..> com.mineutze.worldgen.biomegraph.BiomeGraphJson
+com.mineutze.worldgen.plan.ToroidalWorldSeedReliabilityRunner ..> com.mineutze.worldgen.plan.ClusterSizeModel
+com.mineutze.worldgen.plan.ToroidalWorldSeedReliabilityRunner ..> com.mineutze.worldgen.plan.HexTorusGeometry
+com.mineutze.worldgen.plan.ToroidalWorldSeedReliabilityRunner ..> com.mineutze.worldgen.plan.PatternCsv
+com.mineutze.worldgen.plan.ToroidalWorldSeedReliabilityRunner ..> com.mineutze.worldgen.plan.RawRuleTable
+com.mineutze.worldgen.plan.ToroidalWorldSeedReliabilityRunner ..> com.mineutze.worldgen.plan.RealizationSelector
+com.mineutze.worldgen.plan.ToroidalWorldSeedReliabilityRunner ..> com.mineutze.worldgen.plan.ShapeRule
+com.mineutze.worldgen.plan.ToroidalWorldSeedReliabilityRunner ..> com.mineutze.worldgen.plan.Tally
+com.mineutze.worldgen.plan.ToroidalWorldSeedReliabilityRunner ..> com.mineutze.worldgen.plan.ToroidalGrid
+com.mineutze.worldgen.plan.ToroidalWorldSeedReliabilityRunner ..> com.mineutze.worldgen.plan.ToroidalSizedPatternGenerator
+
+@enduml

@@ -1,0 +1,7 @@
+namespace com.mineutze.worldgen.biomegraph {
+class MinimalJsonParser {
+  - json : String
+  - position : int
+  - parseStringChar(StringBuilder) : boolean
+}
+}

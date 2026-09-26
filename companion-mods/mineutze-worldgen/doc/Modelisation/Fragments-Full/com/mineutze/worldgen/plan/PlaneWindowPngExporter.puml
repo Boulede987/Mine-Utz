@@ -1,0 +1,16 @@
+namespace com.mineutze.worldgen.plan {
+class PlaneWindowPngExporter {
+  ~ {static} TILE_EDGE_RGB : int
+  - {static} OUTLINE_RGB : int
+  ~ {static} export(RealizedBiomeField, HexTorusGeometry, Path, double, double, double, double, double, boolean)
+  - {static} fillRowBiomeData(RealizedBiomeField, int[][], double, double, double, int, int)
+  - {static} renderImageRow(BufferedImage, int[][], HexTorusGeometry, double, double, double, boolean, int, int, int)
+  - {static} renderPixel(BufferedImage, int[][], HexTorusGeometry, double, double, double, boolean, int, int, int, int)
+  - {static} isOnTileEdge(HexTorusGeometry, double, double, double) : boolean
+  - {static} write(BufferedImage, Path)
+}
+}
+
+com.mineutze.worldgen.plan.PlaneWindowPngExporter ..> com.mineutze.worldgen.plan.HexTorusGeometry
+com.mineutze.worldgen.plan.PlaneWindowPngExporter ..> com.mineutze.worldgen.plan.RealizedBiomeField
+com.mineutze.worldgen.plan.PlaneWindowPngExporter ..> com.mineutze.worldgen.plan.ToroidalPatternPngExporter

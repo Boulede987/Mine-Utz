@@ -1,0 +1,11 @@
+namespace com.mineutze.worldgen.biomegraph {
+class MinimalJson {
+  + {static} writeObject(Map<String, Object>) : String
+  - {static} appendObjectField(StringBuilder, Map.Entry<String, Object>, int)
+  + {static} writeArray(List<?>) : String
+  - {static} writeArray(List<?>, StringBuilder)
+  - {static} appendArrayElement(List<?>, StringBuilder, int)
+  - {static} writeValue(Object, StringBuilder)
+  - {static} quote(String) : String
+}
+}

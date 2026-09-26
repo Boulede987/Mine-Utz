@@ -1,0 +1,33 @@
+namespace com.mineutze.worldgen.biomegraph {
+class BiomeGraphData <<record>> {
+  + nodes : NodeData[*]
+  + edges : EdgeData[*]
+  + groups : GroupData[*]
+}
+class NodeData <<record>> {
+  + namespace : String
+  + path : String
+  + minWidthBlocks : int
+  + maxWidthBlocks : int
+  + selfAdjacencyLimit : int
+  + requirement : String
+  + key() : String
+}
+class GroupData <<record>> {
+  + name : String
+  + members : String[*]
+}
+class EdgeData <<record>> {
+  + aNamespace : String
+  + aPath : String
+  + bNamespace : String
+  + bPath : String
+  + blendWidthBlocks : int
+  + aKey() : String
+  + bKey() : String
+}
+}
+
+com.mineutze.worldgen.biomegraph.BiomeGraphData *--> "0..*" com.mineutze.worldgen.biomegraph.EdgeData
+com.mineutze.worldgen.biomegraph.BiomeGraphData *--> "0..*" com.mineutze.worldgen.biomegraph.GroupData
+com.mineutze.worldgen.biomegraph.BiomeGraphData *--> "0..*" com.mineutze.worldgen.biomegraph.NodeData

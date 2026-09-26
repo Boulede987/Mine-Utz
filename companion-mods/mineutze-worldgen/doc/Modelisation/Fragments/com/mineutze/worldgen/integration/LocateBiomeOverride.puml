@@ -1,0 +1,13 @@
+namespace com.mineutze.worldgen.integration {
+class LocateBiomeOverride {
+  - {static} ERROR_BIOME_NOT_FOUND : DynamicCommandExceptionType
+  + {static} register(RegisterCommandsEvent)
+  - {static} locateBiome(CommandSourceStack, ResourceOrTagArgument.Result<Biome>) : int
+  - {static} findClosestBiome(ServerLevel, BlockPos, ResourceOrTagArgument.Result<Biome>) : Pair<BlockPos, Holder<Biome>>
+  - {static} processCandidate(Registry<Biome>, BlockPos, ResourceOrTagArgument.Result<Biome>, WorldBiomePlan, BiomeId, BestBiome) : BestBiome
+}
+class BestBiome <<record>> {
+  + pair : Pair<BlockPos, Holder<Biome>>
+  + squaredDistance : double
+}
+}

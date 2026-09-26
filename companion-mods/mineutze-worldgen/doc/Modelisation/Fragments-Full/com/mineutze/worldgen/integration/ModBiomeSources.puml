@@ -1,0 +1,9 @@
+namespace com.mineutze.worldgen.integration {
+class ModBiomeSources {
+  + {static} CUSTOM_OVERWORLD_ID : String
+  + {static} register(RegisterEvent)
+}
+}
+
+com.mineutze.worldgen.integration.ModBiomeSources ..> com.mineutze.worldgen.integration.ModOverworldBiomeSource
+com.mineutze.worldgen.integration.ModBiomeSources ..> com.mineutze.worldgen.WorldgenMod

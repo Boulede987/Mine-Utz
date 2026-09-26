@@ -1,0 +1,198 @@
+@startuml ToroidalSizedLocalSearch
+
+skinparam classAttributeIconSize 0
+skinparam shadowing false
+
+skinparam class {
+  BackgroundColor<<interface>> #D6EAF8
+  BorderColor<<interface>> #2E86C1
+}
+skinparam class {
+  BackgroundColor<<abstract>> #E8DAEF
+  BorderColor<<abstract>> #8E44AD
+}
+skinparam class {
+  BackgroundColor #D5F5E3
+  BorderColor #27AE60
+}
+skinparam class {
+  BackgroundColor<<record>> #FCF3CF
+  BorderColor<<record>> #B7950B
+}
+skinparam class {
+  BackgroundColor<<static>> #a7faa0
+  BorderColor<<static>> #38d610
+}
+skinparam class {
+  BackgroundColor<<enum>> #F5B7B1
+  BorderColor<<enum>> #C0392B
+}
+
+namespace com.mineutze.worldgen.plan {
+class ToroidalSizedLocalSearch {
+  - {static} MISSING_BIOME_COST : int
+  - {static} NUCLEATION_PROBABILITY : double
+  - {static} MISSING_NUCLEATION_SHARE : double
+  - {static} BEST_TRACKING_INTERVAL_STEPS : int
+  - {static} ACCEPTANCE_TABLE_SIZE : int
+  - {static} SCHEDULE_LEVELS : int
+  - {static} FOCUS_PROBABILITY : double
+  ~ {static} DEFAULT_RELABEL_PROBABILITY : double
+  ~ {static} DEFAULT_TEMPERATURE : double
+  ~ {static} search(RawRuleTable, ToroidalGrid, ClusterSizeModel, long, long) : Result
+  ~ {static} search(RawRuleTable, ToroidalGrid, ClusterSizeModel, long, long, double) : Result
+  ~ {static} search(RawRuleTable, ToroidalGrid, ClusterSizeModel, long, long, Schedule) : Result
+  ~ {static} search(RawRuleTable, ToroidalGrid, ClusterSizeModel, long, long, Schedule, BooleanSupplier) : Result
+  ~ {static} search(RawRuleTable, ToroidalGrid, ClusterSizeModel, long, long, Schedule, BooleanSupplier, double) : Result
+  ~ {static} cost(RawRuleTable, ToroidalGrid, ClusterSizeModel, Map<ToroidalPos, BiomeId>) : int
+  ~ {static} illegalPairCounts(RawRuleTable, ToroidalGrid, Map<ToroidalPos, BiomeId>) : Map<String, Integer>
+  - {static} tallyIllegalPairsFromCell(RawRuleTable, ToroidalGrid, Map<ToroidalPos, BiomeId>, Map<String, Integer>, Map.Entry<ToroidalPos, BiomeId>)
+  ~ {static} breakdown(RawRuleTable, ToroidalGrid, ClusterSizeModel, Map<ToroidalPos, BiomeId>) : Breakdown
+  - {static} countIllegalEdges(RawRuleTable, ToroidalGrid, Map<ToroidalPos, BiomeId>) : int
+  - {static} exploreCluster(ToroidalGrid, Map<ToroidalPos, BiomeId>, ToroidalPos, Set<ToroidalPos>) : ExploredCluster
+  - {static} sumClusterViolations(RawRuleTable, ToroidalGrid, ClusterSizeModel, Map<ToroidalPos, BiomeId>) : int
+  - {static} countMissingBiomes(RawRuleTable, Map<ToroidalPos, BiomeId>) : int
+  - {static} borderShortfallOf(RawRuleTable, BiomeId, Map<BiomeId, Integer>) : int
+  - {static} thinCellsOf(ToroidalGrid, ClusterSizeModel, Set<ToroidalPos>) : int
+  - {static} isOutsideAnyTriangle(ToroidalGrid, Set<ToroidalPos>, ToroidalPos) : boolean
+  - {static} addIfFlowerCenter(ToroidalGrid, Set<ToroidalPos>, Map<ToroidalPos, Integer>, Deque<ToroidalPos>, ToroidalPos)
+  - {static} expandFlowerReach(ToroidalGrid, Set<ToroidalPos>, Map<ToroidalPos, Integer>, Deque<ToroidalPos>, int, ToroidalPos)
+  ~ {static} verify(RawRuleTable, ToroidalGrid, ClusterSizeModel, Map<ToroidalPos, BiomeId>)
+}
+class Result <<record>> {
+  + assignment : Map<ToroidalPos, BiomeId>
+  + closestAssignment : Map<ToroidalPos, BiomeId>
+  + steps : long
+  + bestCost : int
+}
+class Breakdown <<record>> {
+  + illegalEdges : int
+  + clusterViolation : int
+  + missingBiomes : int
+}
+class Schedule <<record>> {
+  + highTemperature : double
+  + lowTemperature : double
+  + cycleSteps : long
+  ~ {static} constant(double) : Schedule
+}
+class ExploredCluster <<record>> {
+  + biome : BiomeId
+  + cells : ToroidalPos[*]
+  + perimeter : int
+  + edgesToBiome : Map<BiomeId, Integer>
+}
+class Search <<static>> {
+  - table : RawRuleTable
+  - grid : ToroidalGrid
+  - model : ClusterSizeModel
+  - random : Random
+  - biomes : BiomeId[*]
+  - positions : ToroidalPos[*]
+  - biomeCount : int
+  - cellCount : int
+  - legal : boolean[][*]
+  - neighbors : int[][*]
+  - schedule : Schedule
+  - shouldStop : BooleanSupplier
+  - acceptanceProbabilityByLevel : double[][*]
+  - acceptanceProbability : double[*]
+  - value : int[*]
+  - conflictedCells : int[*]
+  - conflictedCount : int
+  - usesOfBiome : int[*]
+  - missingBiomes : int
+  - cost : int
+  - visitStamp : int[*]
+  - queue : int[*]
+  - stamp : int
+  - exploredSize : int
+  - exploredThinCells : int
+  - exploredPerimeter : int
+  - exploredBorderShortfall : int
+  - needsBorder : boolean[*]
+  - borderEdges : int[*]
+  - borderEdgeBiomes : int[*]
+  - borderEdgeBiomeCount : int
+  - reachDistance : int[*]
+  - reachQueue : int[*]
+  - relabelProbability : double
+  - changedCells : int[*]
+  - changedStamp : int[*]
+  - changedGeneration : int
+  - seenBiomeStamp : int[*]
+  - seenBiomes : int[*]
+  - seenBiomeGeneration : int
+  - trackBestAndCheckStop(long, int, int[]) : TrackResult
+  - failIfBookkeepingDrifted()
+  - validateBiomeCountAndCheckMissing(int, int[]) : boolean
+  - solved(long) : Result
+  - initializeFromRandomVoronoi()
+  - assignNearestSeedBiome(int[], int[], int, int)
+  - isBiomeMissing(int) : boolean
+  - torusDistance(ToroidalPos, ToroidalPos) : int
+  - wrappedDistanceCandidate(int, int, int, int) : int
+  - fullCost() : int
+  - countIllegalEdgesFromCell(int) : int
+  - collectConflictedCells()
+  - cellHasConflict(int) : boolean
+  - proposeAndMaybeApply()
+  - proposeWholeClusterRelabel()
+  - setChangedCells(int, int)
+  - randomBiomeFittingClusterAndItsSurroundings(int, int) : int
+  - gatherNeighborBiome(int, int, int) : int
+  - considerBiomeAsFit(int, int, int, int, FitCandidate) : FitCandidate
+  - localCost(int) : int
+  - countIllegalEdgesForChangedCell(int) : int
+  - clusterViolationForChangedCell(int) : int
+  - randomMissingBiome() : int
+  - costChangeOfReassigning(int, int, int) : int
+  - edgeCountDelta(int[], int, int) : int
+  - clusterCostBesideCell(int, int[], int, int, int) : int
+  - requirementClustersBesideThatAreNeitherBiome(int[], int, int) : int
+  - exploreCluster(int)
+  - enqueueIfUnvisited(int, int) : int
+  - countEdgeTo(int)
+  - borderShortfallOfExploredCluster(int) : int
+  - countCellsOutsideAnyTriangle(int, int) : int
+  - cellIsOutsideAnyTriangle(int, int) : boolean
+  - countCellsBeyondReachOfAFlower(int, int) : int
+  - isFlowerCenter(int, int) : boolean
+  - visitFlowerNeighborIfReachable(int, int, int, int) : int
+  - toAssignment(int[]) : Map<ToroidalPos, BiomeId>
+}
+class TrackResult <<record>> {
+  + bestCost : int
+  + stop : boolean
+}
+class FitCandidate <<record>> {
+  + fitting : int
+  + chosen : int
+}
+}
+
+com.mineutze.worldgen.plan.Result *--> com.mineutze.worldgen.biomegraph.BiomeId
+com.mineutze.worldgen.plan.Result *--> com.mineutze.worldgen.plan.ToroidalPos
+com.mineutze.worldgen.plan.ExploredCluster *--> com.mineutze.worldgen.biomegraph.BiomeId
+com.mineutze.worldgen.plan.ExploredCluster *--> "0..*" com.mineutze.worldgen.plan.ToroidalPos
+com.mineutze.worldgen.plan.ToroidalSizedLocalSearch ..> com.mineutze.worldgen.biomegraph.BiomeId
+com.mineutze.worldgen.plan.ToroidalSizedLocalSearch ..> com.mineutze.worldgen.plan.Breakdown
+com.mineutze.worldgen.plan.ToroidalSizedLocalSearch ..> com.mineutze.worldgen.plan.ClusterSizeModel
+com.mineutze.worldgen.plan.ToroidalSizedLocalSearch ..> com.mineutze.worldgen.plan.ExploredCluster
+com.mineutze.worldgen.plan.ToroidalSizedLocalSearch ..> com.mineutze.worldgen.plan.RawRuleTable
+com.mineutze.worldgen.plan.ToroidalSizedLocalSearch ..> com.mineutze.worldgen.plan.Result
+com.mineutze.worldgen.plan.ToroidalSizedLocalSearch ..> com.mineutze.worldgen.plan.Schedule
+com.mineutze.worldgen.plan.ToroidalSizedLocalSearch ..> com.mineutze.worldgen.plan.Search
+com.mineutze.worldgen.plan.ToroidalSizedLocalSearch ..> com.mineutze.worldgen.plan.ToroidalGrid
+com.mineutze.worldgen.plan.ToroidalSizedLocalSearch ..> com.mineutze.worldgen.plan.ToroidalPos
+com.mineutze.worldgen.plan.Search --> "0..*" com.mineutze.worldgen.biomegraph.BiomeId
+com.mineutze.worldgen.plan.Search --> com.mineutze.worldgen.plan.ClusterSizeModel
+com.mineutze.worldgen.plan.Search --> com.mineutze.worldgen.plan.RawRuleTable
+com.mineutze.worldgen.plan.Search --> com.mineutze.worldgen.plan.Schedule
+com.mineutze.worldgen.plan.Search --> com.mineutze.worldgen.plan.ToroidalGrid
+com.mineutze.worldgen.plan.Search --> "0..*" com.mineutze.worldgen.plan.ToroidalPos
+com.mineutze.worldgen.plan.Search ..> com.mineutze.worldgen.plan.FitCandidate
+com.mineutze.worldgen.plan.Search ..> com.mineutze.worldgen.plan.Result
+com.mineutze.worldgen.plan.Search ..> com.mineutze.worldgen.plan.TrackResult
+
+@enduml

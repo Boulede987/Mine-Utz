@@ -1,0 +1,54 @@
+namespace com.mineutze.worldgen.plan {
+class WorldBiomePlan {
+  ~ {static} SCHEMA_VERSION : int
+  - {static} LARGEST_PALETTE : int
+  - worldSeed : long
+  - catalogFingerprint : String
+  - gridWidth : int
+  - gridHeight : int
+  - atomWidthBlocks : double
+  - warpStrength : double
+  - patternAttempts : int
+  - strengthsTried : int
+  - paletteNames : String[*]
+  - palette : BiomeId[*]
+  - rasterSize : int
+  - raster : byte[*]
+  - geometry : HexTorusGeometry
+  + {static} create(BiomeGraphData, long, int, ProgressListener) : WorldBiomePlan
+  ~ {static} create(BiomeGraphData, long, int, ProgressListener, PlanSettings) : WorldBiomePlan
+  - {static} toByteRaster(int[]) : byte[]
+  + {static} requireCatalogAcceptable(BiomeGraphData)
+  - {static} modelOf(RawRuleTable, PlanSettings) : ClusterSizeModel
+  + {static} fromSnapshot(PlanSnapshot) : WorldBiomePlan
+  - {static} validateRasterIndex(byte, List<String>)
+  + toSnapshot() : PlanSnapshot
+  + biomeAt(double, double) : BiomeId
+  + nearestPositionOf(BiomeId, double, double) : Optional<BlockPosition>
+  - candidateOffsetAt(int, int, int, double[], double, double, double, double) : Optional<WrappedOffset>
+  - {static} closerOf(WrappedOffset, Optional<WrappedOffset>) : WrappedOffset
+  - {static} closestWrappedOffset(double, double, double, double, double, double) : WrappedOffset
+  - {static} updateBestIfCloser(WrappedOffset, double, double) : WrappedOffset
+  + biomes() : List<BiomeId>
+  + worldSeed() : long
+  + catalogFingerprint() : String
+  + warpStrength() : double
+  + patternAttempts() : int
+  + strengthsTried() : int
+  + tileSideBlocks() : double
+  - tileCoordinates(double, double) : double[]
+  - {static} biomeIdOf(String) : BiomeId
+  + {static} fingerprintOf(BiomeGraphData) : String
+}
+interface ProgressListener <<interface>> {
+  + report(String) : void
+}
+class WrappedOffset <<record>> {
+  + x : double
+  + z : double
+  + distanceSquared : double
+}
+}
+
+com.mineutze.worldgen.plan.WorldBiomePlan *--> "0..*" com.mineutze.worldgen.biomegraph.BiomeId
+com.mineutze.worldgen.plan.WorldBiomePlan *--> com.mineutze.worldgen.plan.HexTorusGeometry

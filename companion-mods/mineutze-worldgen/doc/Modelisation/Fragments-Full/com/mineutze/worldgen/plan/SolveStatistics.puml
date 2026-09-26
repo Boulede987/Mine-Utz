@@ -1,0 +1,9 @@
+namespace com.mineutze.worldgen.plan {
+class SolveStatistics {
+  ~ {static} UNSOLVED : long
+  - {static} Z_FOR_95_PERCENT_TWO_SIDED : double
+  - trialCount : int
+  - solvedSteps : long[*]
+  - solvedWithin(long) : int
+}
+}

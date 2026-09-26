@@ -1,0 +1,20 @@
+namespace com.mineutze.worldgen.plan {
+class ToroidalSizedPatternGenerator {
+  ~ {static} DEFAULT_STEPS_PER_SEED : long
+  ~ {static} DEFAULT_MAX_SEEDS : int
+  ~ {static} DEFAULT_SCHEDULE : ToroidalSizedLocalSearch.Schedule
+  - {static} WORLD_SEED_SALT : long
+  - {static} STUCK_PAIRS_IN_FAILURE_MESSAGE : int
+  ~ {static} generate(RawRuleTable, ToroidalGrid, ClusterSizeModel, long, int) : Generated
+  ~ {static} generate(RawRuleTable, ToroidalGrid, ClusterSizeModel, long, long, int, ToroidalSizedLocalSearch.Schedule, int) : Generated
+  ~ {static} baseSeedOf(long) : long
+  - {static} failureMessage(RawRuleTable, ToroidalGrid, ClusterSizeModel, long, long, int, ParallelSeedSearch.Outcome) : String
+}
+class Generated <<record>> {
+  + pattern : Map<ToroidalPos, BiomeId>
+  + seedIndex : int
+}
+}
+
+com.mineutze.worldgen.plan.Generated *--> com.mineutze.worldgen.biomegraph.BiomeId
+com.mineutze.worldgen.plan.Generated *--> com.mineutze.worldgen.plan.ToroidalPos

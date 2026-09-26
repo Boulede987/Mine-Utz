@@ -1,0 +1,25 @@
+namespace com.mineutze.worldgen.biomegraph {
+interface BorderRequirement <<interface>> {
+  + parse(String) : Optional<BorderRequirement>
+  + print(BorderRequirement) : String
+  + joined(List<BorderRequirement>, String, boolean) : private static String
+  + formatPart(BorderRequirement, boolean) : private static String
+}
+class Share <<record>> {
+  + subject : String
+  + minSharedEdges : int
+  + toString() : String
+}
+class AllOf <<record>> {
+  + parts : BorderRequirement[*]
+  + toString() : String
+}
+class AnyOf <<record>> {
+  + parts : BorderRequirement[*]
+  + toString() : String
+}
+}
+
+com.mineutze.worldgen.biomegraph.Share ..|> com.mineutze.worldgen.biomegraph.BorderRequirement
+com.mineutze.worldgen.biomegraph.AllOf ..|> com.mineutze.worldgen.biomegraph.BorderRequirement
+com.mineutze.worldgen.biomegraph.AnyOf ..|> com.mineutze.worldgen.biomegraph.BorderRequirement

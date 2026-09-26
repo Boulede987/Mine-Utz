@@ -1,0 +1,34 @@
+namespace com.mineutze.worldgen.plan {
+class ToroidalSolvabilityRunner {
+  - {static} ATOM_WIDTH_BLOCKS : double
+  - {static} OFF : int
+  - {static} TRIAL_COUNT : int
+  - {static} BUDGET_STEPS : long
+  - {static} BASE_SEED : long
+  - {static} OUTPUT_DIRECTORY : Path
+  + {static} main(String[])
+  - {static} studyConfiguration(RawRuleTable, Configuration)
+  - {static} study(RawRuleTable, ToroidalGrid, ClusterSizeModel, Configuration)
+  - {static} reportStuckPairs(String, List<Trial>)
+  - {static} reportTrialFailures(Trial, Map<String, Integer>, Map<String, Integer>) : boolean
+  - {static} reportBudget(String, SolveStatistics, long)
+  - {static} restartsOrNone(SolveStatistics, double, long) : String
+  - {static} runTrials(RawRuleTable, ToroidalGrid, ClusterSizeModel, ToroidalSizedLocalSearch.Schedule, int) : List<Trial>
+  - {static} submitTrial(ExecutorService, RawRuleTable, ToroidalGrid, ClusterSizeModel, ToroidalSizedLocalSearch.Schedule, int) : Future<Trial>
+  - {static} runOneTrial(RawRuleTable, ToroidalGrid, ClusterSizeModel, ToroidalSizedLocalSearch.Schedule, long) : Trial
+  - {static} writeCsv(long[], Configuration) : Path
+}
+class Configuration <<record>> {
+  + label : String
+  + gridSize : int
+  + perimeterRatio : double
+  + schedule : ToroidalSizedLocalSearch.Schedule
+}
+class Trial <<record>> {
+  + steps : long
+  + stuckPairs : Map<String, Integer>
+}
+}
+
+com.mineutze.worldgen.plan.Configuration *--> com.mineutze.worldgen.plan.Schedule
+com.mineutze.worldgen.plan.Configuration *--> com.mineutze.worldgen.plan.ToroidalSizedLocalSearch

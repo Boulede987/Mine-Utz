@@ -1,0 +1,24 @@
+namespace com.mineutze.worldgen.biomegraph {
+class BorderRequirementParser {
+  - text : String
+  - position : int
+  ~ {static} parse(String) : BorderRequirement
+  - parseWholeText() : BorderRequirement
+  - parseAnyOf() : BorderRequirement
+  - parseAllOf() : BorderRequirement
+  - {static} flatten(List<BorderRequirement>, boolean) : List<BorderRequirement>
+  - {static} addFlattenedPart(List<BorderRequirement>, BorderRequirement, boolean)
+  - parseAtom() : BorderRequirement
+  - consumeKeyword(String) : boolean
+  - {static} isKeyword(String) : boolean
+  - readWord() : String
+  - {static} isWordCharacter(char) : boolean
+  - skipSpaces()
+  - failure(String) : IllegalArgumentException
+}
+}
+
+com.mineutze.worldgen.biomegraph.BorderRequirementParser ..> com.mineutze.worldgen.biomegraph.AllOf
+com.mineutze.worldgen.biomegraph.BorderRequirementParser ..> com.mineutze.worldgen.biomegraph.AnyOf
+com.mineutze.worldgen.biomegraph.BorderRequirementParser ..> com.mineutze.worldgen.biomegraph.BorderRequirement
+com.mineutze.worldgen.biomegraph.BorderRequirementParser ..> com.mineutze.worldgen.biomegraph.Share

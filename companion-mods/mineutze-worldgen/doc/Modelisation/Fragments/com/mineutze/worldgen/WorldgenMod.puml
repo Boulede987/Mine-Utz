@@ -1,0 +1,5 @@
+namespace com.mineutze.worldgen {
+class WorldgenMod {
+  + {static} MOD_ID : String
+}
+}

@@ -1,0 +1,12 @@
+namespace com.mineutze.worldgen.integration {
+class PlanDebugCommand {
+  - {static} SERVER_OPERATOR_PERMISSION_LEVEL : int
+  - {static} DEFAULT_RADIUS_BLOCKS : int
+  - {static} MAX_RADIUS_BLOCKS : int
+  - {static} DEFAULT_STEP_BLOCKS : int
+  - {static} MAX_STEP_BLOCKS : int
+  + {static} register(RegisterCommandsEvent)
+  - {static} describePlanAtSource(CommandContext<CommandSourceStack>) : int
+  - {static} exportBiomes(CommandContext<CommandSourceStack>, int, int) : int
+}
+}
