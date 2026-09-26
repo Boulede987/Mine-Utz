@@ -272,6 +272,24 @@ class ToroidalSizedLocalSearchTest {
         assertDoesNotThrow(() -> ToroidalSizedLocalSearch.verify(table, grid, strict, result.assignment()));
     }
 
+    /**
+     * The mirror of the test above: A is pinned to exactly 8 cells and a 1.5x PERIMETER FLOOR (no ceiling) demands at
+     * least 30 edges - the compact flower+1 shape (perimeter 20) no longer qualifies, only a genuinely elongated one
+     * does (a straight line of 8 has perimeter 34). Proves the floor is a real end-to-end guarantee the search must
+     * satisfy, not just a unit-level formula.
+     */
+    @Test
+    void searchFindsAnElongatedShapeWhenAPerimeterFloorBinds() {
+        ToroidalGrid grid = new ToroidalGrid(10, 10);
+        RawRuleTable table = legalPairWithSizes(A, 848, 849, B, 300, 3000);
+        ClusterSizeModel floored = new ClusterSizeModel(table, ATOM_WIDTH, new ShapeRule(ShapeRule.NO_PERIMETER_LIMIT, 1.5, Integer.MAX_VALUE, Integer.MAX_VALUE, 2));
+
+        ToroidalSizedLocalSearch.Result result = ToroidalSizedLocalSearch.search(table, grid, floored, SEED, GENEROUS_STEPS);
+
+        assertNotNull(result.assignment(), "an elongated 8-cell shape inside a 100-cell torus exists");
+        assertDoesNotThrow(() -> ToroidalSizedLocalSearch.verify(table, grid, floored, result.assignment()));
+    }
+
     /** Only A-B is legal, so a 3-coloring on 6x6 has 36 edges of each kind: A|B fine, A|C and B|C illegal. */
     @Test
     void illegalPairCountsNameEachIllegalBiomePairWithItsEdgeCount() {

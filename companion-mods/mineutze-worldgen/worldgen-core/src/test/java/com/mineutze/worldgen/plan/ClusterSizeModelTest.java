@@ -3,6 +3,8 @@ package com.mineutze.worldgen.plan;
 import com.mineutze.worldgen.biomegraph.BiomeGraphData;
 import org.junit.jupiter.api.Test;
 
+import java.util.Map;
+
 import static com.mineutze.worldgen.plan.ToroidalTestTables.A;
 import static com.mineutze.worldgen.plan.ToroidalTestTables.B;
 import static com.mineutze.worldgen.plan.ToroidalTestTables.C;
@@ -70,7 +72,7 @@ class ClusterSizeModelTest {
 
     @Test
     void theModelExposesItsShapeRule() {
-        assertEquals(PERIMETER_RULE, modelWithSizeRange(500, 600, PERIMETER_RULE).shape());
+        assertEquals(PERIMETER_RULE, modelWithSizeRange(500, 600, PERIMETER_RULE).shape(A));
     }
 
     @Test
@@ -111,6 +113,45 @@ class ClusterSizeModelTest {
     @Test
     void aBorderShortfallAddsItsEdgesToTheViolation() {
         assertEquals(5, modelWithSizeRange(500, 600).violation(A, 3, 0, ShapeRule.minimumPerimeter(3), 5));
+    }
+
+    @Test
+    void violationCountsEachPerimeterEdgeBelowWhatTheFloorRequires() {
+        ShapeRule floored = new ShapeRule(ShapeRule.NO_PERIMETER_LIMIT, 2.0, 3, 13, 2);
+        ClusterSizeModel model = modelWithSizeRange(500, 600, floored);
+        int required = floored.requiredMinimumPerimeter(3);
+
+        assertEquals(2, model.violation(A, 3, 0, required - 2, 0));
+    }
+
+    @Test
+    void aRuleWithoutAPerimeterFloorNeverChargesForItEvenAtALargeCellCount() {
+        ClusterSizeModel model = new ClusterSizeModel(fullyLegalTableWithWidths(300, 3000, A), ATOM_WIDTH, NO_PERIMETER_RULE);
+
+        assertEquals(0, model.violation(A, 61, 0, 12, 0));
+    }
+
+    @Test
+    void aShapeOverrideAppliesOnlyToTheNamedBiome() {
+        RawRuleTable table = fullyLegalTableWithWidths(500, 600, A, B);
+        ShapeRule floored = new ShapeRule(ShapeRule.NO_PERIMETER_LIMIT, 2.0, 3, 13, 2);
+        ClusterSizeModel model = new ClusterSizeModel(table, ATOM_WIDTH, NO_PERIMETER_RULE, Map.of(A, floored));
+
+        assertEquals(floored, model.shape(A));
+        assertEquals(NO_PERIMETER_RULE, model.shape(B));
+        int required = floored.requiredMinimumPerimeter(3);
+        assertEquals(2, model.violation(A, 3, 0, required - 2, 0), "A's own override should charge for the shortfall");
+        assertEquals(0, model.violation(B, 3, 0, required - 2, 0), "B keeps the default, unfloored rule");
+    }
+
+    @Test
+    void aShapeOverrideNamingAnUnknownBiomeThrows() {
+        RawRuleTable table = fullyLegalTableWithWidths(500, 600, A);
+
+        IllegalArgumentException failure = assertThrows(
+            IllegalArgumentException.class, () -> new ClusterSizeModel(table, ATOM_WIDTH, NO_PERIMETER_RULE, Map.of(B, PERIMETER_RULE))
+        );
+        assertTrue(failure.getMessage().contains(B.toString()), "message should name the unknown biome: " + failure.getMessage());
     }
 
     private static ClusterSizeModel modelOf(String requirementOfA, BiomeGraphData base) {

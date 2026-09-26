@@ -204,7 +204,7 @@ final class ToroidalSizedLocalSearch {
                 continue;
             }
             ExploredCluster cluster = exploreCluster(grid, assignment, start, visited);
-            int thinCells = thinCellsOf(grid, model, cluster.cells());
+            int thinCells = thinCellsOf(grid, model, cluster.biome(), cluster.cells());
             int borderShortfall = borderShortfallOf(table, cluster.biome(), cluster.edgesToBiome());
             clusterViolation += model.violation(cluster.biome(), cluster.cells().size(), thinCells, cluster.perimeter(), borderShortfall);
         }
@@ -227,9 +227,9 @@ final class ToroidalSizedLocalSearch {
     }
 
     /** Independent, set-based count of a cluster's thin cells (see {@link ShapeRule.Thickness}) - shares nothing with the search's array version. */
-    private static int thinCellsOf(ToroidalGrid grid, ClusterSizeModel model, Set<ToroidalPos> cluster) {
-        int tailReachCells = model.shape().tailReachCells();
-        switch (model.shape().thicknessRequiredFor(cluster.size())) {
+    private static int thinCellsOf(ToroidalGrid grid, ClusterSizeModel model, BiomeId biome, Set<ToroidalPos> cluster) {
+        int tailReachCells = model.shape(biome).tailReachCells();
+        switch (model.shape(biome).thicknessRequiredFor(cluster.size())) {
             case NONE:
                 return 0;
             case TRIANGLE:
@@ -894,7 +894,7 @@ final class ToroidalSizedLocalSearch {
             exploredSize = tail;
             exploredPerimeter = perimeter;
             exploredBorderShortfall = countsBorders ? borderShortfallOfExploredCluster(biome) : 0;
-            exploredThinCells = switch (model.shape().thicknessRequiredFor(tail)) {
+            exploredThinCells = switch (model.shape(biome).thicknessRequiredFor(tail)) {
                 case NONE -> 0;
                 case TRIANGLE -> countCellsOutsideAnyTriangle(biome, tail);
                 case FLOWER -> countCellsBeyondReachOfAFlower(biome, tail);
@@ -961,7 +961,7 @@ final class ToroidalSizedLocalSearch {
                     reachQueue[tail++] = cell;
                 }
             }
-            int reach = model.shape().tailReachCells();
+            int reach = model.shape(biome).tailReachCells();
             while (head < tail) {
                 int cell = reachQueue[head++];
                 if (reachDistance[cell] == reach) {

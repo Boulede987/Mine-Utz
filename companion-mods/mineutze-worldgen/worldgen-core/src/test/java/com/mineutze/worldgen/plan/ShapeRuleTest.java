@@ -2,6 +2,7 @@ package com.mineutze.worldgen.plan;
 
 import org.junit.jupiter.api.Test;
 
+import static com.mineutze.worldgen.plan.ShapeRule.NO_PERIMETER_FLOOR;
 import static com.mineutze.worldgen.plan.ShapeRule.NO_PERIMETER_LIMIT;
 import static com.mineutze.worldgen.plan.ShapeRule.Thickness.FLOWER;
 import static com.mineutze.worldgen.plan.ShapeRule.Thickness.NONE;
@@ -93,9 +94,44 @@ class ShapeRuleTest {
         assertEquals(Integer.MAX_VALUE, rule(NO_PERIMETER_LIMIT, 3, 13).allowedPerimeter(20));
     }
 
+    /** No floor set (the common 4-arg constructor) returns 0 whatever the cell count - even where the flat-plane minimum itself is large - so it never falsely fires on a cluster that wraps the torus around another cluster's hole. */
+    @Test
+    void noPerimeterFloorAlwaysReturnsZero() {
+        ShapeRule rule = rule(NO_PERIMETER_LIMIT, 3, 13);
+
+        for (int cellCount : new int[] {1, 3, 7, 61}) {
+            assertEquals(0, rule.requiredMinimumPerimeter(cellCount), "cell count " + cellCount);
+        }
+    }
+
+    /** Three cells have a minimum perimeter of 12; a 2.0 floor demands at least 24 - real elongation, not just permission. */
+    @Test
+    void aPerimeterFloorDemandsMoreThanTheGeometricMinimum() {
+        ShapeRule rule = new ShapeRule(NO_PERIMETER_LIMIT, 2.0, 3, 13, 2);
+
+        assertEquals(24, rule.requiredMinimumPerimeter(3));
+    }
+
     @Test
     void rejectsAPerimeterRatioBelowOneBecauseNoShapeIsMoreCompactThanTheMinimum() {
         assertThrows(IllegalArgumentException.class, () -> rule(0.9, 3, 13));
+    }
+
+    @Test
+    void rejectsAMinPerimeterRatioBelowOneBecauseAClusterCanNeverHaveLessThanItsGeometricMinimum() {
+        assertThrows(IllegalArgumentException.class, () -> new ShapeRule(NO_PERIMETER_LIMIT, 0.9, 3, 13, 2));
+    }
+
+    @Test
+    void rejectsAFloorStricterThanTheCeiling() {
+        assertThrows(IllegalArgumentException.class, () -> new ShapeRule(1.5, 2.0, 3, 13, 2));
+    }
+
+    @Test
+    void aFloorEqualToTheCeilingIsAccepted() {
+        ShapeRule rule = new ShapeRule(1.5, 1.5, 3, 13, 2);
+
+        assertEquals(rule.allowedPerimeter(10), rule.requiredMinimumPerimeter(10));
     }
 
     @Test
