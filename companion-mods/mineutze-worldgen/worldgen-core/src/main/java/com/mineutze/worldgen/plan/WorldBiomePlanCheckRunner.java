@@ -33,22 +33,41 @@ public final class WorldBiomePlanCheckRunner {
         BiomeGraphData catalog = BiomeGraphJson.loadResource(RawRuleTable.class, "/biomegraph/biome-graph.json");
         int threads = Runtime.getRuntime().availableProcessors();
 
+        WorldBiomePlan plan = createAndReport(catalog, threads);
+        PlanSnapshot snapshot = reportSnapshot(plan);
+        WorldBiomePlan restored = restoreAndReport(snapshot);
+        reportLookups(plan, restored);
+        reportNearest(plan);
+        comparePatternWithTheStudy(catalog, threads);
+    }
+
+    private static WorldBiomePlan createAndReport(BiomeGraphData catalog, int threads) {
         long start = System.nanoTime();
         WorldBiomePlan plan = WorldBiomePlan.create(catalog, WORLD_SEED, threads, message -> System.out.println("CHECK   progress: " + message));
         System.out.println("CHECK plan for world seed " + WORLD_SEED + " created in " + seconds(start) + " s on " + threads + " threads: warp strength " + plan.warpStrength()
             + ", pattern attempt " + plan.patternAttempts() + ", " + plan.strengthsTried() + " strengths tried, tile " + String.format(Locale.ROOT, "%.0f", plan.tileSideBlocks()) + " blocks across");
+        return plan;
+    }
 
+    private static PlanSnapshot reportSnapshot(WorldBiomePlan plan) throws NoSuchAlgorithmException {
         PlanSnapshot snapshot = plan.toSnapshot();
         byte[] digest = MessageDigest.getInstance("SHA-256").digest(snapshot.raster());
         System.out.println("CHECK raster " + snapshot.rasterSize() + "x" + snapshot.rasterSize() + " = " + snapshot.raster().length + " bytes; SHA-256 " + HexFormat.of().formatHex(digest));
         System.out.println("CHECK catalog fingerprint " + snapshot.catalogFingerprint());
+        return snapshot;
+    }
 
-        start = System.nanoTime();
+    private static WorldBiomePlan restoreAndReport(PlanSnapshot snapshot) {
+        long start = System.nanoTime();
         WorldBiomePlan restored = WorldBiomePlan.fromSnapshot(snapshot);
         System.out.println("CHECK restored from the snapshot in " + seconds(start) + " s");
+        return restored;
+    }
 
+    /** Random lookups against both {@code plan} and {@code restored} (must agree - the snapshot round trip), and against {@code plan} shifted by one tile vector (must also agree - the tile repeats). */
+    private static void reportLookups(WorldBiomePlan plan, WorldBiomePlan restored) {
         Random random = new Random(1);
-        start = System.nanoTime();
+        long start = System.nanoTime();
         int mismatches = 0;
         int different = 0;
         for (int lookup = 0; lookup < LOOKUPS; lookup++) {
@@ -65,8 +84,10 @@ public final class WorldBiomePlanCheckRunner {
         double lookupSeconds = seconds(start);
         System.out.println("CHECK " + LOOKUPS + " random lookups (x3 counting the two comparisons) in " + lookupSeconds + " s = "
             + String.format(Locale.ROOT, "%.0f", 3.0 * LOOKUPS / lookupSeconds) + " lookups per second; snapshot mismatches " + mismatches + "; tile-repeat mismatches " + different);
+    }
 
-        start = System.nanoTime();
+    private static void reportNearest(WorldBiomePlan plan) {
+        long start = System.nanoTime();
         int located = 0;
         for (BiomeId biome : plan.biomes()) {
             if (plan.nearest(biome, 12_345, -6_789).isPresent()) {
@@ -75,8 +96,6 @@ public final class WorldBiomePlanCheckRunner {
         }
         double nearestSeconds = seconds(start);
         System.out.println("CHECK nearest() found " + located + " of " + plan.biomes().size() + " biomes, " + String.format(Locale.ROOT, "%.0f", 1000 * nearestSeconds / plan.biomes().size()) + " ms each");
-
-        comparePatternWithTheStudy(catalog, threads);
     }
 
     /** Solves the pattern again from the world seed and compares it with the one the reliability study saved earlier (a different process, a different day). */

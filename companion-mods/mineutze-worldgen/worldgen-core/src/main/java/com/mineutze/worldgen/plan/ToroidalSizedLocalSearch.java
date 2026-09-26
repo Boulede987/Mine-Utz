@@ -152,6 +152,13 @@ final class ToroidalSizedLocalSearch {
 
     /** Independent, map-based recomputation of everything wrong with {@code assignment} - shares no bookkeeping with the search, so it is what the search's own accounting is checked against. */
     static Breakdown breakdown(RawRuleTable table, ToroidalGrid grid, ClusterSizeModel model, Map<ToroidalPos, BiomeId> assignment) {
+        int illegalEdges = countIllegalEdges(table, grid, assignment);
+        int clusterViolation = sumClusterViolations(table, grid, model, assignment);
+        int missingBiomes = countMissingBiomes(table, assignment);
+        return new Breakdown(illegalEdges, clusterViolation, missingBiomes);
+    }
+
+    private static int countIllegalEdges(RawRuleTable table, ToroidalGrid grid, Map<ToroidalPos, BiomeId> assignment) {
         int illegalEdges = 0;
         for (Map.Entry<ToroidalPos, BiomeId> entry : assignment.entrySet()) {
             for (ToroidalPos neighbor : grid.neighborsOf(entry.getKey())) {
@@ -162,42 +169,59 @@ final class ToroidalSizedLocalSearch {
                 }
             }
         }
+        return illegalEdges;
+    }
 
+    /** One same-biome cluster, breadth-first from {@code start}: its own cells, its perimeter, and how many perimeter edges go to each other biome. */
+    private record ExploredCluster(BiomeId biome, Set<ToroidalPos> cells, int perimeter, Map<BiomeId, Integer> edgesToBiome) {
+    }
+
+    private static ExploredCluster exploreCluster(ToroidalGrid grid, Map<ToroidalPos, BiomeId> assignment, ToroidalPos start, Set<ToroidalPos> visited) {
+        BiomeId biome = assignment.get(start);
+        Set<ToroidalPos> cluster = new HashSet<>();
+        int perimeter = 0;
+        Map<BiomeId, Integer> edgesToBiome = new HashMap<>();
+        Deque<ToroidalPos> frontier = new ArrayDeque<>();
+        frontier.add(start);
+        visited.add(start);
+        while (!frontier.isEmpty()) {
+            ToroidalPos pos = frontier.poll();
+            cluster.add(pos);
+            for (ToroidalPos neighbor : grid.neighborsOf(pos)) {
+                if (!biome.equals(assignment.get(neighbor))) {
+                    perimeter++;
+                    edgesToBiome.merge(assignment.get(neighbor), 1, Integer::sum);
+                } else if (visited.add(neighbor)) {
+                    frontier.add(neighbor);
+                }
+            }
+        }
+        return new ExploredCluster(biome, cluster, perimeter, edgesToBiome);
+    }
+
+    private static int sumClusterViolations(RawRuleTable table, ToroidalGrid grid, ClusterSizeModel model, Map<ToroidalPos, BiomeId> assignment) {
         int clusterViolation = 0;
         Set<ToroidalPos> visited = new HashSet<>();
         for (ToroidalPos start : assignment.keySet()) {
             if (visited.contains(start)) {
                 continue;
             }
-            BiomeId biome = assignment.get(start);
-            Set<ToroidalPos> cluster = new HashSet<>();
-            int perimeter = 0;
-            Map<BiomeId, Integer> edgesToBiome = new HashMap<>();
-            Deque<ToroidalPos> frontier = new ArrayDeque<>();
-            frontier.add(start);
-            visited.add(start);
-            while (!frontier.isEmpty()) {
-                ToroidalPos pos = frontier.poll();
-                cluster.add(pos);
-                for (ToroidalPos neighbor : grid.neighborsOf(pos)) {
-                    if (!biome.equals(assignment.get(neighbor))) {
-                        perimeter++;
-                        edgesToBiome.merge(assignment.get(neighbor), 1, Integer::sum);
-                    } else if (visited.add(neighbor)) {
-                        frontier.add(neighbor);
-                    }
-                }
-            }
-            clusterViolation += model.violation(biome, cluster.size(), thinCellsOf(grid, model, cluster), perimeter, borderShortfallOf(table, biome, edgesToBiome));
+            ExploredCluster cluster = exploreCluster(grid, assignment, start, visited);
+            int thinCells = thinCellsOf(grid, model, cluster.cells());
+            int borderShortfall = borderShortfallOf(table, cluster.biome(), cluster.edgesToBiome());
+            clusterViolation += model.violation(cluster.biome(), cluster.cells().size(), thinCells, cluster.perimeter(), borderShortfall);
         }
+        return clusterViolation;
+    }
 
+    private static int countMissingBiomes(RawRuleTable table, Map<ToroidalPos, BiomeId> assignment) {
         int missingBiomes = 0;
         for (BiomeId biome : table.allBiomeIds()) {
             if (!assignment.containsValue(biome)) {
                 missingBiomes++;
             }
         }
-        return new Breakdown(illegalEdges, clusterViolation, missingBiomes);
+        return missingBiomes;
     }
 
     /** Independent count of how many shared edges a cluster of {@code biome} is short of its required borders, given how many edges it shares with each other biome: the plain reference reading of the requirement. */
@@ -710,7 +734,19 @@ final class ToroidalSizedLocalSearch {
          */
         private int costChangeOfReassigning(int cell, int old, int candidate) {
             int[] cellNeighbors = neighbors[cell];
+            int edgeDelta = edgeCountDelta(cellNeighbors, old, candidate);
 
+            int clustersBefore = clusterCostBesideCell(cell, cellNeighbors, candidate, old, candidate);
+            value[cell] = candidate;
+            int clustersAfter = clusterCostBesideCell(cell, cellNeighbors, old, old, candidate);
+            value[cell] = old;
+
+            int missingChange = (usesOfBiome[old] == 1 ? MISSING_BIOME_COST : 0) - (usesOfBiome[candidate] == 0 ? MISSING_BIOME_COST : 0);
+            return edgeDelta + clustersAfter - clustersBefore + missingChange;
+        }
+
+        /** How many more illegal edges {@code cell} would have as {@code candidate} than it has as {@code old}, counting only {@code cell}'s own edges (every other cell's edges are unaffected). */
+        private int edgeCountDelta(int[] cellNeighbors, int old, int candidate) {
             int edgesBefore = 0;
             int edgesAfter = 0;
             for (int neighbor : cellNeighbors) {
@@ -722,35 +758,26 @@ final class ToroidalSizedLocalSearch {
                     edgesAfter++;
                 }
             }
+            return edgesAfter - edgesBefore;
+        }
 
+        /**
+         * Violation of the cluster {@code cell} currently sits in (its biome read straight from {@code value[cell]}, so the caller must set that
+         * biome before calling), plus any not-yet-visited {@code alsoExplore}-biome cluster beside it (the one {@code cell} would merge with or
+         * split from), plus third-biome requirement clusters beside it. Called once with {@code cell} still {@code old} and once with it already
+         * {@code candidate} - see {@link #costChangeOfReassigning}.
+         */
+        private int clusterCostBesideCell(int cell, int[] cellNeighbors, int alsoExplore, int old, int candidate) {
             stamp++;
-            int clustersBefore = 0;
             exploreCluster(cell);
-            clustersBefore += model.violation(old, exploredSize, exploredThinCells, exploredPerimeter, exploredBorderShortfall);
+            int cost = model.violation(value[cell], exploredSize, exploredThinCells, exploredPerimeter, exploredBorderShortfall);
             for (int neighbor : cellNeighbors) {
-                if (value[neighbor] == candidate && visitStamp[neighbor] != stamp) {
+                if (value[neighbor] == alsoExplore && visitStamp[neighbor] != stamp) {
                     exploreCluster(neighbor);
-                    clustersBefore += model.violation(candidate, exploredSize, exploredThinCells, exploredPerimeter, exploredBorderShortfall);
+                    cost += model.violation(alsoExplore, exploredSize, exploredThinCells, exploredPerimeter, exploredBorderShortfall);
                 }
             }
-            clustersBefore += requirementClustersBesideThatAreNeitherBiome(cellNeighbors, old, candidate);
-
-            value[cell] = candidate;
-            stamp++;
-            int clustersAfter = 0;
-            exploreCluster(cell);
-            clustersAfter += model.violation(candidate, exploredSize, exploredThinCells, exploredPerimeter, exploredBorderShortfall);
-            for (int neighbor : cellNeighbors) {
-                if (value[neighbor] == old && visitStamp[neighbor] != stamp) {
-                    exploreCluster(neighbor);
-                    clustersAfter += model.violation(old, exploredSize, exploredThinCells, exploredPerimeter, exploredBorderShortfall);
-                }
-            }
-            clustersAfter += requirementClustersBesideThatAreNeitherBiome(cellNeighbors, old, candidate);
-            value[cell] = old;
-
-            int missingChange = (usesOfBiome[old] == 1 ? MISSING_BIOME_COST : 0) - (usesOfBiome[candidate] == 0 ? MISSING_BIOME_COST : 0);
-            return edgesAfter - edgesBefore + clustersAfter - clustersBefore + missingChange;
+            return cost + requirementClustersBesideThatAreNeitherBiome(cellNeighbors, old, candidate);
         }
 
         /**

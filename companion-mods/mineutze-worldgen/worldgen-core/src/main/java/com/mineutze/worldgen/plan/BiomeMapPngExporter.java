@@ -34,29 +34,48 @@ final class BiomeMapPngExporter {
 
     /** A {@code width x height} window whose top-left corner is pixel ({@code left}, {@code top}) of the full picture at this scale. */
     static void exportRegion(BiomeMap map, Path file, int pixelsPerSample, int left, int top, int width, int height) {
+        requirePositive(pixelsPerSample, width, height);
+        int[][] biomeAtPixel = sampleGrid(map, pixelsPerSample, left, top, width, height);
+        BufferedImage image = renderImage(biomeAtPixel, width, height);
+        write(image, file);
+    }
+
+    private static void requirePositive(int pixelsPerSample, int width, int height) {
         if (pixelsPerSample < 1 || width < 1 || height < 1) {
             throw new IllegalArgumentException("BiomeMapPngExporter: scale and size must be positive, got " + pixelsPerSample + ", " + width + "x" + height);
         }
+    }
+
+    /** Which biome sample sits under each pixel, one row/column past {@code width}/{@code height} so {@link #isBorder} can look one pixel ahead without a bounds check. */
+    private static int[][] sampleGrid(BiomeMap map, int pixelsPerSample, int left, int top, int width, int height) {
         int[][] biomeAtPixel = new int[height + 1][width + 1];
         for (int y = 0; y <= height; y++) {
             for (int x = 0; x <= width; x++) {
                 biomeAtPixel[y][x] = biomeUnderPixel(map, pixelsPerSample, left + x, top + y);
             }
         }
+        return biomeAtPixel;
+    }
+
+    private static BufferedImage renderImage(int[][] biomeAtPixel, int width, int height) {
         BufferedImage image = new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);
         for (int y = 0; y < height; y++) {
             for (int x = 0; x < width; x++) {
-                int biome = biomeAtPixel[y][x];
-                if (biome == OUTSIDE_TILE) {
-                    image.setRGB(x, y, BACKGROUND_RGB);
-                } else if (isBorder(biomeAtPixel, x, y)) {
-                    image.setRGB(x, y, OUTLINE_RGB);
-                } else {
-                    image.setRGB(x, y, ToroidalPatternPngExporter.colorOf(biome).getRGB());
-                }
+                image.setRGB(x, y, pixelColor(biomeAtPixel, x, y));
             }
         }
-        write(image, file);
+        return image;
+    }
+
+    private static int pixelColor(int[][] biomeAtPixel, int x, int y) {
+        int biome = biomeAtPixel[y][x];
+        if (biome == OUTSIDE_TILE) {
+            return BACKGROUND_RGB;
+        }
+        if (isBorder(biomeAtPixel, x, y)) {
+            return OUTLINE_RGB;
+        }
+        return ToroidalPatternPngExporter.colorOf(biome).getRGB();
     }
 
     private static boolean isBorder(int[][] biomeAtPixel, int x, int y) {

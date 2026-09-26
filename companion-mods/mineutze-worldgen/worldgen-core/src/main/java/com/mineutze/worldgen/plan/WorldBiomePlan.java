@@ -100,15 +100,20 @@ public final class WorldBiomePlan {
         );
         progress.report("map ready: warp strength " + selection.strength() + " (" + selection.candidatesTried() + " tried)");
 
-        int[] indices = selection.map().biomeIndices();
-        byte[] raster = new byte[indices.length];
-        for (int sample = 0; sample < indices.length; sample++) {
-            raster[sample] = (byte) indices[sample];
-        }
+        byte[] raster = toByteRaster(selection.map().biomeIndices());
         return new WorldBiomePlan(
             worldSeed, fingerprintOf(catalog), settings.gridSize(), settings.gridSize(), settings.atomWidthBlocks(), selection.strength(), generated.seedIndex() + 1,
             selection.candidatesTried(), biomes.stream().map(BiomeId::toString).toList(), settings.rasterSamplesPerSide(), raster
         );
+    }
+
+    /** The raster stores one byte per sample, a palette index - {@code indices} is the same values as wider ints, no palette lookup here. */
+    private static byte[] toByteRaster(int[] indices) {
+        byte[] raster = new byte[indices.length];
+        for (int sample = 0; sample < indices.length; sample++) {
+            raster[sample] = (byte) indices[sample];
+        }
+        return raster;
     }
 
     /**
@@ -191,21 +196,38 @@ public final class WorldBiomePlan {
                 }
                 double u = (column + 0.5) / rasterSize - origin[0];
                 u -= Math.rint(u);
-                for (int shiftU = -1; shiftU <= 1; shiftU++) {
-                    for (int shiftV = -1; shiftV <= 1; shiftV++) {
-                        double offsetX = (u + shiftU) * ax + (v + shiftV) * bx;
-                        double offsetZ = (u + shiftU) * ay + (v + shiftV) * by;
-                        double squared = offsetX * offsetX + offsetZ * offsetZ;
-                        if (squared < bestSquared) {
-                            bestSquared = squared;
-                            bestX = offsetX;
-                            bestZ = offsetZ;
-                        }
-                    }
+                WrappedOffset offset = closestWrappedOffset(u, v, ax, ay, bx, by);
+                if (offset.distanceSquared() < bestSquared) {
+                    bestSquared = offset.distanceSquared();
+                    bestX = offset.x();
+                    bestZ = offset.z();
                 }
             }
         }
         return Optional.of(new BlockPosition((int) Math.round(x + bestX), (int) Math.round(z + bestZ)));
+    }
+
+    /** The closest a sample at tile-fraction {@code (u, v)} (already centred on the query point) can get across the 9 ways the tile wraps, and its squared distance in blocks. */
+    private record WrappedOffset(double x, double z, double distanceSquared) {
+    }
+
+    private static WrappedOffset closestWrappedOffset(double u, double v, double ax, double ay, double bx, double by) {
+        double bestX = 0;
+        double bestZ = 0;
+        double bestSquared = Double.MAX_VALUE;
+        for (int shiftU = -1; shiftU <= 1; shiftU++) {
+            for (int shiftV = -1; shiftV <= 1; shiftV++) {
+                double offsetX = (u + shiftU) * ax + (v + shiftV) * bx;
+                double offsetZ = (u + shiftU) * ay + (v + shiftV) * by;
+                double squared = offsetX * offsetX + offsetZ * offsetZ;
+                if (squared < bestSquared) {
+                    bestSquared = squared;
+                    bestX = offsetX;
+                    bestZ = offsetZ;
+                }
+            }
+        }
+        return new WrappedOffset(bestX, bestZ, bestSquared);
     }
 
     /** The biomes of the catalog this plan was made from, in the order the palette uses. */

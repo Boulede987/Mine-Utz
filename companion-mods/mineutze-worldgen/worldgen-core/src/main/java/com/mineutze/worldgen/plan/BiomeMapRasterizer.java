@@ -20,13 +20,24 @@ final class BiomeMapRasterizer {
     static BiomeMap rasterize(
         ToroidalGrid grid, Map<ToroidalPos, BiomeId> pattern, HexTorusGeometry geometry, DivergenceFreeWarp warp, int samplesPerSide, List<BiomeId> biomeOrder
     ) {
+        requirePositive(samplesPerSide);
+        RealizedBiomeField field = new RealizedBiomeField(grid, pattern, geometry, warp, biomeOrder);
+        int[] cells = new int[samplesPerSide * samplesPerSide];
+        int[] biomeIndices = new int[samplesPerSide * samplesPerSide];
+        sampleTile(field, geometry, samplesPerSide, cells, biomeIndices);
+
+        double sampleAreaBlocks2 = geometry.tileAreaBlocks2() / ((double) samplesPerSide * samplesPerSide);
+        return new BiomeMap(samplesPerSide, biomeIndices, cells, biomeOrder, sampleAreaBlocks2, blocksPerSample(geometry, samplesPerSide));
+    }
+
+    private static void requirePositive(int samplesPerSide) {
         if (samplesPerSide < 1) {
             throw new IllegalArgumentException("BiomeMapRasterizer: samplesPerSide must be positive, got " + samplesPerSide);
         }
-        RealizedBiomeField field = new RealizedBiomeField(grid, pattern, geometry, warp, biomeOrder);
-        int[] biomeIndices = new int[samplesPerSide * samplesPerSide];
-        int[] cells = new int[samplesPerSide * samplesPerSide];
+    }
 
+    /** Fills {@code cells}/{@code biomeIndices} (row-major, {@code samplesPerSide x samplesPerSide}) by asking {@code field} for the cell at each sample's centre, in tile-fraction coordinates {@code (u, v)}. */
+    private static void sampleTile(RealizedBiomeField field, HexTorusGeometry geometry, int samplesPerSide, int[] cells, int[] biomeIndices) {
         double tileAx = geometry.tileVectorAX();
         double tileAy = geometry.tileVectorAY();
         double tileBx = geometry.tileVectorBX();
@@ -40,8 +51,11 @@ final class BiomeMapRasterizer {
                 biomeIndices[row * samplesPerSide + column] = field.biomeOfCell(cellIndex);
             }
         });
+    }
 
-        double blocksPerSample = Math.sqrt(tileAx * tileAx + tileAy * tileAy) / samplesPerSide;
-        return new BiomeMap(samplesPerSide, biomeIndices, cells, biomeOrder, geometry.tileAreaBlocks2() / ((double) samplesPerSide * samplesPerSide), blocksPerSample);
+    private static double blocksPerSample(HexTorusGeometry geometry, int samplesPerSide) {
+        double tileAx = geometry.tileVectorAX();
+        double tileAy = geometry.tileVectorAY();
+        return Math.sqrt(tileAx * tileAx + tileAy * tileAy) / samplesPerSide;
     }
 }
