@@ -4,6 +4,7 @@ import com.mineutze.worldgen.biomegraph.BiomeId;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.SplittableRandom;
 
 /**
@@ -48,19 +49,31 @@ final class RealizationSelector {
         long warpSeed = new SplittableRandom(worldSeed ^ WORLD_SEED_SALT).nextLong();
         StringBuilder attempts = new StringBuilder();
         for (int index = 0; index < strengthsStrongestFirst.length; index++) {
-            double strength = strengthsStrongestFirst[index];
-            DivergenceFreeWarp warp = warpOfStrength(geometry, warpSeed, strength);
-            BiomeMap map = BiomeMapRasterizer.rasterize(grid, pattern, geometry, warp, samplesPerSide, biomeOrder);
-            BiomeMapVerifier.Report report = BiomeMapVerifier.verify(map, table, toleranceOfMinimum, clusters, geometry.cellEdgeBlocks() * REALIZED_BORDER_FRACTION);
-            if (passes(report)) {
-                return new Selection(strength, warp, map, report, index + 1);
+            Optional<Selection> selection = tryStrengthCandidate(
+                table, grid, pattern, geometry, biomeOrder, clusters, samplesPerSide, toleranceOfMinimum, warpSeed, strengthsStrongestFirst[index], index, attempts
+            );
+            if (selection.isPresent()) {
+                return selection.get();
             }
-            attempts.append("\n  strength ").append(describe(strength)).append(": ").append(whyItFailed(report));
         }
         throw new IllegalStateException(
             "RealizationSelector: no strength produced a valid map for world seed " + worldSeed + " on a " + grid.width() + "x" + grid.height() + " torus ("
                 + samplesPerSide + " samples per side, tolerance " + toleranceOfMinimum + " of the minimum). Attempts:" + attempts
         );
+    }
+
+    private static Optional<Selection> tryStrengthCandidate(
+        RawRuleTable table, ToroidalGrid grid, Map<ToroidalPos, BiomeId> pattern, HexTorusGeometry geometry, List<BiomeId> biomeOrder,
+        PatternClusters clusters, int samplesPerSide, double toleranceOfMinimum, long warpSeed, double strength, int index, StringBuilder attempts
+    ) {
+        DivergenceFreeWarp warp = warpOfStrength(geometry, warpSeed, strength);
+        BiomeMap map = BiomeMapRasterizer.rasterize(grid, pattern, geometry, warp, samplesPerSide, biomeOrder);
+        BiomeMapVerifier.Report report = BiomeMapVerifier.verify(map, table, toleranceOfMinimum, clusters, geometry.cellEdgeBlocks() * REALIZED_BORDER_FRACTION);
+        if (passes(report)) {
+            return Optional.of(new Selection(strength, warp, map, report, index + 1));
+        }
+        attempts.append("\n  strength ").append(describe(strength)).append(": ").append(whyItFailed(report));
+        return Optional.empty();
     }
 
     private static DivergenceFreeWarp warpOfStrength(HexTorusGeometry geometry, long warpSeed, double strength) {

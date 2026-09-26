@@ -143,14 +143,18 @@ public final class WorldBiomePlan {
             );
         }
         for (byte index : snapshot.raster()) {
-            if ((index & 0xFF) >= snapshot.palette().size()) {
-                throw new IllegalArgumentException("WorldBiomePlan: snapshot raster refers to palette entry " + (index & 0xFF) + " but the palette has " + snapshot.palette().size());
-            }
+            validateRasterIndex(index, snapshot.palette());
         }
         return new WorldBiomePlan(
             snapshot.worldSeed(), snapshot.catalogFingerprint(), snapshot.gridWidth(), snapshot.gridHeight(), snapshot.atomWidthBlocks(), snapshot.warpStrength(),
             snapshot.patternAttempts(), snapshot.strengthsTried(), snapshot.palette(), snapshot.rasterSize(), snapshot.raster().clone()
         );
+    }
+
+    private static void validateRasterIndex(byte index, List<String> palette) {
+        if ((index & 0xFF) >= palette.size()) {
+            throw new IllegalArgumentException("WorldBiomePlan: snapshot raster refers to palette entry " + (index & 0xFF) + " but the palette has " + palette.size());
+        }
     }
 
     public PlanSnapshot toSnapshot() {
@@ -208,22 +212,20 @@ public final class WorldBiomePlan {
     }
 
     private static WrappedOffset closestWrappedOffset(double u, double v, double ax, double ay, double bx, double by) {
-        double bestX = 0;
-        double bestZ = 0;
-        double bestSquared = Double.MAX_VALUE;
+        WrappedOffset best = new WrappedOffset(0, 0, Double.MAX_VALUE);
         for (int shiftU = -1; shiftU <= 1; shiftU++) {
             for (int shiftV = -1; shiftV <= 1; shiftV++) {
                 double offsetX = (u + shiftU) * ax + (v + shiftV) * bx;
                 double offsetZ = (u + shiftU) * ay + (v + shiftV) * by;
-                double squared = offsetX * offsetX + offsetZ * offsetZ;
-                if (squared < bestSquared) {
-                    bestSquared = squared;
-                    bestX = offsetX;
-                    bestZ = offsetZ;
-                }
+                best = updateBestIfCloser(best, offsetX, offsetZ);
             }
         }
-        return new WrappedOffset(bestX, bestZ, bestSquared);
+        return best;
+    }
+
+    private static WrappedOffset updateBestIfCloser(WrappedOffset current, double offsetX, double offsetZ) {
+        double squared = offsetX * offsetX + offsetZ * offsetZ;
+        return squared < current.distanceSquared() ? new WrappedOffset(offsetX, offsetZ, squared) : current;
     }
 
     /** The biomes of the catalog this plan was made from, in the order the palette uses. */

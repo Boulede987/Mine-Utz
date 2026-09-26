@@ -146,11 +146,15 @@ final class BiomeMapVerifier {
         }
         List<Integer> roots = new ArrayList<>();
         for (int sample = 0; sample < sampleCount; sample++) {
-            if (samplesInRegion[sample] > 0) {
-                roots.add(sample);
-            }
+            checkRootForInclusion(samplesInRegion, roots, sample);
         }
         return new RegionRoots(samplesInRegion, roots);
+    }
+
+    private static void checkRootForInclusion(int[] samplesInRegion, List<Integer> roots, int sample) {
+        if (samplesInRegion[sample] > 0) {
+            roots.add(sample);
+        }
     }
 
     // ---- area check ----
@@ -167,14 +171,18 @@ final class BiomeMapVerifier {
     private static List<AreaViolation> areaViolations(BiomeMap map, RawRuleTable table, double toleranceOfMinimum, RegionRoots regionRoots) {
         List<AreaViolation> violations = new ArrayList<>();
         for (int root : regionRoots.roots()) {
-            BiomeId biome = map.biomes().get(map.biomeIndices()[root]);
-            AllowedArea allowed = allowedArea(table.sizeRangeOf(biome), toleranceOfMinimum);
-            double area = regionRoots.samplesInRegion()[root] * map.sampleAreaBlocks2();
-            if (area < allowed.minimum() || area > allowed.maximum()) {
-                violations.add(new AreaViolation(biome, area, allowed.minimum(), allowed.maximum()));
-            }
+            checkRegionArea(map, table, toleranceOfMinimum, regionRoots, violations, root);
         }
         return violations;
+    }
+
+    private static void checkRegionArea(BiomeMap map, RawRuleTable table, double toleranceOfMinimum, RegionRoots regionRoots, List<AreaViolation> violations, int root) {
+        BiomeId biome = map.biomes().get(map.biomeIndices()[root]);
+        AllowedArea allowed = allowedArea(table.sizeRangeOf(biome), toleranceOfMinimum);
+        double area = regionRoots.samplesInRegion()[root] * map.sampleAreaBlocks2();
+        if (area < allowed.minimum() || area > allowed.maximum()) {
+            violations.add(new AreaViolation(biome, area, allowed.minimum(), allowed.maximum()));
+        }
     }
 
     // ---- required-border check ----
@@ -241,16 +249,23 @@ final class BiomeMapVerifier {
         int[] biomeIndices = map.biomeIndices();
         List<BorderShortfall> shortfalls = new ArrayList<>();
         for (int root : regionRoots) {
-            ResolvedBorderRequirement requirement = requirementOfBiome.get(biomeIndices[root]);
-            if (requirement == null) {
-                continue;
-            }
-            ToDoubleFunction<BiomeId> sharedBlocksWith = other -> contactsByRegionAndBiome.getOrDefault((long) root * biomeCount + map.biomes().indexOf(other), 0) * map.blocksPerSample() / 2;
-            if (!requirement.isMetBy(sharedBlocksWith, requiredBlocksPerEdge)) {
-                shortfalls.add(new BorderShortfall(map.biomes().get(biomeIndices[root]), requirement.toString()));
-            }
+            checkBorderRequirement(map, biomeIndices, requirementOfBiome, contactsByRegionAndBiome, biomeCount, requiredBlocksPerEdge, shortfalls, root);
         }
         return shortfalls;
+    }
+
+    private static void checkBorderRequirement(
+        BiomeMap map, int[] biomeIndices, List<ResolvedBorderRequirement> requirementOfBiome, Map<Long, Integer> contactsByRegionAndBiome, int biomeCount,
+        double requiredBlocksPerEdge, List<BorderShortfall> shortfalls, int root
+    ) {
+        ResolvedBorderRequirement requirement = requirementOfBiome.get(biomeIndices[root]);
+        if (requirement == null) {
+            return;
+        }
+        ToDoubleFunction<BiomeId> sharedBlocksWith = other -> contactsByRegionAndBiome.getOrDefault((long) root * biomeCount + map.biomes().indexOf(other), 0) * map.blocksPerSample() / 2;
+        if (!requirement.isMetBy(sharedBlocksWith, requiredBlocksPerEdge)) {
+            shortfalls.add(new BorderShortfall(map.biomes().get(biomeIndices[root]), requirement.toString()));
+        }
     }
 
     // ---- pattern-cluster comparison ----
@@ -276,15 +291,19 @@ final class BiomeMapVerifier {
         boolean[] regionIsMerged = new boolean[sampleCount];
         int[] cells = map.cells();
         for (int sample = 0; sample < sampleCount; sample++) {
-            int root = regions.find(sample);
-            int cluster = clusters.clusterOfCell()[cells[sample]];
-            if (clusterOfRegion[root] == -1) {
-                clusterOfRegion[root] = cluster;
-            } else if (clusterOfRegion[root] != cluster) {
-                regionIsMerged[root] = true;
-            }
+            assignClusterToRegion(regions, clusters, cells, clusterOfRegion, regionIsMerged, sample);
         }
         return new RegionClusters(clusterOfRegion, regionIsMerged);
+    }
+
+    private static void assignClusterToRegion(UnionFind regions, PatternClusters clusters, int[] cells, int[] clusterOfRegion, boolean[] regionIsMerged, int sample) {
+        int root = regions.find(sample);
+        int cluster = clusters.clusterOfCell()[cells[sample]];
+        if (clusterOfRegion[root] == -1) {
+            clusterOfRegion[root] = cluster;
+        } else if (clusterOfRegion[root] != cluster) {
+            regionIsMerged[root] = true;
+        }
     }
 
     /** Fills {@code regionsOfCluster} (how many regions each pattern cluster rasterized to) and {@code drift} (one entry per region root, same order as {@code regionRoots.roots()}); returns how many regions are a merge of more than one cluster. */
@@ -293,26 +312,35 @@ final class BiomeMapVerifier {
         double tileArea = map.sampleAreaBlocks2() * sampleCount;
         int mergedComponents = 0;
         for (int index = 0; index < regionRoots.roots().size(); index++) {
-            int root = regionRoots.roots().get(index);
-            int cluster = regionClusters.clusterOfRegion()[root];
-            regionsOfCluster[cluster]++;
-            if (regionClusters.regionIsMerged()[root]) {
+            if (accumulateRegionDrift(map, regionRoots, clusters, regionClusters, regionsOfCluster, drift, tileArea, index)) {
                 mergedComponents++;
             }
-            double expectedArea = clusters.cellsInCluster()[cluster] * tileArea / clusters.totalCells();
-            drift[index] = regionRoots.samplesInRegion()[root] * map.sampleAreaBlocks2() / expectedArea - 1;
         }
         return mergedComponents;
+    }
+
+    /** Updates {@code regionsOfCluster} and {@code drift} for region {@code index}; returns whether that region is a merge of more than one cluster. */
+    private static boolean accumulateRegionDrift(
+        BiomeMap map, RegionRoots regionRoots, PatternClusters clusters, RegionClusters regionClusters, int[] regionsOfCluster, double[] drift, double tileArea, int index
+    ) {
+        int root = regionRoots.roots().get(index);
+        int cluster = regionClusters.clusterOfRegion()[root];
+        regionsOfCluster[cluster]++;
+        double expectedArea = clusters.cellsInCluster()[cluster] * tileArea / clusters.totalCells();
+        drift[index] = regionRoots.samplesInRegion()[root] * map.sampleAreaBlocks2() / expectedArea - 1;
+        return regionClusters.regionIsMerged()[root];
     }
 
     private static int countWhere(int[] values, IntPredicate predicate) {
         int count = 0;
         for (int value : values) {
-            if (predicate.test(value)) {
-                count++;
-            }
+            count += accumulateMatchingValue(predicate, value);
         }
         return count;
+    }
+
+    private static int accumulateMatchingValue(IntPredicate predicate, int value) {
+        return predicate.test(value) ? 1 : 0;
     }
 
     // ---- shared lookups ----
@@ -333,15 +361,19 @@ final class BiomeMapVerifier {
         Map<String, Integer> named = new TreeMap<>();
         for (int low = 0; low < biomeCount; low++) {
             for (int high = low + 1; high < biomeCount; high++) {
-                int count = illegalContactCounts[low * biomeCount + high];
-                if (count > 0) {
-                    BiomeId first = map.biomes().get(low);
-                    BiomeId second = map.biomes().get(high);
-                    boolean firstIsLower = first.compareTo(second) <= 0;
-                    named.merge((firstIsLower ? first : second) + " | " + (firstIsLower ? second : first), count, Integer::sum);
-                }
+                tallyIllegalContactPair(map, illegalContactCounts, biomeCount, named, low, high);
             }
         }
         return named;
+    }
+
+    private static void tallyIllegalContactPair(BiomeMap map, int[] illegalContactCounts, int biomeCount, Map<String, Integer> named, int low, int high) {
+        int count = illegalContactCounts[low * biomeCount + high];
+        if (count > 0) {
+            BiomeId first = map.biomes().get(low);
+            BiomeId second = map.biomes().get(high);
+            boolean firstIsLower = first.compareTo(second) <= 0;
+            named.merge((firstIsLower ? first : second) + " | " + (firstIsLower ? second : first), count, Integer::sum);
+        }
     }
 }

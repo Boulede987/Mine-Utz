@@ -47,23 +47,27 @@ final class ClusterSizeModel {
         this.maxCells = new int[biomes.size()];
         this.requirements = new CompiledRequirement[biomes.size()];
         for (int index = 0; index < biomes.size(); index++) {
-            BiomeId biome = biomes.get(index);
-            RawRuleTable.SizeRange range = table.sizeRangeOf(biome);
-            double minAtoms = squared(range.minWidthBlocks() / atomWidthBlocks);
-            double maxAtoms = squared(range.maxWidthBlocks() / atomWidthBlocks);
-            minCells[index] = (int) Math.ceil(minAtoms - ROUNDING_TOLERANCE);
-            maxCells[index] = (int) Math.floor(maxAtoms + ROUNDING_TOLERANCE);
-            if (minCells[index] > maxCells[index]) {
-                throw new IllegalArgumentException(
-                    "ClusterSizeModel: " + biome + " size range [" + range.minWidthBlocks() + "," + range.maxWidthBlocks() + "] contains no whole number of "
-                        + atomWidthBlocks + "-block atoms (needs at least " + minCells[index] + " but at most " + maxCells[index] + ") - use a smaller atom"
-                );
-            }
-            indexOf.put(biome, index);
+            initializeBiomeSizeConstraints(table, atomWidthBlocks, index);
         }
         for (int index = 0; index < biomes.size(); index++) {
             readRequirements(table, index);
         }
+    }
+
+    private void initializeBiomeSizeConstraints(RawRuleTable table, double atomWidthBlocks, int index) {
+        BiomeId biome = biomes.get(index);
+        RawRuleTable.SizeRange range = table.sizeRangeOf(biome);
+        double minAtoms = squared(range.minWidthBlocks() / atomWidthBlocks);
+        double maxAtoms = squared(range.maxWidthBlocks() / atomWidthBlocks);
+        minCells[index] = (int) Math.ceil(minAtoms - ROUNDING_TOLERANCE);
+        maxCells[index] = (int) Math.floor(maxAtoms + ROUNDING_TOLERANCE);
+        if (minCells[index] > maxCells[index]) {
+            throw new IllegalArgumentException(
+                "ClusterSizeModel: " + biome + " size range [" + range.minWidthBlocks() + "," + range.maxWidthBlocks() + "] contains no whole number of "
+                    + atomWidthBlocks + "-block atoms (needs at least " + minCells[index] + " but at most " + maxCells[index] + ") - use a smaller atom"
+            );
+        }
+        indexOf.put(biome, index);
     }
 
     private void readRequirements(RawRuleTable table, int biomeIndex) {
@@ -82,18 +86,28 @@ final class ClusterSizeModel {
         return switch (requirement) {
             case ResolvedBorderRequirement.Share share -> whyShareNeverMet(table, biome, share, biomeMaxCells);
             case ResolvedBorderRequirement.AllOf all -> all.parts().stream().map(part -> whyNeverMet(table, biome, part, biomeMaxCells)).filter(reason -> reason != null).findFirst().orElse(null);
-            case ResolvedBorderRequirement.AnyOf any -> {
-                List<String> reasons = new java.util.ArrayList<>();
-                for (ResolvedBorderRequirement part : any.parts()) {
-                    String reason = whyNeverMet(table, biome, part, biomeMaxCells);
-                    if (reason == null) {
-                        yield null;
-                    }
-                    reasons.add(reason);
-                }
-                yield "none of the alternatives can be met (" + String.join("; ", reasons) + ")";
-            }
+            case ResolvedBorderRequirement.AnyOf any -> anyOfNeverMetReason(table, biome, any, biomeMaxCells);
         };
+    }
+
+    private String anyOfNeverMetReason(RawRuleTable table, BiomeId biome, ResolvedBorderRequirement.AnyOf any, int biomeMaxCells) {
+        List<String> reasons = new java.util.ArrayList<>();
+        for (ResolvedBorderRequirement part : any.parts()) {
+            if (checkAlternativePart(table, biome, part, biomeMaxCells, reasons)) {
+                return null;
+            }
+        }
+        return "none of the alternatives can be met (" + String.join("; ", reasons) + ")";
+    }
+
+    /** Records why {@code part} can never be met; returns true instead, without recording anything, if it can. */
+    private boolean checkAlternativePart(RawRuleTable table, BiomeId biome, ResolvedBorderRequirement part, int biomeMaxCells, List<String> reasons) {
+        String reason = whyNeverMet(table, biome, part, biomeMaxCells);
+        if (reason == null) {
+            return true;
+        }
+        reasons.add(reason);
+        return false;
     }
 
     private String whyShareNeverMet(RawRuleTable table, BiomeId biome, ResolvedBorderRequirement.Share share, int biomeMaxCells) {

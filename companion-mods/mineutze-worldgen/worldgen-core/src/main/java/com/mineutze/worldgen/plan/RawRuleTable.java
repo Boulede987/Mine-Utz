@@ -45,49 +45,69 @@ public final class RawRuleTable {
         List<BiomeId> allBiomeIds = new ArrayList<>();
         Map<BiomeId, SizeRange> sizeRangeById = new LinkedHashMap<>();
         for (NodeData node : data.nodes()) {
-            BiomeId id = new BiomeId(node.namespace(), node.path());
-            allBiomeIds.add(id);
-            sizeRangeById.put(id, new SizeRange(node.minWidthBlocks(), node.maxWidthBlocks()));
+            processNode(allBiomeIds, sizeRangeById, node);
         }
         Set<UnorderedPair> legalPairs = new LinkedHashSet<>();
         for (EdgeData edge : data.edges()) {
-            BiomeId a = new BiomeId(edge.aNamespace(), edge.aPath());
-            BiomeId b = new BiomeId(edge.bNamespace(), edge.bPath());
-            legalPairs.add(new UnorderedPair(a, b));
+            addLegalEdge(legalPairs, edge);
         }
 
         Set<BiomeId> known = Set.copyOf(allBiomeIds);
         Map<String, List<BiomeId>> groups = groupsOf(data, known);
         Map<BiomeId, ResolvedBorderRequirement> requirementById = new LinkedHashMap<>();
         for (NodeData node : data.nodes()) {
-            BiomeId id = new BiomeId(node.namespace(), node.path());
-            resolveRequirement(id, node.requirement(), groups, known).ifPresent(requirement -> requirementById.put(id, requirement));
+            addResolvedRequirement(requirementById, groups, known, node);
         }
         return new RawRuleTable(List.copyOf(allBiomeIds), Map.copyOf(sizeRangeById), Set.copyOf(legalPairs), Map.copyOf(requirementById));
+    }
+
+    private static void processNode(List<BiomeId> allBiomeIds, Map<BiomeId, SizeRange> sizeRangeById, NodeData node) {
+        BiomeId id = new BiomeId(node.namespace(), node.path());
+        allBiomeIds.add(id);
+        sizeRangeById.put(id, new SizeRange(node.minWidthBlocks(), node.maxWidthBlocks()));
+    }
+
+    private static void addLegalEdge(Set<UnorderedPair> legalPairs, EdgeData edge) {
+        BiomeId a = new BiomeId(edge.aNamespace(), edge.aPath());
+        BiomeId b = new BiomeId(edge.bNamespace(), edge.bPath());
+        legalPairs.add(new UnorderedPair(a, b));
+    }
+
+    private static void addResolvedRequirement(Map<BiomeId, ResolvedBorderRequirement> requirementById, Map<String, List<BiomeId>> groups, Set<BiomeId> known, NodeData node) {
+        BiomeId id = new BiomeId(node.namespace(), node.path());
+        resolveRequirement(id, node.requirement(), groups, known).ifPresent(requirement -> requirementById.put(id, requirement));
     }
 
     private static Map<String, List<BiomeId>> groupsOf(BiomeGraphData data, Set<BiomeId> known) {
         Map<String, List<BiomeId>> groups = new LinkedHashMap<>();
         for (GroupData group : data.groups()) {
-            String lower = group.name().toLowerCase(Locale.ROOT);
-            if (!group.name().matches(LEGAL_GROUP_NAME) || lower.equals("and") || lower.equals("or")) {
-                throw new IllegalArgumentException(
-                    "RawRuleTable: group name '" + group.name() + "' is not allowed - use letters, digits, '_', '.' or '-' (no ':', which marks a biome id), and not the words 'and' / 'or'"
-                );
-            }
-            List<BiomeId> members = new ArrayList<>();
-            for (String memberKey : group.members()) {
-                BiomeId member = biomeOfKey(memberKey);
-                if (!known.contains(member)) {
-                    throw new IllegalArgumentException("RawRuleTable: group '" + group.name() + "' holds " + memberKey + ", which is not in the catalog");
-                }
-                members.add(member);
-            }
-            if (groups.put(group.name(), List.copyOf(members)) != null) {
-                throw new IllegalArgumentException("RawRuleTable: there are two groups named '" + group.name() + "'");
-            }
+            processGroupData(groups, known, group);
         }
         return groups;
+    }
+
+    private static void processGroupData(Map<String, List<BiomeId>> groups, Set<BiomeId> known, GroupData group) {
+        String lower = group.name().toLowerCase(Locale.ROOT);
+        if (!group.name().matches(LEGAL_GROUP_NAME) || lower.equals("and") || lower.equals("or")) {
+            throw new IllegalArgumentException(
+                "RawRuleTable: group name '" + group.name() + "' is not allowed - use letters, digits, '_', '.' or '-' (no ':', which marks a biome id), and not the words 'and' / 'or'"
+            );
+        }
+        List<BiomeId> members = new ArrayList<>();
+        for (String memberKey : group.members()) {
+            validateAndAddMember(members, known, group.name(), memberKey);
+        }
+        if (groups.put(group.name(), List.copyOf(members)) != null) {
+            throw new IllegalArgumentException("RawRuleTable: there are two groups named '" + group.name() + "'");
+        }
+    }
+
+    private static void validateAndAddMember(List<BiomeId> members, Set<BiomeId> known, String groupName, String memberKey) {
+        BiomeId member = biomeOfKey(memberKey);
+        if (!known.contains(member)) {
+            throw new IllegalArgumentException("RawRuleTable: group '" + groupName + "' holds " + memberKey + ", which is not in the catalog");
+        }
+        members.add(member);
     }
 
     private static BiomeId biomeOfKey(String key) {
