@@ -30,16 +30,12 @@ import java.util.TreeMap;
  */
 public final class ToroidalWorldSeedReliabilityRunner {
 
-    private static final double ATOM_WIDTH_BLOCKS = 300;
+    /** Same numbers {@link WorldBiomePlan#create} solves a real world with - proving reliability against anything else would prove nothing about production. */
+    private static final PlanSettings SETTINGS = PlanSettings.DEFAULT;
     private static final int OFF = Integer.MAX_VALUE;
-    private static final int GRID_SIZE = 40;
-    private static final double PERIMETER_RATIO = 1.3;
     private static final int WORLD_SEED_COUNT = 100;
     private static final long[] EXTREME_WORLD_SEEDS = {0L, -1L, Long.MAX_VALUE, Long.MIN_VALUE};
     private static final long FIRST_ORDINARY_WORLD_SEED = 1_000L;
-    private static final double[] WARP_STRENGTHS_STRONGEST_FIRST = {30, 26, 22, 18, 14, 10, 6};
-    private static final int VERIFICATION_SAMPLES_PER_SIDE = 2_598;
-    private static final double SIZE_TOLERANCE_OF_MINIMUM = 0.10;
     private static final Path OUTPUT_DIRECTORY = Path.of("build", "reliability");
     private static final Path CSV = OUTPUT_DIRECTORY.resolve("world-seed-reliability.csv");
     private static final Path PATTERN_DIRECTORY = OUTPUT_DIRECTORY.resolve("patterns");
@@ -52,9 +48,9 @@ public final class ToroidalWorldSeedReliabilityRunner {
         BiomeGraphData data = args.length > 0 ? BiomeGraphJson.load(Path.of(args[0])) : BiomeGraphJson.loadResource(RawRuleTable.class, "/biomegraph/biome-graph.json");
         int ordinarySeedCount = args.length > 1 ? Integer.parseInt(args[1]) : WORLD_SEED_COUNT;
         RawRuleTable table = RawRuleTable.from(data);
-        ToroidalGrid grid = new ToroidalGrid(GRID_SIZE, GRID_SIZE);
-        HexTorusGeometry geometry = new HexTorusGeometry(GRID_SIZE, GRID_SIZE, ATOM_WIDTH_BLOCKS);
-        ClusterSizeModel model = new ClusterSizeModel(table, ATOM_WIDTH_BLOCKS, new ShapeRule(PERIMETER_RATIO, OFF, OFF, 2));
+        ToroidalGrid grid = new ToroidalGrid(SETTINGS.gridSize(), SETTINGS.gridSize());
+        HexTorusGeometry geometry = new HexTorusGeometry(SETTINGS.gridSize(), SETTINGS.gridSize(), SETTINGS.atomWidthBlocks());
+        ClusterSizeModel model = new ClusterSizeModel(table, SETTINGS.atomWidthBlocks(), new ShapeRule(SETTINGS.perimeterRatio(), OFF, OFF, 2));
         int threadCount = Runtime.getRuntime().availableProcessors();
         startCsv();
 
@@ -106,9 +102,7 @@ public final class ToroidalWorldSeedReliabilityRunner {
 
         long realizationStart = System.nanoTime();
         try {
-            RealizationSelector.Selection selection = RealizationSelector.select(
-                table, grid, generated.pattern(), geometry, worldSeed, WARP_STRENGTHS_STRONGEST_FIRST, VERIFICATION_SAMPLES_PER_SIDE, SIZE_TOLERANCE_OF_MINIMUM, table.allBiomeIds()
-            );
+            RealizationSelector.Selection selection = RealizationSelector.select(table, grid, generated.pattern(), geometry, worldSeed, SETTINGS);
             double realizationSeconds = secondsSince(realizationStart);
             tally.realized++;
             tally.realizationSeconds.add(realizationSeconds);
@@ -123,9 +117,9 @@ public final class ToroidalWorldSeedReliabilityRunner {
 
     private static void report(Tally tally, int worldCount, int threadCount) {
         System.out.println("WORLDS " + tally.patternsSolved + " of " + worldCount + " world seeds produced a verified PATTERN, and " + tally.realized + " of " + worldCount
-            + " a verified REALIZED MAP (" + GRID_SIZE + "x" + GRID_SIZE + ", perimeter ratio " + PERIMETER_RATIO + ", " + threadCount + " threads; up to " + ToroidalSizedPatternGenerator.DEFAULT_MAX_SEEDS
-            + " pattern attempts of " + String.format(Locale.ROOT, "%,d", ToroidalSizedPatternGenerator.DEFAULT_STEPS_PER_SEED) + " steps; map checked at " + VERIFICATION_SAMPLES_PER_SIDE + "x" + VERIFICATION_SAMPLES_PER_SIDE
-            + " samples, size tolerance " + (int) (100 * SIZE_TOLERANCE_OF_MINIMUM) + "% of the minimum)");
+            + " a verified REALIZED MAP (" + SETTINGS.gridSize() + "x" + SETTINGS.gridSize() + ", perimeter ratio " + SETTINGS.perimeterRatio() + ", " + threadCount + " threads; up to " + ToroidalSizedPatternGenerator.DEFAULT_MAX_SEEDS
+            + " pattern attempts of " + String.format(Locale.ROOT, "%,d", ToroidalSizedPatternGenerator.DEFAULT_STEPS_PER_SEED) + " steps; map checked at " + SETTINGS.rasterSamplesPerSide() + "x" + SETTINGS.rasterSamplesPerSide()
+            + " samples, size tolerance " + (int) (100 * SETTINGS.sizeToleranceOfMinimum()) + "% of the minimum)");
         if (!tally.patternFailures.isEmpty()) {
             System.out.println("WORLDS PATTERN FAILED for world seeds " + tally.patternFailures);
         }
