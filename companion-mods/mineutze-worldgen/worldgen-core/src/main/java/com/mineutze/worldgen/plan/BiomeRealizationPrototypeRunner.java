@@ -146,40 +146,51 @@ public final class BiomeRealizationPrototypeRunner {
         double[] stretches = new double[side * side];
         double[] perRowMinimum = new double[side];
         double[] perRowMaximum = new double[side];
-        IntStream.range(0, side).parallel().forEach(row -> {
-            double minimum = Double.MAX_VALUE;
-            double maximum = -Double.MAX_VALUE;
-            double v = (row + 0.5) / side;
-            double[] right = new double[2];
-            double[] left = new double[2];
-            double[] up = new double[2];
-            double[] down = new double[2];
-            for (int column = 0; column < side; column++) {
-                double u = (column + 0.5) / side;
-                double x = u * geometry.tileVectorAX() + v * geometry.tileVectorBX();
-                double y = u * geometry.tileVectorAY() + v * geometry.tileVectorBY();
-                warp.displace(x + probe, y, right);
-                warp.displace(x - probe, y, left);
-                warp.displace(x, y + probe, up);
-                warp.displace(x, y - probe, down);
-                double a = 1 + (right[0] - left[0]) / (2 * probe);
-                double b = (up[0] - down[0]) / (2 * probe);
-                double c = (right[1] - left[1]) / (2 * probe);
-                double d = 1 + (up[1] - down[1]) / (2 * probe);
-                double determinant = a * d - b * c;
-                double sumOfSquares = a * a + b * b + c * c + d * d;
-                double longestAxis = Math.sqrt((sumOfSquares + Math.sqrt(Math.max(0, sumOfSquares * sumOfSquares - 4 * determinant * determinant))) / 2);
-                stretches[row * side + column] = longestAxis;
-                minimum = Math.min(minimum, determinant);
-                maximum = Math.max(maximum, determinant);
-            }
-            perRowMinimum[row] = minimum;
-            perRowMaximum[row] = maximum;
-        });
+        IntStream.range(0, side).parallel().forEach(row -> computeRowDistortion(geometry, warp, probe, side, stretches, perRowMinimum, perRowMaximum, row));
         Arrays.sort(stretches);
         return new double[] {
             Arrays.stream(perRowMinimum).min().orElse(1), Arrays.stream(perRowMaximum).max().orElse(1), stretches[stretches.length - 1], stretches[(int) (stretches.length * 0.99)]
         };
+    }
+
+    private static void computeRowDistortion(
+        HexTorusGeometry geometry, DivergenceFreeWarp warp, double probe, int side, double[] stretches, double[] perRowMinimum, double[] perRowMaximum, int row
+    ) {
+        double minimum = Double.MAX_VALUE;
+        double maximum = -Double.MAX_VALUE;
+        double v = (row + 0.5) / side;
+        double[] right = new double[2];
+        double[] left = new double[2];
+        double[] up = new double[2];
+        double[] down = new double[2];
+        for (int column = 0; column < side; column++) {
+            double determinant = processGridPoint(geometry, warp, probe, side, stretches, row, column, v, right, left, up, down);
+            minimum = Math.min(minimum, determinant);
+            maximum = Math.max(maximum, determinant);
+        }
+        perRowMinimum[row] = minimum;
+        perRowMaximum[row] = maximum;
+    }
+
+    private static double processGridPoint(
+        HexTorusGeometry geometry, DivergenceFreeWarp warp, double probe, int side, double[] stretches, int row, int column, double v, double[] right, double[] left, double[] up, double[] down
+    ) {
+        double u = (column + 0.5) / side;
+        double x = u * geometry.tileVectorAX() + v * geometry.tileVectorBX();
+        double y = u * geometry.tileVectorAY() + v * geometry.tileVectorBY();
+        warp.displace(x + probe, y, right);
+        warp.displace(x - probe, y, left);
+        warp.displace(x, y + probe, up);
+        warp.displace(x, y - probe, down);
+        double a = 1 + (right[0] - left[0]) / (2 * probe);
+        double b = (up[0] - down[0]) / (2 * probe);
+        double c = (right[1] - left[1]) / (2 * probe);
+        double d = 1 + (up[1] - down[1]) / (2 * probe);
+        double determinant = a * d - b * c;
+        double sumOfSquares = a * a + b * b + c * c + d * d;
+        double longestAxis = Math.sqrt((sumOfSquares + Math.sqrt(Math.max(0, sumOfSquares * sumOfSquares - 4 * determinant * determinant))) / 2);
+        stretches[row * side + column] = longestAxis;
+        return determinant;
     }
 
     /** Reuses the solved pattern for this world seed if one was saved, else solves it with the real generator and saves it. */
@@ -211,9 +222,7 @@ public final class BiomeRealizationPrototypeRunner {
         Map<ToroidalPos, BiomeId> pattern = new LinkedHashMap<>();
         try {
             for (String line : Files.readAllLines(file)) {
-                String[] parts = line.split(",");
-                String[] name = parts[2].split(":");
-                pattern.put(new ToroidalPos(Integer.parseInt(parts[0]), Integer.parseInt(parts[1])), new BiomeId(name[0], name[1]));
+                parsePatternLine(pattern, line);
             }
         } catch (IOException failure) {
             throw new UncheckedIOException("BiomeRealizationPrototypeRunner: could not read " + file, failure);
@@ -222,5 +231,11 @@ public final class BiomeRealizationPrototypeRunner {
             throw new IllegalStateException("BiomeRealizationPrototypeRunner: " + file + " holds " + pattern.size() + " cells, expected " + grid.cellCount());
         }
         return pattern;
+    }
+
+    private static void parsePatternLine(Map<ToroidalPos, BiomeId> pattern, String line) {
+        String[] parts = line.split(",");
+        String[] name = parts[2].split(":");
+        pattern.put(new ToroidalPos(Integer.parseInt(parts[0]), Integer.parseInt(parts[1])), new BiomeId(name[0], name[1]));
     }
 }

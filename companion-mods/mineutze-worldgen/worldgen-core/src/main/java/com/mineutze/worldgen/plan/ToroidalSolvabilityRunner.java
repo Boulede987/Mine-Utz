@@ -54,10 +54,14 @@ public final class ToroidalSolvabilityRunner {
         BiomeGraphData data = BiomeGraphJson.loadResource(RawRuleTable.class, "/biomegraph/biome-graph.json");
         RawRuleTable table = RawRuleTable.from(data);
         for (Configuration configuration : CONFIGURATIONS) {
-            ToroidalGrid grid = new ToroidalGrid(configuration.gridSize(), configuration.gridSize());
-            ClusterSizeModel model = new ClusterSizeModel(table, ATOM_WIDTH_BLOCKS, new ShapeRule(configuration.perimeterRatio(), OFF, OFF, 2));
-            study(table, grid, model, configuration);
+            studyConfiguration(table, configuration);
         }
+    }
+
+    private static void studyConfiguration(RawRuleTable table, Configuration configuration) {
+        ToroidalGrid grid = new ToroidalGrid(configuration.gridSize(), configuration.gridSize());
+        ClusterSizeModel model = new ClusterSizeModel(table, ATOM_WIDTH_BLOCKS, new ShapeRule(configuration.perimeterRatio(), OFF, OFF, 2));
+        study(table, grid, model, configuration);
     }
 
     private static void study(RawRuleTable table, ToroidalGrid grid, ClusterSizeModel model, Configuration configuration) {
@@ -88,20 +92,27 @@ public final class ToroidalSolvabilityRunner {
         Map<String, Integer> edgesTotal = new TreeMap<>();
         int failedSeeds = 0;
         for (Trial trial : trials) {
-            if (trial.steps() != SolveStatistics.UNSOLVED) {
-                continue;
+            if (reportTrialFailures(trial, seedsAffected, edgesTotal)) {
+                failedSeeds++;
             }
-            failedSeeds++;
-            trial.stuckPairs().forEach((pair, edges) -> {
-                seedsAffected.merge(pair, 1, Integer::sum);
-                edgesTotal.merge(pair, edges, Integer::sum);
-            });
         }
         System.out.println("RESULT " + label + failedSeeds + " failed seeds; illegal pairs their closest states were stuck on (seeds affected, edges):");
         seedsAffected.entrySet().stream()
             .sorted((first, second) -> second.getValue() != first.getValue().intValue() ? second.getValue() - first.getValue() : edgesTotal.get(second.getKey()) - edgesTotal.get(first.getKey()))
             .limit(20)
             .forEach(entry -> System.out.println("RESULT   " + entry.getKey() + ": in " + entry.getValue() + " seeds, " + edgesTotal.get(entry.getKey()) + " edges"));
+    }
+
+    /** Tallies {@code trial}'s stuck pairs if it failed; returns whether it did. */
+    private static boolean reportTrialFailures(Trial trial, Map<String, Integer> seedsAffected, Map<String, Integer> edgesTotal) {
+        if (trial.steps() != SolveStatistics.UNSOLVED) {
+            return false;
+        }
+        trial.stuckPairs().forEach((pair, edges) -> {
+            seedsAffected.merge(pair, 1, Integer::sum);
+            edgesTotal.merge(pair, edges, Integer::sum);
+        });
+        return true;
     }
 
     private static void reportBudget(String label, SolveStatistics statistics, long budget) {
@@ -128,14 +139,7 @@ public final class ToroidalSolvabilityRunner {
         try {
             List<Future<Trial>> trials = new ArrayList<>();
             for (int index = 0; index < TRIAL_COUNT; index++) {
-                long seed = BASE_SEED + index;
-                trials.add(pool.submit(() -> {
-                    ToroidalSizedLocalSearch.Result result = ToroidalSizedLocalSearch.search(table, grid, model, seed, BUDGET_STEPS, schedule);
-                    if (result.assignment() != null) {
-                        return new Trial(result.steps(), Map.of());
-                    }
-                    return new Trial(SolveStatistics.UNSOLVED, ToroidalSizedLocalSearch.illegalPairCounts(table, grid, result.closestAssignment()));
-                }));
+                trials.add(submitTrial(pool, table, grid, model, schedule, index));
             }
             List<Trial> finished = new ArrayList<>();
             for (Future<Trial> trial : trials) {
@@ -150,6 +154,19 @@ public final class ToroidalSolvabilityRunner {
         } finally {
             pool.shutdownNow();
         }
+    }
+
+    private static Future<Trial> submitTrial(ExecutorService pool, RawRuleTable table, ToroidalGrid grid, ClusterSizeModel model, ToroidalSizedLocalSearch.Schedule schedule, int index) {
+        long seed = BASE_SEED + index;
+        return pool.submit(() -> runOneTrial(table, grid, model, schedule, seed));
+    }
+
+    private static Trial runOneTrial(RawRuleTable table, ToroidalGrid grid, ClusterSizeModel model, ToroidalSizedLocalSearch.Schedule schedule, long seed) {
+        ToroidalSizedLocalSearch.Result result = ToroidalSizedLocalSearch.search(table, grid, model, seed, BUDGET_STEPS, schedule);
+        if (result.assignment() != null) {
+            return new Trial(result.steps(), Map.of());
+        }
+        return new Trial(SolveStatistics.UNSOLVED, ToroidalSizedLocalSearch.illegalPairCounts(table, grid, result.closestAssignment()));
     }
 
     private static Path writeCsv(long[] stepsPerTrial, Configuration configuration) {
