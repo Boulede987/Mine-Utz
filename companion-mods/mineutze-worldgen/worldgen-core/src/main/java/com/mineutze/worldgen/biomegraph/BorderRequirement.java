@@ -1,10 +1,8 @@
 package com.mineutze.worldgen.biomegraph;
 
 import java.util.ArrayList;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Optional;
-import java.util.Set;
 
 /**
  * What a biome's clusters must border (2026-09-20), written as text like {@code oceans >= 2 and
@@ -68,21 +66,6 @@ public sealed interface BorderRequirement {
             return Optional.empty();
         }
         return Optional.of(BorderRequirementParser.parse(text));
-    }
-
-    /** Every subject named, once each, in order of first appearance. */
-    default List<String> subjects() {
-        Set<String> found = new LinkedHashSet<>();
-        collectSubjects(this, found);
-        return List.copyOf(found);
-    }
-
-    private static void collectSubjects(BorderRequirement requirement, Set<String> found) {
-        switch (requirement) {
-            case Share share -> found.add(share.subject());
-            case AllOf all -> all.parts().forEach(part -> collectSubjects(part, found));
-            case AnyOf any -> any.parts().forEach(part -> collectSubjects(part, found));
-        }
     }
 
     /** The canonical text: {@link #parse} of it gives back an equal requirement. */

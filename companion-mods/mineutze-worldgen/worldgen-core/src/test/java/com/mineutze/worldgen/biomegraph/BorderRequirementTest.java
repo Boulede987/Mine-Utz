@@ -99,11 +99,6 @@ class BorderRequirementTest {
     }
 
     @Test
-    void subjectsListsEveryNameOnceInOrderOfAppearance() {
-        assertEquals(List.of("a", "b", "c"), parse("a >= 1 and (b >= 1 or a >= 2) and c >= 1").subjects());
-    }
-
-    @Test
     void aMissingMinimumIsRejectedSayingWhere() {
         IllegalArgumentException failure = assertThrows(IllegalArgumentException.class, () -> BorderRequirement.parse("oceans and forests >= 1"));
 
