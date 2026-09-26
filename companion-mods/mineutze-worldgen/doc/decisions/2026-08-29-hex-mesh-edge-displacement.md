@@ -1,5 +1,8 @@
 # 2026-08-29 — Hex mesh + edge displacement + precomputed compatibility
 
+**Superseded 2026-09-20: this whole live hex-mesh/CSP system was deleted and replaced by a
+per-world solved plan; see DECISIONS.md's 2026-09-20 entry. Kept as history, describes deleted code.**
+
 Status: implemented and live. Superseded the triangle-mesh-plus-competitive-growth
 design (`SeedGrid` → `DelaunayTriangulation` → `TriangleAdjacency` → CSP
 (`TriangleIdentitySizeAssignment`) → `SeamGrowthRasterizer`/`GrowthGapFiller`, all

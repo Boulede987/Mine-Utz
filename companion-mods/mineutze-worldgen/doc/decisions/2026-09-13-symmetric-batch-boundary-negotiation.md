@@ -1,5 +1,8 @@
 # 2026-09-13 — Symmetric batch-boundary negotiation (no new grid, no new shape — organic batches stay organic, only WHO decides first changes)
 
+**Superseded 2026-09-20: this whole live hex-mesh/CSP system was deleted and replaced by a
+per-world solved plan; see DECISIONS.md's 2026-09-20 entry. Kept as history, describes deleted code.**
+
 Status: **Phase 1 (isolated seam prototype) VERIFIED** - `SeamResolution`/
 `SeamResolutionTest` (commit `15d04460`) directly confirmed identity+size+
 geometry are byte-identical regardless of seam-resolution order, against

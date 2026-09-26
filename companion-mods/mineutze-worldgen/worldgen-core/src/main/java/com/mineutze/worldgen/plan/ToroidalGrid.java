@@ -6,9 +6,9 @@ import java.util.List;
 /**
  * A FINITE {@code width x height} hex-like grid, PERIODIC in both axial directions -
  * {@code Math.floorMod} on each coordinate means every position always has exactly 6 real,
- * in-grid neighbors, never an "off-grid"/undecided-by-construction case the way the
- * infinite {@code reachability} grid has (a real simplification this substrate gets for
- * free by being finite and wrapped from the start).
+ * in-grid neighbors, never an "off-grid"/undecided-by-construction case an unwrapped infinite
+ * grid would have (a real simplification this substrate gets for free by being finite and
+ * wrapped from the start).
  *
  * <p><b>Real shape, not a hidden claim of a perfect square:</b> wrapping raw axial (q,r)
  * coordinates modulo width/height independently is self-consistent (moving {@code width}

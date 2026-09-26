@@ -1,5 +1,8 @@
 # 2026-08-29 — Remove region stitching, keep a shapeless solve-batch
 
+**Superseded 2026-09-20: this whole live hex-mesh/CSP system was deleted and replaced by a
+per-world solved plan; see DECISIONS.md's 2026-09-20 entry. Kept as history, describes deleted code.**
+
 Status: proposed, still not built. The blocking condition (the hex-mesh +
 edge-displacement pivot, `doc/decisions/2026-08-29-hex-mesh-edge-displacement.md`,
 landing its Phase 5 cutover) is now satisfied — `TriangleFieldGeometryRealization`
