@@ -97,12 +97,16 @@ final class GraphValidation {
         List<String> errors = new ArrayList<>();
         List<BiomeId> allBiomes = data.nodes().stream().map(node -> new BiomeId(node.namespace(), node.path())).toList();
         for (BiomeId id : allBiomes) {
-            long legalNeighbors = allBiomes.stream().filter(other -> !other.equals(id) && graph.isAllowed(id, other)).count();
-            if (legalNeighbors < MIN_LEGAL_NEIGHBORS) {
-                errors.add(id + ": only " + legalNeighbors + " legal neighbor(s), fewer than the " + MIN_LEGAL_NEIGHBORS
-                    + " a real/production graph requires (BiomeGraph.forProduction would reject this) - add more adjacencies.");
-            }
+            checkConnectivity(graph, allBiomes, errors, id);
         }
         return errors;
+    }
+
+    private static void checkConnectivity(BiomeGraph graph, List<BiomeId> allBiomes, List<String> errors, BiomeId id) {
+        long legalNeighbors = allBiomes.stream().filter(other -> !other.equals(id) && graph.isAllowed(id, other)).count();
+        if (legalNeighbors < MIN_LEGAL_NEIGHBORS) {
+            errors.add(id + ": only " + legalNeighbors + " legal neighbor(s), fewer than the " + MIN_LEGAL_NEIGHBORS
+                + " a real/production graph requires (BiomeGraph.forProduction would reject this) - add more adjacencies.");
+        }
     }
 }

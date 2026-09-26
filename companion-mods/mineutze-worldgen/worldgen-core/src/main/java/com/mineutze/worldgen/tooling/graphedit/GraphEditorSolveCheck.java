@@ -37,14 +37,8 @@ final class GraphEditorSolveCheck {
 
         int failures = 0;
         for (long worldSeed : WORLD_SEEDS) {
-            long start = System.nanoTime();
-            try {
-                WorldBiomePlan plan = WorldBiomePlan.create(catalog, worldSeed, threads, message -> System.out.println("  seed " + worldSeed + ": " + message));
-                System.out.println("SOLVED seed " + worldSeed + " in " + secondsSince(start) + " s: pattern attempt " + plan.patternAttempts()
-                    + ", warp strength " + plan.warpStrength() + " (" + plan.strengthsTried() + " tried)");
-            } catch (RuntimeException failure) {
+            if (checkSeed(catalog, threads, worldSeed)) {
                 failures++;
-                System.out.println("FAILED seed " + worldSeed + " after " + secondsSince(start) + " s: " + failure.getMessage());
             }
         }
 
@@ -53,6 +47,20 @@ final class GraphEditorSolveCheck {
             : failures + " of " + WORLD_SEEDS.size() + " world seeds could NOT be solved with this graph.");
         if (failures > 0) {
             System.exit(1);
+        }
+    }
+
+    /** Solves {@code worldSeed} and reports it; returns whether it failed. */
+    private static boolean checkSeed(BiomeGraphData catalog, int threads, long worldSeed) {
+        long start = System.nanoTime();
+        try {
+            WorldBiomePlan plan = WorldBiomePlan.create(catalog, worldSeed, threads, message -> System.out.println("  seed " + worldSeed + ": " + message));
+            System.out.println("SOLVED seed " + worldSeed + " in " + secondsSince(start) + " s: pattern attempt " + plan.patternAttempts()
+                + ", warp strength " + plan.warpStrength() + " (" + plan.strengthsTried() + " tried)");
+            return false;
+        } catch (RuntimeException failure) {
+            System.out.println("FAILED seed " + worldSeed + " after " + secondsSince(start) + " s: " + failure.getMessage());
+            return true;
         }
     }
 

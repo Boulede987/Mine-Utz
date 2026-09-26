@@ -85,24 +85,32 @@ public final class LocateBiomeOverride {
     private static Pair<BlockPos, Holder<Biome>> findClosestBiome(ServerLevel level, BlockPos origin, ResourceOrTagArgument.Result<Biome> biomeArg) {
         WorldBiomePlan plan = WorldBiomePlanHolder.get();
         Registry<Biome> registry = level.registryAccess().registryOrThrow(Registries.BIOME);
-        Pair<BlockPos, Holder<Biome>> best = null;
-        double bestSquaredDistance = Double.MAX_VALUE;
+        BestBiome best = new BestBiome(null, Double.MAX_VALUE);
         for (BiomeId biomeId : plan.biomes()) {
-            Optional<Holder.Reference<Biome>> holder = registry.getHolder(ResourceKey.create(Registries.BIOME, BiomeIdAdapter.toResourceLocation(biomeId)));
-            if (holder.isEmpty() || !biomeArg.test(holder.get())) {
-                continue;
-            }
-            Optional<BlockPosition> nearest = plan.nearestPositionOf(biomeId, origin.getX(), origin.getZ());
-            if (nearest.isEmpty()) {
-                continue;
-            }
-            double deltaX = nearest.get().x() - origin.getX();
-            double deltaZ = nearest.get().z() - origin.getZ();
-            double squaredDistance = deltaX * deltaX + deltaZ * deltaZ;
-            if (squaredDistance < bestSquaredDistance) {
-                bestSquaredDistance = squaredDistance;
-                best = Pair.of(new BlockPos(nearest.get().x(), origin.getY(), nearest.get().z()), holder.get());
-            }
+            best = processCandidate(registry, origin, biomeArg, plan, biomeId, best);
+        }
+        return best.pair();
+    }
+
+    private record BestBiome(Pair<BlockPos, Holder<Biome>> pair, double squaredDistance) {
+    }
+
+    private static BestBiome processCandidate(
+        Registry<Biome> registry, BlockPos origin, ResourceOrTagArgument.Result<Biome> biomeArg, WorldBiomePlan plan, BiomeId biomeId, BestBiome best
+    ) {
+        Optional<Holder.Reference<Biome>> holder = registry.getHolder(ResourceKey.create(Registries.BIOME, BiomeIdAdapter.toResourceLocation(biomeId)));
+        if (holder.isEmpty() || !biomeArg.test(holder.get())) {
+            return best;
+        }
+        Optional<BlockPosition> nearest = plan.nearestPositionOf(biomeId, origin.getX(), origin.getZ());
+        if (nearest.isEmpty()) {
+            return best;
+        }
+        double deltaX = nearest.get().x() - origin.getX();
+        double deltaZ = nearest.get().z() - origin.getZ();
+        double squaredDistance = deltaX * deltaX + deltaZ * deltaZ;
+        if (squaredDistance < best.squaredDistance()) {
+            return new BestBiome(Pair.of(new BlockPos(nearest.get().x(), origin.getY(), nearest.get().z()), holder.get()), squaredDistance);
         }
         return best;
     }
