@@ -28,26 +28,37 @@ final class PatternClusters {
         int[] sizes = new int[grid.cellCount()];
         int clusterCount = 0;
         for (ToroidalPos start : grid.allPositionsInFillOrder()) {
-            if (clusterOfCell[indexOf(grid, start)] != -1) {
-                continue;
+            if (clusterOfCell[indexOf(grid, start)] == -1) {
+                growClusterFrom(grid, pattern, clusterOfCell, sizes, start, clusterCount);
+                clusterCount++;
             }
-            BiomeId biome = pattern.get(start);
-            Deque<ToroidalPos> frontier = new ArrayDeque<>();
-            frontier.add(start);
-            clusterOfCell[indexOf(grid, start)] = clusterCount;
-            while (!frontier.isEmpty()) {
-                ToroidalPos pos = frontier.poll();
-                sizes[clusterCount]++;
-                for (ToroidalPos neighbor : grid.neighborsOf(pos)) {
-                    if (clusterOfCell[indexOf(grid, neighbor)] == -1 && biome.equals(pattern.get(neighbor))) {
-                        clusterOfCell[indexOf(grid, neighbor)] = clusterCount;
-                        frontier.add(neighbor);
-                    }
-                }
-            }
-            clusterCount++;
         }
         return new PatternClusters(clusterOfCell, Arrays.copyOf(sizes, clusterCount));
+    }
+
+    private static void growClusterFrom(ToroidalGrid grid, Map<ToroidalPos, BiomeId> pattern, int[] clusterOfCell, int[] sizes, ToroidalPos start, int clusterCount) {
+        BiomeId biome = pattern.get(start);
+        Deque<ToroidalPos> frontier = new ArrayDeque<>();
+        frontier.add(start);
+        clusterOfCell[indexOf(grid, start)] = clusterCount;
+        while (!frontier.isEmpty()) {
+            ToroidalPos pos = frontier.poll();
+            sizes[clusterCount]++;
+            processFrontierNode(grid, pattern, clusterOfCell, frontier, biome, pos, clusterCount);
+        }
+    }
+
+    private static void processFrontierNode(ToroidalGrid grid, Map<ToroidalPos, BiomeId> pattern, int[] clusterOfCell, Deque<ToroidalPos> frontier, BiomeId biome, ToroidalPos pos, int clusterCount) {
+        for (ToroidalPos neighbor : grid.neighborsOf(pos)) {
+            addIfUnvisited(grid, pattern, clusterOfCell, frontier, biome, neighbor, clusterCount);
+        }
+    }
+
+    private static void addIfUnvisited(ToroidalGrid grid, Map<ToroidalPos, BiomeId> pattern, int[] clusterOfCell, Deque<ToroidalPos> frontier, BiomeId biome, ToroidalPos neighbor, int clusterCount) {
+        if (clusterOfCell[indexOf(grid, neighbor)] == -1 && biome.equals(pattern.get(neighbor))) {
+            clusterOfCell[indexOf(grid, neighbor)] = clusterCount;
+            frontier.add(neighbor);
+        }
     }
 
     private static int indexOf(ToroidalGrid grid, ToroidalPos pos) {

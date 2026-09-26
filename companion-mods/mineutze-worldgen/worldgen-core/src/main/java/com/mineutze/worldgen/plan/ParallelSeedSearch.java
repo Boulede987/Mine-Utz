@@ -75,19 +75,27 @@ final class ParallelSeedSearch {
     private static Outcome pickOutcome(long baseSeed, List<Future<ToroidalSizedLocalSearch.Result>> runs) {
         Outcome closest = null;
         for (int index = 0; index < runs.size(); index++) {
-            ToroidalSizedLocalSearch.Result result = resultOf(baseSeed + index, runs.get(index));
-            if (result == null) {
-                continue;
-            }
-            if (result.assignment() != null) {
-                return new Outcome(baseSeed + index, result);
-            }
-            if (closest == null || result.bestCost() < closest.result().bestCost()) {
-                closest = new Outcome(baseSeed + index, result);
+            closest = processRunResult(baseSeed, runs, index, closest);
+            if (closest != null && closest.solved()) {
+                return closest;
             }
         }
         if (closest == null) {
             throw new IllegalStateException("ParallelSeedSearch: every seed was skipped but none solved - impossible unless a seed was lost");
+        }
+        return closest;
+    }
+
+    private static Outcome processRunResult(long baseSeed, List<Future<ToroidalSizedLocalSearch.Result>> runs, int index, Outcome closest) {
+        ToroidalSizedLocalSearch.Result result = resultOf(baseSeed + index, runs.get(index));
+        if (result == null) {
+            return closest;
+        }
+        if (result.assignment() != null) {
+            return new Outcome(baseSeed + index, result);
+        }
+        if (closest == null || result.bestCost() < closest.result().bestCost()) {
+            return new Outcome(baseSeed + index, result);
         }
         return closest;
     }

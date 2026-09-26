@@ -68,10 +68,14 @@ final class ToroidalGrid {
     List<ToroidalPos> allPositionsInFillOrder() {
         List<ToroidalPos> all = new ArrayList<>(cellCount());
         for (int r = 0; r < height; r++) {
-            for (int q = 0; q < width; q++) {
-                all.add(new ToroidalPos(q, r));
-            }
+            fillRowToPositions(all, r);
         }
         return all;
+    }
+
+    private void fillRowToPositions(List<ToroidalPos> all, int r) {
+        for (int q = 0; q < width; q++) {
+            all.add(new ToroidalPos(q, r));
+        }
     }
 }

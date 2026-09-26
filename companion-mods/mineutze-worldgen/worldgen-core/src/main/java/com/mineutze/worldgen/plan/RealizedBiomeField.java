@@ -27,17 +27,21 @@ final class RealizedBiomeField {
         this.biomeOfCell = new int[grid.cellCount()];
         for (int r = 0; r < grid.height(); r++) {
             for (int q = 0; q < grid.width(); q++) {
-                BiomeId biome = pattern.get(new ToroidalPos(q, r));
-                if (biome == null) {
-                    throw new IllegalArgumentException("RealizedBiomeField: the pattern has no biome for cell (" + q + "," + r + ")");
-                }
-                int index = biomeOrder.indexOf(biome);
-                if (index < 0) {
-                    throw new IllegalArgumentException("RealizedBiomeField: " + biome + " is used by the pattern but missing from the biome order");
-                }
-                biomeOfCell[r * grid.width() + q] = index;
+                assignCellBiome(grid, pattern, biomeOrder, q, r);
             }
         }
+    }
+
+    private void assignCellBiome(ToroidalGrid grid, Map<ToroidalPos, BiomeId> pattern, List<BiomeId> biomeOrder, int q, int r) {
+        BiomeId biome = pattern.get(new ToroidalPos(q, r));
+        if (biome == null) {
+            throw new IllegalArgumentException("RealizedBiomeField: the pattern has no biome for cell (" + q + "," + r + ")");
+        }
+        int index = biomeOrder.indexOf(biome);
+        if (index < 0) {
+            throw new IllegalArgumentException("RealizedBiomeField: " + biome + " is used by the pattern but missing from the biome order");
+        }
+        biomeOfCell[r * grid.width() + q] = index;
     }
 
     /** Index (row * width + column) of the pattern cell whose hexagon holds the displaced point. */

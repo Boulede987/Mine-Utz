@@ -36,14 +36,7 @@ final class PatternCsv {
         Map<ToroidalPos, BiomeId> pattern = new LinkedHashMap<>();
         try {
             for (String line : Files.readAllLines(file)) {
-                String[] parts = line.split(",");
-                String[] name = parts[2].split(":");
-                int q = Integer.parseInt(parts[0]);
-                int r = Integer.parseInt(parts[1]);
-                if (q < 0 || q >= grid.width() || r < 0 || r >= grid.height()) {
-                    throw new IllegalStateException("PatternCsv: " + file + " has cell (" + q + "," + r + ") outside the " + grid.width() + "x" + grid.height() + " grid");
-                }
-                pattern.put(new ToroidalPos(q, r), new BiomeId(name[0], name[1]));
+                parseCsvLine(file, grid, pattern, line);
             }
         } catch (IOException failure) {
             throw new UncheckedIOException("PatternCsv: could not read " + file, failure);
@@ -52,5 +45,16 @@ final class PatternCsv {
             throw new IllegalStateException("PatternCsv: " + file + " holds " + pattern.size() + " cells, expected " + grid.cellCount());
         }
         return pattern;
+    }
+
+    private static void parseCsvLine(Path file, ToroidalGrid grid, Map<ToroidalPos, BiomeId> pattern, String line) {
+        String[] parts = line.split(",");
+        String[] name = parts[2].split(":");
+        int q = Integer.parseInt(parts[0]);
+        int r = Integer.parseInt(parts[1]);
+        if (q < 0 || q >= grid.width() || r < 0 || r >= grid.height()) {
+            throw new IllegalStateException("PatternCsv: " + file + " has cell (" + q + "," + r + ") outside the " + grid.width() + "x" + grid.height() + " grid");
+        }
+        pattern.put(new ToroidalPos(q, r), new BiomeId(name[0], name[1]));
     }
 }
