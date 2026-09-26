@@ -37,13 +37,13 @@ import java.util.function.BooleanSupplier;
  */
 final class ToroidalSizedLocalSearch {
 
-    private static final int MISSING_BIOME_COST = 4;
-    private static final double NUCLEATION_PROBABILITY = 0.02;
-    private static final double MISSING_NUCLEATION_SHARE = 0.5;
-    private static final int BEST_TRACKING_INTERVAL_STEPS = 1024;
-    private static final int ACCEPTANCE_TABLE_SIZE = 64;
-    private static final int SCHEDULE_LEVELS = 16;
-    private static final double FOCUS_PROBABILITY = 0.3;
+    static final int MISSING_BIOME_COST = 4;
+    static final double NUCLEATION_PROBABILITY = 0.02;
+    static final double MISSING_NUCLEATION_SHARE = 0.5;
+    static final int BEST_TRACKING_INTERVAL_STEPS = 1024;
+    static final int ACCEPTANCE_TABLE_SIZE = 64;
+    static final int SCHEDULE_LEVELS = 16;
+    static final double FOCUS_PROBABILITY = 0.3;
     static final double DEFAULT_RELABEL_PROBABILITY = 0.02;
 
     static final double DEFAULT_TEMPERATURE = 0.5;

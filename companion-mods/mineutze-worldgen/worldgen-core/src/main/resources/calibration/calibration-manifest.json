@@ -1,0 +1,53 @@
+{
+  "catalogResourcePath": "/biomegraph/biome-graph.json",
+  "groups": [
+    {
+      "name": "identity-and-size-search",
+      "description": "Whether the joint identity+size simulated annealing finds ANY valid pattern at all, at the current grid resolution and atom width.",
+      "constants": [
+        { "owner": "PlanSettings.DEFAULT", "field": "gridSize", "recordedValue": 40 },
+        { "owner": "PlanSettings.DEFAULT", "field": "atomWidthBlocks", "recordedValue": 300.0 },
+        { "owner": "PlanSettings.DEFAULT", "field": "perimeterRatio", "recordedValue": 1.3 },
+        { "owner": "ToroidalSizedPatternGenerator", "field": "DEFAULT_STEPS_PER_SEED", "recordedValue": 40000000 },
+        { "owner": "ToroidalSizedPatternGenerator", "field": "DEFAULT_MAX_SEEDS", "recordedValue": 200 },
+        { "owner": "ToroidalSizedPatternGenerator", "field": "DEFAULT_SCHEDULE.highTemperature", "recordedValue": 0.40 },
+        { "owner": "ToroidalSizedPatternGenerator", "field": "DEFAULT_SCHEDULE.lowTemperature", "recordedValue": 0.20 },
+        { "owner": "ToroidalSizedPatternGenerator", "field": "DEFAULT_SCHEDULE.cycleSteps", "recordedValue": 1000000 },
+        { "owner": "ToroidalSizedLocalSearch", "field": "DEFAULT_RELABEL_PROBABILITY", "recordedValue": 0.02 },
+        { "owner": "ToroidalSizedLocalSearch", "field": "DEFAULT_TEMPERATURE", "recordedValue": 0.5 },
+        { "owner": "ToroidalSizedLocalSearch", "field": "NUCLEATION_PROBABILITY", "recordedValue": 0.02 },
+        { "owner": "ToroidalSizedLocalSearch", "field": "MISSING_NUCLEATION_SHARE", "recordedValue": 0.5 },
+        { "owner": "ToroidalSizedLocalSearch", "field": "MISSING_BIOME_COST", "recordedValue": 4 },
+        { "owner": "ToroidalSizedLocalSearch", "field": "FOCUS_PROBABILITY", "recordedValue": 0.3 },
+        { "owner": "ToroidalSizedLocalSearch", "field": "ACCEPTANCE_TABLE_SIZE", "recordedValue": 64 },
+        { "owner": "ToroidalSizedLocalSearch", "field": "SCHEDULE_LEVELS", "recordedValue": 16 },
+        { "owner": "ToroidalSizedLocalSearch", "field": "BEST_TRACKING_INTERVAL_STEPS", "recordedValue": 1024 }
+      ],
+      "validatedOn": "2026-09-20",
+      "validatedAgainstCatalogFingerprint": "295cf6744015fb0748a67f45da407cb42c60c5b057f16d911692d6c36fb801a3",
+      "verifiedByGradleTasks": ["toroidalSolvability", "toroidalWorldSeedReliability", "graphEditorSolveCheck"],
+      "decisionsEntry": "2026-09-20 - One solved biome plan per world replaces the hex-mesh region solver",
+      "evidenceSummary": "104 of 104 world seeds solved (toroidalWorldSeedReliability); dev seed 42 plan created in 32s on 11 threads; about 21% single-seed solve rate within 40M steps at ratio 1.3 on 40x40."
+    },
+    {
+      "name": "shape-and-realization",
+      "description": "Whether a solved pattern's borders can be warped naturally and still pass the raster verifier (area, legality, topology, required borders) at production tolerance.",
+      "constants": [
+        { "owner": "PlanSettings.DEFAULT", "field": "warpStrengthsStrongestFirst", "recordedValue": [30, 26, 22, 18, 14, 10, 6] },
+        { "owner": "PlanSettings.DEFAULT", "field": "rasterSamplesPerSide", "recordedValue": 2598 },
+        { "owner": "PlanSettings.DEFAULT", "field": "sizeToleranceOfMinimum", "recordedValue": 0.10 },
+        { "owner": "RealizationSelector", "field": "WAVE_COUNT", "recordedValue": 40 },
+        { "owner": "RealizationSelector", "field": "SHORTEST_WAVELENGTH_BLOCKS", "recordedValue": 40.0 },
+        { "owner": "RealizationSelector", "field": "LONGEST_WAVELENGTH_BLOCKS", "recordedValue": 1200.0 },
+        { "owner": "RealizationSelector", "field": "ROUGHNESS", "recordedValue": 0.8 },
+        { "owner": "RealizationSelector", "field": "FLOW_STEPS", "recordedValue": 8 },
+        { "owner": "RealizationSelector", "field": "REALIZED_BORDER_FRACTION", "recordedValue": 0.5 }
+      ],
+      "validatedOn": "2026-09-20",
+      "validatedAgainstCatalogFingerprint": "295cf6744015fb0748a67f45da407cb42c60c5b057f16d911692d6c36fb801a3",
+      "verifiedByGradleTasks": ["biomeRealizationPrototype", "worldBiomePlanCheck"],
+      "decisionsEntry": "2026-09-20 - One solved biome plan per world replaces the hex-mesh region solver",
+      "evidenceSummary": "Shipped catalog raster-verified clean (biomeRealizationPrototype) at warp strength ladder 30..6; dev seed 42 raster reproduced byte-identical (SHA-256) across separate JVM processes (worldBiomePlanCheck)."
+    }
+  ]
+}

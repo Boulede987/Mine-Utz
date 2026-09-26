@@ -1,5 +1,11 @@
 # Decisions
 
+Current tuning validity - which constants are validated together, against what, and whether that
+still holds right now - lives in `worldgen-core/src/main/resources/calibration/calibration-manifest.json`;
+run `./gradlew :worldgen-core:calibrationReport` to read it, or `./gradlew :worldgen-core:test` to
+enforce it (`CalibrationManifestTest` fails loud on drift). This log stays the history (context,
+alternatives considered, evidence at the time) - it does not track current validity on its own.
+
 ## 2026-09-20 — Groups of biomes and and/or border requirements
 
 **Context:** A requirement named ONE biome, but a beach may touch `ocean` or `lukewarm_ocean`, so one

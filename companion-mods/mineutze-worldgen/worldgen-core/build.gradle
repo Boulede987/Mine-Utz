@@ -60,6 +60,13 @@ tasks.register('thinBeachShapeExperiment', JavaExec) {
     mainClass = 'com.mineutze.worldgen.plan.ThinBeachShapeExperimentRunner'
 }
 
+tasks.register('calibrationReport', JavaExec) {
+    group = 'verification'
+    description = 'Instant (no world solving): prints which tuning constants are validated together, against what catalog, by which of the other verification tasks, and whether that is still true right now - see calibration-manifest.json. Run with: ./gradlew :worldgen-core:calibrationReport'
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'com.mineutze.worldgen.plan.CalibrationReportRunner'
+}
+
 repositories {
     mavenCentral()
 }
