@@ -1,7 +1,0 @@
-namespace com.mineutze.worldgen.biomegraph {
-class BiomeFeatureToggles <<record>> {
-  + riversEnabled : boolean
-  + lakesEnabled : boolean
-}
-
-}

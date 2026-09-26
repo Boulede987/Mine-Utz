@@ -1,7 +1,0 @@
-namespace com.mineutze.worldgen.regionsolve {
-interface RegionPersistenceStore <<interface>> {
-  + load(RegionPos) : Optional<RegionSolveResult>
-  + save(RegionPos, RegionSolveResult) : void
-}
-
-}

@@ -1,7 +1,0 @@
-namespace com.mineutze.worldgen.regionsolve.topology {
-class Point2D <<record>> {
-  + x : double
-  + z : double
-}
-
-}

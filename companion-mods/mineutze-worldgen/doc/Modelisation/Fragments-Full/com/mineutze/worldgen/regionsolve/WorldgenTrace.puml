@@ -1,7 +1,0 @@
-namespace com.mineutze.worldgen.regionsolve {
-class WorldgenTrace {
-  - {static} ENABLED : boolean
-  + {static} log(String)
-}
-
-}

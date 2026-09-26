@@ -1,7 +1,0 @@
-namespace com.mineutze.worldgen.regionsolve {
-class RegionPos <<record>> {
-  + x : int
-  + z : int
-}
-
-}

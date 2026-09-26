@@ -1,9 +1,0 @@
-namespace com.mineutze.worldgen.biomegraph {
-class GrowthCohesionProfile <<record>> {
-  + minSameBiomeNeighbors : int
-  + directionalRunMajor : int
-  + directionalRunMinor : int
-  + {static} UNRESTRICTED : GrowthCohesionProfile
-}
-
-}
