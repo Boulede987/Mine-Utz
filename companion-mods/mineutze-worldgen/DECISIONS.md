@@ -88,7 +88,9 @@ Coherence proof buttons became one Solve check that builds real plans from the s
 - Keep solving lazily while exploring: rejected, several minutes of solving while the player waits
   for chunks is unacceptable; a one-time wait at world creation is fine.
 - Complete backtracking or AC-3 on the pattern: never solved the size-coupled model; min-conflicts
-  local search does, in under a second at 24x24 and reliably at 40x40.
+  local search does, in under a second at 24x24 and reliably at 40x40. Full investigation (eight
+  iterations, a real correctness bug found in the exclusion logic, and the search-efficiency
+  ceiling that ended it): `doc/decisions/2026-09-18-toroidal-patch-construction-findings.md`.
 - One remixed pattern for all seeds: rejected, per-seed solving was chosen and its reliability
   proven instead (104 of 104 world seeds solved).
 
@@ -420,8 +422,8 @@ already-established behavior that small-tier biomes commonly land near baseline 
 real surrounding competition.
 
 **Evidence:** 1.3 is the starting value one of the three outside AIs consulted for this
-investigation proposed (`doc/IDEAS.txt`) — not re-derived from scratch, tuned from real
-measurement if that ever helps.
+investigation proposed (`doc/IDEAS.txt`, since removed as no longer relevant) — not
+re-derived from scratch, tuned from real measurement if that ever helps.
 
 ## 2026-09-06 — `MAX_VERTEX_DISPLACEMENT_FRACTION` raise to 0.9 reverted, stays 0.8
 
