@@ -32,16 +32,18 @@ final class RealizationSelector {
     }
 
     /** The winning strength, its warp, the verified map itself, the report that cleared it and how many strengths were tried to get there. */
-    record Selection(double strength, DivergenceFreeWarp warp, BiomeMap map, BiomeMapVerifier.Report report, int candidatesTried, List<BiomeId> biomeOrder) {
+    record Selection(double strength, DivergenceFreeWarp warp, BiomeMap map, BiomeMapVerifier.Report report, int candidatesTried) {
     }
 
-    static Selection select(
-        RawRuleTable table, ToroidalGrid grid, Map<ToroidalPos, BiomeId> pattern, HexTorusGeometry geometry, long worldSeed, double[] strengthsStrongestFirst,
-        int samplesPerSide, double toleranceOfMinimum, List<BiomeId> biomeOrder
-    ) {
+    /** {@code settings} supplies the candidate strengths (strongest first), the raster resolution and the size tolerance; the biome order is always {@code table.allBiomeIds()}, so it is not a separate parameter. */
+    static Selection select(RawRuleTable table, ToroidalGrid grid, Map<ToroidalPos, BiomeId> pattern, HexTorusGeometry geometry, long worldSeed, PlanSettings settings) {
+        double[] strengthsStrongestFirst = settings.warpStrengthsStrongestFirst();
         if (strengthsStrongestFirst.length == 0) {
             throw new IllegalArgumentException("RealizationSelector: needs at least one candidate strength");
         }
+        int samplesPerSide = settings.rasterSamplesPerSide();
+        double toleranceOfMinimum = settings.sizeToleranceOfMinimum();
+        List<BiomeId> biomeOrder = table.allBiomeIds();
         PatternClusters clusters = PatternClusters.of(grid, pattern);
         long warpSeed = new SplittableRandom(worldSeed ^ WORLD_SEED_SALT).nextLong();
         StringBuilder attempts = new StringBuilder();
@@ -51,7 +53,7 @@ final class RealizationSelector {
             BiomeMap map = BiomeMapRasterizer.rasterize(grid, pattern, geometry, warp, samplesPerSide, biomeOrder);
             BiomeMapVerifier.Report report = BiomeMapVerifier.verify(map, table, toleranceOfMinimum, clusters, geometry.cellEdgeBlocks() * REALIZED_BORDER_FRACTION);
             if (passes(report)) {
-                return new Selection(strength, warp, map, report, index + 1, biomeOrder);
+                return new Selection(strength, warp, map, report, index + 1);
             }
             attempts.append("\n  strength ").append(describe(strength)).append(": ").append(whyItFailed(report));
         }

@@ -95,9 +95,7 @@ public final class WorldBiomePlan {
         progress.report("pattern solved at attempt " + (generated.seedIndex() + 1));
 
         progress.report("rendering and verifying the map, trying warp strengths " + Arrays.toString(settings.warpStrengthsStrongestFirst()) + " strongest first");
-        RealizationSelector.Selection selection = RealizationSelector.select(
-            table, grid, generated.pattern(), geometry, worldSeed, settings.warpStrengthsStrongestFirst(), settings.rasterSamplesPerSide(), settings.sizeToleranceOfMinimum(), biomes
-        );
+        RealizationSelector.Selection selection = RealizationSelector.select(table, grid, generated.pattern(), geometry, worldSeed, settings);
         progress.report("map ready: warp strength " + selection.strength() + " (" + selection.candidatesTried() + " tried)");
 
         byte[] raster = toByteRaster(selection.map().biomeIndices());

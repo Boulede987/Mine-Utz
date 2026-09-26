@@ -33,7 +33,14 @@ class RealizationSelectorTest {
     }
 
     private static RealizationSelector.Selection select(RawRuleTable table, double[] strengths, long worldSeed) {
-        return RealizationSelector.select(table, GRID, pattern(), GEOMETRY, worldSeed, strengths, SAMPLES, TOLERANCE, table.allBiomeIds());
+        return RealizationSelector.select(table, GRID, pattern(), GEOMETRY, worldSeed, settingsWithStrengths(strengths));
+    }
+
+    /** {@link PlanSettings} with this test's fixed grid/geometry/samples/tolerance and the strengths under test; the pattern-search fields are irrelevant here (only {@link RealizationSelector} reads this settings object in these tests) so they keep {@link PlanSettings#DEFAULT}'s. */
+    private static PlanSettings settingsWithStrengths(double[] strengths) {
+        return new PlanSettings(
+            GRID.width(), 300, 1.3, strengths, SAMPLES, TOLERANCE, PlanSettings.DEFAULT.patternStepsPerAttempt(), PlanSettings.DEFAULT.maxPatternAttempts(), PlanSettings.DEFAULT.patternSchedule()
+        );
     }
 
     @Test
@@ -141,13 +148,6 @@ class RealizationSelectorTest {
         select(table(), new double[] {20}, 11L).warp().displace(500, 500, second);
 
         assertTrue(first[0] != second[0] || first[1] != second[1]);
-    }
-
-    @Test
-    void theOrderOfBiomesIsTheOneGiven() {
-        RealizationSelector.Selection selection = select(table(), NO_WARP_FIRST, 6L);
-
-        assertEquals(List.copyOf(table().allBiomeIds()), selection.biomeOrder());
     }
 
     /** In the plain 3-coloring every A cell shares 3 edges with B; asking for 8 (half of that is still more than 3) can never be met, whatever the warp. */
