@@ -1,7 +1,5 @@
 package com.mineutze.worldgen.biomegraph;
 
-import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -96,164 +94,12 @@ public final class MinimalJson {
 
     /** @return a {@code Map<String,Object>}, {@code List<Object>}, {@code String}, {@code Double}, {@code Boolean}, or {@code null} - caller knows the expected shape from its own schema. */
     public static Object parse(String json) {
-        Parser parser = new Parser(json);
+        MinimalJsonParser parser = new MinimalJsonParser(json);
         Object value = parser.parseValue();
         parser.skipWhitespace();
         if (!parser.atEnd()) {
-            throw new IllegalArgumentException("MinimalJson: trailing content after the top-level value at position " + parser.position);
+            throw new IllegalArgumentException("MinimalJson: trailing content after the top-level value at position " + parser.position());
         }
         return value;
-    }
-
-    private static final class Parser {
-        private final String json;
-        private int position;
-
-        private Parser(String json) {
-            this.json = json;
-        }
-
-        boolean atEnd() {
-            return position >= json.length();
-        }
-
-        void skipWhitespace() {
-            while (!atEnd() && Character.isWhitespace(json.charAt(position))) {
-                position++;
-            }
-        }
-
-        Object parseValue() {
-            skipWhitespace();
-            char c = json.charAt(position);
-            return switch (c) {
-                case '{' -> parseObject();
-                case '[' -> parseArray();
-                case '"' -> parseString();
-                case 't', 'f' -> parseBoolean();
-                case 'n' -> parseNull();
-                default -> parseNumber();
-            };
-        }
-
-        Map<String, Object> parseObject() {
-            Map<String, Object> result = new LinkedHashMap<>();
-            expect('{');
-            skipWhitespace();
-            if (peek() == '}') {
-                position++;
-                return result;
-            }
-            while (true) {
-                skipWhitespace();
-                String key = parseString();
-                skipWhitespace();
-                expect(':');
-                result.put(key, parseValue());
-                skipWhitespace();
-                char next = json.charAt(position++);
-                if (next == '}') {
-                    return result;
-                }
-                if (next != ',') {
-                    throw new IllegalArgumentException("MinimalJson: expected ',' or '}' at position " + (position - 1));
-                }
-            }
-        }
-
-        List<Object> parseArray() {
-            List<Object> result = new ArrayList<>();
-            expect('[');
-            skipWhitespace();
-            if (peek() == ']') {
-                position++;
-                return result;
-            }
-            while (true) {
-                result.add(parseValue());
-                skipWhitespace();
-                char next = json.charAt(position++);
-                if (next == ']') {
-                    return result;
-                }
-                if (next != ',') {
-                    throw new IllegalArgumentException("MinimalJson: expected ',' or ']' at position " + (position - 1));
-                }
-            }
-        }
-
-        String parseString() {
-            expect('"');
-            StringBuilder out = new StringBuilder();
-            while (true) {
-                char c = json.charAt(position++);
-                if (c == '"') {
-                    return out.toString();
-                }
-                if (c == '\\') {
-                    char escaped = json.charAt(position++);
-                    out.append(switch (escaped) {
-                        case '"' -> '"';
-                        case '\\' -> '\\';
-                        case '/' -> '/';
-                        case 'n' -> '\n';
-                        case 'r' -> '\r';
-                        case 't' -> '\t';
-                        case 'u' -> unicodeEscape();
-                        default -> throw new IllegalArgumentException("MinimalJson: unknown escape \\" + escaped + " at position " + (position - 1));
-                    });
-                } else {
-                    out.append(c);
-                }
-            }
-        }
-
-        char unicodeEscape() {
-            char value = (char) Integer.parseInt(json.substring(position, position + 4), 16);
-            position += 4;
-            return value;
-        }
-
-        Boolean parseBoolean() {
-            if (json.startsWith("true", position)) {
-                position += 4;
-                return Boolean.TRUE;
-            }
-            if (json.startsWith("false", position)) {
-                position += 5;
-                return Boolean.FALSE;
-            }
-            throw new IllegalArgumentException("MinimalJson: expected true/false at position " + position);
-        }
-
-        Object parseNull() {
-            if (json.startsWith("null", position)) {
-                position += 4;
-                return null;
-            }
-            throw new IllegalArgumentException("MinimalJson: expected null at position " + position);
-        }
-
-        Double parseNumber() {
-            int start = position;
-            while (!atEnd() && "+-0123456789.eE".indexOf(json.charAt(position)) >= 0) {
-                position++;
-            }
-            if (position == start) {
-                throw new IllegalArgumentException("MinimalJson: expected a value at position " + position);
-            }
-            return Double.parseDouble(json.substring(start, position));
-        }
-
-        char peek() {
-            return json.charAt(position);
-        }
-
-        void expect(char expected) {
-            char actual = json.charAt(position++);
-            if (actual != expected) {
-                throw new IllegalArgumentException("MinimalJson: expected '" + expected + "' but found '" + actual + "' at position " + (position - 1));
-            }
-        }
     }
 }
