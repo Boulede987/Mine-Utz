@@ -148,7 +148,7 @@ class WorldBiomePlanTest {
                     }
                 }
 
-                Optional<BlockPosition> found = plan.nearest(biome, from[0], from[1]);
+                Optional<BlockPosition> found = plan.nearestPositionOf(biome, from[0], from[1]);
 
                 assertTrue(found.isPresent());
                 assertEquals(biome, plan.biomeAt(found.get().x() + 0.5, found.get().z() + 0.5), "the position must really hold the biome");
@@ -159,7 +159,7 @@ class WorldBiomePlanTest {
 
     @Test
     void nearestOfABiomeThatIsNotInTheCatalogIsEmpty() {
-        assertTrue(plan(9L).nearest(new BiomeId("test", "nowhere"), 0, 0).isEmpty());
+        assertTrue(plan(9L).nearestPositionOf(new BiomeId("test", "nowhere"), 0, 0).isEmpty());
     }
 
     @Test
@@ -267,7 +267,7 @@ class WorldBiomePlanTest {
         double sameTileCopy = Math.hypot(0.55 * plan.tileVectorAX() + 0.55 * plan.tileVectorBX(), 0.55 * plan.tileVectorAY() + 0.55 * plan.tileVectorBY());
         assertTrue(expected < 0.7 * sameTileCopy, "the test only means something if another tile's copy is much closer");
 
-        BlockPosition found = plan.nearest(B, 0, 0).orElseThrow();
+        BlockPosition found = plan.nearestPositionOf(B, 0, 0).orElseThrow();
 
         assertEquals(expected, Math.hypot(found.x(), found.z()), 1.5);
     }

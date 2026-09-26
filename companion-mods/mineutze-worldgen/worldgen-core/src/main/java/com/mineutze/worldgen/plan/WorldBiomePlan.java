@@ -167,12 +167,8 @@ public final class WorldBiomePlan {
         return palette.get(raster[row * rasterSize + column] & 0xFF);
     }
 
-    /**
-     * The nearest position, in whole blocks, whose biome is {@code biome}, or empty if the map
-     * has no such biome. Exact: every biome occurs in every tile, so an answer always exists within
-     * about one tile.
-     */
-    public Optional<BlockPosition> nearest(BiomeId biome, double x, double z) {
+    /** Guaranteed to find one within about one tile: every biome occurs at least once in every tile. Empty only if {@code biome} is not in this plan's palette at all. */
+    public Optional<BlockPosition> nearestPositionOf(BiomeId biome, double x, double z) {
         int paletteIndex = paletteNames.indexOf(biome.toString());
         if (paletteIndex < 0) {
             return Optional.empty();
@@ -182,27 +178,29 @@ public final class WorldBiomePlan {
         double bx = geometry.tileVectorBX();
         double by = geometry.tileVectorBY();
         double[] origin = tileCoordinates(x, z);
-        double bestSquared = Double.MAX_VALUE;
-        double bestX = 0;
-        double bestZ = 0;
+        WrappedOffset best = new WrappedOffset(0, 0, Double.MAX_VALUE);
         for (int row = 0; row < rasterSize; row++) {
-            double v = (row + 0.5) / rasterSize - origin[1];
-            v -= Math.rint(v);
             for (int column = 0; column < rasterSize; column++) {
-                if ((raster[row * rasterSize + column] & 0xFF) != paletteIndex) {
-                    continue;
-                }
-                double u = (column + 0.5) / rasterSize - origin[0];
-                u -= Math.rint(u);
-                WrappedOffset offset = closestWrappedOffset(u, v, ax, ay, bx, by);
-                if (offset.distanceSquared() < bestSquared) {
-                    bestSquared = offset.distanceSquared();
-                    bestX = offset.x();
-                    bestZ = offset.z();
-                }
+                best = closerOf(best, candidateOffsetAt(row, column, paletteIndex, origin, ax, ay, bx, by));
             }
         }
-        return Optional.of(new BlockPosition((int) Math.round(x + bestX), (int) Math.round(z + bestZ)));
+        return Optional.of(new BlockPosition((int) Math.round(x + best.x()), (int) Math.round(z + best.z())));
+    }
+
+    /** The offset of raster sample {@code (row, column)}, the closest of the 9 ways the tile wraps, if that sample holds {@code paletteIndex}'s biome; empty if it doesn't. */
+    private Optional<WrappedOffset> candidateOffsetAt(int row, int column, int paletteIndex, double[] origin, double ax, double ay, double bx, double by) {
+        if ((raster[row * rasterSize + column] & 0xFF) != paletteIndex) {
+            return Optional.empty();
+        }
+        double v = (row + 0.5) / rasterSize - origin[1];
+        v -= Math.rint(v);
+        double u = (column + 0.5) / rasterSize - origin[0];
+        u -= Math.rint(u);
+        return Optional.of(closestWrappedOffset(u, v, ax, ay, bx, by));
+    }
+
+    private static WrappedOffset closerOf(WrappedOffset current, Optional<WrappedOffset> candidate) {
+        return candidate.filter(offset -> offset.distanceSquared() < current.distanceSquared()).orElse(current);
     }
 
     /** The closest a sample at tile-fraction {@code (u, v)} (already centred on the query point) can get across the 9 ways the tile wraps, and its squared distance in blocks. */

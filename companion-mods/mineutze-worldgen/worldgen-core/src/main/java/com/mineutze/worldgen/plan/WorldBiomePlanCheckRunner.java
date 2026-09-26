@@ -15,10 +15,11 @@ import java.util.Random;
 
 /**
  * Real-scale check of {@link WorldBiomePlan} against the real catalog (2026-09-20): how long a plan
- * takes, how big it is, how fast lookups and {@code nearest} are, that the map repeats after each tile
- * vector, and - the point of running it twice, in separate processes, days apart - that the SAME world
- * seed gives the SAME map. It prints a hash of the raster to compare between runs, and, when the study
- * saved a pattern for this world seed, compares the solver's pattern with it cell by cell.
+ * takes, how big it is, how fast lookups and {@link WorldBiomePlan#nearestPositionOf} are, that the
+ * map repeats after each tile vector, and - the point of running it twice, in separate processes,
+ * days apart - that the SAME world seed gives the SAME map. It prints a hash of the raster to compare
+ * between runs, and, when the study saved a pattern for this world seed, compares the solver's
+ * pattern with it cell by cell.
  */
 public final class WorldBiomePlanCheckRunner {
 
@@ -90,12 +91,12 @@ public final class WorldBiomePlanCheckRunner {
         long start = System.nanoTime();
         int located = 0;
         for (BiomeId biome : plan.biomes()) {
-            if (plan.nearest(biome, 12_345, -6_789).isPresent()) {
+            if (plan.nearestPositionOf(biome, 12_345, -6_789).isPresent()) {
                 located++;
             }
         }
         double nearestSeconds = seconds(start);
-        System.out.println("CHECK nearest() found " + located + " of " + plan.biomes().size() + " biomes, " + String.format(Locale.ROOT, "%.0f", 1000 * nearestSeconds / plan.biomes().size()) + " ms each");
+        System.out.println("CHECK nearestPositionOf() found " + located + " of " + plan.biomes().size() + " biomes, " + String.format(Locale.ROOT, "%.0f", 1000 * nearestSeconds / plan.biomes().size()) + " ms each");
     }
 
     /** Solves the pattern again from the world seed and compares it with the one the reliability study saved earlier (a different process, a different day). */

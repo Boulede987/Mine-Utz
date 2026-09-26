@@ -92,7 +92,7 @@ public final class LocateBiomeOverride {
             if (holder.isEmpty() || !biomeArg.test(holder.get())) {
                 continue;
             }
-            Optional<BlockPosition> nearest = plan.nearest(biomeId, origin.getX(), origin.getZ());
+            Optional<BlockPosition> nearest = plan.nearestPositionOf(biomeId, origin.getX(), origin.getZ());
             if (nearest.isEmpty()) {
                 continue;
             }
