@@ -4,20 +4,29 @@ import com.mineutze.worldgen.biomegraph.BiomeGraphData;
 import com.mineutze.worldgen.biomegraph.BiomeGraphJson;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 
 /**
  * Measures whether the joint identity+size search still converges reasonably at a much finer grid
- * resolution (2026-09-26): today's PRODUCTION schedule/step-budget, unchanged, against the real
- * catalog, at {@code gridSize=120, atomWidthBlocks=100} instead of the shipped {@code 40/300} - a
- * real 9x increase in cell count that preserves the world's physical tile size exactly
- * ({@code 120 * 0.866 * 100} equals {@code 40 * 0.866 * 300}, about 10,392 blocks across).
+ * resolution (2026-09-26): a real 9x increase in cell count ({@code gridSize=120,
+ * atomWidthBlocks=100} instead of the shipped {@code 40/300}) that preserves the world's physical
+ * tile size exactly ({@code 120 * 0.866 * 100} equals {@code 40 * 0.866 * 300}, about 10,392 blocks
+ * across).
+ *
+ * <p>A first bounded run (today's schedule, unchanged) found solving nowhere near converged even at
+ * production's full step budget (bestCost 442, not 0, for world seed 42 at 40,000,000 steps) - real
+ * re-tuning is needed, not just more time. This runner now A/B-compares candidate {@link
+ * ToroidalSizedLocalSearch.Schedule}s directly by best-cost-reached, at a REDUCED, bounded step/seed
+ * budget so the comparison itself stays cheap: the schedule's {@code cycleSteps} (how many steps
+ * between each sawtooth reheat) was tuned at 1,600 cells; at 9x the cells, each cycle sweeps a much
+ * smaller fraction of the grid before cooling back down, so the first candidate tested is that same
+ * cycle length scaled by the same 9x.
  *
  * <p>Deliberately does NOT touch {@link PlanSettings#DEFAULT} or the calibration manifest - this is
- * a bounded probe, not a re-tune. The per-seed step/seed budget is reduced from production's
- * defaults specifically so this probe has a known, safe wall-clock ceiling regardless of whether
- * solving actually converges: failing to solve within it is itself a real, useful measurement.
+ * still a probe, not a re-tune of production settings.
  */
 public final class AtomWidthResolutionProbeRunner {
 
@@ -26,10 +35,16 @@ public final class AtomWidthResolutionProbeRunner {
     private static final long PROBE_STEPS_PER_SEED = 5_000_000L;
     private static final int PROBE_MAX_SEEDS = 20;
     private static final long[] WORLD_SEEDS = {42L, 1094L, 20260920L, -7311L, 424242L};
-    private static final double WORLD_CREATION_BUDGET_SECONDS_LOW = 300;
-    private static final double WORLD_CREATION_BUDGET_SECONDS_HIGH = 480;
 
-    private record SeedResult(long worldSeed, boolean solved, int patternAttempts, double seconds, String failureMessage) {
+    private record ScheduleCandidate(String label, ToroidalSizedLocalSearch.Schedule schedule) {
+    }
+
+    private static final List<ScheduleCandidate> CANDIDATES = List.of(
+        new ScheduleCandidate("today's (cycleSteps=1,000,000)", ToroidalSizedPatternGenerator.DEFAULT_SCHEDULE),
+        new ScheduleCandidate("cycleSteps x9 (9,000,000)", new ToroidalSizedLocalSearch.Schedule(0.40, 0.20, 9_000_000))
+    );
+
+    private record SeedResult(long worldSeed, boolean solved, int bestCost, double seconds) {
     }
 
     private AtomWidthResolutionProbeRunner() {
@@ -45,65 +60,70 @@ public final class AtomWidthResolutionProbeRunner {
         int threads = Runtime.getRuntime().availableProcessors();
 
         System.out.println(
-            "PROBE grid " + PROBE_GRID_SIZE + "x" + PROBE_GRID_SIZE + " at atom width " + PROBE_ATOM_WIDTH_BLOCKS + " blocks (" + grid.cellCount()
-                + " cells, " + (grid.cellCount() / (double) (40 * 40)) + "x production's 1600) - schedule and perimeter ratio UNCHANGED from PlanSettings.DEFAULT, budget reduced to "
-                + PROBE_STEPS_PER_SEED + " steps x " + PROBE_MAX_SEEDS + " seeds per world seed, " + threads + " threads"
+            "PROBE grid " + PROBE_GRID_SIZE + "x" + PROBE_GRID_SIZE + " at atom width " + PROBE_ATOM_WIDTH_BLOCKS + " blocks (" + grid.cellCount() + " cells, "
+                + (grid.cellCount() / (double) (40 * 40)) + "x production's 1600), budget " + PROBE_STEPS_PER_SEED + " steps x " + PROBE_MAX_SEEDS
+                + " seeds per world seed, " + threads + " threads"
         );
 
-        List<SeedResult> results = new ArrayList<>();
-        for (long worldSeed : WORLD_SEEDS) {
-            runSeed(table, grid, model, worldSeed, threads, results);
+        Map<String, List<SeedResult>> resultsByCandidate = new LinkedHashMap<>();
+        for (ScheduleCandidate candidate : CANDIDATES) {
+            resultsByCandidate.put(candidate.label(), runCandidate(table, grid, model, candidate, threads));
         }
-        reportResults(results);
+        reportComparison(resultsByCandidate);
     }
 
-    private static void runSeed(RawRuleTable table, ToroidalGrid grid, ClusterSizeModel model, long worldSeed, int threads, List<SeedResult> results) {
-        long start = System.nanoTime();
-        try {
-            ToroidalSizedPatternGenerator.Generated generated = ToroidalSizedPatternGenerator.generate(
-                table, grid, model, worldSeed, PROBE_STEPS_PER_SEED, PROBE_MAX_SEEDS, ToroidalSizedPatternGenerator.DEFAULT_SCHEDULE, threads
-            );
-            double seconds = secondsSince(start);
-            System.out.println("SEED " + worldSeed + ": solved at attempt " + (generated.seedIndex() + 1) + " in " + String.format(Locale.ROOT, "%.1f", seconds) + "s");
-            results.add(new SeedResult(worldSeed, true, generated.seedIndex() + 1, seconds, null));
-        } catch (IllegalStateException failure) {
-            double seconds = secondsSince(start);
-            System.out.println("SEED " + worldSeed + ": did NOT solve within budget, " + String.format(Locale.ROOT, "%.1f", seconds) + "s spent - " + failure.getMessage());
-            results.add(new SeedResult(worldSeed, false, -1, seconds, failure.getMessage()));
+    private static List<SeedResult> runCandidate(RawRuleTable table, ToroidalGrid grid, ClusterSizeModel model, ScheduleCandidate candidate, int threads) {
+        System.out.println();
+        System.out.println("SCHEDULE " + candidate.label());
+        List<SeedResult> results = new ArrayList<>();
+        for (long worldSeed : WORLD_SEEDS) {
+            results.add(runSeed(table, grid, model, candidate, worldSeed, threads));
         }
+        return results;
+    }
+
+    private static SeedResult runSeed(RawRuleTable table, ToroidalGrid grid, ClusterSizeModel model, ScheduleCandidate candidate, long worldSeed, int threads) {
+        long start = System.nanoTime();
+        long baseSeed = ToroidalSizedPatternGenerator.baseSeedOf(worldSeed);
+        ParallelSeedSearch.Outcome outcome = ParallelSeedSearch.search(table, grid, model, baseSeed, PROBE_MAX_SEEDS, PROBE_STEPS_PER_SEED, candidate.schedule(), threads);
+        double seconds = secondsSince(start);
+        int bestCost = outcome.result().bestCost();
+        System.out.println(
+            "SEED " + worldSeed + ": " + (outcome.solved() ? "SOLVED" : "not solved") + ", best cost " + bestCost + ", " + String.format(Locale.ROOT, "%.1f", seconds) + "s"
+        );
+        return new SeedResult(worldSeed, outcome.solved(), bestCost, seconds);
     }
 
     private static double secondsSince(long startNanos) {
         return (System.nanoTime() - startNanos) / 1_000_000_000.0;
     }
 
-    private static void reportResults(List<SeedResult> results) {
-        long solvedCount = results.stream().filter(SeedResult::solved).count();
+    private static void reportComparison(Map<String, List<SeedResult>> resultsByCandidate) {
         System.out.println();
-        System.out.println("RESULT " + solvedCount + " of " + results.size() + " world seeds solved within the reduced probe budget");
-        if (solvedCount == 0) {
-            System.out.println("RESULT no timing data - none solved; re-run with a larger step/seed budget before drawing conclusions");
-            return;
+        System.out.println("RESULT best cost per seed, by schedule (lower is closer to solved; 0 = solved):");
+        for (int index = 0; index < WORLD_SEEDS.length; index++) {
+            reportSeedRow(index, resultsByCandidate);
         }
-        double[] solvedSeconds = results.stream().filter(SeedResult::solved).mapToDouble(SeedResult::seconds).sorted().toArray();
-        double min = solvedSeconds[0];
-        double max = solvedSeconds[solvedSeconds.length - 1];
-        double median = solvedSeconds[solvedSeconds.length / 2];
-        System.out.println(
-            "RESULT solve time among solved seeds: min " + String.format(Locale.ROOT, "%.1f", min) + "s, median " + String.format(Locale.ROOT, "%.1f", median) + "s, max "
-                + String.format(Locale.ROOT, "%.1f", max) + "s"
-        );
-        System.out.println("RESULT verdict versus the 5-8 minute world-creation budget: " + verdict(max));
+        reportAverageCost(resultsByCandidate);
     }
 
-    private static String verdict(double maxSolvedSeconds) {
-        if (maxSolvedSeconds <= WORLD_CREATION_BUDGET_SECONDS_LOW) {
-            return "within budget even at the low end (" + String.format(Locale.ROOT, "%.1f", maxSolvedSeconds) + "s <= 300s) - and this used only " + PROBE_STEPS_PER_SEED
-                + " steps x " + PROBE_MAX_SEEDS + " seeds, an eighth/tenth of production's real budget, so there is real headroom left unused.";
+    private static void reportSeedRow(int index, Map<String, List<SeedResult>> resultsByCandidate) {
+        StringBuilder line = new StringBuilder("  seed " + WORLD_SEEDS[index] + ":  ");
+        for (Map.Entry<String, List<SeedResult>> entry : resultsByCandidate.entrySet()) {
+            appendSeedCost(line, entry.getKey(), entry.getValue().get(index));
         }
-        if (maxSolvedSeconds <= WORLD_CREATION_BUDGET_SECONDS_HIGH) {
-            return "within the high end of budget (" + String.format(Locale.ROOT, "%.1f", maxSolvedSeconds) + "s <= 480s) but not the low end - worth re-tuning before committing.";
+        System.out.println(line);
+    }
+
+    private static void appendSeedCost(StringBuilder line, String label, SeedResult result) {
+        line.append(label).append("=").append(result.bestCost()).append(result.solved() ? " (SOLVED)" : "").append("   ");
+    }
+
+    private static void reportAverageCost(Map<String, List<SeedResult>> resultsByCandidate) {
+        System.out.println();
+        for (Map.Entry<String, List<SeedResult>> entry : resultsByCandidate.entrySet()) {
+            double averageCost = entry.getValue().stream().mapToInt(SeedResult::bestCost).average().orElse(0);
+            System.out.println("RESULT " + entry.getKey() + ": average best cost " + String.format(Locale.ROOT, "%.1f", averageCost) + " across " + WORLD_SEEDS.length + " seeds");
         }
-        return "OVER budget (" + String.format(Locale.ROOT, "%.1f", maxSolvedSeconds) + "s > 480s) even at a reduced step/seed budget - re-tuning the schedule is required, not optional, before this resolution is viable.";
     }
 }
