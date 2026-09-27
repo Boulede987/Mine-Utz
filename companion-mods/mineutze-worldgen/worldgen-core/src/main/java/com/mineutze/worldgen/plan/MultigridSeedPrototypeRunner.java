@@ -4,6 +4,7 @@ import com.mineutze.worldgen.biomegraph.BiomeGraphData;
 import com.mineutze.worldgen.biomegraph.BiomeGraphJson;
 import com.mineutze.worldgen.biomegraph.BiomeId;
 
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -36,8 +37,9 @@ public final class MultigridSeedPrototypeRunner {
     private static final long REFINEMENT_STEPS = 20_000_000L;
     private static final int MAX_REFINEMENT_ATTEMPTS = 5;
     private static final ToroidalSizedLocalSearch.Schedule REFINEMENT_SCHEDULE = new ToroidalSizedLocalSearch.Schedule(0.40, 0.20, 9_000_000);
+    private static final Path OUTPUT_DIRECTORY = Path.of("build", "multigrid-seed-prototype");
 
-    private record RefinementOutcome(boolean solved, int attemptsUsed, int bestCost) {
+    private record RefinementOutcome(boolean solved, int attemptsUsed, int bestCost, Map<ToroidalPos, BiomeId> assignment) {
     }
 
     private record SeedResult(long worldSeed, double coarseSeconds, int seededCost, RefinementOutcome refinement, double refineSeconds) {
@@ -89,7 +91,21 @@ public final class MultigridSeedPrototypeRunner {
             "  refined: " + (outcome.solved() ? "SOLVED (attempt " + outcome.attemptsUsed() + ")" : "not solved after " + outcome.attemptsUsed() + " attempts, best cost "
                 + outcome.bestCost()) + " in " + String.format(Locale.ROOT, "%.1f", refineSeconds) + "s"
         );
+        exportPictures(table, coarseGrid, fineGrid, worldSeed, coarseSolved.pattern(), seed, outcome.assignment());
         return new SeedResult(worldSeed, coarseSeconds, seededCost, outcome, refineSeconds);
+    }
+
+    private static void exportPictures(
+        RawRuleTable table, ToroidalGrid coarseGrid, ToroidalGrid fineGrid, long worldSeed, Map<ToroidalPos, BiomeId> coarsePattern, Map<ToroidalPos, BiomeId> seed,
+        Map<ToroidalPos, BiomeId> refined
+    ) {
+        List<BiomeId> colorOrder = table.allBiomeIds();
+        ToroidalPatternPngExporter.export(coarseGrid, coarsePattern, colorOrder, OUTPUT_DIRECTORY.resolve("seed-" + worldSeed + "-1-coarse.png"));
+        ToroidalPatternPngExporter.export(fineGrid, seed, colorOrder, OUTPUT_DIRECTORY.resolve("seed-" + worldSeed + "-2-seeded.png"));
+        if (refined != null) {
+            ToroidalPatternPngExporter.export(fineGrid, refined, colorOrder, OUTPUT_DIRECTORY.resolve("seed-" + worldSeed + "-3-refined.png"));
+        }
+        System.out.println("  pictures written to " + OUTPUT_DIRECTORY.toAbsolutePath());
     }
 
     /** Tries a different internal random seed (the same structural, coarse-derived seed each time) up to {@link #MAX_REFINEMENT_ATTEMPTS} times, taking the first that solves. */
@@ -100,11 +116,11 @@ public final class MultigridSeedPrototypeRunner {
                 table, fineGrid, fineModel, worldSeed + attempt, seed, REFINEMENT_STEPS, REFINEMENT_SCHEDULE, () -> false, ToroidalSizedLocalSearch.DEFAULT_RELABEL_PROBABILITY
             );
             if (result.assignment() != null) {
-                return new RefinementOutcome(true, attempt + 1, 0);
+                return new RefinementOutcome(true, attempt + 1, 0, result.assignment());
             }
             bestCostSoFar = Math.min(bestCostSoFar, result.bestCost());
         }
-        return new RefinementOutcome(false, MAX_REFINEMENT_ATTEMPTS, bestCostSoFar);
+        return new RefinementOutcome(false, MAX_REFINEMENT_ATTEMPTS, bestCostSoFar, null);
     }
 
     private static Map<ToroidalPos, BiomeId> upsampleToFineSeed(ToroidalGrid fineGrid, ToroidalGrid coarseGrid, Map<ToroidalPos, BiomeId> coarseSolution) {
