@@ -6,6 +6,57 @@ run `./gradlew :worldgen-core:calibrationReport` to read it, or `./gradlew :worl
 enforce it (`CalibrationManifestTest` fails loud on drift). This log stays the history (context,
 alternatives considered, evidence at the time) - it does not track current validity on its own.
 
+## 2026-09-27 — Lowering atomWidthBlocks to 100 needs real algorithm work, not simple re-tuning
+
+**Context:** Beach's shape-floor mechanism (`ShapeRule.minPerimeterRatio`, 2026-09-26) is blocked by
+beach's own declared minimum (300 blocks = exactly 1 cell at production's `atomWidthBlocks=300`)
+having zero shape freedom - a single hexagon's perimeter is fixed, not a range. Investigated whether
+lowering `atomWidthBlocks` to 100 (3x finer, `gridSize` scaled 40->120 to preserve the ~10,392-block
+tile size, a real 9x cell-count increase, 1,600->14,400) could give small biomes genuine shape
+freedom at their own minimum, using the calibration manifest's own newly-tracked constants as the
+baseline to probe against.
+
+**Finding:** Simple tuning does not get this resolution to a viable solve within the 5-8 minute
+world-creation budget (`DESIGN.md`'s own clarified limit). Measured directly against the real
+catalog (`AtomWidthResolutionProbeRunner`, gradle task `atomWidthResolutionProbe`, world seed 42,
+schedule's `cycleSteps` scaled 9x alongside cell count):
+- Step depth per attempt is the dominant lever, not attempt count: 100 shallow attempts (60,000,000
+  steps each) reached only cost 146 in 866s - WORSE than 10 deep attempts (80,000,000 steps) reaching
+  cost 102 in 122s. The "many independent cheap tries" dynamic that makes production's 1,600-cell
+  reliability real (each attempt has a real chance of converging within budget) does not hold at
+  9x the cells - no single shallow attempt gets close, so trying more of them buys nothing.
+- Increasing steps per attempt showed real convergence early, then hit a hard wall: 5,000,000 steps
+  -> cost 2159; 40,000,000 -> 442; 80,000,000 -> 102; 160,000,000 -> 45; 320,000,000 -> 41 (only 9%
+  better for double the steps, in 529.8s - already over budget). Diminishing returns collapsed from
+  4.3x to 2.3x to 1.1x across successive doublings - a real plateau, not a patience problem.
+- The schedule's `cycleSteps` (1,000,000, tuned at 1,600 cells) scaled proportionally to the 9x cell
+  increase (9,000,000) gave only a modest, real improvement (average best cost 1951.2 -> 1842.0
+  across 5 seeds at a fixed reduced budget) - not remotely enough alone.
+
+**Conclusion:** the plateau is structural. A single-cell-flip move (the search's main mechanism)
+propagates corrective information diffusively across the grid; in a 2D lattice that kind of
+equilibration scales with total AREA (cell count), not the sqrt-of-area growth in total cluster
+boundary length that a naive "bigger clusters, longer perimeters" estimate would predict - which is
+consistent with needing far more than a proportional (9x, or even the observed up-to-8x-and-still-
+climbing) step increase to reach the same relative convergence. Reaching this resolution needs a
+genuine redesign for a much larger state space (see the coarse-to-fine multigrid direction under
+investigation as of this entry), not a config change.
+
+**Alternatives considered:**
+- More parallel seed attempts at a shallow step budget instead of fewer deep ones: measured worse,
+  not better (see Finding above).
+- Scaling the annealing schedule's cycle length alone: measured, real but modest (~6%), not enough.
+- A region-based/divide-and-conquer solve (each block of the grid solved somewhat independently,
+  boundaries reconciled after): NOT attempted here, and worth naming the real risk explicitly - this
+  is close in spirit to the hex-mesh region CSP this project already tried and deleted (see the
+  2026-09-20 "One solved biome plan per world" entry's own banner) precisely because per-region
+  solving could not be made reliable for every world seed. A new attempt would need to differ in a
+  real way (e.g. reconciling via shared boundary state, or seeding from a coarse global solve first),
+  not repeat the same independent-regions shape.
+
+**Evidence:** `worldgen-core/src/main/java/com/mineutze/worldgen/plan/AtomWidthResolutionProbeRunner.java`
+(gradle task `atomWidthResolutionProbe`); full numbers in commits `5024ce5f` and `4f833740`.
+
 ## 2026-09-20 — Groups of biomes and and/or border requirements
 
 **Context:** A requirement named ONE biome, but a beach may touch `ocean` or `lukewarm_ocean`, so one
