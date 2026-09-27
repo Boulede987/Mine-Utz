@@ -6,6 +6,53 @@ run `./gradlew :worldgen-core:calibrationReport` to read it, or `./gradlew :worl
 enforce it (`CalibrationManifestTest` fails loud on drift). This log stays the history (context,
 alternatives considered, evidence at the time) - it does not track current validity on its own.
 
+## 2026-09-27 — Multigrid + beach shape floor wired into live world generation
+
+**Context:** The three entries below this one built and validated coarse-to-fine multigrid seeding
+(prototype only, `MultigridSeedPrototypeRunner`) and a real beach shape floor, on 5 world seeds. This
+entry makes it the real thing `WorldBiomePlan.create` runs for every world - production code, not a
+prototype - per explicit user instruction.
+
+**Decision:** `PlanSettings` gains a nested `FineResolution` record and one new field
+(`fineResolution`), backward-compatibly - the existing 9-arg constructor becomes a convenience
+overload passing `fineResolution = null` (no fine stage, solve directly, byte-for-byte today's
+behavior; every existing test's `new PlanSettings(...)` call keeps compiling and behaving
+identically). `PlanSettings.DEFAULT` gets a real, populated `FineResolution`: fine grid 120x120 at
+100 blocks, 20,000,000 refinement steps per attempt, up to 5 attempts, schedule cycleSteps 9,000,000,
+beach's `minPerimeterRatio` at 1.5. New class `MultigridPatternGenerator` generalizes the prototype's
+already-proven logic (coarse solve via unmodified `ToroidalSizedPatternGenerator`, upsample, refine
+with retries) with real validation (fail loud if the fine/coarse grid ratio isn't a whole, equal
+multiple on both axes) instead of hardcoded constants. `WorldBiomePlan.create` branches once on
+`settings.fineResolution()`; the rest of the pipeline (`RealizationSelector`, rasterizing) is
+unchanged either way, and only ever sees "a grid, a geometry, a solved pattern." `WorldBiomePlan
+.requireCatalogAcceptable` (the editor's live check) now also validates the fine model's shape floor
+feasibility when configured. `ToroidalWorldSeedReliabilityRunner` updated to take the SAME branch as
+production (it was solving directly before; its own doc claims "same numbers `WorldBiomePlan#create`
+solves a real world with" - that would have gone stale otherwise). Calibration manifest gets a third
+group, `multigrid-refinement`, tracking the new settings, explicitly `verifiedByGradleTasks:
+["multigridSeedPrototype"]` only - not `toroidalWorldSeedReliability` yet, see below.
+
+**Evidence:** Full test suite (372 tests) passes unchanged, proving the `fineResolution == null` path
+is truly untouched. Real end-to-end run through the actual production entry point
+(`worldBiomePlanCheck`, real 66-biome catalog, world seed 1094): progress log correctly shows "120x120
+cells (coarse 40x40 then refined)"; solved coarse attempt 1, fine refinement attempt 1; whole plan
+(solve + render + verify) created in 29.8s - comparable to or faster than the prior ~32s at the OLD
+resolution alone; 2,000,000 random lookups, 0 mismatches, 39.7M lookups/second; snapshot round-trip
+clean; all 66 biomes findable via `nearestPositionOf`; coarse-stage cross-process reproducibility
+unchanged (0 of 1,600 cells differ from a previously-saved study pattern).
+
+**Known gap, not fixed here:** `ClusterSizeModel` still does not validate at construction time
+whether a per-biome shape floor is even achievable given that biome's own min-cell-count (flagged in
+the 2026-09-26 shape-floor commit and `ThinBeachShapeExperimentRunner`'s own doc, still true) - a
+misconfigured floor only fails at world-creation time via `MultigridPatternGenerator`'s
+exhausted-attempts exception, not earlier.
+
+**Real, un-glossed-over follow-up needed before this is trusted as much as the coarse-only settings
+were**: only 5 world seeds have been tested end to end (42, 1094, 20260920, -7311, 424242), not the
+~104-seed bar `identity-and-size-search`'s own entry rests on. Run
+`./gradlew :worldgen-core:toroidalWorldSeedReliability` at real scale (now exercising the real
+multigrid path) before treating this with the same confidence.
+
 ## 2026-09-27 — Coarse-to-fine multigrid seeding solves the 9x-cell-count plateau
 
 **Context:** The entry below this one diagnosed why `atomWidthBlocks=100` (9x production's cell

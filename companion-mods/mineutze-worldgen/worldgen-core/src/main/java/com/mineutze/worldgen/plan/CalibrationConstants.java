@@ -1,5 +1,7 @@
 package com.mineutze.worldgen.plan;
 
+import com.mineutze.worldgen.biomegraph.BiomeId;
+
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -23,6 +25,7 @@ final class CalibrationConstants {
         Map<String, Map<String, Object>> groups = new LinkedHashMap<>();
         groups.put("identity-and-size-search", identityAndSizeSearchGroup());
         groups.put("shape-and-realization", shapeAndRealizationGroup());
+        groups.put("multigrid-refinement", multigridRefinementGroup());
         return groups;
     }
 
@@ -59,6 +62,20 @@ final class CalibrationConstants {
         live.put("RealizationSelector.ROUGHNESS", RealizationSelector.ROUGHNESS);
         live.put("RealizationSelector.FLOW_STEPS", (double) RealizationSelector.FLOW_STEPS);
         live.put("RealizationSelector.REALIZED_BORDER_FRACTION", RealizationSelector.REALIZED_BORDER_FRACTION);
+        return live;
+    }
+
+    private static Map<String, Object> multigridRefinementGroup() {
+        Map<String, Object> live = new LinkedHashMap<>();
+        PlanSettings.FineResolution fine = PlanSettings.DEFAULT.fineResolution();
+        live.put("PlanSettings.DEFAULT.fineResolution.gridSize", (double) fine.gridSize());
+        live.put("PlanSettings.DEFAULT.fineResolution.atomWidthBlocks", fine.atomWidthBlocks());
+        live.put("PlanSettings.DEFAULT.fineResolution.refinementStepsPerAttempt", (double) fine.refinementStepsPerAttempt());
+        live.put("PlanSettings.DEFAULT.fineResolution.maxRefinementAttempts", (double) fine.maxRefinementAttempts());
+        live.put("PlanSettings.DEFAULT.fineResolution.refinementSchedule.highTemperature", fine.refinementSchedule().highTemperature());
+        live.put("PlanSettings.DEFAULT.fineResolution.refinementSchedule.lowTemperature", fine.refinementSchedule().lowTemperature());
+        live.put("PlanSettings.DEFAULT.fineResolution.refinementSchedule.cycleSteps", (double) fine.refinementSchedule().cycleSteps());
+        live.put("PlanSettings.DEFAULT.fineResolution.shapeFloorRatios.minecraft:beach", fine.shapeFloorRatios().get(new BiomeId("minecraft", "beach")));
         return live;
     }
 

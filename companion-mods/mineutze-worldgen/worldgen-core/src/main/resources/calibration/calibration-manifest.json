@@ -48,6 +48,25 @@
       "verifiedByGradleTasks": ["biomeRealizationPrototype", "worldBiomePlanCheck"],
       "decisionsEntry": "2026-09-20 - One solved biome plan per world replaces the hex-mesh region solver",
       "evidenceSummary": "Shipped catalog raster-verified clean (biomeRealizationPrototype) at warp strength ladder 30..6; dev seed 42 raster reproduced byte-identical (SHA-256) across separate JVM processes (worldBiomePlanCheck)."
+    },
+    {
+      "name": "multigrid-refinement",
+      "description": "Whether solving coarse (production scale) then upsampling into a seed for a finer grid, refining there with retries, still converges within the world-creation budget - and whether beach's own perimeter floor is still achievable at the fine resolution.",
+      "constants": [
+        { "owner": "PlanSettings.DEFAULT", "field": "fineResolution.gridSize", "recordedValue": 120 },
+        { "owner": "PlanSettings.DEFAULT", "field": "fineResolution.atomWidthBlocks", "recordedValue": 100.0 },
+        { "owner": "PlanSettings.DEFAULT", "field": "fineResolution.refinementStepsPerAttempt", "recordedValue": 20000000 },
+        { "owner": "PlanSettings.DEFAULT", "field": "fineResolution.maxRefinementAttempts", "recordedValue": 5 },
+        { "owner": "PlanSettings.DEFAULT", "field": "fineResolution.refinementSchedule.highTemperature", "recordedValue": 0.40 },
+        { "owner": "PlanSettings.DEFAULT", "field": "fineResolution.refinementSchedule.lowTemperature", "recordedValue": 0.20 },
+        { "owner": "PlanSettings.DEFAULT", "field": "fineResolution.refinementSchedule.cycleSteps", "recordedValue": 9000000 },
+        { "owner": "PlanSettings.DEFAULT", "field": "fineResolution.shapeFloorRatios.minecraft:beach", "recordedValue": 1.5 }
+      ],
+      "validatedOn": "2026-09-27",
+      "validatedAgainstCatalogFingerprint": "295cf6744015fb0748a67f45da407cb42c60c5b057f16d911692d6c36fb801a3",
+      "verifiedByGradleTasks": ["multigridSeedPrototype"],
+      "decisionsEntry": "2026-09-27 - Coarse-to-fine multigrid seeding solves the 9x-cell-count plateau",
+      "evidenceSummary": "5 of 5 world seeds fully solved with retries (42, 1094, 20260920, -7311, 424242), average 28.3s wall time per world, worst case 53.2s. NOT yet validated at the ~104-seed reliability scale the identity-and-size-search group above rests on - run toroidalWorldSeedReliability at real scale before trusting this as much as that group."
     }
   ]
 }

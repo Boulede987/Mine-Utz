@@ -10,6 +10,7 @@ import java.security.NoSuchAlgorithmException;
 import java.util.Arrays;
 import java.util.HexFormat;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -81,27 +82,48 @@ public final class WorldBiomePlan {
         if (biomes.size() > LARGEST_PALETTE) {
             throw new IllegalStateException("WorldBiomePlan: the catalog has " + biomes.size() + " biomes but a map stores at most " + LARGEST_PALETTE);
         }
-        ToroidalGrid grid = new ToroidalGrid(settings.gridSize(), settings.gridSize());
-        HexTorusGeometry geometry = new HexTorusGeometry(settings.gridSize(), settings.gridSize(), settings.atomWidthBlocks());
-        ClusterSizeModel model = modelOf(table, settings);
+        PlanSettings.FineResolution fine = settings.fineResolution();
+        int effectiveGridSize = fine != null ? fine.gridSize() : settings.gridSize();
+        double effectiveAtomWidthBlocks = fine != null ? fine.atomWidthBlocks() : settings.atomWidthBlocks();
+        ToroidalGrid grid = new ToroidalGrid(effectiveGridSize, effectiveGridSize);
+        HexTorusGeometry geometry = new HexTorusGeometry(effectiveGridSize, effectiveGridSize, effectiveAtomWidthBlocks);
 
         progress.report(
-            "solving the biome pattern for world seed " + worldSeed + " on " + threads + " threads (" + biomes.size() + " biomes, " + settings.gridSize() + "x" + settings.gridSize()
-                + " cells, up to " + settings.maxPatternAttempts() + " attempts)"
+            "solving the biome pattern for world seed " + worldSeed + " on " + threads + " threads (" + biomes.size() + " biomes, " + effectiveGridSize + "x" + effectiveGridSize
+                + " cells" + (fine != null ? " (coarse " + settings.gridSize() + "x" + settings.gridSize() + " then refined)" : "") + ", up to " + settings.maxPatternAttempts()
+                + " attempts)"
         );
-        ToroidalSizedPatternGenerator.Generated generated = ToroidalSizedPatternGenerator.generate(
-            table, grid, model, worldSeed, settings.patternStepsPerAttempt(), settings.maxPatternAttempts(), settings.patternSchedule(), threads
-        );
-        progress.report("pattern solved at attempt " + (generated.seedIndex() + 1));
+        PatternSolved solved = fine == null ? solveDirect(table, grid, settings, worldSeed, threads) : solveMultigrid(table, settings, worldSeed, threads);
+        progress.report(solved.progressMessage());
 
         progress.report("rendering and verifying the map, trying warp strengths " + Arrays.toString(settings.warpStrengthsStrongestFirst()) + " strongest first");
-        RealizationSelector.Selection selection = RealizationSelector.select(table, grid, generated.pattern(), geometry, worldSeed, settings);
+        RealizationSelector.Selection selection = RealizationSelector.select(table, grid, solved.pattern(), geometry, worldSeed, settings);
         progress.report("map ready: warp strength " + selection.strength() + " (" + selection.candidatesTried() + " tried)");
 
         byte[] raster = toByteRaster(selection.map().biomeIndices());
         return new WorldBiomePlan(
-            worldSeed, fingerprintOf(catalog), settings.gridSize(), settings.gridSize(), settings.atomWidthBlocks(), selection.strength(), generated.seedIndex() + 1,
+            worldSeed, fingerprintOf(catalog), effectiveGridSize, effectiveGridSize, effectiveAtomWidthBlocks, selection.strength(), solved.patternAttempts(),
             selection.candidatesTried(), biomes.stream().map(BiomeId::toString).toList(), settings.rasterSamplesPerSide(), raster
+        );
+    }
+
+    /** The solved pattern, how many (coarse) attempts it took, and a progress line describing it - the same shape whichever path solved it. */
+    private record PatternSolved(Map<ToroidalPos, BiomeId> pattern, int patternAttempts, String progressMessage) {
+    }
+
+    private static PatternSolved solveDirect(RawRuleTable table, ToroidalGrid grid, PlanSettings settings, long worldSeed, int threads) {
+        ClusterSizeModel model = modelOf(table, settings);
+        ToroidalSizedPatternGenerator.Generated generated = ToroidalSizedPatternGenerator.generate(
+            table, grid, model, worldSeed, settings.patternStepsPerAttempt(), settings.maxPatternAttempts(), settings.patternSchedule(), threads
+        );
+        return new PatternSolved(generated.pattern(), generated.seedIndex() + 1, "pattern solved at attempt " + (generated.seedIndex() + 1));
+    }
+
+    private static PatternSolved solveMultigrid(RawRuleTable table, PlanSettings settings, long worldSeed, int threads) {
+        MultigridPatternGenerator.Generated generated = MultigridPatternGenerator.generate(table, settings, worldSeed, threads);
+        return new PatternSolved(
+            generated.pattern(), generated.coarseAttempts(),
+            "pattern solved: coarse attempt " + generated.coarseAttempts() + ", fine refinement attempt " + generated.refinementAttempts()
         );
     }
 
@@ -115,11 +137,16 @@ public final class WorldBiomePlan {
     }
 
     /**
-     * Throws {@link IllegalArgumentException}, saying why, if {@link #create} would reject {@code catalog} outright: a size range holding no whole cell, or a border requirement that
-     * no cluster could ever meet. Cheap - it solves nothing - so the graph editor can run it on every edit. It cannot say whether the catalog is solvable; only solving does.
+     * Throws {@link IllegalArgumentException}, saying why, if {@link #create} would reject {@code catalog} outright: a size range holding no whole cell, a border requirement that
+     * no cluster could ever meet, or (when {@link PlanSettings#fineResolution()} is configured) a per-biome shape floor the fine model rejects the same way. Cheap - it solves
+     * nothing - so the graph editor can run it on every edit. It cannot say whether the catalog is solvable; only solving does.
      */
     public static void requireCatalogAcceptable(BiomeGraphData catalog) {
-        modelOf(RawRuleTable.from(catalog), PlanSettings.DEFAULT);
+        RawRuleTable table = RawRuleTable.from(catalog);
+        modelOf(table, PlanSettings.DEFAULT);
+        if (PlanSettings.DEFAULT.fineResolution() != null) {
+            MultigridPatternGenerator.fineModelOf(table, PlanSettings.DEFAULT);
+        }
     }
 
     private static ClusterSizeModel modelOf(RawRuleTable table, PlanSettings settings) {
