@@ -42,10 +42,24 @@ region) to refine locally, rather than a globally-uncommitted state needing grid
 even decide that - a structural property the raw cost number doesn't expose, only the refinement
 behavior does.
 
-**Not yet done:** tested on one world seed only, not the ~104-seed reliability scale; not wired into
-production (`PlanSettings`/`WorldBiomePlan` untouched); the other two candidate directions
-(local-patch move, region-based divide-and-conquer) in `doc/TODO.md` are now most likely moot given
-this result, but not removed from the TODO without the user's own call.
+**Follow-up across 5 world seeds** (42, 1094, 20260920, -7311, 424242 - the same set used throughout
+this investigation): 5 of 5 fully solved. One seed (-7311) exposed a real, separate finding: its
+first refinement attempt plateaued at cost 4 and was completely UNMOVED by doubling the step budget
+(20,000,000 -> 40,000,000, identical cost 4 both times) - a local trap for that one random walk, not
+a global slowdown. Confirmed directly: three different internal random seeds (same structural,
+coarse-derived seed) were tried against that same trapped state - two of the three solved outright
+(one in 3.7s), only the original one was stuck. Fix, made permanent in the runner: refinement now
+retries with a different internal random seed (same coarse-derived structural seed) up to 5 times,
+taking the first that solves - the exact "try several independent attempts, take whichever solves
+first" mechanism production already uses at the coarse level (`ParallelSeedSearch`), just applied one
+level deeper. With retries: seed -7311 solved on attempt 2 (29.9s). Total wall time across all 5
+seeds averaged 28.3s per world (worst case 53.2s, seed -7311's two attempts) - comfortably inside the
+5-8 minute budget with a full order of magnitude of headroom.
+
+**Not yet done:** not tested at the ~104-seed reliability scale; not wired into production
+(`PlanSettings`/`WorldBiomePlan` untouched); the other two candidate directions (local-patch move,
+region-based divide-and-conquer) in `doc/TODO.md` are now most likely moot given this result, but not
+removed from the TODO without the user's own call.
 
 ## 2026-09-27 — Lowering atomWidthBlocks to 100 needs real algorithm work, not simple re-tuning
 
