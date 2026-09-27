@@ -4,6 +4,9 @@ import com.mineutze.worldgen.biomegraph.BiomeGraphData;
 import com.mineutze.worldgen.biomegraph.BiomeGraphJson;
 import com.mineutze.worldgen.biomegraph.BiomeId;
 
+import javax.imageio.ImageIO;
+import java.awt.image.BufferedImage;
+import java.io.IOException;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -38,6 +41,7 @@ public final class MultigridSeedPrototypeRunner {
     private static final int MAX_REFINEMENT_ATTEMPTS = 5;
     private static final ToroidalSizedLocalSearch.Schedule REFINEMENT_SCHEDULE = new ToroidalSizedLocalSearch.Schedule(0.40, 0.20, 9_000_000);
     private static final Path OUTPUT_DIRECTORY = Path.of("build", "multigrid-seed-prototype");
+    private static final BiomeId BEACH = new BiomeId("minecraft", "beach");
 
     private record RefinementOutcome(boolean solved, int attemptsUsed, int bestCost, Map<ToroidalPos, BiomeId> assignment) {
     }
@@ -48,7 +52,7 @@ public final class MultigridSeedPrototypeRunner {
     private MultigridSeedPrototypeRunner() {
     }
 
-    public static void main(String[] args) {
+    public static void main(String[] args) throws IOException {
         BiomeGraphData catalog = BiomeGraphJson.loadResource(RawRuleTable.class, "/biomegraph/biome-graph.json");
         RawRuleTable table = RawRuleTable.from(catalog);
         int threads = Runtime.getRuntime().availableProcessors();
@@ -72,7 +76,7 @@ public final class MultigridSeedPrototypeRunner {
 
     private static SeedResult runSeed(
         RawRuleTable table, ToroidalGrid coarseGrid, ToroidalGrid fineGrid, ClusterSizeModel coarseModel, ClusterSizeModel fineModel, long worldSeed, int threads
-    ) {
+    ) throws IOException {
         System.out.println();
         System.out.println("SEED " + worldSeed);
         long coarseStart = System.nanoTime();
@@ -98,14 +102,103 @@ public final class MultigridSeedPrototypeRunner {
     private static void exportPictures(
         RawRuleTable table, ToroidalGrid coarseGrid, ToroidalGrid fineGrid, long worldSeed, Map<ToroidalPos, BiomeId> coarsePattern, Map<ToroidalPos, BiomeId> seed,
         Map<ToroidalPos, BiomeId> refined
-    ) {
+    ) throws IOException {
         List<BiomeId> colorOrder = table.allBiomeIds();
         ToroidalPatternPngExporter.export(coarseGrid, coarsePattern, colorOrder, OUTPUT_DIRECTORY.resolve("seed-" + worldSeed + "-1-coarse.png"));
         ToroidalPatternPngExporter.export(fineGrid, seed, colorOrder, OUTPUT_DIRECTORY.resolve("seed-" + worldSeed + "-2-seeded.png"));
         if (refined != null) {
-            ToroidalPatternPngExporter.export(fineGrid, refined, colorOrder, OUTPUT_DIRECTORY.resolve("seed-" + worldSeed + "-3-refined.png"));
+            Path refinedPicture = OUTPUT_DIRECTORY.resolve("seed-" + worldSeed + "-3-refined.png");
+            ToroidalPatternPngExporter.export(fineGrid, refined, colorOrder, refinedPicture);
+            exportBeachZoom(fineGrid, refined, refinedPicture, worldSeed);
         }
         System.out.println("  pictures written to " + OUTPUT_DIRECTORY.toAbsolutePath());
+    }
+
+    /** Zooms on beach's own tightest (non-wraparound) cluster in the refined picture, so its real shape can be inspected directly. */
+    private static void exportBeachZoom(ToroidalGrid fineGrid, Map<ToroidalPos, BiomeId> refined, Path refinedPicture, long worldSeed) throws IOException {
+        List<List<ToroidalPos>> beachClusters = beachClustersOf(fineGrid, refined);
+        List<ToroidalPos> tightest = tightestBoundingBoxCluster(beachClusters);
+        if (tightest == null) {
+            System.out.println("  no beach cluster found to zoom on");
+            return;
+        }
+        Path crop = OUTPUT_DIRECTORY.resolve("seed-" + worldSeed + "-4-beach-zoom.png");
+        exportCrop(refinedPicture, tightest, crop);
+        System.out.println("  beach zoom (" + tightest.size() + " cells) written to " + crop.toAbsolutePath());
+    }
+
+    private static List<List<ToroidalPos>> beachClustersOf(ToroidalGrid grid, Map<ToroidalPos, BiomeId> pattern) {
+        PatternClusters clusters = PatternClusters.of(grid, pattern);
+        int[] clusterOfCell = clusters.clusterOfCell();
+        BiomeId[] biomeOfCluster = new BiomeId[clusters.clusterCount()];
+        List<List<ToroidalPos>> cellsOfCluster = new ArrayList<>();
+        for (int cluster = 0; cluster < clusters.clusterCount(); cluster++) {
+            cellsOfCluster.add(new ArrayList<>());
+        }
+        for (ToroidalPos pos : grid.allPositionsInFillOrder()) {
+            int cell = pos.r() * grid.width() + pos.q();
+            int cluster = clusterOfCell[cell];
+            biomeOfCluster[cluster] = pattern.get(pos);
+            cellsOfCluster.get(cluster).add(pos);
+        }
+        List<List<ToroidalPos>> beachClusters = new ArrayList<>();
+        for (int cluster = 0; cluster < clusters.clusterCount(); cluster++) {
+            if (BEACH.equals(biomeOfCluster[cluster])) {
+                beachClusters.add(cellsOfCluster.get(cluster));
+            }
+        }
+        return beachClusters;
+    }
+
+    /** Whichever cluster's naive pixel bounding box is smallest, since a cluster that wraps the periodic tile's edge is drawn as several disconnected pieces far apart on the flat canvas. */
+    private static List<ToroidalPos> tightestBoundingBoxCluster(List<List<ToroidalPos>> clusters) {
+        List<ToroidalPos> tightest = null;
+        long smallestArea = Long.MAX_VALUE;
+        for (List<ToroidalPos> cluster : clusters) {
+            long area = boundingBoxArea(cluster);
+            if (area < smallestArea) {
+                smallestArea = area;
+                tightest = cluster;
+            }
+        }
+        return tightest;
+    }
+
+    private static long boundingBoxArea(List<ToroidalPos> cluster) {
+        int[] bounds = pixelBounds(cluster);
+        return (long) (bounds[1] - bounds[0]) * (bounds[3] - bounds[2]);
+    }
+
+    /** {left, right, top, bottom} pixel bounds of {@code cluster}'s own hexagon centers. */
+    private static int[] pixelBounds(List<ToroidalPos> cluster) {
+        int left = Integer.MAX_VALUE;
+        int right = Integer.MIN_VALUE;
+        int top = Integer.MAX_VALUE;
+        int bottom = Integer.MIN_VALUE;
+        for (ToroidalPos pos : cluster) {
+            int x = ToroidalPatternPngExporter.centerXOf(pos);
+            int y = ToroidalPatternPngExporter.centerYOf(pos);
+            left = Math.min(left, x);
+            right = Math.max(right, x);
+            top = Math.min(top, y);
+            bottom = Math.max(bottom, y);
+        }
+        return new int[] {left, right, top, bottom};
+    }
+
+    /** Crops {@code fullPicture} down to {@code cluster}'s own pixel bounds (plus a margin), using the same hexagon-center math the full picture was drawn with. */
+    private static void exportCrop(Path fullPicture, List<ToroidalPos> cluster, Path cropPicture) throws IOException {
+        int margin = ToroidalPatternPngExporter.HEX_RADIUS_PIXELS * 3;
+        int[] bounds = pixelBounds(cluster);
+        BufferedImage full = ImageIO.read(fullPicture.toFile());
+        int cropLeft = Math.max(0, bounds[0] - margin);
+        int cropTop = Math.max(0, bounds[2] - margin);
+        int cropWidth = Math.min(full.getWidth() - cropLeft, bounds[1] - bounds[0] + 2 * margin);
+        int cropHeight = Math.min(full.getHeight() - cropTop, bounds[3] - bounds[2] + 2 * margin);
+        BufferedImage crop = full.getSubimage(cropLeft, cropTop, cropWidth, cropHeight);
+        if (!ImageIO.write(crop, "png", cropPicture.toFile())) {
+            throw new IllegalStateException("MultigridSeedPrototypeRunner: no PNG writer available for " + cropPicture);
+        }
     }
 
     /** Tries a different internal random seed (the same structural, coarse-derived seed each time) up to {@link #MAX_REFINEMENT_ATTEMPTS} times, taking the first that solves. */
