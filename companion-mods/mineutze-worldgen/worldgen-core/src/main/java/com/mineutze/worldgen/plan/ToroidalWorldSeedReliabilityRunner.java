@@ -2,6 +2,7 @@ package com.mineutze.worldgen.plan;
 
 import com.mineutze.worldgen.biomegraph.BiomeGraphData;
 import com.mineutze.worldgen.biomegraph.BiomeGraphJson;
+import com.mineutze.worldgen.biomegraph.BiomeId;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -17,9 +18,11 @@ import java.util.Map;
 import java.util.TreeMap;
 
 /**
- * The end-to-end proof that "every world seed succeeds" (2026-09-20): for many DIFFERENT world
- * seeds, against the real catalog, it (1) solves the cell pattern with the real
- * {@link ToroidalSizedPatternGenerator}, (2) chooses how hard to bend the borders with the
+ * The end-to-end proof that "every world seed succeeds" (2026-09-20, multigrid-aware 2026-09-27):
+ * for many DIFFERENT world seeds, against the real catalog, it (1) solves the cell pattern - via
+ * {@link ToroidalSizedPatternGenerator} directly, or via {@link MultigridPatternGenerator} when
+ * {@link PlanSettings#fineResolution()} is configured, the SAME branch {@link WorldBiomePlan#create}
+ * itself takes, so this keeps proving what production actually does - (2) chooses how hard to bend the borders with the
  * {@link RealizationSelector} - the strongest strength whose rendered map passes
  * {@link BiomeMapVerifier} at 4-block resolution - and records per world seed whether each step
  * worked, how many attempts and seconds it took, and which strength was chosen. Each line is
@@ -48,9 +51,12 @@ public final class ToroidalWorldSeedReliabilityRunner {
         BiomeGraphData data = args.length > 0 ? BiomeGraphJson.load(Path.of(args[0])) : BiomeGraphJson.loadResource(RawRuleTable.class, "/biomegraph/biome-graph.json");
         int ordinarySeedCount = args.length > 1 ? Integer.parseInt(args[1]) : WORLD_SEED_COUNT;
         RawRuleTable table = RawRuleTable.from(data);
-        ToroidalGrid grid = new ToroidalGrid(SETTINGS.gridSize(), SETTINGS.gridSize());
-        HexTorusGeometry geometry = new HexTorusGeometry(SETTINGS.gridSize(), SETTINGS.gridSize(), SETTINGS.atomWidthBlocks());
-        ClusterSizeModel model = new ClusterSizeModel(table, SETTINGS.atomWidthBlocks(), new ShapeRule(SETTINGS.perimeterRatio(), OFF, OFF, 2));
+        PlanSettings.FineResolution fine = SETTINGS.fineResolution();
+        int effectiveGridSize = fine != null ? fine.gridSize() : SETTINGS.gridSize();
+        double effectiveAtomWidthBlocks = fine != null ? fine.atomWidthBlocks() : SETTINGS.atomWidthBlocks();
+        ToroidalGrid grid = new ToroidalGrid(effectiveGridSize, effectiveGridSize);
+        HexTorusGeometry geometry = new HexTorusGeometry(effectiveGridSize, effectiveGridSize, effectiveAtomWidthBlocks);
+        ClusterSizeModel directModel = fine == null ? new ClusterSizeModel(table, SETTINGS.atomWidthBlocks(), new ShapeRule(SETTINGS.perimeterRatio(), OFF, OFF, 2)) : null;
         int threadCount = Runtime.getRuntime().availableProcessors();
         startCsv();
 
@@ -64,9 +70,22 @@ public final class ToroidalWorldSeedReliabilityRunner {
 
         Tally tally = new Tally();
         for (long worldSeed : worldSeeds) {
-            processWorld(worldSeed, table, grid, geometry, model, threadCount, tally);
+            processWorld(worldSeed, table, grid, geometry, directModel, threadCount, tally);
         }
-        report(tally, worldSeeds.size(), threadCount);
+        report(tally, worldSeeds.size(), threadCount, effectiveGridSize);
+    }
+
+    private record PatternOutcome(Map<ToroidalPos, BiomeId> pattern, int patternAttempts) {
+    }
+
+    /** {@code directModel} is null when {@link PlanSettings#fineResolution()} is configured - the pattern is then solved via {@link MultigridPatternGenerator} instead. */
+    private static PatternOutcome solvePattern(RawRuleTable table, ToroidalGrid grid, ClusterSizeModel directModel, long worldSeed, int threadCount) {
+        if (directModel != null) {
+            ToroidalSizedPatternGenerator.Generated generated = ToroidalSizedPatternGenerator.generate(table, grid, directModel, worldSeed, threadCount);
+            return new PatternOutcome(generated.pattern(), generated.seedIndex() + 1);
+        }
+        MultigridPatternGenerator.Generated generated = MultigridPatternGenerator.generate(table, SETTINGS, worldSeed, threadCount);
+        return new PatternOutcome(generated.pattern(), generated.coarseAttempts());
     }
 
     /** What the study has seen so far. */
@@ -83,12 +102,12 @@ public final class ToroidalWorldSeedReliabilityRunner {
     }
 
     private static void processWorld(
-        long worldSeed, RawRuleTable table, ToroidalGrid grid, HexTorusGeometry geometry, ClusterSizeModel model, int threadCount, Tally tally
+        long worldSeed, RawRuleTable table, ToroidalGrid grid, HexTorusGeometry geometry, ClusterSizeModel directModel, int threadCount, Tally tally
     ) {
         long patternStart = System.nanoTime();
-        ToroidalSizedPatternGenerator.Generated generated;
+        PatternOutcome outcome;
         try {
-            generated = ToroidalSizedPatternGenerator.generate(table, grid, model, worldSeed, threadCount);
+            outcome = solvePattern(table, grid, directModel, worldSeed, threadCount);
         } catch (IllegalStateException failure) {
             tally.patternFailures.add(worldSeed);
             record(worldSeed, "PATTERN FAILED", -1, secondsSince(patternStart), "", -1, "", failure.getMessage());
@@ -96,28 +115,28 @@ public final class ToroidalWorldSeedReliabilityRunner {
         }
         double patternSeconds = secondsSince(patternStart);
         tally.patternsSolved++;
-        tally.attemptsUsed.add(generated.seedIndex() + 1);
+        tally.attemptsUsed.add(outcome.patternAttempts());
         tally.patternSeconds.add(patternSeconds);
-        PatternCsv.write(PATTERN_DIRECTORY.resolve("pattern-" + worldSeed + ".csv"), generated.pattern());
+        PatternCsv.write(PATTERN_DIRECTORY.resolve("pattern-" + worldSeed + ".csv"), outcome.pattern());
 
         long realizationStart = System.nanoTime();
         try {
-            RealizationSelector.Selection selection = RealizationSelector.select(table, grid, generated.pattern(), geometry, worldSeed, SETTINGS);
+            RealizationSelector.Selection selection = RealizationSelector.select(table, grid, outcome.pattern(), geometry, worldSeed, SETTINGS);
             double realizationSeconds = secondsSince(realizationStart);
             tally.realized++;
             tally.realizationSeconds.add(realizationSeconds);
             tally.worldsPerStrength.merge(selection.strength(), 1, Integer::sum);
             tally.worstAbsoluteDrift = Math.max(tally.worstAbsoluteDrift, Arrays.stream(selection.report().driftRatios()).map(Math::abs).max().orElse(0));
-            record(worldSeed, "solved", generated.seedIndex() + 1, patternSeconds, String.valueOf(selection.strength()), selection.candidatesTried(), String.format(Locale.ROOT, "%.1f", realizationSeconds), "");
+            record(worldSeed, "solved", outcome.patternAttempts(), patternSeconds, String.valueOf(selection.strength()), selection.candidatesTried(), String.format(Locale.ROOT, "%.1f", realizationSeconds), "");
         } catch (IllegalStateException failure) {
             tally.realizationFailures.add(worldSeed);
-            record(worldSeed, "REALIZATION FAILED", generated.seedIndex() + 1, patternSeconds, "", -1, String.format(Locale.ROOT, "%.1f", secondsSince(realizationStart)), failure.getMessage());
+            record(worldSeed, "REALIZATION FAILED", outcome.patternAttempts(), patternSeconds, "", -1, String.format(Locale.ROOT, "%.1f", secondsSince(realizationStart)), failure.getMessage());
         }
     }
 
-    private static void report(Tally tally, int worldCount, int threadCount) {
+    private static void report(Tally tally, int worldCount, int threadCount, int effectiveGridSize) {
         System.out.println("WORLDS " + tally.patternsSolved + " of " + worldCount + " world seeds produced a verified PATTERN, and " + tally.realized + " of " + worldCount
-            + " a verified REALIZED MAP (" + SETTINGS.gridSize() + "x" + SETTINGS.gridSize() + ", perimeter ratio " + SETTINGS.perimeterRatio() + ", " + threadCount + " threads; up to " + ToroidalSizedPatternGenerator.DEFAULT_MAX_SEEDS
+            + " a verified REALIZED MAP (" + effectiveGridSize + "x" + effectiveGridSize + ", perimeter ratio " + SETTINGS.perimeterRatio() + ", " + threadCount + " threads; up to " + ToroidalSizedPatternGenerator.DEFAULT_MAX_SEEDS
             + " pattern attempts of " + String.format(Locale.ROOT, "%,d", ToroidalSizedPatternGenerator.DEFAULT_STEPS_PER_SEED) + " steps; map checked at " + SETTINGS.rasterSamplesPerSide() + "x" + SETTINGS.rasterSamplesPerSide()
             + " samples, size tolerance " + (int) (100 * SETTINGS.sizeToleranceOfMinimum()) + "% of the minimum)");
         if (!tally.patternFailures.isEmpty()) {

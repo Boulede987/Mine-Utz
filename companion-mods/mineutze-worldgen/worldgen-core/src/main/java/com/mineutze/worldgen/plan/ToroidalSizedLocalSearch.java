@@ -37,13 +37,13 @@ import java.util.function.BooleanSupplier;
  */
 final class ToroidalSizedLocalSearch {
 
-    private static final int MISSING_BIOME_COST = 4;
-    private static final double NUCLEATION_PROBABILITY = 0.02;
-    private static final double MISSING_NUCLEATION_SHARE = 0.5;
-    private static final int BEST_TRACKING_INTERVAL_STEPS = 1024;
-    private static final int ACCEPTANCE_TABLE_SIZE = 64;
-    private static final int SCHEDULE_LEVELS = 16;
-    private static final double FOCUS_PROBABILITY = 0.3;
+    static final int MISSING_BIOME_COST = 4;
+    static final double NUCLEATION_PROBABILITY = 0.02;
+    static final double MISSING_NUCLEATION_SHARE = 0.5;
+    static final int BEST_TRACKING_INTERVAL_STEPS = 1024;
+    static final int ACCEPTANCE_TABLE_SIZE = 64;
+    static final int SCHEDULE_LEVELS = 16;
+    static final double FOCUS_PROBABILITY = 0.3;
     static final double DEFAULT_RELABEL_PROBABILITY = 0.02;
 
     static final double DEFAULT_TEMPERATURE = 0.5;
@@ -93,6 +93,21 @@ final class ToroidalSizedLocalSearch {
             throw new IllegalArgumentException("ToroidalSizedLocalSearch: relabelProbability must be within 0..1, got " + relabelProbability);
         }
         return new Search(table, grid, model, new Random(randomSeed), schedule, shouldStop, relabelProbability).run(maxSteps);
+    }
+
+    /**
+     * As {@link #search(RawRuleTable, ToroidalGrid, ClusterSizeModel, long, long, Schedule, BooleanSupplier, double)}, but starting from
+     * {@code initialAssignment} (which must cover every cell with a known biome) instead of a random Voronoi partition - for a search that
+     * already has a good starting point (a coarser-resolution solve upsampled to this grid, say) and only needs to refine it.
+     */
+    static Result searchFromSeed(
+        RawRuleTable table, ToroidalGrid grid, ClusterSizeModel model, long randomSeed, Map<ToroidalPos, BiomeId> initialAssignment, long maxSteps, Schedule schedule,
+        BooleanSupplier shouldStop, double relabelProbability
+    ) {
+        if (relabelProbability < 0.0 || relabelProbability > 1.0) {
+            throw new IllegalArgumentException("ToroidalSizedLocalSearch: relabelProbability must be within 0..1, got " + relabelProbability);
+        }
+        return new Search(table, grid, model, new Random(randomSeed), schedule, shouldStop, relabelProbability).run(maxSteps, initialAssignment);
     }
 
     /**
@@ -204,7 +219,7 @@ final class ToroidalSizedLocalSearch {
                 continue;
             }
             ExploredCluster cluster = exploreCluster(grid, assignment, start, visited);
-            int thinCells = thinCellsOf(grid, model, cluster.cells());
+            int thinCells = thinCellsOf(grid, model, cluster.biome(), cluster.cells());
             int borderShortfall = borderShortfallOf(table, cluster.biome(), cluster.edgesToBiome());
             clusterViolation += model.violation(cluster.biome(), cluster.cells().size(), thinCells, cluster.perimeter(), borderShortfall);
         }
@@ -227,9 +242,9 @@ final class ToroidalSizedLocalSearch {
     }
 
     /** Independent, set-based count of a cluster's thin cells (see {@link ShapeRule.Thickness}) - shares nothing with the search's array version. */
-    private static int thinCellsOf(ToroidalGrid grid, ClusterSizeModel model, Set<ToroidalPos> cluster) {
-        int tailReachCells = model.shape().tailReachCells();
-        switch (model.shape().thicknessRequiredFor(cluster.size())) {
+    private static int thinCellsOf(ToroidalGrid grid, ClusterSizeModel model, BiomeId biome, Set<ToroidalPos> cluster) {
+        int tailReachCells = model.shape(biome).tailReachCells();
+        switch (model.shape(biome).thicknessRequiredFor(cluster.size())) {
             case NONE:
                 return 0;
             case TRIANGLE:
@@ -396,6 +411,16 @@ final class ToroidalSizedLocalSearch {
 
         Result run(long maxSteps) {
             initializeFromRandomVoronoi();
+            return runFrom(maxSteps);
+        }
+
+        /** As {@link #run(long)}, but starting from {@code initialAssignment} instead of a random Voronoi partition. */
+        Result run(long maxSteps, Map<ToroidalPos, BiomeId> initialAssignment) {
+            initializeFrom(initialAssignment);
+            return runFrom(maxSteps);
+        }
+
+        private Result runFrom(long maxSteps) {
             cost = fullCost();
             int bestCost = cost;
             int[] bestValue = value.clone();
@@ -519,6 +544,35 @@ final class ToroidalSizedLocalSearch {
             for (int cell = 0; cell < cellCount; cell++) {
                 assignNearestSeedBiome(shuffledCells, seedBiome, seedCount, cell);
             }
+            recomputeUsesAndMissing();
+        }
+
+        /** Sets {@code value[]} from {@code assignment} directly - every cell must be covered, every biome named must be one of {@code table}'s. */
+        private void initializeFrom(Map<ToroidalPos, BiomeId> assignment) {
+            if (assignment.size() != cellCount) {
+                throw new IllegalArgumentException("ToroidalSizedLocalSearch: initial assignment covers " + assignment.size() + " of " + cellCount + " cells");
+            }
+            for (int cell = 0; cell < cellCount; cell++) {
+                assignSeededCell(assignment, cell);
+            }
+            recomputeUsesAndMissing();
+        }
+
+        private void assignSeededCell(Map<ToroidalPos, BiomeId> assignment, int cell) {
+            ToroidalPos position = positions.get(cell);
+            BiomeId biome = assignment.get(position);
+            if (biome == null) {
+                throw new IllegalArgumentException("ToroidalSizedLocalSearch: initial assignment has no biome for " + position);
+            }
+            int index = biomes.indexOf(biome);
+            if (index < 0) {
+                throw new IllegalArgumentException("ToroidalSizedLocalSearch: initial assignment names " + biome + " at " + position + ", which is not in the catalog");
+            }
+            value[cell] = index;
+        }
+
+        /** Recomputes {@code usesOfBiome}/{@code missingBiomes} from {@code value[]} - shared by every way of seeding it. */
+        private void recomputeUsesAndMissing() {
             for (int biome = 0; biome < biomeCount; biome++) {
                 usesOfBiome[biome] = 0;
             }
@@ -894,7 +948,7 @@ final class ToroidalSizedLocalSearch {
             exploredSize = tail;
             exploredPerimeter = perimeter;
             exploredBorderShortfall = countsBorders ? borderShortfallOfExploredCluster(biome) : 0;
-            exploredThinCells = switch (model.shape().thicknessRequiredFor(tail)) {
+            exploredThinCells = switch (model.shape(biome).thicknessRequiredFor(tail)) {
                 case NONE -> 0;
                 case TRIANGLE -> countCellsOutsideAnyTriangle(biome, tail);
                 case FLOWER -> countCellsBeyondReachOfAFlower(biome, tail);
@@ -961,7 +1015,7 @@ final class ToroidalSizedLocalSearch {
                     reachQueue[tail++] = cell;
                 }
             }
-            int reach = model.shape().tailReachCells();
+            int reach = model.shape(biome).tailReachCells();
             while (head < tail) {
                 int cell = reachQueue[head++];
                 if (reachDistance[cell] == reach) {

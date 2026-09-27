@@ -53,6 +53,34 @@ tasks.register('graphEditorSolveCheck', JavaExec) {
     mainClass = 'com.mineutze.worldgen.tooling.graphedit.GraphEditorSolveCheck'
 }
 
+tasks.register('thinBeachShapeExperiment', JavaExec) {
+    group = 'verification'
+    description = 'Prototype: solves the real catalog with and without a per-biome perimeter FLOOR on beach (forcing elongation instead of merely permitting it) and reports the shape difference, with pictures, to build/thin-beach-shape. Run with: ./gradlew :worldgen-core:thinBeachShapeExperiment'
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'com.mineutze.worldgen.plan.ThinBeachShapeExperimentRunner'
+}
+
+tasks.register('calibrationReport', JavaExec) {
+    group = 'verification'
+    description = 'Instant (no world solving): prints which tuning constants are validated together, against what catalog, by which of the other verification tasks, and whether that is still true right now - see calibration-manifest.json. Run with: ./gradlew :worldgen-core:calibrationReport'
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'com.mineutze.worldgen.plan.CalibrationReportRunner'
+}
+
+tasks.register('atomWidthResolutionProbe', JavaExec) {
+    group = 'verification'
+    description = 'Bounded probe (minutes, not the full reliability study): does the identity+size search still converge reasonably at gridSize=120/atomWidthBlocks=100 (9x production cell count, same tile size) with TODAY\'S schedule unchanged? Does not touch production settings. Run with: ./gradlew :worldgen-core:atomWidthResolutionProbe'
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'com.mineutze.worldgen.plan.AtomWidthResolutionProbeRunner'
+}
+
+tasks.register('multigridSeedPrototype', JavaExec) {
+    group = 'verification'
+    description = 'Solves at production scale (40x40/300 blocks), upsamples that solution to seed the fine 120x120/100-block grid instead of a random Voronoi start, then refines - tests whether coarse-then-fine avoids the diffusive-propagation plateau simple tuning hit. Run with: ./gradlew :worldgen-core:multigridSeedPrototype'
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'com.mineutze.worldgen.plan.MultigridSeedPrototypeRunner'
+}
+
 repositories {
     mavenCentral()
 }

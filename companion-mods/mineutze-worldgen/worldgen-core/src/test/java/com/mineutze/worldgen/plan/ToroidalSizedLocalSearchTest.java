@@ -211,6 +211,39 @@ class ToroidalSizedLocalSearchTest {
         assertEquals(0, ToroidalSizedLocalSearch.cost(table, grid, model(table), threeColoring(grid, A, B, C)));
     }
 
+    /** searchFromSeed's whole point: starting already valid needs no steps at all - cost is 0 before the loop even runs once. */
+    @Test
+    void searchFromSeedStartingAlreadyValidSolvesImmediately() {
+        ToroidalGrid grid = new ToroidalGrid(6, 6);
+        RawRuleTable table = singleCellClusterTable();
+        Map<ToroidalPos, BiomeId> validAssignment = threeColoring(grid, A, B, C);
+
+        ToroidalSizedLocalSearch.Result result = ToroidalSizedLocalSearch.searchFromSeed(
+            table, grid, model(table), SEED, validAssignment, GENEROUS_STEPS, ToroidalSizedLocalSearch.Schedule.constant(0.5), () -> false,
+            ToroidalSizedLocalSearch.DEFAULT_RELABEL_PROBABILITY
+        );
+
+        assertEquals(validAssignment, result.assignment());
+        assertEquals(0, result.bestCost());
+        assertEquals(0, result.steps());
+    }
+
+    @Test
+    void searchFromSeedRejectsAnAssignmentMissingCells() {
+        ToroidalGrid grid = new ToroidalGrid(6, 6);
+        RawRuleTable table = singleCellClusterTable();
+        Map<ToroidalPos, BiomeId> incomplete = new LinkedHashMap<>(threeColoring(grid, A, B, C));
+        incomplete.remove(new ToroidalPos(0, 0));
+
+        assertThrows(
+            IllegalArgumentException.class,
+            () -> ToroidalSizedLocalSearch.searchFromSeed(
+                table, grid, model(table), SEED, incomplete, GENEROUS_STEPS, ToroidalSizedLocalSearch.Schedule.constant(0.5), () -> false,
+                ToroidalSizedLocalSearch.DEFAULT_RELABEL_PROBABILITY
+            )
+        );
+    }
+
     @Test
     void searchSolvesASmallInstanceWithMultiCellClusters() {
         ToroidalGrid grid = new ToroidalGrid(6, 6);
@@ -270,6 +303,24 @@ class ToroidalSizedLocalSearchTest {
 
         assertNotNull(result.assignment(), "a compact 8-cell blob inside a 100-cell torus exists");
         assertDoesNotThrow(() -> ToroidalSizedLocalSearch.verify(table, grid, strict, result.assignment()));
+    }
+
+    /**
+     * The mirror of the test above: A is pinned to exactly 8 cells and a 1.5x PERIMETER FLOOR (no ceiling) demands at
+     * least 30 edges - the compact flower+1 shape (perimeter 20) no longer qualifies, only a genuinely elongated one
+     * does (a straight line of 8 has perimeter 34). Proves the floor is a real end-to-end guarantee the search must
+     * satisfy, not just a unit-level formula.
+     */
+    @Test
+    void searchFindsAnElongatedShapeWhenAPerimeterFloorBinds() {
+        ToroidalGrid grid = new ToroidalGrid(10, 10);
+        RawRuleTable table = legalPairWithSizes(A, 848, 849, B, 300, 3000);
+        ClusterSizeModel floored = new ClusterSizeModel(table, ATOM_WIDTH, new ShapeRule(ShapeRule.NO_PERIMETER_LIMIT, 1.5, Integer.MAX_VALUE, Integer.MAX_VALUE, 2));
+
+        ToroidalSizedLocalSearch.Result result = ToroidalSizedLocalSearch.search(table, grid, floored, SEED, GENEROUS_STEPS);
+
+        assertNotNull(result.assignment(), "an elongated 8-cell shape inside a 100-cell torus exists");
+        assertDoesNotThrow(() -> ToroidalSizedLocalSearch.verify(table, grid, floored, result.assignment()));
     }
 
     /** Only A-B is legal, so a 3-coloring on 6x6 has 36 edges of each kind: A|B fine, A|C and B|C illegal. */

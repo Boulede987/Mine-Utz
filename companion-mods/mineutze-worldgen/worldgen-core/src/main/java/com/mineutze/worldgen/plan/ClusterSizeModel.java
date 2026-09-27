@@ -5,6 +5,7 @@ import com.mineutze.worldgen.biomegraph.BiomeId;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * What a valid cluster of same-biome cells looks like when the grid's cells are small "atoms"
@@ -15,7 +16,9 @@ import java.util.Map;
  * DOWN; a range that contains no whole atom count is rejected outright, because no cluster
  * could ever satisfy it at this atom size.
  *
- * <p>What shape a cluster may take (irregular yes, thin snakes no) is a {@link ShapeRule}.
+ * <p>What shape a cluster may take (irregular yes, thin snakes no - unless the biome's own profile
+ * asks for elongation instead) is a {@link ShapeRule}, one per biome (a shared default, with
+ * per-biome overrides).
  *
  * <p>A biome may also REQUIRE borders (a {@link ResolvedBorderRequirement}): every cluster of it must
  * share at least N cell-edges with a group of biomes, alone or combined with "and" / "or" (a beach
@@ -35,14 +38,29 @@ final class ClusterSizeModel {
     private final int[] minCells;
     private final int[] maxCells;
     private final CompiledRequirement[] requirements;
-    private final ShapeRule shape;
+    private final ShapeRule[] shapeByBiomeIndex;
 
-    ClusterSizeModel(RawRuleTable table, double atomWidthBlocks, ShapeRule shape) {
+    /** Every biome gets {@code defaultShape}; see the other constructor for per-biome shape profiles (a beach that must stay elongated, say). */
+    ClusterSizeModel(RawRuleTable table, double atomWidthBlocks, ShapeRule defaultShape) {
+        this(table, atomWidthBlocks, defaultShape, Map.of());
+    }
+
+    /** {@code shapeOverrides} replaces {@code defaultShape} for the named biomes only; every name in it must be a real biome of {@code table}. */
+    ClusterSizeModel(RawRuleTable table, double atomWidthBlocks, ShapeRule defaultShape, Map<BiomeId, ShapeRule> shapeOverrides) {
         if (atomWidthBlocks <= 0) {
             throw new IllegalArgumentException("ClusterSizeModel: atomWidthBlocks must be positive, got " + atomWidthBlocks);
         }
         this.biomes = table.allBiomeIds();
-        this.shape = shape;
+        Set<BiomeId> knownBiomes = Set.copyOf(biomes);
+        for (BiomeId overridden : shapeOverrides.keySet()) {
+            if (!knownBiomes.contains(overridden)) {
+                throw new IllegalArgumentException("ClusterSizeModel: shape override names " + overridden + ", which is not in the catalog");
+            }
+        }
+        this.shapeByBiomeIndex = new ShapeRule[biomes.size()];
+        for (int index = 0; index < biomes.size(); index++) {
+            shapeByBiomeIndex[index] = shapeOverrides.getOrDefault(biomes.get(index), defaultShape);
+        }
         this.minCells = new int[biomes.size()];
         this.maxCells = new int[biomes.size()];
         this.requirements = new CompiledRequirement[biomes.size()];
@@ -116,7 +134,7 @@ final class ClusterSizeModel {
                 ? "'" + share.subject() + "' holds no biome"
                 : (share.subject().contains(":") ? share.subject() + " is not" : "none of the biomes of '" + share.subject() + "' is") + " a legal neighbor of " + biome;
         }
-        int largestOutline = Math.min(STRAIGHT_LINE_OUTLINE_PER_CELL * biomeMaxCells + STRAIGHT_LINE_OUTLINE_EXTRA, shape.allowedPerimeter(biomeMaxCells));
+        int largestOutline = Math.min(STRAIGHT_LINE_OUTLINE_PER_CELL * biomeMaxCells + STRAIGHT_LINE_OUTLINE_EXTRA, shapeByBiomeIndex[indexOf.get(biome)].allowedPerimeter(biomeMaxCells));
         if (share.minEdges() > largestOutline) {
             return share.minEdges() + " shared edges with '" + share.subject() + "' are asked for, but a cluster of at most " + biomeMaxCells + " cells has at most "
                 + largestOutline + " outline edges under the shape rule";
@@ -191,8 +209,12 @@ final class ClusterSizeModel {
         return maxCells[indexOf.get(biome)];
     }
 
-    ShapeRule shape() {
-        return shape;
+    ShapeRule shape(int biomeIndex) {
+        return shapeByBiomeIndex[biomeIndex];
+    }
+
+    ShapeRule shape(BiomeId biome) {
+        return shape(indexOf.get(biome));
     }
 
     /**
@@ -205,9 +227,11 @@ final class ClusterSizeModel {
 
     /** As {@link #violation(BiomeId, int, int, int, int)}, by the biome's position in the rule table's biome list - what the search's hot loop uses. */
     int violation(int biomeIndex, int cellCount, int thinCells, int perimeter, int borderShortfall) {
+        ShapeRule shape = shapeByBiomeIndex[biomeIndex];
         int outsideRange = Math.max(0, minCells[biomeIndex] - cellCount) + Math.max(0, cellCount - maxCells[biomeIndex]);
         int beyondPerimeterLimit = Math.max(0, perimeter - shape.allowedPerimeter(cellCount));
-        return outsideRange + thinCells + beyondPerimeterLimit + borderShortfall;
+        int belowPerimeterFloor = Math.max(0, shape.requiredMinimumPerimeter(cellCount) - perimeter);
+        return outsideRange + thinCells + beyondPerimeterLimit + belowPerimeterFloor + borderShortfall;
     }
 
     boolean hasRequirement(int biomeIndex) {

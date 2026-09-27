@@ -8,6 +8,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Random;
 import java.util.Set;
@@ -27,6 +28,11 @@ class WorldBiomePlanTest {
 
     private static final BiomeGraphData CATALOG = fullyLegalCatalog(500, 700, A, B, C);
     private static final PlanSettings SMALL = new PlanSettings(8, 300, 1.3, new double[] {20, 0}, 208, 0.10, 3_000_000, 60, ToroidalSizedPatternGenerator.DEFAULT_SCHEDULE);
+    /** Coarse 8x8@300 (same as SMALL, already proven to solve) upsampled x2 into a fine 16x16@150 grid - proves the multigrid branch actually takes effect, not just that it compiles. */
+    private static final PlanSettings WITH_FINE_RESOLUTION = new PlanSettings(
+        8, 300, 1.3, new double[] {20, 0}, 208, 0.10, 3_000_000, 60, ToroidalSizedPatternGenerator.DEFAULT_SCHEDULE,
+        new PlanSettings.FineResolution(16, 150, 3_000_000L, 20, ToroidalSizedPatternGenerator.DEFAULT_SCHEDULE, Map.of())
+    );
 
     private static WorldBiomePlan plan(long worldSeed) {
         return WorldBiomePlan.create(CATALOG, worldSeed, 2, message -> { }, SMALL);
@@ -270,6 +276,17 @@ class WorldBiomePlanTest {
         BlockPosition found = plan.nearestPositionOf(B, 0, 0).orElseThrow();
 
         assertEquals(expected, Math.hypot(found.x(), found.z()), 1.5);
+    }
+
+    @Test
+    void aFineResolutionProducesAPlanAtTheFineGridNotTheCoarseOne() {
+        WorldBiomePlan plan = WorldBiomePlan.create(CATALOG, 20L, 2, message -> { }, WITH_FINE_RESOLUTION);
+        PlanSnapshot snapshot = plan.toSnapshot();
+
+        assertEquals(16, snapshot.gridWidth());
+        assertEquals(16, snapshot.gridHeight());
+        assertEquals(150.0, snapshot.atomWidthBlocks());
+        assertEquals(List.of(A, B, C), plan.biomes());
     }
 
     @Test

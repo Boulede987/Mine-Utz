@@ -1,5 +1,184 @@
 # Decisions
 
+Current tuning validity - which constants are validated together, against what, and whether that
+still holds right now - lives in `worldgen-core/src/main/resources/calibration/calibration-manifest.json`;
+run `./gradlew :worldgen-core:calibrationReport` to read it, or `./gradlew :worldgen-core:test` to
+enforce it (`CalibrationManifestTest` fails loud on drift). This log stays the history (context,
+alternatives considered, evidence at the time) - it does not track current validity on its own.
+
+## 2026-09-27 — Multigrid + beach shape floor wired into live world generation
+
+**Context:** The three entries below this one built and validated coarse-to-fine multigrid seeding
+(prototype only, `MultigridSeedPrototypeRunner`) and a real beach shape floor, on 5 world seeds. This
+entry makes it the real thing `WorldBiomePlan.create` runs for every world - production code, not a
+prototype - per explicit user instruction.
+
+**Decision:** `PlanSettings` gains a nested `FineResolution` record and one new field
+(`fineResolution`), backward-compatibly - the existing 9-arg constructor becomes a convenience
+overload passing `fineResolution = null` (no fine stage, solve directly, byte-for-byte today's
+behavior; every existing test's `new PlanSettings(...)` call keeps compiling and behaving
+identically). `PlanSettings.DEFAULT` gets a real, populated `FineResolution`: fine grid 120x120 at
+100 blocks, 20,000,000 refinement steps per attempt, up to 5 attempts, schedule cycleSteps 9,000,000,
+beach's `minPerimeterRatio` at 1.5. New class `MultigridPatternGenerator` generalizes the prototype's
+already-proven logic (coarse solve via unmodified `ToroidalSizedPatternGenerator`, upsample, refine
+with retries) with real validation (fail loud if the fine/coarse grid ratio isn't a whole, equal
+multiple on both axes) instead of hardcoded constants. `WorldBiomePlan.create` branches once on
+`settings.fineResolution()`; the rest of the pipeline (`RealizationSelector`, rasterizing) is
+unchanged either way, and only ever sees "a grid, a geometry, a solved pattern." `WorldBiomePlan
+.requireCatalogAcceptable` (the editor's live check) now also validates the fine model's shape floor
+feasibility when configured. `ToroidalWorldSeedReliabilityRunner` updated to take the SAME branch as
+production (it was solving directly before; its own doc claims "same numbers `WorldBiomePlan#create`
+solves a real world with" - that would have gone stale otherwise). Calibration manifest gets a third
+group, `multigrid-refinement`, tracking the new settings, explicitly `verifiedByGradleTasks:
+["multigridSeedPrototype"]` only - not `toroidalWorldSeedReliability` yet, see below.
+
+**Evidence:** Full test suite (372 tests) passes unchanged, proving the `fineResolution == null` path
+is truly untouched. Real end-to-end run through the actual production entry point
+(`worldBiomePlanCheck`, real 66-biome catalog, world seed 1094): progress log correctly shows "120x120
+cells (coarse 40x40 then refined)"; solved coarse attempt 1, fine refinement attempt 1; whole plan
+(solve + render + verify) created in 29.8s - comparable to or faster than the prior ~32s at the OLD
+resolution alone; 2,000,000 random lookups, 0 mismatches, 39.7M lookups/second; snapshot round-trip
+clean; all 66 biomes findable via `nearestPositionOf`; coarse-stage cross-process reproducibility
+unchanged (0 of 1,600 cells differ from a previously-saved study pattern).
+
+**Known gap, not fixed here:** `ClusterSizeModel` still does not validate at construction time
+whether a per-biome shape floor is even achievable given that biome's own min-cell-count (flagged in
+the 2026-09-26 shape-floor commit and `ThinBeachShapeExperimentRunner`'s own doc, still true) - a
+misconfigured floor only fails at world-creation time via `MultigridPatternGenerator`'s
+exhausted-attempts exception, not earlier.
+
+**Real, un-glossed-over follow-up needed before this is trusted as much as the coarse-only settings
+were**: only 5 world seeds have been tested end to end (42, 1094, 20260920, -7311, 424242), not the
+~104-seed bar `identity-and-size-search`'s own entry rests on. Run
+`./gradlew :worldgen-core:toroidalWorldSeedReliability` at real scale (now exercising the real
+multigrid path) before treating this with the same confidence.
+
+## 2026-09-27 — Coarse-to-fine multigrid seeding solves the 9x-cell-count plateau
+
+**Context:** The entry below this one diagnosed why `atomWidthBlocks=100` (9x production's cell
+count) plateaus under simple tuning: a single-cell-flip move propagates corrections diffusively, and
+diffusive equilibration scales with total area, not the sqrt-of-area growth in cluster perimeter a
+naive estimate predicts. `gridSize`/`atomWidthBlocks` were chosen (120/100 vs production's 40/300) so
+that a 3x3 block of fine cells is EXACTLY one coarse cell at production's own proven settings - the
+coarse solve is not a new mechanism, it is today's production solve, unmodified.
+
+**Decision:** Solve at production scale first (`ToroidalSizedPatternGenerator.generate`, unmodified),
+upsample that solution into a seed for the fine grid (each fine cell inherits its 3x3 coarse parent's
+biome), then refine at fine resolution starting FROM that seed instead of a random Voronoi partition.
+Required one real, additive change to the production search class: `ToroidalSizedLocalSearch` gained
+`searchFromSeed`/`Search.run(long, Map)`/`initializeFrom` (mirroring the existing random-Voronoi
+entry point exactly, sharing its `recomputeUsesAndMissing` bookkeeping - see
+`ToroidalSizedLocalSearchTest.searchFromSeedStartingAlreadyValidSolvesImmediately` for the smallest
+unit-level proof). No existing call site changed.
+
+**Evidence:** `MultigridSeedPrototypeRunner` (gradle task `multigridSeedPrototype`), real catalog,
+world seed 1094: coarse solve 8.2s, seeded (pre-refinement) cost 2215, refined to **cost 0 (fully
+SOLVED)** in 2,179,884 of a 20,000,000-step budget, 3.1s. Total ~11.3s - inside the 5-8 minute
+world-creation budget with enormous headroom, comparable to production's OWN current solve time at
+1,600 cells. Every random-Voronoi baseline in the entry below (up to 320,000,000 steps, 529.8s) never
+reached 0 at all.
+
+**A prediction that was wrong in a specific, informative way:** expected the seeded cost to already
+be near zero (adjacency/size inherited correctly from the coarse solve, only shape needing fixing).
+Measured seeded cost (2215) was comparable in magnitude to a random-Voronoi start after just 5,000,000
+steps (2159) - not dramatically lower. What actually differs is not the starting SCALAR cost but the
+starting STRUCTURE: this 2215-cost seeded state refined to 0 in 2.18M further steps, while a
+random-Voronoi state at a similar cost level never reached 0 even after 60x more steps than that on
+top. The coarse solve gives the fine search a globally-correct topology (which cluster owns which
+region) to refine locally, rather than a globally-uncommitted state needing grid-wide propagation to
+even decide that - a structural property the raw cost number doesn't expose, only the refinement
+behavior does.
+
+**Follow-up across 5 world seeds** (42, 1094, 20260920, -7311, 424242 - the same set used throughout
+this investigation): 5 of 5 fully solved. One seed (-7311) exposed a real, separate finding: its
+first refinement attempt plateaued at cost 4 and was completely UNMOVED by doubling the step budget
+(20,000,000 -> 40,000,000, identical cost 4 both times) - a local trap for that one random walk, not
+a global slowdown. Confirmed directly: three different internal random seeds (same structural,
+coarse-derived seed) were tried against that same trapped state - two of the three solved outright
+(one in 3.7s), only the original one was stuck. Fix, made permanent in the runner: refinement now
+retries with a different internal random seed (same coarse-derived structural seed) up to 5 times,
+taking the first that solves - the exact "try several independent attempts, take whichever solves
+first" mechanism production already uses at the coarse level (`ParallelSeedSearch`), just applied one
+level deeper. With retries: seed -7311 solved on attempt 2 (29.9s). Total wall time across all 5
+seeds averaged 28.3s per world (worst case 53.2s, seed -7311's two attempts) - comfortably inside the
+5-8 minute budget with a full order of magnitude of headroom.
+
+**The original goal, delivered:** wired a real perimeter floor (`minPerimeterRatio` 1.5x) onto beach
+in the FINE model only (coarse stays untouched, matching "coarse is unmodified production"). Beach's
+real declared range (300-700 blocks) already gives 9-49 cells at this finer 100-block atom - unlike
+`ThinBeachShapeExperimentRunner`'s earlier attempt at production's 300-block atom (where beach's own
+1-cell minimum had zero shape freedom at all), no catalog change was needed this time. Ratio 1.5 is
+safe up to beach's own tightest case (9 cells, max achievable ~1.727) with real margin. All 5 world
+seeds still solved with the floor active (same 28.3s average, same -7311 two-attempt pattern - the
+floor did not change the reliability profile). Visually confirmed on two seeds (1094: 31-cell winding
+two-lobe cluster with a pinched neck; 424242: a genuinely thin, snaking cluster hugging a border) -
+a real, qualitative change from the unfloored 22-cell round blob first measured. Pictures in
+`build/multigrid-seed-prototype/seed-<world seed>-4-beach-zoom.png`.
+
+**Not yet done:** not tested at the ~104-seed reliability scale; not wired into production
+(`PlanSettings`/`WorldBiomePlan` untouched); the other two candidate directions (local-patch move,
+region-based divide-and-conquer) in `doc/TODO.md` are now most likely moot given this result, but not
+removed from the TODO without the user's own call.
+
+## 2026-09-27 — Lowering atomWidthBlocks to 100 needs real algorithm work, not simple re-tuning
+
+**Context:** Beach's shape-floor mechanism (`ShapeRule.minPerimeterRatio`, 2026-09-26) is blocked by
+beach's own declared minimum (300 blocks = exactly 1 cell at production's `atomWidthBlocks=300`)
+having zero shape freedom - a single hexagon's perimeter is fixed, not a range. Investigated whether
+lowering `atomWidthBlocks` to 100 (3x finer, `gridSize` scaled 40->120 to preserve the ~10,392-block
+tile size, a real 9x cell-count increase, 1,600->14,400) could give small biomes genuine shape
+freedom at their own minimum, using the calibration manifest's own newly-tracked constants as the
+baseline to probe against.
+
+**Finding:** Simple tuning does not get this resolution to a viable solve within the 5-8 minute
+world-creation budget (`DESIGN.md`'s own clarified limit). Measured directly against the real
+catalog (`AtomWidthResolutionProbeRunner`, gradle task `atomWidthResolutionProbe`, world seed 42,
+schedule's `cycleSteps` scaled 9x alongside cell count):
+- Step depth per attempt is the dominant lever, not attempt count: 100 shallow attempts (60,000,000
+  steps each) reached only cost 146 in 866s - WORSE than 10 deep attempts (80,000,000 steps) reaching
+  cost 102 in 122s. The "many independent cheap tries" dynamic that makes production's 1,600-cell
+  reliability real (each attempt has a real chance of converging within budget) does not hold at
+  9x the cells - no single shallow attempt gets close, so trying more of them buys nothing.
+- Increasing steps per attempt showed real convergence early, then hit a hard wall: 5,000,000 steps
+  -> cost 2159; 40,000,000 -> 442; 80,000,000 -> 102; 160,000,000 -> 45; 320,000,000 -> 41 (only 9%
+  better for double the steps, in 529.8s - already over budget). Diminishing returns collapsed from
+  4.3x to 2.3x to 1.1x across successive doublings - a real plateau, not a patience problem.
+- The schedule's `cycleSteps` (1,000,000, tuned at 1,600 cells) scaled proportionally to the 9x cell
+  increase (9,000,000) gave only a modest, real improvement (average best cost 1951.2 -> 1842.0
+  across 5 seeds at a fixed reduced budget) - not remotely enough alone.
+
+**Conclusion:** the plateau is structural. A single-cell-flip move (the search's main mechanism)
+propagates corrective information diffusively across the grid; in a 2D lattice that kind of
+equilibration scales with total AREA (cell count), not the sqrt-of-area growth in total cluster
+boundary length that a naive "bigger clusters, longer perimeters" estimate would predict - which is
+consistent with needing far more than a proportional (9x, or even the observed up-to-8x-and-still-
+climbing) step increase to reach the same relative convergence. Reaching this resolution needs a
+genuine redesign for a much larger state space (see the coarse-to-fine multigrid direction under
+investigation as of this entry), not a config change.
+
+**Alternatives considered:**
+- More parallel seed attempts at a shallow step budget instead of fewer deep ones: measured worse,
+  not better (see Finding above).
+- Scaling the annealing schedule's cycle length alone: measured, real but modest (~6%), not enough.
+- Scaling `NUCLEATION_PROBABILITY`/`DEFAULT_RELABEL_PROBABILITY` 9x (0.02 -> 0.18) to match
+  production's per-cell event density, on the theory that a flat step-fraction dilutes 9x over 9x
+  more cells: measured WORSE, not better, at the same 80,000,000-step/10-attempt/x9-cycle
+  configuration - cost 102 -> 146 AND wall time 122s -> 212s. Nucleation and relabel moves are
+  heavier per-attempt than a plain single-cell flip (a whole-cluster BFS, or an unconstrained
+  reassignment); diverting more of a scarce step budget to them starves the fine, patient local
+  correction the plateau regime actually needs. Reinforces the diffusive-propagation diagnosis rather
+  than contradicting it: this was never an event-density problem.
+- A region-based/divide-and-conquer solve (each block of the grid solved somewhat independently,
+  boundaries reconciled after): NOT attempted here, and worth naming the real risk explicitly - this
+  is close in spirit to the hex-mesh region CSP this project already tried and deleted (see the
+  2026-09-20 "One solved biome plan per world" entry's own banner) precisely because per-region
+  solving could not be made reliable for every world seed. A new attempt would need to differ in a
+  real way (e.g. reconciling via shared boundary state, or seeding from a coarse global solve first),
+  not repeat the same independent-regions shape.
+
+**Evidence:** `worldgen-core/src/main/java/com/mineutze/worldgen/plan/AtomWidthResolutionProbeRunner.java`
+(gradle task `atomWidthResolutionProbe`); full numbers in commits `5024ce5f` and `4f833740`.
+
 ## 2026-09-20 — Groups of biomes and and/or border requirements
 
 **Context:** A requirement named ONE biome, but a beach may touch `ocean` or `lukewarm_ocean`, so one
