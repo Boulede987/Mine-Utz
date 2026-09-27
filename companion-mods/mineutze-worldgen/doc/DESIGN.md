@@ -49,4 +49,6 @@ No "reseeding". We don't "try until we make it". We make it work. Until it works
 
 We don't compromise on our desing. Biomes, have correct size and correct adjencies. They have natural shapes (no too thin seams, no straight edges, but weavy natural shapes)
 
-We have a performance concern. This is meant for a live game. Several minutes of solving is hardly acceptable.
+We have a performance concern. This is meant for a live game. 
+Several minutes of solving in the middle of normal gameplay is hardly acceptable.
+Several minutes of solving at world creation is acceptable (5-8 minutes maximum).
