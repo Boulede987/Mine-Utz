@@ -56,6 +56,18 @@ level deeper. With retries: seed -7311 solved on attempt 2 (29.9s). Total wall t
 seeds averaged 28.3s per world (worst case 53.2s, seed -7311's two attempts) - comfortably inside the
 5-8 minute budget with a full order of magnitude of headroom.
 
+**The original goal, delivered:** wired a real perimeter floor (`minPerimeterRatio` 1.5x) onto beach
+in the FINE model only (coarse stays untouched, matching "coarse is unmodified production"). Beach's
+real declared range (300-700 blocks) already gives 9-49 cells at this finer 100-block atom - unlike
+`ThinBeachShapeExperimentRunner`'s earlier attempt at production's 300-block atom (where beach's own
+1-cell minimum had zero shape freedom at all), no catalog change was needed this time. Ratio 1.5 is
+safe up to beach's own tightest case (9 cells, max achievable ~1.727) with real margin. All 5 world
+seeds still solved with the floor active (same 28.3s average, same -7311 two-attempt pattern - the
+floor did not change the reliability profile). Visually confirmed on two seeds (1094: 31-cell winding
+two-lobe cluster with a pinched neck; 424242: a genuinely thin, snaking cluster hugging a border) -
+a real, qualitative change from the unfloored 22-cell round blob first measured. Pictures in
+`build/multigrid-seed-prototype/seed-<world seed>-4-beach-zoom.png`.
+
 **Not yet done:** not tested at the ~104-seed reliability scale; not wired into production
 (`PlanSettings`/`WorldBiomePlan` untouched); the other two candidate directions (local-patch move,
 region-based divide-and-conquer) in `doc/TODO.md` are now most likely moot given this result, but not

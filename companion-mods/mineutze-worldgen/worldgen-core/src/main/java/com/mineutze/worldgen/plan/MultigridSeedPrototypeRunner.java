@@ -28,6 +28,14 @@ import java.util.Map;
  * deeper. Found necessary directly: one world seed (-7311) plateaued at cost 4 with attempt 0 alone,
  * unmoved by DOUBLING the step budget (20,000,000 -> 40,000,000, identical cost both times - a local
  * trap for that one random walk, not a global slowdown) but solved in 3.7s on the very next attempt.
+ *
+ * <p>The FINE model gives beach a real perimeter floor ({@value #BEACH_FLOOR_RATIO}x, forcing
+ * elongation - see {@code ShapeRule#minPerimeterRatio}), the original goal this whole investigation
+ * started from. Unlike {@code ThinBeachShapeExperimentRunner}'s earlier attempt at production's
+ * 300-block atom width, beach's REAL declared range (300-700 blocks) already gives 9-49 cells at this
+ * finer 100-block atom - no widened minimum needed this time. The coarse model is untouched (no
+ * floor), matching "the coarse solve IS production, unmodified" - only fine refinement has to satisfy
+ * it, on top of fixing the blocky coarse-cell seams.
  */
 public final class MultigridSeedPrototypeRunner {
 
@@ -42,6 +50,8 @@ public final class MultigridSeedPrototypeRunner {
     private static final ToroidalSizedLocalSearch.Schedule REFINEMENT_SCHEDULE = new ToroidalSizedLocalSearch.Schedule(0.40, 0.20, 9_000_000);
     private static final Path OUTPUT_DIRECTORY = Path.of("build", "multigrid-seed-prototype");
     private static final BiomeId BEACH = new BiomeId("minecraft", "beach");
+    /** Safe up to ~1.727 even at beach's own tightest case (9 cells, its real declared minimum at this atom width) - see DECISIONS.md. */
+    private static final double BEACH_FLOOR_RATIO = 1.5;
 
     private record RefinementOutcome(boolean solved, int attemptsUsed, int bestCost, Map<ToroidalPos, BiomeId> assignment) {
     }
@@ -261,7 +271,9 @@ public final class MultigridSeedPrototypeRunner {
     }
 
     private static ClusterSizeModel fineModel(RawRuleTable table) {
-        return new ClusterSizeModel(table, FINE_ATOM_WIDTH_BLOCKS, new ShapeRule(PlanSettings.DEFAULT.perimeterRatio(), Integer.MAX_VALUE, Integer.MAX_VALUE, 2));
+        ShapeRule defaultShape = new ShapeRule(PlanSettings.DEFAULT.perimeterRatio(), Integer.MAX_VALUE, Integer.MAX_VALUE, 2);
+        ShapeRule flooredBeach = new ShapeRule(ShapeRule.NO_PERIMETER_LIMIT, BEACH_FLOOR_RATIO, Integer.MAX_VALUE, Integer.MAX_VALUE, 2);
+        return new ClusterSizeModel(table, FINE_ATOM_WIDTH_BLOCKS, defaultShape, Map.of(BEACH, flooredBeach));
     }
 
     private static double secondsSince(long startNanos) {
