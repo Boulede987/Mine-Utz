@@ -74,6 +74,13 @@ tasks.register('atomWidthResolutionProbe', JavaExec) {
     mainClass = 'com.mineutze.worldgen.plan.AtomWidthResolutionProbeRunner'
 }
 
+tasks.register('multigridSeedPrototype', JavaExec) {
+    group = 'verification'
+    description = 'Solves at production scale (40x40/300 blocks), upsamples that solution to seed the fine 120x120/100-block grid instead of a random Voronoi start, then refines - tests whether coarse-then-fine avoids the diffusive-propagation plateau simple tuning hit. Run with: ./gradlew :worldgen-core:multigridSeedPrototype'
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'com.mineutze.worldgen.plan.MultigridSeedPrototypeRunner'
+}
+
 repositories {
     mavenCentral()
 }

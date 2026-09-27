@@ -211,6 +211,39 @@ class ToroidalSizedLocalSearchTest {
         assertEquals(0, ToroidalSizedLocalSearch.cost(table, grid, model(table), threeColoring(grid, A, B, C)));
     }
 
+    /** searchFromSeed's whole point: starting already valid needs no steps at all - cost is 0 before the loop even runs once. */
+    @Test
+    void searchFromSeedStartingAlreadyValidSolvesImmediately() {
+        ToroidalGrid grid = new ToroidalGrid(6, 6);
+        RawRuleTable table = singleCellClusterTable();
+        Map<ToroidalPos, BiomeId> validAssignment = threeColoring(grid, A, B, C);
+
+        ToroidalSizedLocalSearch.Result result = ToroidalSizedLocalSearch.searchFromSeed(
+            table, grid, model(table), SEED, validAssignment, GENEROUS_STEPS, ToroidalSizedLocalSearch.Schedule.constant(0.5), () -> false,
+            ToroidalSizedLocalSearch.DEFAULT_RELABEL_PROBABILITY
+        );
+
+        assertEquals(validAssignment, result.assignment());
+        assertEquals(0, result.bestCost());
+        assertEquals(0, result.steps());
+    }
+
+    @Test
+    void searchFromSeedRejectsAnAssignmentMissingCells() {
+        ToroidalGrid grid = new ToroidalGrid(6, 6);
+        RawRuleTable table = singleCellClusterTable();
+        Map<ToroidalPos, BiomeId> incomplete = new LinkedHashMap<>(threeColoring(grid, A, B, C));
+        incomplete.remove(new ToroidalPos(0, 0));
+
+        assertThrows(
+            IllegalArgumentException.class,
+            () -> ToroidalSizedLocalSearch.searchFromSeed(
+                table, grid, model(table), SEED, incomplete, GENEROUS_STEPS, ToroidalSizedLocalSearch.Schedule.constant(0.5), () -> false,
+                ToroidalSizedLocalSearch.DEFAULT_RELABEL_PROBABILITY
+            )
+        );
+    }
+
     @Test
     void searchSolvesASmallInstanceWithMultiCellClusters() {
         ToroidalGrid grid = new ToroidalGrid(6, 6);

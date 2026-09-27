@@ -96,6 +96,21 @@ final class ToroidalSizedLocalSearch {
     }
 
     /**
+     * As {@link #search(RawRuleTable, ToroidalGrid, ClusterSizeModel, long, long, Schedule, BooleanSupplier, double)}, but starting from
+     * {@code initialAssignment} (which must cover every cell with a known biome) instead of a random Voronoi partition - for a search that
+     * already has a good starting point (a coarser-resolution solve upsampled to this grid, say) and only needs to refine it.
+     */
+    static Result searchFromSeed(
+        RawRuleTable table, ToroidalGrid grid, ClusterSizeModel model, long randomSeed, Map<ToroidalPos, BiomeId> initialAssignment, long maxSteps, Schedule schedule,
+        BooleanSupplier shouldStop, double relabelProbability
+    ) {
+        if (relabelProbability < 0.0 || relabelProbability > 1.0) {
+            throw new IllegalArgumentException("ToroidalSizedLocalSearch: relabelProbability must be within 0..1, got " + relabelProbability);
+        }
+        return new Search(table, grid, model, new Random(randomSeed), schedule, shouldStop, relabelProbability).run(maxSteps, initialAssignment);
+    }
+
+    /**
      * Sawtooth annealing: every {@code cycleSteps} steps the temperature restarts at {@code
      * highTemperature} and cools geometrically to {@code lowTemperature}. The hot phase lets the
      * walk escape a frozen state that a fixed low temperature is stuck in (2026-09-19: fixed
@@ -396,6 +411,16 @@ final class ToroidalSizedLocalSearch {
 
         Result run(long maxSteps) {
             initializeFromRandomVoronoi();
+            return runFrom(maxSteps);
+        }
+
+        /** As {@link #run(long)}, but starting from {@code initialAssignment} instead of a random Voronoi partition. */
+        Result run(long maxSteps, Map<ToroidalPos, BiomeId> initialAssignment) {
+            initializeFrom(initialAssignment);
+            return runFrom(maxSteps);
+        }
+
+        private Result runFrom(long maxSteps) {
             cost = fullCost();
             int bestCost = cost;
             int[] bestValue = value.clone();
@@ -519,6 +544,35 @@ final class ToroidalSizedLocalSearch {
             for (int cell = 0; cell < cellCount; cell++) {
                 assignNearestSeedBiome(shuffledCells, seedBiome, seedCount, cell);
             }
+            recomputeUsesAndMissing();
+        }
+
+        /** Sets {@code value[]} from {@code assignment} directly - every cell must be covered, every biome named must be one of {@code table}'s. */
+        private void initializeFrom(Map<ToroidalPos, BiomeId> assignment) {
+            if (assignment.size() != cellCount) {
+                throw new IllegalArgumentException("ToroidalSizedLocalSearch: initial assignment covers " + assignment.size() + " of " + cellCount + " cells");
+            }
+            for (int cell = 0; cell < cellCount; cell++) {
+                assignSeededCell(assignment, cell);
+            }
+            recomputeUsesAndMissing();
+        }
+
+        private void assignSeededCell(Map<ToroidalPos, BiomeId> assignment, int cell) {
+            ToroidalPos position = positions.get(cell);
+            BiomeId biome = assignment.get(position);
+            if (biome == null) {
+                throw new IllegalArgumentException("ToroidalSizedLocalSearch: initial assignment has no biome for " + position);
+            }
+            int index = biomes.indexOf(biome);
+            if (index < 0) {
+                throw new IllegalArgumentException("ToroidalSizedLocalSearch: initial assignment names " + biome + " at " + position + ", which is not in the catalog");
+            }
+            value[cell] = index;
+        }
+
+        /** Recomputes {@code usesOfBiome}/{@code missingBiomes} from {@code value[]} - shared by every way of seeding it. */
+        private void recomputeUsesAndMissing() {
             for (int biome = 0; biome < biomeCount; biome++) {
                 usesOfBiome[biome] = 0;
             }

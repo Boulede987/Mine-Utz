@@ -6,6 +6,47 @@ run `./gradlew :worldgen-core:calibrationReport` to read it, or `./gradlew :worl
 enforce it (`CalibrationManifestTest` fails loud on drift). This log stays the history (context,
 alternatives considered, evidence at the time) - it does not track current validity on its own.
 
+## 2026-09-27 — Coarse-to-fine multigrid seeding solves the 9x-cell-count plateau
+
+**Context:** The entry below this one diagnosed why `atomWidthBlocks=100` (9x production's cell
+count) plateaus under simple tuning: a single-cell-flip move propagates corrections diffusively, and
+diffusive equilibration scales with total area, not the sqrt-of-area growth in cluster perimeter a
+naive estimate predicts. `gridSize`/`atomWidthBlocks` were chosen (120/100 vs production's 40/300) so
+that a 3x3 block of fine cells is EXACTLY one coarse cell at production's own proven settings - the
+coarse solve is not a new mechanism, it is today's production solve, unmodified.
+
+**Decision:** Solve at production scale first (`ToroidalSizedPatternGenerator.generate`, unmodified),
+upsample that solution into a seed for the fine grid (each fine cell inherits its 3x3 coarse parent's
+biome), then refine at fine resolution starting FROM that seed instead of a random Voronoi partition.
+Required one real, additive change to the production search class: `ToroidalSizedLocalSearch` gained
+`searchFromSeed`/`Search.run(long, Map)`/`initializeFrom` (mirroring the existing random-Voronoi
+entry point exactly, sharing its `recomputeUsesAndMissing` bookkeeping - see
+`ToroidalSizedLocalSearchTest.searchFromSeedStartingAlreadyValidSolvesImmediately` for the smallest
+unit-level proof). No existing call site changed.
+
+**Evidence:** `MultigridSeedPrototypeRunner` (gradle task `multigridSeedPrototype`), real catalog,
+world seed 1094: coarse solve 8.2s, seeded (pre-refinement) cost 2215, refined to **cost 0 (fully
+SOLVED)** in 2,179,884 of a 20,000,000-step budget, 3.1s. Total ~11.3s - inside the 5-8 minute
+world-creation budget with enormous headroom, comparable to production's OWN current solve time at
+1,600 cells. Every random-Voronoi baseline in the entry below (up to 320,000,000 steps, 529.8s) never
+reached 0 at all.
+
+**A prediction that was wrong in a specific, informative way:** expected the seeded cost to already
+be near zero (adjacency/size inherited correctly from the coarse solve, only shape needing fixing).
+Measured seeded cost (2215) was comparable in magnitude to a random-Voronoi start after just 5,000,000
+steps (2159) - not dramatically lower. What actually differs is not the starting SCALAR cost but the
+starting STRUCTURE: this 2215-cost seeded state refined to 0 in 2.18M further steps, while a
+random-Voronoi state at a similar cost level never reached 0 even after 60x more steps than that on
+top. The coarse solve gives the fine search a globally-correct topology (which cluster owns which
+region) to refine locally, rather than a globally-uncommitted state needing grid-wide propagation to
+even decide that - a structural property the raw cost number doesn't expose, only the refinement
+behavior does.
+
+**Not yet done:** tested on one world seed only, not the ~104-seed reliability scale; not wired into
+production (`PlanSettings`/`WorldBiomePlan` untouched); the other two candidate directions
+(local-patch move, region-based divide-and-conquer) in `doc/TODO.md` are now most likely moot given
+this result, but not removed from the TODO without the user's own call.
+
 ## 2026-09-27 — Lowering atomWidthBlocks to 100 needs real algorithm work, not simple re-tuning
 
 **Context:** Beach's shape-floor mechanism (`ShapeRule.minPerimeterRatio`, 2026-09-26) is blocked by
