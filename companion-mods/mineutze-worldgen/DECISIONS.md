@@ -46,6 +46,14 @@ investigation as of this entry), not a config change.
 - More parallel seed attempts at a shallow step budget instead of fewer deep ones: measured worse,
   not better (see Finding above).
 - Scaling the annealing schedule's cycle length alone: measured, real but modest (~6%), not enough.
+- Scaling `NUCLEATION_PROBABILITY`/`DEFAULT_RELABEL_PROBABILITY` 9x (0.02 -> 0.18) to match
+  production's per-cell event density, on the theory that a flat step-fraction dilutes 9x over 9x
+  more cells: measured WORSE, not better, at the same 80,000,000-step/10-attempt/x9-cycle
+  configuration - cost 102 -> 146 AND wall time 122s -> 212s. Nucleation and relabel moves are
+  heavier per-attempt than a plain single-cell flip (a whole-cluster BFS, or an unconstrained
+  reassignment); diverting more of a scarce step budget to them starves the fine, patient local
+  correction the plateau regime actually needs. Reinforces the diffusive-propagation diagnosis rather
+  than contradicting it: this was never an event-density problem.
 - A region-based/divide-and-conquer solve (each block of the grid solved somewhat independently,
   boundaries reconciled after): NOT attempted here, and worth naming the real risk explicitly - this
   is close in spirit to the hex-mesh region CSP this project already tried and deleted (see the
