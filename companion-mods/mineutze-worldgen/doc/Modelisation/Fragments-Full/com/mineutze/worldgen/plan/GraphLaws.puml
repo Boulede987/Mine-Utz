@@ -1,0 +1,14 @@
+namespace com.mineutze.worldgen.plan {
+class GraphLaws {
+  ~ {static} of(RawRuleTable, ClusterSizeModel) : List<GraphLaw>
+  - {static} addIllegalPairsFrom(RawRuleTable, List<BiomeId>, int, List<GraphLaw>)
+}
+}
+
+com.mineutze.worldgen.plan.GraphLaws ..> com.mineutze.worldgen.biomegraph.BiomeId
+com.mineutze.worldgen.plan.GraphLaws ..> com.mineutze.worldgen.plan.ClusterSizeModel
+com.mineutze.worldgen.plan.GraphLaws ..> com.mineutze.worldgen.plan.GraphLaw
+com.mineutze.worldgen.plan.GraphLaws ..> com.mineutze.worldgen.plan.IllegalPairLaw
+com.mineutze.worldgen.plan.GraphLaws ..> com.mineutze.worldgen.plan.RawRuleTable
+com.mineutze.worldgen.plan.GraphLaws ..> com.mineutze.worldgen.plan.RequiredBorderLaw
+com.mineutze.worldgen.plan.GraphLaws ..> com.mineutze.worldgen.plan.SizeRangeLaw

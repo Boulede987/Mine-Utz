@@ -35,13 +35,14 @@ class AttemptResult <<record>> {
   + failedCost : OptionalInt
   + solvedPattern : Optional<Map<ToroidalPos, BiomeId>>
   + closestState : Optional<Map<ToroidalPos, BiomeId>>
+  + renderedMap : Optional<BiomeMap>
   + renderFailureReason : Optional<String>
   + duration : Duration
   ~ {static} ofSearch(Stage, ToroidalSizedLocalSearch.Result, Duration) : AttemptResult
-  ~ {static} rendered(Duration) : AttemptResult
+  ~ {static} rendered(Map<ToroidalPos, BiomeId>, BiomeMap, Duration) : AttemptResult
   ~ {static} renderFailed(String, Duration) : AttemptResult
-  - {static} requireRenderShape(boolean, OptionalInt, Optional<Map<ToroidalPos, BiomeId>>, Optional<Map<ToroidalPos, BiomeId>>, Optional<String>)
-  - {static} requireSearchShape(Stage, boolean, OptionalInt, Optional<Map<ToroidalPos, BiomeId>>, Optional<String>)
+  - {static} requireRenderShape(boolean, OptionalInt, Optional<Map<ToroidalPos, BiomeId>>, Optional<Map<ToroidalPos, BiomeId>>, Optional<BiomeMap>, Optional<String>)
+  - {static} requireSearchShape(Stage, boolean, OptionalInt, Optional<Map<ToroidalPos, BiomeId>>, Optional<Map<ToroidalPos, BiomeId>>, Optional<BiomeMap>, Optional<String>)
 }
 enum Stage <<enum>> {
   COARSE
@@ -51,6 +52,7 @@ enum Stage <<enum>> {
 }
 
 com.mineutze.worldgen.plan.AttemptResult *--> com.mineutze.worldgen.biomegraph.BiomeId
+com.mineutze.worldgen.plan.AttemptResult *--> com.mineutze.worldgen.plan.BiomeMap
 com.mineutze.worldgen.plan.AttemptResult *--> com.mineutze.worldgen.plan.Stage
 com.mineutze.worldgen.plan.AttemptResult *--> com.mineutze.worldgen.plan.ToroidalPos
 

@@ -1,0 +1,13 @@
+namespace com.mineutze.worldgen.plan {
+class BuiltWorld <<record>> {
+  + pattern : Map<ToroidalPos, BiomeId>
+  + map : BiomeMap
+  + attemptsUntilBuilt : int
+  - {static} PIXELS_PER_SAMPLE : int
+  + writePicture(Path)
+}
+}
+
+com.mineutze.worldgen.plan.BuiltWorld *--> com.mineutze.worldgen.biomegraph.BiomeId
+com.mineutze.worldgen.plan.BuiltWorld *--> com.mineutze.worldgen.plan.BiomeMap
+com.mineutze.worldgen.plan.BuiltWorld *--> com.mineutze.worldgen.plan.ToroidalPos

@@ -1,20 +1,22 @@
 namespace com.mineutze.worldgen.tooling.graphedit {
 class GraphEditorSolveCheck {
-  - {static} EXIT_PASS : int
-  - {static} EXIT_FAIL : int
-  - {static} EXIT_BORDERLINE : int
+  - {static} EXIT_FEASIBLE : int
+  - {static} EXIT_INFEASIBLE : int
+  - {static} EXIT_UNPROVEN : int
   - {static} EXIT_CRASH : int
   + {static} main(String[])
   - {static} checkSavedGraph() : int
   - {static} printVerdict(FeasibilityVerdict)
+  - {static} writeWorldPicture(BuiltWorld)
   - {static} exitCodeOf(FeasibilityVerdict.Outcome) : int
 }
 }
 
 com.mineutze.worldgen.tooling.graphedit.GraphEditorSolveCheck ..> com.mineutze.worldgen.biomegraph.BiomeGraphData
 com.mineutze.worldgen.tooling.graphedit.GraphEditorSolveCheck ..> com.mineutze.worldgen.biomegraph.BiomeGraphJson
+com.mineutze.worldgen.tooling.graphedit.GraphEditorSolveCheck ..> com.mineutze.worldgen.plan.BuiltWorld
 com.mineutze.worldgen.tooling.graphedit.GraphEditorSolveCheck ..> com.mineutze.worldgen.plan.FeasibilityBudget
-com.mineutze.worldgen.tooling.graphedit.GraphEditorSolveCheck ..> com.mineutze.worldgen.plan.FeasibilityEstimator
+com.mineutze.worldgen.tooling.graphedit.GraphEditorSolveCheck ..> com.mineutze.worldgen.plan.FeasibilityCheck
 com.mineutze.worldgen.tooling.graphedit.GraphEditorSolveCheck ..> com.mineutze.worldgen.plan.FeasibilityVerdict
 com.mineutze.worldgen.tooling.graphedit.GraphEditorSolveCheck ..> com.mineutze.worldgen.tooling.graphedit.GraphEditorFiles
 com.mineutze.worldgen.tooling.graphedit.GraphEditorSolveCheck ..> com.mineutze.worldgen.plan.Outcome

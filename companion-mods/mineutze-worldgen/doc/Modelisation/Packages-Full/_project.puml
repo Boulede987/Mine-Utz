@@ -1170,13 +1170,14 @@ class AttemptResult <<record>> {
   + failedCost : OptionalInt
   + solvedPattern : Optional<Map<ToroidalPos, BiomeId>>
   + closestState : Optional<Map<ToroidalPos, BiomeId>>
+  + renderedMap : Optional<BiomeMap>
   + renderFailureReason : Optional<String>
   + duration : Duration
   ~ {static} ofSearch(Stage, ToroidalSizedLocalSearch.Result, Duration) : AttemptResult
-  ~ {static} rendered(Duration) : AttemptResult
+  ~ {static} rendered(Map<ToroidalPos, BiomeId>, BiomeMap, Duration) : AttemptResult
   ~ {static} renderFailed(String, Duration) : AttemptResult
-  - {static} requireRenderShape(boolean, OptionalInt, Optional<Map<ToroidalPos, BiomeId>>, Optional<Map<ToroidalPos, BiomeId>>, Optional<String>)
-  - {static} requireSearchShape(Stage, boolean, OptionalInt, Optional<Map<ToroidalPos, BiomeId>>, Optional<String>)
+  - {static} requireRenderShape(boolean, OptionalInt, Optional<Map<ToroidalPos, BiomeId>>, Optional<Map<ToroidalPos, BiomeId>>, Optional<BiomeMap>, Optional<String>)
+  - {static} requireSearchShape(Stage, boolean, OptionalInt, Optional<Map<ToroidalPos, BiomeId>>, Optional<Map<ToroidalPos, BiomeId>>, Optional<BiomeMap>, Optional<String>)
 }
 enum Stage <<enum>> {
   COARSE
@@ -1190,6 +1191,94 @@ class BinomialConfidence {
   - {static} requireValid(int, int, double)
   - {static} bisect(DoubleUnaryOperator) : double
   - {static} cumulativeProbability(int, int, double) : double
+}
+class BuiltWorld <<record>> {
+  + pattern : Map<ToroidalPos, BiomeId>
+  + map : BiomeMap
+  + attemptsUntilBuilt : int
+  - {static} PIXELS_PER_SAMPLE : int
+  + writePicture(Path)
+}
+class CatalogRejected {
+}
+class ConflictExplainer {
+  - model : CountingModel
+  - timeLimit : Duration
+  - {static} recordAndSetAside(LawConflict, List<LawConflict>, List<GraphLaw>)
+  - {static} biomesOf(List<GraphLaw>) : List<BiomeId>
+  - {static} concerns(GraphLaw, BiomeId) : boolean
+  - {static} union(List<GraphLaw>, List<GraphLaw>) : List<GraphLaw>
+}
+class Explanation <<record>> {
+  + conflicts : LawConflict[*]
+  + complete : boolean
+}
+class Run {
+  - deadlineNanos : long
+  - minimalConflict(List<GraphLaw>, Predicate<List<GraphLaw>>) : List<GraphLaw>
+  - shrinkOnFullModel(List<GraphLaw>) : List<GraphLaw>
+  - dropIfStillContradicting(List<GraphLaw>, GraphLaw)
+  - quickXplain(List<GraphLaw>, boolean, List<GraphLaw>, Predicate<List<GraphLaw>>) : List<GraphLaw>
+  - contradicts(List<GraphLaw>) : boolean
+  - contradicts(List<GraphLaw>, BiomeId) : boolean
+  - requireTimeLeft()
+}
+class Incomplete <<static>> {
+}
+class CountingModel {
+  - {static} CHECK_TIME_LIMIT : Duration
+  - {static} EDGES_PER_CELL : int
+  - biomes : BiomeId[*]
+  - indexOfBiome : Map<BiomeId, Integer>
+  - minCells : int[*]
+  - maxCells : int[*]
+  - perimeterCeilingPerPatch : int[*]
+  - gridSide : int
+  - gridCells : int
+  ~ {static} of(RawRuleTable, PlanSettings) : CountingModel
+  - {static} solve(Model) : CountingStatus
+  - indexOf(BiomeId) : int
+  - {static} alternativesOf(ResolvedBorderRequirement) : List<ResolvedBorderRequirement.Share>
+}
+class Build {
+  - model : Model
+  - count : int
+  - sized : boolean[*]
+  - forbidden : boolean[][*]
+  - requirements : RequiredBorderLaw[*]
+  - patches : IntVar[*]
+  - cells : IntVar[*]
+  - perimeter : IntVar[*]
+  - edges : IntVar[][*]
+  - modelled : boolean[*]
+  - everyBiomeModelled : boolean
+  - {static} allTrue(boolean[]) : boolean
+  - outerGridCells() : int
+  - pairModelled(int, int) : boolean
+  - classify(GraphLaw)
+  - markForbidden(int, int)
+  - declarePatchesAndCells()
+  - declareEdgesAndPerimeters()
+  - postPerimeterIdentity(int)
+  - postSizeAndPerimeterBounds(int)
+  - postIllegalPairs()
+  - postRequirement(RequiredBorderLaw)
+  - postRequirementPart(int, ResolvedBorderRequirement)
+  - postShares(int, List<ResolvedBorderRequirement.Share>)
+  - postWeightedShares(int, List<ResolvedBorderRequirement.Share>, ShareWeights)
+  - addShareTerms(int, ResolvedBorderRequirement.Share, int, List<IntVar>, List<Integer>)
+}
+class Corners <<record>> {
+  + build : Build
+  - hasLegalThird(int, int) : boolean
+  - postSegments(int, int, List<IntVar>[]) : IntVar
+  - postPatchVertices(int, IntVar[], List<IntVar>)
+  - {static} newLists(int) : List<IntVar>[]
+}
+enum CountingStatus <<enum>> {
+  SATISFIABLE
+  CONTRADICTION
+  UNKNOWN
 }
 class Evidence <<record>> {
   + coarse : StageEvidence
@@ -1209,16 +1298,110 @@ class FeasibilityBudget <<record>> {
   + {static} EDITOR_DEFAULT : FeasibilityBudget
   - {static} requireOpenUnitInterval(String, double)
 }
-class FeasibilityEstimator {
-  - {static} ESTIMATE_WORLD_SEED : long
-  - {static} PROGRESS_EVERY_ATTEMPTS : int
-  - {static} NANOS_PER_SECOND : double
-  + {static} estimate(BiomeGraphData, FeasibilityBudget, WorldBiomePlan.ProgressListener) : FeasibilityVerdict
-  ~ {static} estimate(BiomeGraphData, PlanSettings, FeasibilityBudget, WorldBiomePlan.ProgressListener) : FeasibilityVerdict
+class FeasibilityCheck {
+  + {static} check(BiomeGraphData, FeasibilityBudget, WorldBiomePlan.ProgressListener) : FeasibilityVerdict
+  ~ {static} check(BiomeGraphData, PlanSettings, FeasibilityBudget, WorldBiomePlan.ProgressListener) : FeasibilityVerdict
+  - {static} proveImpossible(SolveStages, PlanSettings, long, WorldBiomePlan.ProgressListener) : Optional<InfeasibilityProof>
+  - {static} elapsedSince(long) : Duration
 }
-class CatalogRejected <<static>> {
+class FeasibilityVerdict <<record>> {
+  + outcome : Outcome
+  + proof : Optional<InfeasibilityProof>
+  + builtWorld : Optional<BuiltWorld>
+  + evidence : Evidence
+  + reliability : Optional<ReliabilityEstimate>
+  + targetWorldFailure : double
+  + elapsed : Duration
+  - {static} PERCENT_PER_UNIT : double
+  - {static} SMALLEST_SHOWN_PERCENT : double
+  - {static} MILLIS_PER_SECOND : double
+  ~ {static} infeasible(InfeasibilityProof, Evidence, double, Duration) : FeasibilityVerdict
+  ~ {static} feasible(BuiltWorld, Evidence, ReliabilityEstimate, double, Duration) : FeasibilityVerdict
+  ~ {static} unproven(Evidence, double, Duration) : FeasibilityVerdict
+  + summary() : String
+  - feasibleSummary() : String
+  - {static} infeasibleSummary(InfeasibilityProof) : String
+  - {static} appendConflict(StringBuilder, int, LawConflict)
+  - unprovenSummary() : String
+  - attemptsLine() : String
+  - reliabilityLine() : String
+  - seconds() : String
+  - {static} percent(double) : String
 }
-class Stages <<record>> {
+enum Outcome <<enum>> {
+  FEASIBLE
+  INFEASIBLE
+  UNPROVEN
+}
+interface GraphLaw <<interface>> {
+  + describe() : String
+}
+class GraphLaws {
+  ~ {static} of(RawRuleTable, ClusterSizeModel) : List<GraphLaw>
+  - {static} addIllegalPairsFrom(RawRuleTable, List<BiomeId>, int, List<GraphLaw>)
+}
+class IllegalPairLaw <<record>> {
+  + first : BiomeId
+  + second : BiomeId
+  + describe() : String
+}
+class IndependentAttemptPool<T> {
+  - executor : ExecutorService
+  - completions : CompletionService<T>
+  - running : int
+  + close()
+  - {static} daemonThread(Runnable) : Thread
+  - pollFor(Duration) : Future<T>
+  - {static} resultOf(Future<R>) : R
+}
+class InfeasibilityProof <<record>> {
+  + conflicts : LawConflict[*]
+  + generatorRejection : Optional<String>
+  + explanationComplete : boolean
+  ~ {static} rejectedByGenerator(String) : InfeasibilityProof
+  ~ {static} of(ConflictExplainer.Explanation) : InfeasibilityProof
+}
+class LawConflict <<record>> {
+  + laws : GraphLaw[*]
+  - {static} SMALLEST_GROUPED_PAIR_COUNT : int
+  - {static} hubOf(List<IllegalPairLaw>) : Optional<BiomeId>
+  - {static} partnersOf(BiomeId, List<IllegalPairLaw>) : List<String>
+  - {static} isFolded(GraphLaw, Optional<BiomeId>) : boolean
+  - {static} touches(IllegalPairLaw, BiomeId) : boolean
+}
+class ProductionFailureModel <<record>> {
+  + coarseAttemptsPerWorld : int
+  + refinementAttemptsPerWorld : int
+  ~ {static} fromProduction(PlanSettings) : ProductionFailureModel
+  - {static} atLeastOneSuccess(double, int) : double
+  - {static} requireRate(String, double)
+}
+class ReliabilityEstimate <<record>> {
+  + worldFailureLow : double
+  + worldFailureHigh : double
+  - {static} CERTAIN : double
+  ~ {static} of(Evidence, ProductionFailureModel, double) : ReliabilityEstimate
+  - {static} lowerRate(StageEvidence, double) : double
+  - {static} upperRate(StageEvidence, double) : double
+}
+class RequiredBorderLaw <<record>> {
+  + biome : BiomeId
+  + requirement : ResolvedBorderRequirement
+  + describe() : String
+}
+class ShareWeights <<record>> {
+  + shareWeights : Integer[*]
+  + patchWeight : int
+  ~ {static} of(List<Integer>, long, long) : Optional<ShareWeights>
+  - {static} greatestCommonDivisor(long, long) : long
+}
+class SizeRangeLaw <<record>> {
+  + biome : BiomeId
+  + minCells : int
+  + maxCells : int
+  + describe() : String
+}
+class SolveStages <<record>> {
   + table : RawRuleTable
   + coarseGrid : ToroidalGrid
   + coarseModel : ClusterSizeModel
@@ -1226,18 +1409,28 @@ class Stages <<record>> {
   + fineModel : Optional<ClusterSizeModel>
   + renderGrid : ToroidalGrid
   + renderGeometry : HexTorusGeometry
-  ~ {static} of(BiomeGraphData, PlanSettings) : Stages
+  ~ {static} of(BiomeGraphData, PlanSettings) : SolveStages
   - {static} readCatalog(Supplier<T>) : T
   - {static} requireRoomForEveryBiome(RawRuleTable, ToroidalGrid, ClusterSizeModel)
 }
-class EstimationRun <<static>> {
-  - stages : Stages
+class StageEvidence <<record>> {
+  + trials : int
+  + successes : int
+  + closestFailedCost : OptionalInt
+  ~ {static} EMPTY : StageEvidence
+  - {static} lowerOf(OptionalInt, OptionalInt) : OptionalInt
+}
+class WorldSearch {
+  - {static} SEARCH_WORLD_SEED : long
+  - {static} PROGRESS_EVERY_ATTEMPTS : int
+  - {static} MOST_PATTERNS_AWAITING_RENDER : int
+  - {static} NANOS_PER_SECOND : double
+  - stages : SolveStages
   - settings : PlanSettings
-  - budget : FeasibilityBudget
+  - threads : int
   - progress : WorldBiomePlan.ProgressListener
   - startNanos : long
   - deadlineNanos : long
-  - rule : SequentialVerdictRule
   - pool : IndependentAttemptPool<AttemptResult>
   - stopRequested : AtomicBoolean
   - fineSeedsAwaitingRefinement : Map<ToroidalPos, BiomeId>[*]
@@ -1250,13 +1443,12 @@ class EstimationRun <<static>> {
   - nextRefinementIndex : long
   - nextRenderIndex : long
   - renderInFlight : boolean
-  - closestCoarseFailure : Optional<AttemptResult>
-  - firstRenderFailure : Optional<String>
-  - step() : Optional<FeasibilityVerdict.Outcome>
+  - builtWorld : Optional<BuiltWorld>
+  - step() : boolean
+  - recordAlreadyFinished()
   - recordCoarse(AttemptResult)
-  - recordRefinement(AttemptResult)
+  - queueForRender(Map<ToroidalPos, BiomeId>)
   - recordRender(AttemptResult)
-  - keepIfClosest(AttemptResult)
   - reportProgressPeriodically()
   - submitNextWork()
   - submitCoarse()
@@ -1265,89 +1457,32 @@ class EstimationRun <<static>> {
   - runCoarseAttempt(long) : AttemptResult
   - runRefinementAttempt(Map<ToroidalPos, BiomeId>, long) : AttemptResult
   - runRenderAttempt(Map<ToroidalPos, BiomeId>, long) : AttemptResult
-  - verdictOf(FeasibilityVerdict.Outcome) : FeasibilityVerdict
-  - describeCoarseFailure(AttemptResult) : String
   - elapsed() : Duration
   + close()
 }
-class FeasibilityVerdict <<record>> {
-  + outcome : Outcome
+class Outcome <<record>> {
+  + builtWorld : Optional<BuiltWorld>
   + evidence : Evidence
-  + worldFailureLowerBound : double
-  + certifiedWorldFailureUpperBound : double
-  + elapsed : Duration
-  + rejection : Optional<String>
-  + closestFailureReport : Optional<String>
-  + renderFailureReport : Optional<String>
-  - {static} CERTAIN_FAILURE : double
-  - {static} PERCENT_PER_UNIT : double
-  - {static} SMALLEST_SHOWN_PERCENT : double
-  - {static} MILLIS_PER_SECOND : double
-  - {static} RENDER_CAVEAT : String
-  ~ {static} rejected(String, Duration) : FeasibilityVerdict
-  + summary() : String
-  - headline() : String
-  - evidenceLine() : String
-  - {static} percent(double) : String
-  - {static} requireProbability(String, double)
-}
-enum Outcome <<enum>> {
-  PASS
-  FAIL
-  BORDERLINE
-}
-class IndependentAttemptPool<T> {
-  - executor : ExecutorService
-  - completions : CompletionService<T>
-  - running : int
-  + close()
-  - {static} daemonThread(Runnable) : Thread
-  - pollFor(Duration) : Future<T>
-  - {static} resultOf(Future<R>) : R
-}
-class ProductionFailureModel <<record>> {
-  + coarseAttemptsPerWorld : int
-  + refinementAttemptsPerWorld : int
-  ~ {static} fromProduction(PlanSettings) : ProductionFailureModel
-  - {static} atLeastOneSuccess(double, int) : double
-  - {static} requireRate(String, double)
-}
-class SequentialVerdictRule {
-  - {static} CERTAIN : double
-  - model : ProductionFailureModel
-  - budget : FeasibilityBudget
-  - {static} everyRenderWorked(StageEvidence) : boolean
-  - lowerRate(StageEvidence) : double
-  - upperRate(StageEvidence) : double
-}
-enum Deadline <<enum>> {
-  REACHED
-  NOT_REACHED
-}
-class StageEvidence <<record>> {
-  + trials : int
-  + successes : int
-  + closestFailedCost : OptionalInt
-  ~ {static} EMPTY : StageEvidence
-  - {static} lowerOf(OptionalInt, OptionalInt) : OptionalInt
 }
 }
 namespace com.mineutze.worldgen.tooling.graphedit {
 class GraphEditorFiles {
   ~ {static} DATA_FILE : Path
+  ~ {static} VERDICT_WORLD_PICTURE : Path
 }
 class GraphEditorServer {
   - {static} DEFAULT_PORT : int
   + {static} main(String[])
 }
 class GraphEditorSolveCheck {
-  - {static} EXIT_PASS : int
-  - {static} EXIT_FAIL : int
-  - {static} EXIT_BORDERLINE : int
+  - {static} EXIT_FEASIBLE : int
+  - {static} EXIT_INFEASIBLE : int
+  - {static} EXIT_UNPROVEN : int
   - {static} EXIT_CRASH : int
   + {static} main(String[])
   - {static} checkSavedGraph() : int
   - {static} printVerdict(FeasibilityVerdict)
+  - {static} writeWorldPicture(BuiltWorld)
   - {static} exitCodeOf(FeasibilityVerdict.Outcome) : int
 }
 class GraphValidation {
@@ -1739,66 +1874,133 @@ com.mineutze.worldgen.plan.WorldBiomePlanCheckRunner ..> com.mineutze.worldgen.p
 com.mineutze.worldgen.plan.WorldBiomePlanCheckRunner ..> com.mineutze.worldgen.plan.ToroidalSizedPatternGenerator
 com.mineutze.worldgen.plan.WorldBiomePlanCheckRunner ..> com.mineutze.worldgen.plan.WorldBiomePlan
 com.mineutze.worldgen.plan.AttemptResult *--> com.mineutze.worldgen.biomegraph.BiomeId
+com.mineutze.worldgen.plan.AttemptResult *--> com.mineutze.worldgen.plan.BiomeMap
 com.mineutze.worldgen.plan.AttemptResult *--> com.mineutze.worldgen.plan.Stage
 com.mineutze.worldgen.plan.AttemptResult *--> com.mineutze.worldgen.plan.ToroidalPos
 com.mineutze.worldgen.plan.AttemptResult ..> com.mineutze.worldgen.plan.Result
 com.mineutze.worldgen.plan.AttemptResult ..> com.mineutze.worldgen.plan.ToroidalSizedLocalSearch
+com.mineutze.worldgen.plan.BuiltWorld *--> com.mineutze.worldgen.biomegraph.BiomeId
+com.mineutze.worldgen.plan.BuiltWorld *--> com.mineutze.worldgen.plan.BiomeMap
+com.mineutze.worldgen.plan.BuiltWorld *--> com.mineutze.worldgen.plan.ToroidalPos
+com.mineutze.worldgen.plan.BuiltWorld ..> com.mineutze.worldgen.plan.BiomeMapPngExporter
+com.mineutze.worldgen.plan.CatalogRejected --|> RuntimeException
+com.mineutze.worldgen.plan.Incomplete --|> RuntimeException
+com.mineutze.worldgen.plan.Explanation *--> "0..*" com.mineutze.worldgen.plan.LawConflict
+com.mineutze.worldgen.plan.ConflictExplainer --> com.mineutze.worldgen.plan.CountingModel
+com.mineutze.worldgen.plan.ConflictExplainer ..> com.mineutze.worldgen.biomegraph.BiomeId
+com.mineutze.worldgen.plan.ConflictExplainer ..> com.mineutze.worldgen.plan.Explanation
+com.mineutze.worldgen.plan.ConflictExplainer ..> com.mineutze.worldgen.plan.GraphLaw
+com.mineutze.worldgen.plan.ConflictExplainer ..> com.mineutze.worldgen.plan.Incomplete
+com.mineutze.worldgen.plan.ConflictExplainer ..> com.mineutze.worldgen.plan.LawConflict
+com.mineutze.worldgen.plan.ConflictExplainer ..> com.mineutze.worldgen.plan.Run
+com.mineutze.worldgen.plan.Run ..> com.mineutze.worldgen.biomegraph.BiomeId
+com.mineutze.worldgen.plan.Run ..> com.mineutze.worldgen.plan.CountingStatus
+com.mineutze.worldgen.plan.Run ..> com.mineutze.worldgen.plan.GraphLaw
+com.mineutze.worldgen.plan.Run ..> com.mineutze.worldgen.plan.Incomplete
+com.mineutze.worldgen.plan.Run ..> com.mineutze.worldgen.plan.LawConflict
+com.mineutze.worldgen.plan.Corners *--> com.mineutze.worldgen.plan.Build
+com.mineutze.worldgen.plan.CountingModel --> "0..*" com.mineutze.worldgen.biomegraph.BiomeId
+com.mineutze.worldgen.plan.CountingModel ..> com.mineutze.worldgen.plan.Build
+com.mineutze.worldgen.plan.CountingModel ..> com.mineutze.worldgen.plan.ClusterSizeModel
+com.mineutze.worldgen.plan.CountingModel ..> com.mineutze.worldgen.plan.CountingStatus
+com.mineutze.worldgen.plan.CountingModel ..> com.mineutze.worldgen.plan.MultigridPatternGenerator
+com.mineutze.worldgen.plan.CountingModel ..> com.mineutze.worldgen.plan.PlanSettings
+com.mineutze.worldgen.plan.CountingModel ..> com.mineutze.worldgen.plan.RawRuleTable
+com.mineutze.worldgen.plan.CountingModel ..> com.mineutze.worldgen.plan.ResolvedBorderRequirement
+com.mineutze.worldgen.plan.CountingModel ..> com.mineutze.worldgen.plan.Share
+com.mineutze.worldgen.plan.Build ..> com.mineutze.worldgen.plan.Corners
+com.mineutze.worldgen.plan.Build ..> com.mineutze.worldgen.plan.GraphLaw
+com.mineutze.worldgen.plan.Build ..> com.mineutze.worldgen.plan.RequiredBorderLaw
+com.mineutze.worldgen.plan.Build ..> com.mineutze.worldgen.plan.ResolvedBorderRequirement
+com.mineutze.worldgen.plan.Build ..> com.mineutze.worldgen.plan.ShapeRule
+com.mineutze.worldgen.plan.Build ..> com.mineutze.worldgen.plan.Share
+com.mineutze.worldgen.plan.Build ..> com.mineutze.worldgen.plan.ShareWeights
 com.mineutze.worldgen.plan.Evidence *--> com.mineutze.worldgen.plan.StageEvidence
 com.mineutze.worldgen.plan.Evidence ..> com.mineutze.worldgen.plan.AttemptResult
-com.mineutze.worldgen.plan.CatalogRejected --|> RuntimeException
-com.mineutze.worldgen.plan.EstimationRun ..|> AutoCloseable
-com.mineutze.worldgen.plan.Stages *--> com.mineutze.worldgen.plan.ClusterSizeModel
-com.mineutze.worldgen.plan.Stages *--> com.mineutze.worldgen.plan.HexTorusGeometry
-com.mineutze.worldgen.plan.Stages *--> com.mineutze.worldgen.plan.RawRuleTable
-com.mineutze.worldgen.plan.Stages *--> com.mineutze.worldgen.plan.ToroidalGrid
-com.mineutze.worldgen.plan.EstimationRun *--> com.mineutze.worldgen.plan.IndependentAttemptPool
-com.mineutze.worldgen.plan.EstimationRun *--> com.mineutze.worldgen.plan.SequentialVerdictRule
-com.mineutze.worldgen.plan.FeasibilityEstimator ..> com.mineutze.worldgen.biomegraph.BiomeGraphData
-com.mineutze.worldgen.plan.FeasibilityEstimator ..> com.mineutze.worldgen.plan.CatalogRejected
-com.mineutze.worldgen.plan.FeasibilityEstimator ..> com.mineutze.worldgen.plan.EstimationRun
-com.mineutze.worldgen.plan.FeasibilityEstimator ..> com.mineutze.worldgen.plan.FeasibilityBudget
-com.mineutze.worldgen.plan.FeasibilityEstimator ..> com.mineutze.worldgen.plan.FeasibilityVerdict
-com.mineutze.worldgen.plan.FeasibilityEstimator ..> com.mineutze.worldgen.plan.PlanSettings
-com.mineutze.worldgen.plan.FeasibilityEstimator ..> com.mineutze.worldgen.plan.ProgressListener
-com.mineutze.worldgen.plan.FeasibilityEstimator ..> com.mineutze.worldgen.plan.Stages
-com.mineutze.worldgen.plan.FeasibilityEstimator ..> com.mineutze.worldgen.plan.WorldBiomePlan
-com.mineutze.worldgen.plan.Stages ..> com.mineutze.worldgen.biomegraph.BiomeGraphData
-com.mineutze.worldgen.plan.Stages ..> com.mineutze.worldgen.plan.CatalogRejected
-com.mineutze.worldgen.plan.Stages ..> com.mineutze.worldgen.plan.MultigridPatternGenerator
-com.mineutze.worldgen.plan.Stages ..> com.mineutze.worldgen.plan.PlanSettings
-com.mineutze.worldgen.plan.Stages ..> com.mineutze.worldgen.plan.ToroidalSizedPatternGenerator
-com.mineutze.worldgen.plan.EstimationRun --> com.mineutze.worldgen.plan.AttemptResult
-com.mineutze.worldgen.plan.EstimationRun --> com.mineutze.worldgen.plan.Evidence
-com.mineutze.worldgen.plan.EstimationRun --> com.mineutze.worldgen.plan.FeasibilityBudget
-com.mineutze.worldgen.plan.EstimationRun --> com.mineutze.worldgen.plan.PlanSettings
-com.mineutze.worldgen.plan.EstimationRun --> com.mineutze.worldgen.plan.ProgressListener
-com.mineutze.worldgen.plan.EstimationRun --> com.mineutze.worldgen.plan.Stages
-com.mineutze.worldgen.plan.EstimationRun --> com.mineutze.worldgen.plan.WorldBiomePlan
-com.mineutze.worldgen.plan.EstimationRun ..> com.mineutze.worldgen.plan.AdjacencyReport
-com.mineutze.worldgen.plan.EstimationRun ..> com.mineutze.worldgen.biomegraph.BiomeId
-com.mineutze.worldgen.plan.EstimationRun ..> com.mineutze.worldgen.plan.FeasibilityVerdict
-com.mineutze.worldgen.plan.EstimationRun ..> com.mineutze.worldgen.plan.MultigridPatternGenerator
-com.mineutze.worldgen.plan.EstimationRun ..> com.mineutze.worldgen.plan.Outcome
-com.mineutze.worldgen.plan.EstimationRun ..> com.mineutze.worldgen.plan.ProductionFailureModel
-com.mineutze.worldgen.plan.EstimationRun ..> com.mineutze.worldgen.plan.RealizationSelector
-com.mineutze.worldgen.plan.EstimationRun ..> com.mineutze.worldgen.plan.SizeSlackReport
-com.mineutze.worldgen.plan.EstimationRun ..> com.mineutze.worldgen.plan.ToroidalPos
-com.mineutze.worldgen.plan.EstimationRun ..> com.mineutze.worldgen.plan.ToroidalSizedLocalSearch
+com.mineutze.worldgen.plan.FeasibilityCheck ..> com.mineutze.worldgen.biomegraph.BiomeGraphData
+com.mineutze.worldgen.plan.FeasibilityCheck ..> com.mineutze.worldgen.plan.CatalogRejected
+com.mineutze.worldgen.plan.FeasibilityCheck ..> com.mineutze.worldgen.plan.ConflictExplainer
+com.mineutze.worldgen.plan.FeasibilityCheck ..> com.mineutze.worldgen.plan.CountingModel
+com.mineutze.worldgen.plan.FeasibilityCheck ..> com.mineutze.worldgen.plan.CountingStatus
+com.mineutze.worldgen.plan.FeasibilityCheck ..> com.mineutze.worldgen.plan.Evidence
+com.mineutze.worldgen.plan.FeasibilityCheck ..> com.mineutze.worldgen.plan.FeasibilityBudget
+com.mineutze.worldgen.plan.FeasibilityCheck ..> com.mineutze.worldgen.plan.FeasibilityVerdict
+com.mineutze.worldgen.plan.FeasibilityCheck ..> com.mineutze.worldgen.plan.GraphLaw
+com.mineutze.worldgen.plan.FeasibilityCheck ..> com.mineutze.worldgen.plan.GraphLaws
+com.mineutze.worldgen.plan.FeasibilityCheck ..> com.mineutze.worldgen.plan.InfeasibilityProof
+com.mineutze.worldgen.plan.FeasibilityCheck ..> com.mineutze.worldgen.plan.PlanSettings
+com.mineutze.worldgen.plan.FeasibilityCheck ..> com.mineutze.worldgen.plan.ProductionFailureModel
+com.mineutze.worldgen.plan.FeasibilityCheck ..> com.mineutze.worldgen.plan.ProgressListener
+com.mineutze.worldgen.plan.FeasibilityCheck ..> com.mineutze.worldgen.plan.ReliabilityEstimate
+com.mineutze.worldgen.plan.FeasibilityCheck ..> com.mineutze.worldgen.plan.SolveStages
+com.mineutze.worldgen.plan.FeasibilityCheck ..> com.mineutze.worldgen.plan.WorldBiomePlan
+com.mineutze.worldgen.plan.FeasibilityCheck ..> com.mineutze.worldgen.plan.WorldSearch
+com.mineutze.worldgen.plan.FeasibilityVerdict *--> com.mineutze.worldgen.plan.BuiltWorld
 com.mineutze.worldgen.plan.FeasibilityVerdict *--> com.mineutze.worldgen.plan.Evidence
+com.mineutze.worldgen.plan.FeasibilityVerdict *--> com.mineutze.worldgen.plan.InfeasibilityProof
 com.mineutze.worldgen.plan.FeasibilityVerdict *--> com.mineutze.worldgen.plan.Outcome
+com.mineutze.worldgen.plan.FeasibilityVerdict *--> com.mineutze.worldgen.plan.ReliabilityEstimate
+com.mineutze.worldgen.plan.FeasibilityVerdict ..> com.mineutze.worldgen.plan.LawConflict
+com.mineutze.worldgen.plan.GraphLaws ..> com.mineutze.worldgen.biomegraph.BiomeId
+com.mineutze.worldgen.plan.GraphLaws ..> com.mineutze.worldgen.plan.ClusterSizeModel
+com.mineutze.worldgen.plan.GraphLaws ..> com.mineutze.worldgen.plan.GraphLaw
+com.mineutze.worldgen.plan.GraphLaws ..> com.mineutze.worldgen.plan.IllegalPairLaw
+com.mineutze.worldgen.plan.GraphLaws ..> com.mineutze.worldgen.plan.RawRuleTable
+com.mineutze.worldgen.plan.GraphLaws ..> com.mineutze.worldgen.plan.RequiredBorderLaw
+com.mineutze.worldgen.plan.GraphLaws ..> com.mineutze.worldgen.plan.SizeRangeLaw
+com.mineutze.worldgen.plan.IllegalPairLaw ..|> com.mineutze.worldgen.plan.GraphLaw
+com.mineutze.worldgen.plan.IllegalPairLaw *--> com.mineutze.worldgen.biomegraph.BiomeId
 com.mineutze.worldgen.plan.IndependentAttemptPool ..|> AutoCloseable
+com.mineutze.worldgen.plan.InfeasibilityProof *--> "0..*" com.mineutze.worldgen.plan.LawConflict
+com.mineutze.worldgen.plan.InfeasibilityProof ..> com.mineutze.worldgen.plan.ConflictExplainer
+com.mineutze.worldgen.plan.InfeasibilityProof ..> com.mineutze.worldgen.plan.Explanation
+com.mineutze.worldgen.plan.LawConflict *--> "0..*" com.mineutze.worldgen.plan.GraphLaw
+com.mineutze.worldgen.plan.LawConflict ..> com.mineutze.worldgen.biomegraph.BiomeId
+com.mineutze.worldgen.plan.LawConflict ..> com.mineutze.worldgen.plan.IllegalPairLaw
 com.mineutze.worldgen.plan.ProductionFailureModel ..> com.mineutze.worldgen.plan.PlanSettings
-com.mineutze.worldgen.plan.SequentialVerdictRule --> com.mineutze.worldgen.plan.FeasibilityBudget
-com.mineutze.worldgen.plan.SequentialVerdictRule --> com.mineutze.worldgen.plan.ProductionFailureModel
-com.mineutze.worldgen.plan.SequentialVerdictRule ..> com.mineutze.worldgen.plan.BinomialConfidence
-com.mineutze.worldgen.plan.SequentialVerdictRule ..> com.mineutze.worldgen.plan.Deadline
-com.mineutze.worldgen.plan.SequentialVerdictRule ..> com.mineutze.worldgen.plan.FeasibilityVerdict
-com.mineutze.worldgen.plan.SequentialVerdictRule ..> com.mineutze.worldgen.plan.StageEvidence
+com.mineutze.worldgen.plan.ReliabilityEstimate ..> com.mineutze.worldgen.plan.BinomialConfidence
+com.mineutze.worldgen.plan.ReliabilityEstimate ..> com.mineutze.worldgen.plan.Evidence
+com.mineutze.worldgen.plan.ReliabilityEstimate ..> com.mineutze.worldgen.plan.ProductionFailureModel
+com.mineutze.worldgen.plan.ReliabilityEstimate ..> com.mineutze.worldgen.plan.StageEvidence
+com.mineutze.worldgen.plan.RequiredBorderLaw ..|> com.mineutze.worldgen.plan.GraphLaw
+com.mineutze.worldgen.plan.RequiredBorderLaw *--> com.mineutze.worldgen.biomegraph.BiomeId
+com.mineutze.worldgen.plan.RequiredBorderLaw *--> com.mineutze.worldgen.plan.ResolvedBorderRequirement
+com.mineutze.worldgen.plan.SizeRangeLaw ..|> com.mineutze.worldgen.plan.GraphLaw
+com.mineutze.worldgen.plan.SizeRangeLaw *--> com.mineutze.worldgen.biomegraph.BiomeId
+com.mineutze.worldgen.plan.SolveStages *--> com.mineutze.worldgen.plan.ClusterSizeModel
+com.mineutze.worldgen.plan.SolveStages *--> com.mineutze.worldgen.plan.HexTorusGeometry
+com.mineutze.worldgen.plan.SolveStages *--> com.mineutze.worldgen.plan.RawRuleTable
+com.mineutze.worldgen.plan.SolveStages *--> com.mineutze.worldgen.plan.ToroidalGrid
+com.mineutze.worldgen.plan.SolveStages ..> com.mineutze.worldgen.biomegraph.BiomeGraphData
+com.mineutze.worldgen.plan.SolveStages ..> com.mineutze.worldgen.plan.CatalogRejected
+com.mineutze.worldgen.plan.SolveStages ..> com.mineutze.worldgen.plan.MultigridPatternGenerator
+com.mineutze.worldgen.plan.SolveStages ..> com.mineutze.worldgen.plan.PlanSettings
+com.mineutze.worldgen.plan.SolveStages ..> com.mineutze.worldgen.plan.ToroidalSizedPatternGenerator
+com.mineutze.worldgen.plan.WorldSearch ..|> AutoCloseable
+com.mineutze.worldgen.plan.WorldSearch *--> com.mineutze.worldgen.plan.IndependentAttemptPool
+com.mineutze.worldgen.plan.Outcome *--> com.mineutze.worldgen.plan.BuiltWorld
+com.mineutze.worldgen.plan.Outcome *--> com.mineutze.worldgen.plan.Evidence
+com.mineutze.worldgen.plan.WorldSearch --> com.mineutze.worldgen.plan.AttemptResult
+com.mineutze.worldgen.plan.WorldSearch --> com.mineutze.worldgen.plan.Evidence
+com.mineutze.worldgen.plan.WorldSearch --> com.mineutze.worldgen.plan.PlanSettings
+com.mineutze.worldgen.plan.WorldSearch --> com.mineutze.worldgen.plan.ProgressListener
+com.mineutze.worldgen.plan.WorldSearch --> com.mineutze.worldgen.plan.SolveStages
+com.mineutze.worldgen.plan.WorldSearch --> com.mineutze.worldgen.plan.WorldBiomePlan
+com.mineutze.worldgen.plan.WorldSearch ..> com.mineutze.worldgen.biomegraph.BiomeId
+com.mineutze.worldgen.plan.WorldSearch ..> com.mineutze.worldgen.plan.BuiltWorld
+com.mineutze.worldgen.plan.WorldSearch ..> com.mineutze.worldgen.plan.MultigridPatternGenerator
+com.mineutze.worldgen.plan.WorldSearch ..> com.mineutze.worldgen.plan.Outcome
+com.mineutze.worldgen.plan.WorldSearch ..> com.mineutze.worldgen.plan.ProductionFailureModel
+com.mineutze.worldgen.plan.WorldSearch ..> com.mineutze.worldgen.plan.RealizationSelector
+com.mineutze.worldgen.plan.WorldSearch ..> com.mineutze.worldgen.plan.Selection
+com.mineutze.worldgen.plan.WorldSearch ..> com.mineutze.worldgen.plan.ToroidalPos
+com.mineutze.worldgen.plan.WorldSearch ..> com.mineutze.worldgen.plan.ToroidalSizedLocalSearch
 com.mineutze.worldgen.tooling.graphedit.GraphEditorServer ..> com.mineutze.worldgen.tooling.graphedit.GraphEditorFiles
 com.mineutze.worldgen.tooling.graphedit.GraphEditorSolveCheck ..> com.mineutze.worldgen.biomegraph.BiomeGraphData
 com.mineutze.worldgen.tooling.graphedit.GraphEditorSolveCheck ..> com.mineutze.worldgen.biomegraph.BiomeGraphJson
+com.mineutze.worldgen.tooling.graphedit.GraphEditorSolveCheck ..> com.mineutze.worldgen.plan.BuiltWorld
 com.mineutze.worldgen.tooling.graphedit.GraphEditorSolveCheck ..> com.mineutze.worldgen.plan.FeasibilityBudget
-com.mineutze.worldgen.tooling.graphedit.GraphEditorSolveCheck ..> com.mineutze.worldgen.plan.FeasibilityEstimator
+com.mineutze.worldgen.tooling.graphedit.GraphEditorSolveCheck ..> com.mineutze.worldgen.plan.FeasibilityCheck
 com.mineutze.worldgen.tooling.graphedit.GraphEditorSolveCheck ..> com.mineutze.worldgen.plan.FeasibilityVerdict
 com.mineutze.worldgen.tooling.graphedit.GraphEditorSolveCheck ..> com.mineutze.worldgen.tooling.graphedit.GraphEditorFiles
 com.mineutze.worldgen.tooling.graphedit.GraphEditorSolveCheck ..> com.mineutze.worldgen.plan.Outcome

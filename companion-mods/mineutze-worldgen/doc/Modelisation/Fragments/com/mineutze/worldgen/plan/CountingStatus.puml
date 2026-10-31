@@ -1,0 +1,7 @@
+namespace com.mineutze.worldgen.plan {
+enum CountingStatus <<enum>> {
+  SATISFIABLE
+  CONTRADICTION
+  UNKNOWN
+}
+}

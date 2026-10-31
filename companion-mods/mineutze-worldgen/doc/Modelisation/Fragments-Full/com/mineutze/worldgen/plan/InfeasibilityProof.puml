@@ -1,0 +1,13 @@
+namespace com.mineutze.worldgen.plan {
+class InfeasibilityProof <<record>> {
+  + conflicts : LawConflict[*]
+  + generatorRejection : Optional<String>
+  + explanationComplete : boolean
+  ~ {static} rejectedByGenerator(String) : InfeasibilityProof
+  ~ {static} of(ConflictExplainer.Explanation) : InfeasibilityProof
+}
+}
+
+com.mineutze.worldgen.plan.InfeasibilityProof *--> "0..*" com.mineutze.worldgen.plan.LawConflict
+com.mineutze.worldgen.plan.InfeasibilityProof ..> com.mineutze.worldgen.plan.ConflictExplainer
+com.mineutze.worldgen.plan.InfeasibilityProof ..> com.mineutze.worldgen.plan.Explanation

@@ -1,0 +1,19 @@
+namespace com.mineutze.worldgen.plan {
+class SolveStages <<record>> {
+  + table : RawRuleTable
+  + coarseGrid : ToroidalGrid
+  + coarseModel : ClusterSizeModel
+  + fineGrid : Optional<ToroidalGrid>
+  + fineModel : Optional<ClusterSizeModel>
+  + renderGrid : ToroidalGrid
+  + renderGeometry : HexTorusGeometry
+  ~ {static} of(BiomeGraphData, PlanSettings) : SolveStages
+  - {static} readCatalog(Supplier<T>) : T
+  - {static} requireRoomForEveryBiome(RawRuleTable, ToroidalGrid, ClusterSizeModel)
+}
+}
+
+com.mineutze.worldgen.plan.SolveStages *--> com.mineutze.worldgen.plan.ClusterSizeModel
+com.mineutze.worldgen.plan.SolveStages *--> com.mineutze.worldgen.plan.HexTorusGeometry
+com.mineutze.worldgen.plan.SolveStages *--> com.mineutze.worldgen.plan.RawRuleTable
+com.mineutze.worldgen.plan.SolveStages *--> com.mineutze.worldgen.plan.ToroidalGrid

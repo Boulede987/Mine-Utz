@@ -1,0 +1,98 @@
+@startuml WorldSearch
+
+skinparam classAttributeIconSize 0
+skinparam shadowing false
+
+skinparam class {
+  BackgroundColor<<interface>> #D6EAF8
+  BorderColor<<interface>> #2E86C1
+}
+skinparam class {
+  BackgroundColor<<abstract>> #E8DAEF
+  BorderColor<<abstract>> #8E44AD
+}
+skinparam class {
+  BackgroundColor #D5F5E3
+  BorderColor #27AE60
+}
+skinparam class {
+  BackgroundColor<<record>> #FCF3CF
+  BorderColor<<record>> #B7950B
+}
+skinparam class {
+  BackgroundColor<<static>> #a7faa0
+  BorderColor<<static>> #38d610
+}
+skinparam class {
+  BackgroundColor<<enum>> #F5B7B1
+  BorderColor<<enum>> #C0392B
+}
+
+namespace com.mineutze.worldgen.plan {
+class WorldSearch {
+  - {static} SEARCH_WORLD_SEED : long
+  - {static} PROGRESS_EVERY_ATTEMPTS : int
+  - {static} MOST_PATTERNS_AWAITING_RENDER : int
+  - {static} NANOS_PER_SECOND : double
+  - stages : SolveStages
+  - settings : PlanSettings
+  - threads : int
+  - progress : WorldBiomePlan.ProgressListener
+  - startNanos : long
+  - deadlineNanos : long
+  - pool : IndependentAttemptPool<AttemptResult>
+  - stopRequested : AtomicBoolean
+  - fineSeedsAwaitingRefinement : Map<ToroidalPos, BiomeId>[*]
+  - patternsAwaitingRender : Map<ToroidalPos, BiomeId>[*]
+  - coarseBaseSeed : long
+  - refinementBaseSeed : long
+  - refinementAttemptsPerPattern : int
+  - evidence : Evidence
+  - nextCoarseIndex : long
+  - nextRefinementIndex : long
+  - nextRenderIndex : long
+  - renderInFlight : boolean
+  - builtWorld : Optional<BuiltWorld>
+  - step() : boolean
+  - recordAlreadyFinished()
+  - recordCoarse(AttemptResult)
+  - queueForRender(Map<ToroidalPos, BiomeId>)
+  - recordRender(AttemptResult)
+  - reportProgressPeriodically()
+  - submitNextWork()
+  - submitCoarse()
+  - submitRefinement(Map<ToroidalPos, BiomeId>)
+  - submitRender(Map<ToroidalPos, BiomeId>)
+  - runCoarseAttempt(long) : AttemptResult
+  - runRefinementAttempt(Map<ToroidalPos, BiomeId>, long) : AttemptResult
+  - runRenderAttempt(Map<ToroidalPos, BiomeId>, long) : AttemptResult
+  - elapsed() : Duration
+  + close()
+}
+class Outcome <<record>> {
+  + builtWorld : Optional<BuiltWorld>
+  + evidence : Evidence
+}
+}
+
+com.mineutze.worldgen.plan.WorldSearch ..|> AutoCloseable
+com.mineutze.worldgen.plan.WorldSearch *--> com.mineutze.worldgen.plan.IndependentAttemptPool
+com.mineutze.worldgen.plan.Outcome *--> com.mineutze.worldgen.plan.BuiltWorld
+com.mineutze.worldgen.plan.Outcome *--> com.mineutze.worldgen.plan.Evidence
+com.mineutze.worldgen.plan.WorldSearch --> com.mineutze.worldgen.plan.AttemptResult
+com.mineutze.worldgen.plan.WorldSearch --> com.mineutze.worldgen.plan.Evidence
+com.mineutze.worldgen.plan.WorldSearch --> com.mineutze.worldgen.plan.PlanSettings
+com.mineutze.worldgen.plan.WorldSearch --> com.mineutze.worldgen.plan.ProgressListener
+com.mineutze.worldgen.plan.WorldSearch --> com.mineutze.worldgen.plan.SolveStages
+com.mineutze.worldgen.plan.WorldSearch --> com.mineutze.worldgen.plan.WorldBiomePlan
+com.mineutze.worldgen.plan.WorldSearch ..> com.mineutze.worldgen.biomegraph.BiomeId
+com.mineutze.worldgen.plan.WorldSearch ..> com.mineutze.worldgen.plan.BuiltWorld
+com.mineutze.worldgen.plan.WorldSearch ..> com.mineutze.worldgen.plan.MultigridPatternGenerator
+com.mineutze.worldgen.plan.WorldSearch ..> com.mineutze.worldgen.plan.Outcome
+com.mineutze.worldgen.plan.WorldSearch ..> com.mineutze.worldgen.plan.ProductionFailureModel
+com.mineutze.worldgen.plan.WorldSearch ..> com.mineutze.worldgen.plan.RealizationSelector
+com.mineutze.worldgen.plan.WorldSearch ..> com.mineutze.worldgen.plan.Selection
+com.mineutze.worldgen.plan.WorldSearch ..> com.mineutze.worldgen.plan.ToroidalPos
+com.mineutze.worldgen.plan.WorldSearch ..> com.mineutze.worldgen.plan.ToroidalSizedLocalSearch
+
+@enduml

@@ -1,0 +1,10 @@
+namespace com.mineutze.worldgen.plan {
+class ReliabilityEstimate <<record>> {
+  + worldFailureLow : double
+  + worldFailureHigh : double
+  - {static} CERTAIN : double
+  ~ {static} of(Evidence, ProductionFailureModel, double) : ReliabilityEstimate
+  - {static} lowerRate(StageEvidence, double) : double
+  - {static} upperRate(StageEvidence, double) : double
+}
+}

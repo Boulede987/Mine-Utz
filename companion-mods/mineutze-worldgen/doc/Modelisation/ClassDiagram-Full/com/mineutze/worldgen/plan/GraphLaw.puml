@@ -1,4 +1,4 @@
-@startuml SequentialVerdictRule
+@startuml GraphLaw
 
 skinparam classAttributeIconSize 0
 skinparam shadowing false
@@ -29,17 +29,8 @@ skinparam class {
 }
 
 namespace com.mineutze.worldgen.plan {
-class SequentialVerdictRule {
-  - {static} CERTAIN : double
-  - model : ProductionFailureModel
-  - budget : FeasibilityBudget
-  - {static} everyRenderWorked(StageEvidence) : boolean
-  - lowerRate(StageEvidence) : double
-  - upperRate(StageEvidence) : double
-}
-enum Deadline <<enum>> {
-  REACHED
-  NOT_REACHED
+interface GraphLaw <<interface>> {
+  + describe() : String
 }
 }
 

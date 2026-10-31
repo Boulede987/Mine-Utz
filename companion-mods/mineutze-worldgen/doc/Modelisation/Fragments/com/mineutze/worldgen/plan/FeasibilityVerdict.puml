@@ -1,31 +1,37 @@
 namespace com.mineutze.worldgen.plan {
 class FeasibilityVerdict <<record>> {
   + outcome : Outcome
+  + proof : Optional<InfeasibilityProof>
+  + builtWorld : Optional<BuiltWorld>
   + evidence : Evidence
-  + worldFailureLowerBound : double
-  + certifiedWorldFailureUpperBound : double
+  + reliability : Optional<ReliabilityEstimate>
+  + targetWorldFailure : double
   + elapsed : Duration
-  + rejection : Optional<String>
-  + closestFailureReport : Optional<String>
-  + renderFailureReport : Optional<String>
-  - {static} CERTAIN_FAILURE : double
   - {static} PERCENT_PER_UNIT : double
   - {static} SMALLEST_SHOWN_PERCENT : double
   - {static} MILLIS_PER_SECOND : double
-  - {static} RENDER_CAVEAT : String
-  ~ {static} rejected(String, Duration) : FeasibilityVerdict
+  ~ {static} infeasible(InfeasibilityProof, Evidence, double, Duration) : FeasibilityVerdict
+  ~ {static} feasible(BuiltWorld, Evidence, ReliabilityEstimate, double, Duration) : FeasibilityVerdict
+  ~ {static} unproven(Evidence, double, Duration) : FeasibilityVerdict
   + summary() : String
-  - headline() : String
-  - evidenceLine() : String
+  - feasibleSummary() : String
+  - {static} infeasibleSummary(InfeasibilityProof) : String
+  - {static} appendConflict(StringBuilder, int, LawConflict)
+  - unprovenSummary() : String
+  - attemptsLine() : String
+  - reliabilityLine() : String
+  - seconds() : String
   - {static} percent(double) : String
-  - {static} requireProbability(String, double)
 }
 enum Outcome <<enum>> {
-  PASS
-  FAIL
-  BORDERLINE
+  FEASIBLE
+  INFEASIBLE
+  UNPROVEN
 }
 }
 
+com.mineutze.worldgen.plan.FeasibilityVerdict *--> com.mineutze.worldgen.plan.BuiltWorld
 com.mineutze.worldgen.plan.FeasibilityVerdict *--> com.mineutze.worldgen.plan.Evidence
+com.mineutze.worldgen.plan.FeasibilityVerdict *--> com.mineutze.worldgen.plan.InfeasibilityProof
 com.mineutze.worldgen.plan.FeasibilityVerdict *--> com.mineutze.worldgen.plan.Outcome
+com.mineutze.worldgen.plan.FeasibilityVerdict *--> com.mineutze.worldgen.plan.ReliabilityEstimate

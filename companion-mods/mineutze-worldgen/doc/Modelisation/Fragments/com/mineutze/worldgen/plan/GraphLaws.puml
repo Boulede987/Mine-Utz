@@ -1,0 +1,6 @@
+namespace com.mineutze.worldgen.plan {
+class GraphLaws {
+  ~ {static} of(RawRuleTable, ClusterSizeModel) : List<GraphLaw>
+  - {static} addIllegalPairsFrom(RawRuleTable, List<BiomeId>, int, List<GraphLaw>)
+}
+}

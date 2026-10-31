@@ -1,0 +1,6 @@
+namespace com.mineutze.worldgen.plan {
+class CatalogRejected {
+}
+}
+
+com.mineutze.worldgen.plan.CatalogRejected --|> RuntimeException

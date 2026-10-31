@@ -36,19 +36,21 @@ skinparam class {
 namespace com.mineutze.worldgen.tooling.graphedit {
 class GraphEditorFiles {
   ~ {static} DATA_FILE : Path
+  ~ {static} VERDICT_WORLD_PICTURE : Path
 }
 class GraphEditorServer {
   - {static} DEFAULT_PORT : int
   + {static} main(String[])
 }
 class GraphEditorSolveCheck {
-  - {static} EXIT_PASS : int
-  - {static} EXIT_FAIL : int
-  - {static} EXIT_BORDERLINE : int
+  - {static} EXIT_FEASIBLE : int
+  - {static} EXIT_INFEASIBLE : int
+  - {static} EXIT_UNPROVEN : int
   - {static} EXIT_CRASH : int
   + {static} main(String[])
   - {static} checkSavedGraph() : int
   - {static} printVerdict(FeasibilityVerdict)
+  - {static} writeWorldPicture(BuiltWorld)
   - {static} exitCodeOf(FeasibilityVerdict.Outcome) : int
 }
 class GraphValidation {

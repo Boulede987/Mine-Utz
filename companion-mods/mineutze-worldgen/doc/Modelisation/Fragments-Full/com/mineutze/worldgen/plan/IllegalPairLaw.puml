@@ -1,0 +1,10 @@
+namespace com.mineutze.worldgen.plan {
+class IllegalPairLaw <<record>> {
+  + first : BiomeId
+  + second : BiomeId
+  + describe() : String
+}
+}
+
+com.mineutze.worldgen.plan.IllegalPairLaw ..|> com.mineutze.worldgen.plan.GraphLaw
+com.mineutze.worldgen.plan.IllegalPairLaw *--> com.mineutze.worldgen.biomegraph.BiomeId

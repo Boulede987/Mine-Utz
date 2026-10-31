@@ -1,0 +1,41 @@
+namespace com.mineutze.worldgen.plan {
+class ConflictExplainer {
+  - model : CountingModel
+  - timeLimit : Duration
+  - {static} recordAndSetAside(LawConflict, List<LawConflict>, List<GraphLaw>)
+  - {static} biomesOf(List<GraphLaw>) : List<BiomeId>
+  - {static} concerns(GraphLaw, BiomeId) : boolean
+  - {static} union(List<GraphLaw>, List<GraphLaw>) : List<GraphLaw>
+}
+class Explanation <<record>> {
+  + conflicts : LawConflict[*]
+  + complete : boolean
+}
+class Run {
+  - deadlineNanos : long
+  - minimalConflict(List<GraphLaw>, Predicate<List<GraphLaw>>) : List<GraphLaw>
+  - shrinkOnFullModel(List<GraphLaw>) : List<GraphLaw>
+  - dropIfStillContradicting(List<GraphLaw>, GraphLaw)
+  - quickXplain(List<GraphLaw>, boolean, List<GraphLaw>, Predicate<List<GraphLaw>>) : List<GraphLaw>
+  - contradicts(List<GraphLaw>) : boolean
+  - contradicts(List<GraphLaw>, BiomeId) : boolean
+  - requireTimeLeft()
+}
+class Incomplete <<static>> {
+}
+}
+
+com.mineutze.worldgen.plan.Incomplete --|> RuntimeException
+com.mineutze.worldgen.plan.Explanation *--> "0..*" com.mineutze.worldgen.plan.LawConflict
+com.mineutze.worldgen.plan.ConflictExplainer --> com.mineutze.worldgen.plan.CountingModel
+com.mineutze.worldgen.plan.ConflictExplainer ..> com.mineutze.worldgen.biomegraph.BiomeId
+com.mineutze.worldgen.plan.ConflictExplainer ..> com.mineutze.worldgen.plan.Explanation
+com.mineutze.worldgen.plan.ConflictExplainer ..> com.mineutze.worldgen.plan.GraphLaw
+com.mineutze.worldgen.plan.ConflictExplainer ..> com.mineutze.worldgen.plan.Incomplete
+com.mineutze.worldgen.plan.ConflictExplainer ..> com.mineutze.worldgen.plan.LawConflict
+com.mineutze.worldgen.plan.ConflictExplainer ..> com.mineutze.worldgen.plan.Run
+com.mineutze.worldgen.plan.Run ..> com.mineutze.worldgen.biomegraph.BiomeId
+com.mineutze.worldgen.plan.Run ..> com.mineutze.worldgen.plan.CountingStatus
+com.mineutze.worldgen.plan.Run ..> com.mineutze.worldgen.plan.GraphLaw
+com.mineutze.worldgen.plan.Run ..> com.mineutze.worldgen.plan.Incomplete
+com.mineutze.worldgen.plan.Run ..> com.mineutze.worldgen.plan.LawConflict

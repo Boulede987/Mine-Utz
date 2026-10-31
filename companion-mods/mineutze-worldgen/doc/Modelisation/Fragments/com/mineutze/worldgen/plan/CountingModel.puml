@@ -1,0 +1,54 @@
+namespace com.mineutze.worldgen.plan {
+class CountingModel {
+  - {static} CHECK_TIME_LIMIT : Duration
+  - {static} EDGES_PER_CELL : int
+  - biomes : BiomeId[*]
+  - indexOfBiome : Map<BiomeId, Integer>
+  - minCells : int[*]
+  - maxCells : int[*]
+  - perimeterCeilingPerPatch : int[*]
+  - gridSide : int
+  - gridCells : int
+  ~ {static} of(RawRuleTable, PlanSettings) : CountingModel
+  - {static} solve(Model) : CountingStatus
+  - indexOf(BiomeId) : int
+  - {static} alternativesOf(ResolvedBorderRequirement) : List<ResolvedBorderRequirement.Share>
+}
+class Build {
+  - model : Model
+  - count : int
+  - sized : boolean[*]
+  - forbidden : boolean[][*]
+  - requirements : RequiredBorderLaw[*]
+  - patches : IntVar[*]
+  - cells : IntVar[*]
+  - perimeter : IntVar[*]
+  - edges : IntVar[][*]
+  - modelled : boolean[*]
+  - everyBiomeModelled : boolean
+  - {static} allTrue(boolean[]) : boolean
+  - outerGridCells() : int
+  - pairModelled(int, int) : boolean
+  - classify(GraphLaw)
+  - markForbidden(int, int)
+  - declarePatchesAndCells()
+  - declareEdgesAndPerimeters()
+  - postPerimeterIdentity(int)
+  - postSizeAndPerimeterBounds(int)
+  - postIllegalPairs()
+  - postRequirement(RequiredBorderLaw)
+  - postRequirementPart(int, ResolvedBorderRequirement)
+  - postShares(int, List<ResolvedBorderRequirement.Share>)
+  - postWeightedShares(int, List<ResolvedBorderRequirement.Share>, ShareWeights)
+  - addShareTerms(int, ResolvedBorderRequirement.Share, int, List<IntVar>, List<Integer>)
+}
+class Corners <<record>> {
+  + build : Build
+  - hasLegalThird(int, int) : boolean
+  - postSegments(int, int, List<IntVar>[]) : IntVar
+  - postPatchVertices(int, IntVar[], List<IntVar>)
+  - {static} newLists(int) : List<IntVar>[]
+}
+}
+
+com.mineutze.worldgen.plan.Corners *--> com.mineutze.worldgen.plan.Build

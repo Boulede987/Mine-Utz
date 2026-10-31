@@ -1,0 +1,14 @@
+namespace com.mineutze.worldgen.plan {
+class LawConflict <<record>> {
+  + laws : GraphLaw[*]
+  - {static} SMALLEST_GROUPED_PAIR_COUNT : int
+  - {static} hubOf(List<IllegalPairLaw>) : Optional<BiomeId>
+  - {static} partnersOf(BiomeId, List<IllegalPairLaw>) : List<String>
+  - {static} isFolded(GraphLaw, Optional<BiomeId>) : boolean
+  - {static} touches(IllegalPairLaw, BiomeId) : boolean
+}
+}
+
+com.mineutze.worldgen.plan.LawConflict *--> "0..*" com.mineutze.worldgen.plan.GraphLaw
+com.mineutze.worldgen.plan.LawConflict ..> com.mineutze.worldgen.biomegraph.BiomeId
+com.mineutze.worldgen.plan.LawConflict ..> com.mineutze.worldgen.plan.IllegalPairLaw
