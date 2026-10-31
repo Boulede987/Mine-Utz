@@ -6,6 +6,29 @@ run `./gradlew :worldgen-core:calibrationReport` to read it, or `./gradlew :worl
 enforce it (`CalibrationManifestTest` fails loud on drift). This log stays the history (context,
 alternatives considered, evidence at the time) - it does not track current validity on its own.
 
+## 2026-10-31 — UNPROVEN verdicts rank what blocked the failed attempts
+
+**Context:** Tight-but-feasible graphs (the current WIP graph solves ~1 coarse attempt in 100) end UNPROVEN in 2 min
+with no hint of what to loosen. Measuring each loosening's solve rate directly needs hundreds of attempts per law -
+hours. User requirement: rank in the normal check at no extra time; an optional Verify run (next increment, up to
+10 min) measures the top loosenings.
+
+**Decision:** every failed coarse / refinement attempt's closest state goes through `ObstacleFinder` on the worker
+thread: laws it still breaks (illegal pair touching, patch outside its cell range, patch short of its required border,
+biome absent, patch outside its shape limits incl. the perimeter floor), each counted once per attempt by
+`TightnessTally`, one tally per stage (coarse and fine use different grids and size models: not one population). The
+UNPROVEN summary lists the top 10 per stage as "still broke in N of M" - co-occurrence wording, never "blocked",
+labelled measured, not proof. Per-cluster facts come from `ToroidalSizedLocalSearch.clusterFacts` in `worldgen-core`
+(user choice over duplicating the walk in the tool); the solver's own violation sum now reuses it, so behaviour is
+unchanged. Verify will widen a size range by min -20% / max +25% (user choice).
+
+**Evidence (2026-10-31, WIP graph, 12 threads, 120 s, two runs):** 37 then 42 failed coarse attempts; the top obstacles
+are the same ocean-family-vs-land pairs both times: ocean/savanna 15 of 37 / 16 of 42, warm_ocean/windswept_gravelly_hills
+11 / 12, ocean/wooded_badlands 8 / 9, taiga/warm_ocean 7 / 9 - consistent with the earlier "ocean bottleneck" finding.
+
+**Known gap:** a ranking says where attempts end, not that loosening there raises the solve rate - that is what the
+Verify run is for.
+
 ## 2026-10-31 — Solve check verdict: FEASIBLE / INFEASIBLE (proof) / UNPROVEN
 
 **Context:** The statistical PASS/FAIL/BORDERLINE verdict (entry below) was rejected by the user: "BORDERLINE"
