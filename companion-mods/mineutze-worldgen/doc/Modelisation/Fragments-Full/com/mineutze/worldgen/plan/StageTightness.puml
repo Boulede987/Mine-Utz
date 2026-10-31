@@ -1,0 +1,8 @@
+namespace com.mineutze.worldgen.plan {
+class StageTightness <<record>> {
+  + coarse : TightnessRanking
+  + refinement : TightnessRanking
+}
+}
+
+com.mineutze.worldgen.plan.StageTightness *--> com.mineutze.worldgen.plan.TightnessRanking

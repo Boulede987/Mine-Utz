@@ -1,0 +1,11 @@
+namespace com.mineutze.worldgen.plan {
+class ObstacleFinder {
+  ~ {static} of(RawRuleTable, ToroidalGrid, ClusterSizeModel, Map<ToroidalPos, BiomeId>) : Set<Obstacle>
+  - {static} addObstaclesOf(ToroidalSizedLocalSearch.ClusterFacts, RawRuleTable, ClusterSizeModel, Set<Obstacle>)
+  - {static} addIllegalPairs(ToroidalSizedLocalSearch.ClusterFacts, RawRuleTable, Set<Obstacle>)
+  - {static} addSizeRange(ToroidalSizedLocalSearch.ClusterFacts, ClusterSizeModel, Set<Obstacle>)
+  - {static} addRequiredBorder(ToroidalSizedLocalSearch.ClusterFacts, RawRuleTable, Set<Obstacle>)
+  - {static} addShapeLimit(ToroidalSizedLocalSearch.ClusterFacts, ClusterSizeModel, Set<Obstacle>)
+  - {static} addMissingBiomes(RawRuleTable, Map<ToroidalPos, BiomeId>, Set<Obstacle>)
+}
+}

@@ -1,0 +1,8 @@
+namespace com.mineutze.worldgen.plan {
+class RankedObstacle <<record>> {
+  + obstacle : Obstacle
+  + attemptsBroken : int
+}
+}
+
+com.mineutze.worldgen.plan.RankedObstacle *--> com.mineutze.worldgen.plan.Obstacle

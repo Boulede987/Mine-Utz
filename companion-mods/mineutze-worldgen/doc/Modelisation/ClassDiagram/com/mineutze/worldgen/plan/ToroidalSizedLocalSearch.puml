@@ -49,6 +49,8 @@ class ToroidalSizedLocalSearch {
   ~ {static} biomesOnIllegalEdges(RawRuleTable, ToroidalGrid, Map<ToroidalPos, BiomeId>) : Set<BiomeId>
   ~ {static} illegalPairCounts(RawRuleTable, ToroidalGrid, Map<ToroidalPos, BiomeId>) : Map<String, Integer>
   - {static} tallyIllegalPairsFromCell(RawRuleTable, ToroidalGrid, Map<ToroidalPos, BiomeId>, Map<String, Integer>, Map.Entry<ToroidalPos, BiomeId>)
+  ~ {static} clusterFacts(RawRuleTable, ToroidalGrid, ClusterSizeModel, Map<ToroidalPos, BiomeId>) : List<ClusterFacts>
+  - {static} factsOf(RawRuleTable, ToroidalGrid, ClusterSizeModel, ExploredCluster) : ClusterFacts
   ~ {static} breakdown(RawRuleTable, ToroidalGrid, ClusterSizeModel, Map<ToroidalPos, BiomeId>) : Breakdown
   - {static} countIllegalEdges(RawRuleTable, ToroidalGrid, Map<ToroidalPos, BiomeId>) : int
   - {static} exploreCluster(ToroidalGrid, Map<ToroidalPos, BiomeId>, ToroidalPos, Set<ToroidalPos>) : ExploredCluster
@@ -77,6 +79,15 @@ class Schedule <<record>> {
   + lowTemperature : double
   + cycleSteps : long
   ~ {static} constant(double) : Schedule
+}
+class ClusterFacts <<record>> {
+  + biome : BiomeId
+  + cellCount : int
+  + perimeter : int
+  + edgesToBiome : Map<BiomeId, Integer>
+  + borderShortfall : int
+  + thinCells : int
+  + violation : int
 }
 class ExploredCluster <<record>> {
   + biome : BiomeId
@@ -179,6 +190,7 @@ class FitCandidate <<record>> {
 
 com.mineutze.worldgen.plan.Result *--> com.mineutze.worldgen.biomegraph.BiomeId
 com.mineutze.worldgen.plan.Result *--> com.mineutze.worldgen.plan.ToroidalPos
+com.mineutze.worldgen.plan.ClusterFacts *--> com.mineutze.worldgen.biomegraph.BiomeId
 com.mineutze.worldgen.plan.ExploredCluster *--> com.mineutze.worldgen.biomegraph.BiomeId
 com.mineutze.worldgen.plan.ExploredCluster *--> "0..*" com.mineutze.worldgen.plan.ToroidalPos
 

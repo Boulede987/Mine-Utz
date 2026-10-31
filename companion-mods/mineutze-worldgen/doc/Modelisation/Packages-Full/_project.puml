@@ -883,6 +883,8 @@ class ToroidalSizedLocalSearch {
   ~ {static} biomesOnIllegalEdges(RawRuleTable, ToroidalGrid, Map<ToroidalPos, BiomeId>) : Set<BiomeId>
   ~ {static} illegalPairCounts(RawRuleTable, ToroidalGrid, Map<ToroidalPos, BiomeId>) : Map<String, Integer>
   - {static} tallyIllegalPairsFromCell(RawRuleTable, ToroidalGrid, Map<ToroidalPos, BiomeId>, Map<String, Integer>, Map.Entry<ToroidalPos, BiomeId>)
+  ~ {static} clusterFacts(RawRuleTable, ToroidalGrid, ClusterSizeModel, Map<ToroidalPos, BiomeId>) : List<ClusterFacts>
+  - {static} factsOf(RawRuleTable, ToroidalGrid, ClusterSizeModel, ExploredCluster) : ClusterFacts
   ~ {static} breakdown(RawRuleTable, ToroidalGrid, ClusterSizeModel, Map<ToroidalPos, BiomeId>) : Breakdown
   - {static} countIllegalEdges(RawRuleTable, ToroidalGrid, Map<ToroidalPos, BiomeId>) : int
   - {static} exploreCluster(ToroidalGrid, Map<ToroidalPos, BiomeId>, ToroidalPos, Set<ToroidalPos>) : ExploredCluster
@@ -911,6 +913,15 @@ class Schedule <<record>> {
   + lowTemperature : double
   + cycleSteps : long
   ~ {static} constant(double) : Schedule
+}
+class ClusterFacts <<record>> {
+  + biome : BiomeId
+  + cellCount : int
+  + perimeter : int
+  + edgesToBiome : Map<BiomeId, Integer>
+  + borderShortfall : int
+  + thinCells : int
+  + violation : int
 }
 class ExploredCluster <<record>> {
   + biome : BiomeId
@@ -1310,19 +1321,22 @@ class FeasibilityVerdict <<record>> {
   + builtWorld : Optional<BuiltWorld>
   + evidence : Evidence
   + reliability : Optional<ReliabilityEstimate>
+  + tightness : Optional<StageTightness>
   + targetWorldFailure : double
   + elapsed : Duration
   - {static} PERCENT_PER_UNIT : double
   - {static} SMALLEST_SHOWN_PERCENT : double
   - {static} MILLIS_PER_SECOND : double
+  - {static} OBSTACLES_SHOWN : int
   ~ {static} infeasible(InfeasibilityProof, Evidence, double, Duration) : FeasibilityVerdict
   ~ {static} feasible(BuiltWorld, Evidence, ReliabilityEstimate, double, Duration) : FeasibilityVerdict
-  ~ {static} unproven(Evidence, double, Duration) : FeasibilityVerdict
+  ~ {static} unproven(Evidence, StageTightness, double, Duration) : FeasibilityVerdict
   + summary() : String
   - feasibleSummary() : String
   - {static} infeasibleSummary(InfeasibilityProof) : String
   - {static} appendConflict(StringBuilder, int, LawConflict)
   - unprovenSummary() : String
+  - {static} tightnessLines(String, TightnessRanking) : String
   - attemptsLine() : String
   - reliabilityLine() : String
   - seconds() : String
@@ -1369,12 +1383,36 @@ class LawConflict <<record>> {
   - {static} isFolded(GraphLaw, Optional<BiomeId>) : boolean
   - {static} touches(IllegalPairLaw, BiomeId) : boolean
 }
+class LawObstacle <<record>> {
+  + law : GraphLaw
+  + describe() : String
+}
+class MissingBiome <<record>> {
+  + biome : BiomeId
+  + describe() : String
+}
+interface Obstacle <<interface>> {
+  + describe() : String
+}
+class ObstacleFinder {
+  ~ {static} of(RawRuleTable, ToroidalGrid, ClusterSizeModel, Map<ToroidalPos, BiomeId>) : Set<Obstacle>
+  - {static} addObstaclesOf(ToroidalSizedLocalSearch.ClusterFacts, RawRuleTable, ClusterSizeModel, Set<Obstacle>)
+  - {static} addIllegalPairs(ToroidalSizedLocalSearch.ClusterFacts, RawRuleTable, Set<Obstacle>)
+  - {static} addSizeRange(ToroidalSizedLocalSearch.ClusterFacts, ClusterSizeModel, Set<Obstacle>)
+  - {static} addRequiredBorder(ToroidalSizedLocalSearch.ClusterFacts, RawRuleTable, Set<Obstacle>)
+  - {static} addShapeLimit(ToroidalSizedLocalSearch.ClusterFacts, ClusterSizeModel, Set<Obstacle>)
+  - {static} addMissingBiomes(RawRuleTable, Map<ToroidalPos, BiomeId>, Set<Obstacle>)
+}
 class ProductionFailureModel <<record>> {
   + coarseAttemptsPerWorld : int
   + refinementAttemptsPerWorld : int
   ~ {static} fromProduction(PlanSettings) : ProductionFailureModel
   - {static} atLeastOneSuccess(double, int) : double
   - {static} requireRate(String, double)
+}
+class RankedObstacle <<record>> {
+  + obstacle : Obstacle
+  + attemptsBroken : int
 }
 class ReliabilityEstimate <<record>> {
   + worldFailureLow : double
@@ -1387,6 +1425,10 @@ class ReliabilityEstimate <<record>> {
 class RequiredBorderLaw <<record>> {
   + biome : BiomeId
   + requirement : ResolvedBorderRequirement
+  + describe() : String
+}
+class ShapeLimit <<record>> {
+  + biome : BiomeId
   + describe() : String
 }
 class ShareWeights <<record>> {
@@ -1420,6 +1462,18 @@ class StageEvidence <<record>> {
   ~ {static} EMPTY : StageEvidence
   - {static} lowerOf(OptionalInt, OptionalInt) : OptionalInt
 }
+class StageTightness <<record>> {
+  + coarse : TightnessRanking
+  + refinement : TightnessRanking
+}
+class TightnessRanking <<record>> {
+  + entries : RankedObstacle[*]
+  + failedAttempts : int
+}
+class TightnessTally {
+  - attemptsBrokenByObstacle : Map<Obstacle, Integer>
+  - failedAttempts : int
+}
 class WorldSearch {
   - {static} SEARCH_WORLD_SEED : long
   - {static} PROGRESS_EVERY_ATTEMPTS : int
@@ -1431,7 +1485,7 @@ class WorldSearch {
   - progress : WorldBiomePlan.ProgressListener
   - startNanos : long
   - deadlineNanos : long
-  - pool : IndependentAttemptPool<AttemptResult>
+  - pool : IndependentAttemptPool<FinishedAttempt>
   - stopRequested : AtomicBoolean
   - fineSeedsAwaitingRefinement : Map<ToroidalPos, BiomeId>[*]
   - patternsAwaitingRender : Map<ToroidalPos, BiomeId>[*]
@@ -1444,9 +1498,12 @@ class WorldSearch {
   - nextRenderIndex : long
   - renderInFlight : boolean
   - builtWorld : Optional<BuiltWorld>
+  - coarseTightness : TightnessTally
+  - refinementTightness : TightnessTally
   - step() : boolean
   - recordAlreadyFinished()
-  - recordCoarse(AttemptResult)
+  - recordCoarse(AttemptResult, Set<Obstacle>)
+  - recordRefinement(AttemptResult, Set<Obstacle>)
   - queueForRender(Map<ToroidalPos, BiomeId>)
   - recordRender(AttemptResult)
   - reportProgressPeriodically()
@@ -1454,15 +1511,21 @@ class WorldSearch {
   - submitCoarse()
   - submitRefinement(Map<ToroidalPos, BiomeId>)
   - submitRender(Map<ToroidalPos, BiomeId>)
-  - runCoarseAttempt(long) : AttemptResult
-  - runRefinementAttempt(Map<ToroidalPos, BiomeId>, long) : AttemptResult
-  - runRenderAttempt(Map<ToroidalPos, BiomeId>, long) : AttemptResult
+  - runCoarseAttempt(long) : FinishedAttempt
+  - runRefinementAttempt(Map<ToroidalPos, BiomeId>, long) : FinishedAttempt
+  - obstaclesOf(AttemptResult, ToroidalGrid, ClusterSizeModel) : Set<Obstacle>
+  - runRenderAttempt(Map<ToroidalPos, BiomeId>, long) : FinishedAttempt
   - elapsed() : Duration
   + close()
 }
 class Outcome <<record>> {
   + builtWorld : Optional<BuiltWorld>
   + evidence : Evidence
+  + tightness : StageTightness
+}
+class FinishedAttempt <<record>> {
+  + result : AttemptResult
+  + obstacles : Obstacle[*]
 }
 }
 namespace com.mineutze.worldgen.tooling.graphedit {
@@ -1778,10 +1841,12 @@ com.mineutze.worldgen.plan.ToroidalPatternPngExporter ..> com.mineutze.worldgen.
 com.mineutze.worldgen.plan.ToroidalPatternPngExporter ..> com.mineutze.worldgen.plan.ToroidalPos
 com.mineutze.worldgen.plan.Result *--> com.mineutze.worldgen.biomegraph.BiomeId
 com.mineutze.worldgen.plan.Result *--> com.mineutze.worldgen.plan.ToroidalPos
+com.mineutze.worldgen.plan.ClusterFacts *--> com.mineutze.worldgen.biomegraph.BiomeId
 com.mineutze.worldgen.plan.ExploredCluster *--> com.mineutze.worldgen.biomegraph.BiomeId
 com.mineutze.worldgen.plan.ExploredCluster *--> "0..*" com.mineutze.worldgen.plan.ToroidalPos
 com.mineutze.worldgen.plan.ToroidalSizedLocalSearch ..> com.mineutze.worldgen.biomegraph.BiomeId
 com.mineutze.worldgen.plan.ToroidalSizedLocalSearch ..> com.mineutze.worldgen.plan.Breakdown
+com.mineutze.worldgen.plan.ToroidalSizedLocalSearch ..> com.mineutze.worldgen.plan.ClusterFacts
 com.mineutze.worldgen.plan.ToroidalSizedLocalSearch ..> com.mineutze.worldgen.plan.ClusterSizeModel
 com.mineutze.worldgen.plan.ToroidalSizedLocalSearch ..> com.mineutze.worldgen.plan.ExploredCluster
 com.mineutze.worldgen.plan.ToroidalSizedLocalSearch ..> com.mineutze.worldgen.plan.RawRuleTable
@@ -1940,7 +2005,9 @@ com.mineutze.worldgen.plan.FeasibilityVerdict *--> com.mineutze.worldgen.plan.Ev
 com.mineutze.worldgen.plan.FeasibilityVerdict *--> com.mineutze.worldgen.plan.InfeasibilityProof
 com.mineutze.worldgen.plan.FeasibilityVerdict *--> com.mineutze.worldgen.plan.Outcome
 com.mineutze.worldgen.plan.FeasibilityVerdict *--> com.mineutze.worldgen.plan.ReliabilityEstimate
+com.mineutze.worldgen.plan.FeasibilityVerdict *--> com.mineutze.worldgen.plan.StageTightness
 com.mineutze.worldgen.plan.FeasibilityVerdict ..> com.mineutze.worldgen.plan.LawConflict
+com.mineutze.worldgen.plan.FeasibilityVerdict ..> com.mineutze.worldgen.plan.TightnessRanking
 com.mineutze.worldgen.plan.GraphLaws ..> com.mineutze.worldgen.biomegraph.BiomeId
 com.mineutze.worldgen.plan.GraphLaws ..> com.mineutze.worldgen.plan.ClusterSizeModel
 com.mineutze.worldgen.plan.GraphLaws ..> com.mineutze.worldgen.plan.GraphLaw
@@ -1957,7 +2024,28 @@ com.mineutze.worldgen.plan.InfeasibilityProof ..> com.mineutze.worldgen.plan.Exp
 com.mineutze.worldgen.plan.LawConflict *--> "0..*" com.mineutze.worldgen.plan.GraphLaw
 com.mineutze.worldgen.plan.LawConflict ..> com.mineutze.worldgen.biomegraph.BiomeId
 com.mineutze.worldgen.plan.LawConflict ..> com.mineutze.worldgen.plan.IllegalPairLaw
+com.mineutze.worldgen.plan.LawObstacle ..|> com.mineutze.worldgen.plan.Obstacle
+com.mineutze.worldgen.plan.LawObstacle *--> com.mineutze.worldgen.plan.GraphLaw
+com.mineutze.worldgen.plan.MissingBiome ..|> com.mineutze.worldgen.plan.Obstacle
+com.mineutze.worldgen.plan.MissingBiome *--> com.mineutze.worldgen.biomegraph.BiomeId
+com.mineutze.worldgen.plan.ObstacleFinder ..> com.mineutze.worldgen.biomegraph.BiomeId
+com.mineutze.worldgen.plan.ObstacleFinder ..> com.mineutze.worldgen.plan.ClusterFacts
+com.mineutze.worldgen.plan.ObstacleFinder ..> com.mineutze.worldgen.plan.ClusterSizeModel
+com.mineutze.worldgen.plan.ObstacleFinder ..> com.mineutze.worldgen.plan.IllegalPairLaw
+com.mineutze.worldgen.plan.ObstacleFinder ..> com.mineutze.worldgen.plan.LawObstacle
+com.mineutze.worldgen.plan.ObstacleFinder ..> com.mineutze.worldgen.plan.MissingBiome
+com.mineutze.worldgen.plan.ObstacleFinder ..> com.mineutze.worldgen.plan.Obstacle
+com.mineutze.worldgen.plan.ObstacleFinder ..> com.mineutze.worldgen.plan.RawRuleTable
+com.mineutze.worldgen.plan.ObstacleFinder ..> com.mineutze.worldgen.plan.RequiredBorderLaw
+com.mineutze.worldgen.plan.ObstacleFinder ..> com.mineutze.worldgen.plan.ResolvedBorderRequirement
+com.mineutze.worldgen.plan.ObstacleFinder ..> com.mineutze.worldgen.plan.ShapeLimit
+com.mineutze.worldgen.plan.ObstacleFinder ..> com.mineutze.worldgen.plan.ShapeRule
+com.mineutze.worldgen.plan.ObstacleFinder ..> com.mineutze.worldgen.plan.SizeRangeLaw
+com.mineutze.worldgen.plan.ObstacleFinder ..> com.mineutze.worldgen.plan.ToroidalGrid
+com.mineutze.worldgen.plan.ObstacleFinder ..> com.mineutze.worldgen.plan.ToroidalPos
+com.mineutze.worldgen.plan.ObstacleFinder ..> com.mineutze.worldgen.plan.ToroidalSizedLocalSearch
 com.mineutze.worldgen.plan.ProductionFailureModel ..> com.mineutze.worldgen.plan.PlanSettings
+com.mineutze.worldgen.plan.RankedObstacle *--> com.mineutze.worldgen.plan.Obstacle
 com.mineutze.worldgen.plan.ReliabilityEstimate ..> com.mineutze.worldgen.plan.BinomialConfidence
 com.mineutze.worldgen.plan.ReliabilityEstimate ..> com.mineutze.worldgen.plan.Evidence
 com.mineutze.worldgen.plan.ReliabilityEstimate ..> com.mineutze.worldgen.plan.ProductionFailureModel
@@ -1965,6 +2053,8 @@ com.mineutze.worldgen.plan.ReliabilityEstimate ..> com.mineutze.worldgen.plan.St
 com.mineutze.worldgen.plan.RequiredBorderLaw ..|> com.mineutze.worldgen.plan.GraphLaw
 com.mineutze.worldgen.plan.RequiredBorderLaw *--> com.mineutze.worldgen.biomegraph.BiomeId
 com.mineutze.worldgen.plan.RequiredBorderLaw *--> com.mineutze.worldgen.plan.ResolvedBorderRequirement
+com.mineutze.worldgen.plan.ShapeLimit ..|> com.mineutze.worldgen.plan.Obstacle
+com.mineutze.worldgen.plan.ShapeLimit *--> com.mineutze.worldgen.biomegraph.BiomeId
 com.mineutze.worldgen.plan.SizeRangeLaw ..|> com.mineutze.worldgen.plan.GraphLaw
 com.mineutze.worldgen.plan.SizeRangeLaw *--> com.mineutze.worldgen.biomegraph.BiomeId
 com.mineutze.worldgen.plan.SolveStages *--> com.mineutze.worldgen.plan.ClusterSizeModel
@@ -1976,23 +2066,36 @@ com.mineutze.worldgen.plan.SolveStages ..> com.mineutze.worldgen.plan.CatalogRej
 com.mineutze.worldgen.plan.SolveStages ..> com.mineutze.worldgen.plan.MultigridPatternGenerator
 com.mineutze.worldgen.plan.SolveStages ..> com.mineutze.worldgen.plan.PlanSettings
 com.mineutze.worldgen.plan.SolveStages ..> com.mineutze.worldgen.plan.ToroidalSizedPatternGenerator
+com.mineutze.worldgen.plan.StageTightness *--> com.mineutze.worldgen.plan.TightnessRanking
+com.mineutze.worldgen.plan.TightnessRanking *--> "0..*" com.mineutze.worldgen.plan.RankedObstacle
+com.mineutze.worldgen.plan.TightnessTally ..> com.mineutze.worldgen.plan.RankedObstacle
+com.mineutze.worldgen.plan.TightnessTally ..> com.mineutze.worldgen.plan.TightnessRanking
 com.mineutze.worldgen.plan.WorldSearch ..|> AutoCloseable
+com.mineutze.worldgen.plan.WorldSearch *--> com.mineutze.worldgen.plan.FinishedAttempt
 com.mineutze.worldgen.plan.WorldSearch *--> com.mineutze.worldgen.plan.IndependentAttemptPool
 com.mineutze.worldgen.plan.Outcome *--> com.mineutze.worldgen.plan.BuiltWorld
 com.mineutze.worldgen.plan.Outcome *--> com.mineutze.worldgen.plan.Evidence
-com.mineutze.worldgen.plan.WorldSearch --> com.mineutze.worldgen.plan.AttemptResult
+com.mineutze.worldgen.plan.Outcome *--> com.mineutze.worldgen.plan.StageTightness
+com.mineutze.worldgen.plan.FinishedAttempt *--> com.mineutze.worldgen.plan.AttemptResult
+com.mineutze.worldgen.plan.FinishedAttempt *--> "0..*" com.mineutze.worldgen.plan.Obstacle
 com.mineutze.worldgen.plan.WorldSearch --> com.mineutze.worldgen.plan.Evidence
 com.mineutze.worldgen.plan.WorldSearch --> com.mineutze.worldgen.plan.PlanSettings
 com.mineutze.worldgen.plan.WorldSearch --> com.mineutze.worldgen.plan.ProgressListener
 com.mineutze.worldgen.plan.WorldSearch --> com.mineutze.worldgen.plan.SolveStages
 com.mineutze.worldgen.plan.WorldSearch --> com.mineutze.worldgen.plan.WorldBiomePlan
+com.mineutze.worldgen.plan.WorldSearch ..> com.mineutze.worldgen.plan.AttemptResult
 com.mineutze.worldgen.plan.WorldSearch ..> com.mineutze.worldgen.biomegraph.BiomeId
 com.mineutze.worldgen.plan.WorldSearch ..> com.mineutze.worldgen.plan.BuiltWorld
+com.mineutze.worldgen.plan.WorldSearch ..> com.mineutze.worldgen.plan.ClusterSizeModel
 com.mineutze.worldgen.plan.WorldSearch ..> com.mineutze.worldgen.plan.MultigridPatternGenerator
+com.mineutze.worldgen.plan.WorldSearch ..> com.mineutze.worldgen.plan.Obstacle
+com.mineutze.worldgen.plan.WorldSearch ..> com.mineutze.worldgen.plan.ObstacleFinder
 com.mineutze.worldgen.plan.WorldSearch ..> com.mineutze.worldgen.plan.Outcome
 com.mineutze.worldgen.plan.WorldSearch ..> com.mineutze.worldgen.plan.ProductionFailureModel
 com.mineutze.worldgen.plan.WorldSearch ..> com.mineutze.worldgen.plan.RealizationSelector
 com.mineutze.worldgen.plan.WorldSearch ..> com.mineutze.worldgen.plan.Selection
+com.mineutze.worldgen.plan.WorldSearch ..> com.mineutze.worldgen.plan.StageTightness
+com.mineutze.worldgen.plan.WorldSearch ..> com.mineutze.worldgen.plan.ToroidalGrid
 com.mineutze.worldgen.plan.WorldSearch ..> com.mineutze.worldgen.plan.ToroidalPos
 com.mineutze.worldgen.plan.WorldSearch ..> com.mineutze.worldgen.plan.ToroidalSizedLocalSearch
 com.mineutze.worldgen.tooling.graphedit.GraphEditorServer ..> com.mineutze.worldgen.tooling.graphedit.GraphEditorFiles

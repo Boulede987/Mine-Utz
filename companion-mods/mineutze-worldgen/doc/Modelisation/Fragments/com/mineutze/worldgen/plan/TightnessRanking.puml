@@ -1,0 +1,8 @@
+namespace com.mineutze.worldgen.plan {
+class TightnessRanking <<record>> {
+  + entries : RankedObstacle[*]
+  + failedAttempts : int
+}
+}
+
+com.mineutze.worldgen.plan.TightnessRanking *--> "0..*" com.mineutze.worldgen.plan.RankedObstacle

@@ -1,0 +1,9 @@
+namespace com.mineutze.worldgen.plan {
+class MissingBiome <<record>> {
+  + biome : BiomeId
+  + describe() : String
+}
+}
+
+com.mineutze.worldgen.plan.MissingBiome ..|> com.mineutze.worldgen.plan.Obstacle
+com.mineutze.worldgen.plan.MissingBiome *--> com.mineutze.worldgen.biomegraph.BiomeId

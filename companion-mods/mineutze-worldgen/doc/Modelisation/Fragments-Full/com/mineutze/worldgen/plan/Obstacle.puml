@@ -1,0 +1,5 @@
+namespace com.mineutze.worldgen.plan {
+interface Obstacle <<interface>> {
+  + describe() : String
+}
+}

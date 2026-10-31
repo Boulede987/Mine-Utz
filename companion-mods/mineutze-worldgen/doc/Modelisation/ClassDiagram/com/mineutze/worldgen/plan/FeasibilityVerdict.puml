@@ -35,19 +35,22 @@ class FeasibilityVerdict <<record>> {
   + builtWorld : Optional<BuiltWorld>
   + evidence : Evidence
   + reliability : Optional<ReliabilityEstimate>
+  + tightness : Optional<StageTightness>
   + targetWorldFailure : double
   + elapsed : Duration
   - {static} PERCENT_PER_UNIT : double
   - {static} SMALLEST_SHOWN_PERCENT : double
   - {static} MILLIS_PER_SECOND : double
+  - {static} OBSTACLES_SHOWN : int
   ~ {static} infeasible(InfeasibilityProof, Evidence, double, Duration) : FeasibilityVerdict
   ~ {static} feasible(BuiltWorld, Evidence, ReliabilityEstimate, double, Duration) : FeasibilityVerdict
-  ~ {static} unproven(Evidence, double, Duration) : FeasibilityVerdict
+  ~ {static} unproven(Evidence, StageTightness, double, Duration) : FeasibilityVerdict
   + summary() : String
   - feasibleSummary() : String
   - {static} infeasibleSummary(InfeasibilityProof) : String
   - {static} appendConflict(StringBuilder, int, LawConflict)
   - unprovenSummary() : String
+  - {static} tightnessLines(String, TightnessRanking) : String
   - attemptsLine() : String
   - reliabilityLine() : String
   - seconds() : String
@@ -65,5 +68,6 @@ com.mineutze.worldgen.plan.FeasibilityVerdict *--> com.mineutze.worldgen.plan.Ev
 com.mineutze.worldgen.plan.FeasibilityVerdict *--> com.mineutze.worldgen.plan.InfeasibilityProof
 com.mineutze.worldgen.plan.FeasibilityVerdict *--> com.mineutze.worldgen.plan.Outcome
 com.mineutze.worldgen.plan.FeasibilityVerdict *--> com.mineutze.worldgen.plan.ReliabilityEstimate
+com.mineutze.worldgen.plan.FeasibilityVerdict *--> com.mineutze.worldgen.plan.StageTightness
 
 @enduml
