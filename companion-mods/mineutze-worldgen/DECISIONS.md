@@ -6,6 +6,37 @@ run `./gradlew :worldgen-core:calibrationReport` to read it, or `./gradlew :worl
 enforce it (`CalibrationManifestTest` fails loud on drift). This log stays the history (context,
 alternatives considered, evidence at the time) - it does not track current validity on its own.
 
+## 2026-10-31 — Solve check verdict: FEASIBLE / INFEASIBLE (proof) / UNPROVEN
+
+**Context:** The statistical PASS/FAIL/BORDERLINE verdict (entry below) was rejected by the user: "BORDERLINE"
+with zero solved attempts misled, an estimate is not a confirmation, and closest-attempt diagnostics sent them
+in circles (each fix surfaced other biomes). Spike: a Choco counting model proves a no-legal-corner graph
+impossible in 0.12 s, but finds the real WIP graph satisfiable - correctly: that graph had already produced a
+full world (seed 20260920). It was feasible but tight, and the "stuck biomes" were search noise.
+
+**Decision:** `FeasibilityCheck`: generator rejection -> INFEASIBLE; else `CountingModel` (Choco) over every
+user law (`SizeRangeLaw`, `IllegalPairLaw`, `RequiredBorderLaw`); CONTRADICTION -> INFEASIBLE with every
+independent minimal conflict (`ConflictExplainer`, QuickXplain, conflicts share no law); else `WorldSearch`
+(production-identical attempts) -> FEASIBLE with the built world (picture in the editor), or UNPROVEN at the
+deadline with plain counts. Production reliability is shown only next to a built world: with no world its
+range (0%..100%) says nothing. Counting rules are each implied by the coarse solver's own rules (per-patch
+size and perimeter ceiling, perimeter floor only for patches that cannot wrap the torus, required borders,
+legal pairs, map corners); a Choco timeout is never a proof. Proof covers the coarse stage only.
+
+**Measured (66-biome graphs, 12 threads):** committed graph -> counting SATISFIABLE, FEASIBLE in 113 s (world
+after 29-30 attempts). WIP graph -> SATISFIABLE, UNPROVEN (0 of 39 coarse in 120 s). Committed graph with
+cherry_grove isolated -> INFEASIBLE in 4 s, one conflict folded as "cherry_grove is not a legal neighbour of
+65 biomes". Same graph with one legal neighbour left -> UNPROVEN (an enclave inside that neighbour is not ruled
+out, so no proof exists).
+
+**Alternatives rejected on the way:** map corners per biome triple (exact, but up to 45,760 variables when few
+laws are active: checks too slow) - replaced by a weaker, still sound per-pair form; QuickXplain over all
+~1,800 laws for a 65-law conflict (>10 min) - replaced by a per-biome pass on a model holding one biome's
+variables only (a relaxation, so its contradictions are still proofs), verified on the full model.
+
+**Known gap:** tight-but-feasible graphs can end UNPROVEN within 2 min; which laws make them tight is not
+explained yet (later increment). Fine-stage-only impossibility (beach shape floors) is UNPROVEN, never proven.
+
 ## 2026-10-31 — Graph tool moves to its own `worldgen-tooling` module
 
 **Context:** The proof-based verdict needs Choco. The mod jar bundled ALL of `worldgen-core`'s compiled

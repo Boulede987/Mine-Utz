@@ -1,0 +1,57 @@
+@startuml feasibility_check
+title FeasibilityCheck.check - confirmation verdict (FEASIBLE / INFEASIBLE / UNPROVEN)
+
+start
+:Read graph; build RawRuleTable + coarse/fine models
+(same code and constants as production);
+if (generator rejects graph?\n(bad range, unmeetable requirement,\nminimum cells > grid)) then (yes)
+  :INFEASIBLE
+  proof = generator's own message;
+  stop
+endif
+
+partition "proof engine (counting model, Choco) [3]" {
+  :laws = every size range, required border,
+  illegal pair of the graph;
+  :CountingModel.check(all laws);
+  note right
+    Sound by construction: every counting rule is
+    implied by the coarse solver's own rules
+    (per-cluster size and perimeter, required borders,
+    legal pairs, hex corners = 3 mutually legal biomes).
+    UNKNOWN (solver timeout) is never treated as a proof.
+  end note
+  if (CONTRADICTION?) then (yes)
+    :per-biome pass: each biome's own laws on a model
+    focused on that biome (ms per check),
+    if contradicting: QuickXplain inside them,
+    verify on the full model, set those laws aside;
+    repeat
+      :QuickXplain on the remaining laws (full model);
+      :record it as one conflict;
+      :drop those laws from the rest;
+    repeat while (rest still CONTRADICTION\nAND time left?) is (yes)
+    :INFEASIBLE
+    proof = every independent minimal conflict
+    (marked incomplete if time ran out);
+    stop
+  endif
+}
+
+partition "world search (production-identical attempts)" {
+  :Run coarse / refinement / render attempts
+  on every thread until the deadline;
+  if (a full world was built\n(coarse + refinement + render)?) then (yes)
+    :FEASIBLE
+    show the built world (picture),
+    secondary: "N of M attempts", production
+    world-seed failure range (only here);
+    stop
+  else (deadline)
+    :UNPROVEN
+    plain facts: "0 of 48 coarse attempts solved,
+    no contradiction found", no probability headline;
+    stop
+  endif
+}
+@enduml
