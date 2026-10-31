@@ -18,6 +18,8 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -87,6 +89,7 @@ public final class GraphEditorServer {
         server.createContext("/api/validate", GraphEditorServer::handleValidate);
         server.createContext("/api/tests", GraphEditorServer::handleRunTests);
         server.createContext("/api/solvecheck", GraphEditorServer::handleSolveCheck);
+        server.createContext("/api/verdictworld", GraphEditorServer::serveVerdictWorld);
         server.createContext("/api/requirement", GraphEditorServer::handleSetRequirement);
         server.createContext("/api/groups", GraphEditorServer::handleSaveGroup);
         server.createContext("/api/groups/remove", GraphEditorServer::handleRemoveGroup);
@@ -96,6 +99,18 @@ public final class GraphEditorServer {
 
     private static void serveIndex(HttpExchange exchange) throws IOException {
         respond(exchange, 200, "text/html; charset=utf-8", PAGE_HTML.getBytes(StandardCharsets.UTF_8));
+    }
+
+    /** Picture of the world the last Solve check built; each check deletes it first, so none after a non-FEASIBLE run. */
+    private static void serveVerdictWorld(HttpExchange exchange) throws IOException {
+        byte[] picture;
+        try {
+            picture = Files.readAllBytes(GraphEditorFiles.VERDICT_WORLD_PICTURE);
+        } catch (NoSuchFileException missing) {
+            respondJson(exchange, 404, MinimalJson.writeObject(Map.of("error", "no world picture: the last Solve check did not end FEASIBLE")));
+            return;
+        }
+        respond(exchange, 200, "image/png", picture);
     }
 
     private static void serveGraph(HttpExchange exchange) throws IOException {
@@ -628,6 +643,7 @@ public final class GraphEditorServer {
           <div id="testStatus"></div>
           <div id="testReportLinks"></div>
           <pre id="testOutput"></pre>
+          <img id="verdictWorld" alt="World built by the last Solve check" style="display:none;max-width:100%">
         </div>
         <script>
         let graph = null;
@@ -1005,11 +1021,17 @@ public final class GraphEditorServer {
 
         function statusLabelOf(result) {
           const exitLabel = 'Exit code ' + result.exitCode + (result.exitCode === 0 ? ' (PASS)' : ' (FAIL)');
-          const verdictMatch = result.output.match(/^VERDICT: (PASS|FAIL|BORDERLINE|CRASH)$/m);
+          const verdictMatch = result.output.match(/^VERDICT: (FEASIBLE|INFEASIBLE|UNPROVEN|CRASH)$/m);
           if (!verdictMatch) return exitLabel;
           const verdict = verdictMatch[1];
-          const exitAgrees = (verdict === 'PASS') === (result.exitCode === 0);
+          const exitAgrees = (verdict === 'FEASIBLE') === (result.exitCode === 0);
           return exitAgrees ? verdict : verdict + ' but ' + exitLabel;
+        }
+
+        function showVerdictWorld(built) {
+          const picture = document.getElementById('verdictWorld');
+          picture.style.display = built ? 'block' : 'none';
+          if (built) picture.src = '/api/verdictworld?t=' + Date.now();
         }
 
         async function runGradleTaskAndRender(endpoint) {
@@ -1020,6 +1042,7 @@ public final class GraphEditorServer {
           const result = await response.json();
           document.getElementById('testStatus').textContent = statusLabelOf(result);
           document.getElementById('testOutput').textContent = result.output;
+          showVerdictWorld(/^WORLD_PICTURE: /m.test(result.output));
 
           const linksDiv = document.getElementById('testReportLinks');
           const reportUrls = [...new Set(result.output.match(/file:\\/\\/\\/\\S+\\.(html|txt)/g) || [])];

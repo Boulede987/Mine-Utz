@@ -19,6 +19,9 @@ final class GraphEditorFiles {
 
     static final Path DATA_FILE = Path.of("src", "main", "resources", "biomegraph", "biome-graph.json");
 
+    /** Solve check writes the world it built here; the editor serves it. */
+    static final Path VERDICT_WORLD_PICTURE = Path.of("build", "graph-editor", "verdict-world.png");
+
     private GraphEditorFiles() {
     }
 }
