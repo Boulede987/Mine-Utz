@@ -29,7 +29,7 @@ import java.util.concurrent.Executors;
  * Graph editor vertical slice (2026-09-14, real user request - see DECISIONS.md same
  * date): local web app, embedded {@link HttpServer} (JDK-bundled, zero new dependency,
  * matches {@code worldgen-core}'s own no-dependency discipline) + a single-file browser
- * UI. Run with {@code ./gradlew :worldgen-core:graphEditor}, then open
+ * UI. Run with {@code ./gradlew :worldgen-tooling:graphEditor}, then open
  * http://localhost:8842 - Ctrl+C to stop.
  *
  * <p><b>POC scope, deliberately narrow</b> (real user decision: "make a vertical slice, a
@@ -317,7 +317,7 @@ public final class GraphEditorServer {
      * it solves complete worlds from THIS tool's saved data file.
      */
     private static void handleSolveCheck(HttpExchange exchange) throws IOException {
-        runGradleTaskAndRespond(exchange, List.of("../gradlew.bat", ":worldgen-core:graphEditorSolveCheck"));
+        runGradleTaskAndRespond(exchange, List.of("../gradlew.bat", ":worldgen-tooling:graphEditorSolveCheck"));
     }
 
     /**

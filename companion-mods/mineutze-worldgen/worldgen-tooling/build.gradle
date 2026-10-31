@@ -1,0 +1,55 @@
+// Never part of the mod: the mod depends only on worldgen-core, and the root build's verifyModJarHasNoTooling fails if anything from here (or Choco)
+// reaches the mod jar or its runtime classpath. User requirement 2026-10-31, see DECISIONS.md.
+//
+// Feasibility classes keep package com.mineutze.worldgen.plan (split package) to reuse worldgen-core's
+// package-private solver API without making it public. Works on a plain classpath; breaks if worldgen-core
+// ever becomes a JPMS module.
+plugins {
+    id 'java'
+}
+
+// Test fixtures (ToroidalTestTables) come from worldgen-core's test output.
+evaluationDependsOn(':worldgen-core')
+
+java {
+    toolchain.languageVersion = JavaLanguageVersion.of(21)
+}
+
+// The editor reads and writes worldgen-core's real biome-graph.json through a path relative to that module.
+def coreDir = project(':worldgen-core').projectDir
+
+tasks.register('graphEditor', JavaExec) {
+    group = 'application'
+    description = 'Local web app for editing the biome adjacency graph (add/remove biomes and adjacencies, live rule-consistency warnings, on-demand solve check) - reads/writes the SAME file ModBiomeGraph.OVERWORLD loads, so edits here are production changes. Run with: ./gradlew :worldgen-tooling:graphEditor, then open http://localhost:8842'
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'com.mineutze.worldgen.tooling.graphedit.GraphEditorServer'
+    workingDir = coreDir
+}
+
+tasks.register('graphEditorSolveCheck', JavaExec) {
+    group = 'verification'
+    description = 'The graph editor Solve check button - statistical feasibility verdict on the editor currently SAVED graph, using production solver attempts, within 2 minutes. Run with: ./gradlew :worldgen-tooling:graphEditorSolveCheck'
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'com.mineutze.worldgen.tooling.graphedit.GraphEditorSolveCheck'
+    workingDir = coreDir
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    implementation project(':worldgen-core')
+    implementation 'org.choco-solver:choco-solver:4.10.14'
+    testImplementation project(':worldgen-core').sourceSets.test.output
+    testImplementation platform('org.junit:junit-bom:5.10.2')
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+}
+
+
+test {
+    useJUnitPlatform()
+    // Editor tests read the real biome-graph.json through GraphEditorFiles' core-relative path.
+    workingDir = coreDir
+    maxHeapSize = '3g'
+}

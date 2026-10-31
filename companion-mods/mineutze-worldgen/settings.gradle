@@ -12,3 +12,4 @@ plugins {
 
 rootProject.name = 'mineutze-worldgen'
 include 'worldgen-core'
+include 'worldgen-tooling'

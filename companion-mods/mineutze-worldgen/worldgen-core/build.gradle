@@ -11,13 +11,6 @@ java {
     toolchain.languageVersion = JavaLanguageVersion.of(21)
 }
 
-tasks.register('graphEditor', JavaExec) {
-    group = 'application'
-    description = 'Local web app for editing the biome adjacency graph (add/remove biomes and adjacencies, live rule-consistency warnings, on-demand solve check) - reads/writes the SAME file ModBiomeGraph.OVERWORLD loads, so edits here are production changes. Run with: ./gradlew :worldgen-core:graphEditor, then open http://localhost:8842'
-    classpath = sourceSets.main.runtimeClasspath
-    mainClass = 'com.mineutze.worldgen.tooling.graphedit.GraphEditorServer'
-}
-
 tasks.register('toroidalSolvability', JavaExec) {
     group = 'verification'
     description = 'The evidence for "every world seed solves": many independent single-seed searches against the real catalog, with per-seed solve rate, failure bound and restarts needed. Long-running. Run with: ./gradlew :worldgen-core:toroidalSolvability'
@@ -44,13 +37,6 @@ tasks.register('worldBiomePlanCheck', JavaExec) {
     description = 'Real-scale check of WorldBiomePlan against the real catalog: creation time, lookup speed, tile repeat, snapshot round trip, a raster hash to compare between runs, and a comparison of the solved pattern with the one the reliability study saved. Run with: ./gradlew :worldgen-core:worldBiomePlanCheck'
     classpath = sourceSets.main.runtimeClasspath
     mainClass = 'com.mineutze.worldgen.plan.WorldBiomePlanCheckRunner'
-}
-
-tasks.register('graphEditorSolveCheck', JavaExec) {
-    group = 'verification'
-    description = 'The graph editor Solve check button - statistical feasibility verdict (PASS/FAIL/BORDERLINE) on the editor currently SAVED graph, using production solver attempts, within 2 minutes. Run with: ./gradlew :worldgen-core:graphEditorSolveCheck'
-    classpath = sourceSets.main.runtimeClasspath
-    mainClass = 'com.mineutze.worldgen.tooling.graphedit.GraphEditorSolveCheck'
 }
 
 tasks.register('thinBeachShapeExperiment', JavaExec) {
