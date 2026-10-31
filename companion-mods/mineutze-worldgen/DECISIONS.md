@@ -6,6 +6,42 @@ run `./gradlew :worldgen-core:calibrationReport` to read it, or `./gradlew :worl
 enforce it (`CalibrationManifestTest` fails loud on drift). This log stays the history (context,
 alternatives considered, evidence at the time) - it does not track current validity on its own.
 
+## 2026-10-31 — Editor Solve check becomes a statistical feasibility verdict
+
+**Context:** Old Solve check = full `WorldBiomePlan.create` on 4 fixed seeds. Measured 21.5 min (12
+threads) on the working-tree graph, 3 of 4 seeds failed. A seed only "fails" after all 200 coarse
+attempts miss (~440 s), and even then failure is statistical, never proven. Editor needs a verdict in
+2 min (user requirement, `.claude/workflow/worldgen/graph-editor/NEEDS.md`).
+
+**Decision:** `FeasibilityEstimator` runs production-identical attempts (same steps, schedule,
+models) of each stage on all threads, counts successes, computes exact Clopper-Pearson bounds per
+stage (`BinomialConfidence`), maps them to production world-seed failure odds
+(`ProductionFailureModel`: 200 coarse tries, 5 refinement tries, 1 render), and stops when
+`SequentialVerdictRule` decides PASS / FAIL, else BORDERLINE at the deadline. Target 1% world-seed
+failure at 99% confidence (99% offsets re-checking after every attempt). User decisions:
+- PASS certifies coarse + refinement only. Render runs once per world: certifying <=1% needs ~460
+  clean renders. Render failures still count toward FAIL and block PASS; verdict says "not certified".
+- Production refinement retries stay at 5, and the committed graph is accepted as BORDERLINE (below).
+- Max 1 render in flight: rasterizer's parallel stream fights 12 search threads, render took 110-320 s
+  under full load (few s alone).
+
+**Alternatives considered:** reduced-budget attempts (rejected: the measured rate would not be
+production's rate, risk of false PASS); point estimate + loose ceiling (weaker guarantee); strict
+render certification (nearly every graph BORDERLINE).
+
+**Evidence (2026-10-31, 12 threads, 2 min budget):** working-tree graph BORDERLINE in 120 s, coarse
+0 of 48. Committed graph (`743845d9`) BORDERLINE in 120 s: coarse 5 of 13, refinement 14 of 21,
+render 1 of 1; also BORDERLINE at a 6 min budget (refinement 14 of 25). Refinement ~56% per attempt
+means ~0.44^5 = 1.6% of world seeds fail at refinement alone in production - at/over the 1% target.
+The 104-seed reliability study predates the multigrid refinement stage; multigrid was checked on 5
+seeds only. Per-attempt cost under load: coarse solved 6-12 s / failed 34-41 s, refinement solved
+3-23 s / failed 75-90 s.
+
+**Known gap:** a graph whose true failure rate sits near 1% stays BORDERLINE in any short budget
+(sample size grows as the rate approaches the target) - inherent, not a defect. Refinement rate is
+pooled across coarse patterns (approximation). Verdict is not deterministic: attempt seeds are fixed,
+but completion order and the deadline depend on timing.
+
 ## 2026-09-27 — Multigrid + beach shape floor wired into live world generation
 
 **Context:** The three entries below this one built and validated coarse-to-fine multigrid seeding

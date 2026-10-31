@@ -1,0 +1,84 @@
+@startuml feasibility_estimate
+title FeasibilityEstimator.estimate - sequential, budget-bounded feasibility verdict
+
+start
+:Load graph, build RawRuleTable + coarse/fine models
+(same code and constants as production);
+if (structural rejection?\n(requireCatalogAcceptable, minimum cells > grid)) then (yes)
+  :FAIL, reason = generator's own message
+  (no solving needed);
+  stop
+endif
+
+:Start wall-clock deadline = budget.wallTime;
+:Fill every thread with work (see "pick next work");
+
+repeat
+  :Wait for next finished attempt
+or the deadline;
+  :Add it to its stage's evidence
+  (trials += 1, successes += solved, keep closest-cost state);
+  if (coarse attempt solved?) then (yes)
+    :Queue its pattern for refinement;
+  endif
+  if (refinement attempt solved?) then (yes)
+    :Queue its fine pattern for realization;
+  endif
+
+  :Per stage: exact binomial bounds low..high
+  on per-attempt success rate, at budget.confidence
+  (stages with no trials: 0..1);
+  :worldFailure range =
+  model(high rates) .. model(low rates)
+  model = 1 - (1-(1-pC)^200) * (1-(1-pF)^5) * pR
+  target 1%, confidence 99%;
+
+  if (worldFailure upper <= target\nAND every stage has trials?) then (yes)
+    :PASS;
+    :Cancel running attempts;
+    stop
+  elseif (worldFailure lower > target?) then (yes)
+    :FAIL, attach closest coarse failure
+    (SizeSlackReport + AdjacencyReport);
+    :Cancel running attempts;
+    stop
+  else (undecided)
+    if (deadline passed?) then (yes)
+      :BORDERLINE, report both bounds
+      + closest failure;
+      :Cancel running attempts;
+      stop
+    endif
+  endif
+
+  partition "pick next work for the freed thread" {
+    if (no render in flight AND fine pattern waiting
+AND no clean render yet?) then (yes)
+      :Run RealizationSelector on it
+      (max 1 render in flight);
+    elseif (coarse pattern waiting for refinement?) then (yes)
+      :Run one refinement attempt
+      (production steps + schedule, fresh attempt seed);
+    elseif (no render in flight AND fine pattern waiting?) then (yes)
+      :Run RealizationSelector on it;
+    else
+      :Run one coarse attempt
+      (production 40M steps + schedule,
+      next unused attempt seed);
+    endif
+  }
+repeat while (undecided)
+
+note right
+  Every attempt uses production's own step budget and schedule,
+  so the measured rate IS production's per-attempt rate.
+  Bounds are re-checked after every attempt (repeated looks),
+  hence a high confidence (99%) to keep false PASS rare.
+  Render is single-shot per world: certifying it needs ~460
+  clean trials, so PASS certifies coarse + refinement only
+  (user decision 2026-10-31); render failures still count
+  toward FAIL and block PASS.
+  Refinement rate is pooled across coarse patterns: an
+  approximation (patterns differ); stated in the verdict.
+end note
+@enduml
