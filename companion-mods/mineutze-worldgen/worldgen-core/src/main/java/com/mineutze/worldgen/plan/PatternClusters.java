@@ -3,8 +3,11 @@ package com.mineutze.worldgen.plan;
 import com.mineutze.worldgen.biomegraph.BiomeId;
 
 import java.util.ArrayDeque;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Deque;
+import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -81,5 +84,18 @@ final class PatternClusters {
 
     int totalCells() {
         return clusterOfCell.length;
+    }
+
+    /** The size of every cluster, grouped by the biome the cluster is made of. */
+    Map<BiomeId, List<Integer>> cellCountsByBiome(ToroidalGrid grid, Map<ToroidalPos, BiomeId> pattern) {
+        BiomeId[] biomeOfCluster = new BiomeId[cellsInCluster.length];
+        for (Map.Entry<ToroidalPos, BiomeId> entry : pattern.entrySet()) {
+            biomeOfCluster[clusterOfCell[indexOf(grid, entry.getKey())]] = entry.getValue();
+        }
+        Map<BiomeId, List<Integer>> countsByBiome = new HashMap<>();
+        for (int cluster = 0; cluster < cellsInCluster.length; cluster++) {
+            countsByBiome.computeIfAbsent(biomeOfCluster[cluster], biome -> new ArrayList<>()).add(cellsInCluster[cluster]);
+        }
+        return countsByBiome;
     }
 }

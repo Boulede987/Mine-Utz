@@ -149,6 +149,21 @@ final class ToroidalSizedLocalSearch {
     }
 
     /** Which biome pairs the illegal edges of {@code assignment} join, and how many edges each - "a | b" with the names in sorted order. Says WHAT a stuck pattern is stuck on. */
+    /** Every biome with a cell on an illegal edge: the biomes a pattern is stuck on. */
+    static Set<BiomeId> biomesOnIllegalEdges(RawRuleTable table, ToroidalGrid grid, Map<ToroidalPos, BiomeId> assignment) {
+        Set<BiomeId> onIllegalEdge = new HashSet<>();
+        for (Map.Entry<ToroidalPos, BiomeId> cell : assignment.entrySet()) {
+            for (ToroidalPos neighbor : grid.neighborsOf(cell.getKey())) {
+                BiomeId neighborBiome = assignment.get(neighbor);
+                if (!cell.getValue().equals(neighborBiome) && !table.isLegal(cell.getValue(), neighborBiome)) {
+                    onIllegalEdge.add(cell.getValue());
+                    onIllegalEdge.add(neighborBiome);
+                }
+            }
+        }
+        return onIllegalEdge;
+    }
+
     static Map<String, Integer> illegalPairCounts(RawRuleTable table, ToroidalGrid grid, Map<ToroidalPos, BiomeId> assignment) {
         Map<String, Integer> counts = new TreeMap<>();
         for (Map.Entry<ToroidalPos, BiomeId> entry : assignment.entrySet()) {

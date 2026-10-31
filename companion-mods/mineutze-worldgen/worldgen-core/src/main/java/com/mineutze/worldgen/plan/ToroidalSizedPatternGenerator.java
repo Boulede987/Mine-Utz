@@ -48,12 +48,24 @@ final class ToroidalSizedPatternGenerator {
                 "ToroidalSizedPatternGenerator: stepsPerSeed, maxSeeds and threadCount must be positive, got " + stepsPerSeed + ", " + maxSeeds + ", " + threadCount
             );
         }
+        long minimumCellsNeeded = minimumCellsOfAllBiomes(table, model);
+        if (minimumCellsNeeded > grid.cellCount()) {
+            throw new IllegalStateException(
+                "ToroidalSizedPatternGenerator: no pattern can exist for world seed " + worldSeed + ": each biome needs at least one cluster of its minimum size, which add up to "
+                    + minimumCellsNeeded + " cells, but the " + grid.width() + "x" + grid.height() + " torus has " + grid.cellCount()
+            );
+        }
         long baseSeed = baseSeedOf(worldSeed);
         ParallelSeedSearch.Outcome outcome = ParallelSeedSearch.search(table, grid, model, baseSeed, maxSeeds, stepsPerSeed, schedule, threadCount);
         if (!outcome.solved()) {
             throw new IllegalStateException(failureMessage(table, grid, model, worldSeed, stepsPerSeed, maxSeeds, outcome));
         }
         return new Generated(outcome.result().assignment(), (int) (outcome.seed() - baseSeed));
+    }
+
+    /** Cells needed for one minimum-size cluster of every biome. */
+    static long minimumCellsOfAllBiomes(RawRuleTable table, ClusterSizeModel model) {
+        return table.allBiomeIds().stream().mapToLong(biome -> model.minCells(biome)).sum();
     }
 
     /** The first of the world seed's attempt seeds; attempt {@code i} uses {@code baseSeedOf(worldSeed) + i}. Scrambled so that neighboring world seeds get unrelated ranges. */
@@ -73,6 +85,8 @@ final class ToroidalSizedPatternGenerator {
             .forEach(entry -> stuckPairs.append("\n  ").append(entry.getKey()).append(": ").append(entry.getValue()).append(" edges"));
         return "ToroidalSizedPatternGenerator: no valid pattern for world seed " + worldSeed + " on a " + grid.width() + "x" + grid.height() + " torus with " + table.allBiomeIds().size()
             + " biomes after " + maxSeeds + " seeds of " + stepsPerSeed + " steps each. The closest attempt has cost " + outcome.result().bestCost() + " (illegal edges "
-            + breakdown.illegalEdges() + ", cluster violation " + breakdown.clusterViolation() + ", missing biomes " + breakdown.missingBiomes() + "); its stuck pairs:" + stuckPairs;
+            + breakdown.illegalEdges() + ", cluster violation " + breakdown.clusterViolation() + ", missing biomes " + breakdown.missingBiomes() + "); its stuck pairs:" + stuckPairs
+            + "\nSize slack per biome, most squeezed first:" + SizeSlackReport.of(table, grid, model, closest)
+            + AdjacencyReport.of(table, grid, closest);
     }
 }

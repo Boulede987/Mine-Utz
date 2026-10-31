@@ -100,7 +100,7 @@ class ToroidalSizedPatternGeneratorTest {
     @Test
     void failureMessageCarriesTheWorldSeedTheBudgetAndWhatTheClosestAttemptWasStuckOn() {
         ToroidalGrid grid = new ToroidalGrid(6, 6);
-        RawRuleTable table = fullyLegalTableWithWidths(1500, 1500, A, B, C);
+        RawRuleTable table = fullyLegalTableWithWidths(1500, 1500, A);
 
         IllegalStateException failure = assertThrows(
             IllegalStateException.class, () -> ToroidalSizedPatternGenerator.generate(table, grid, model(table), 424242L, 20_000, 3, SCHEDULE, 2)
@@ -112,6 +112,21 @@ class ToroidalSizedPatternGeneratorTest {
         assertTrue(message.contains("20000"), message);
         assertTrue(message.contains("6x6"), message);
         assertTrue(message.contains("closest"), message);
+        assertTrue(message.contains("Size slack per biome"), message);
+    }
+
+    /** Minimum cluster sizes that cannot fit on the grid fail before any search runs, so the message names the cell count rather than a budget of attempts. */
+    @Test
+    void aCatalogWhoseMinimumClustersCannotFitFailsBeforeAnySearch() {
+        ToroidalGrid grid = new ToroidalGrid(6, 6);
+        RawRuleTable table = fullyLegalTableWithWidths(1500, 1500, A, B, C);
+
+        IllegalStateException failure = assertThrows(
+            IllegalStateException.class, () -> ToroidalSizedPatternGenerator.generate(table, grid, model(table), 7L, STEPS_PER_SEED, MAX_SEEDS, SCHEDULE, 2)
+        );
+
+        assertTrue(failure.getMessage().contains("75 cells"), failure.getMessage());
+        assertTrue(failure.getMessage().contains("36"), failure.getMessage());
     }
 
     @Test
