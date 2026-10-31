@@ -624,7 +624,7 @@ public final class GraphEditorServer {
           <h3>Tests</h3>
           <button onclick="runTests(false)">Run quick check (BiomeGraphTest)</button>
           <button onclick="runTests(true)">Run full worldgen-core suite</button>
-          <button onclick="runSolveCheck()">Solve check (builds real worlds, minutes)</button>
+          <button onclick="runSolveCheck()">Solve check (feasibility verdict, up to 2 min)</button>
           <div id="testStatus"></div>
           <div id="testReportLinks"></div>
           <pre id="testOutput"></pre>
@@ -1003,13 +1003,22 @@ public final class GraphEditorServer {
           await runGradleTaskAndRender('/api/solvecheck');
         }
 
+        function statusLabelOf(result) {
+          const exitLabel = 'Exit code ' + result.exitCode + (result.exitCode === 0 ? ' (PASS)' : ' (FAIL)');
+          const verdictMatch = result.output.match(/^VERDICT: (PASS|FAIL|BORDERLINE|CRASH)$/m);
+          if (!verdictMatch) return exitLabel;
+          const verdict = verdictMatch[1];
+          const exitAgrees = (verdict === 'PASS') === (result.exitCode === 0);
+          return exitAgrees ? verdict : verdict + ' but ' + exitLabel;
+        }
+
         async function runGradleTaskAndRender(endpoint) {
           document.getElementById('testStatus').textContent = 'Running...';
           document.getElementById('testReportLinks').innerHTML = '';
           document.getElementById('testOutput').textContent = '';
           const response = await fetch(endpoint);
           const result = await response.json();
-          document.getElementById('testStatus').textContent = 'Exit code ' + result.exitCode + (result.exitCode === 0 ? ' (PASS)' : ' (FAIL)');
+          document.getElementById('testStatus').textContent = statusLabelOf(result);
           document.getElementById('testOutput').textContent = result.output;
 
           const linksDiv = document.getElementById('testReportLinks');

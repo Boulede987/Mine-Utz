@@ -25,7 +25,7 @@
       ],
       "validatedOn": "2026-09-20",
       "validatedAgainstCatalogFingerprint": "295cf6744015fb0748a67f45da407cb42c60c5b057f16d911692d6c36fb801a3",
-      "verifiedByGradleTasks": ["toroidalSolvability", "toroidalWorldSeedReliability", "graphEditorSolveCheck"],
+      "verifiedByGradleTasks": ["toroidalSolvability", "toroidalWorldSeedReliability"],
       "decisionsEntry": "2026-09-20 - One solved biome plan per world replaces the hex-mesh region solver",
       "evidenceSummary": "104 of 104 world seeds solved (toroidalWorldSeedReliability); dev seed 42 plan created in 32s on 11 threads; about 21% single-seed solve rate within 40M steps at ratio 1.3 on 40x40."
     },

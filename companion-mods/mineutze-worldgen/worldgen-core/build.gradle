@@ -48,7 +48,7 @@ tasks.register('worldBiomePlanCheck', JavaExec) {
 
 tasks.register('graphEditorSolveCheck', JavaExec) {
     group = 'verification'
-    description = 'The graph editor Solve check button - builds real WorldBiomePlans (the pipeline a new world runs) from the editor currently SAVED graph for a few world seeds and reports per seed whether it solved; exits non-zero if any did not. Takes minutes. Run with: ./gradlew :worldgen-core:graphEditorSolveCheck'
+    description = 'The graph editor Solve check button - statistical feasibility verdict (PASS/FAIL/BORDERLINE) on the editor currently SAVED graph, using production solver attempts, within 2 minutes. Run with: ./gradlew :worldgen-core:graphEditorSolveCheck'
     classpath = sourceSets.main.runtimeClasspath
     mainClass = 'com.mineutze.worldgen.tooling.graphedit.GraphEditorSolveCheck'
 }
