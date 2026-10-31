@@ -38,7 +38,7 @@ class ClusterSizeModel {
   - minCells : int[*]
   - maxCells : int[*]
   - requirements : CompiledRequirement[*]
-  - shape : ShapeRule
+  - shapeByBiomeIndex : ShapeRule[*]
   - initializeBiomeSizeConstraints(RawRuleTable, double, int)
   - readRequirements(RawRuleTable, int)
   - whyNeverMet(RawRuleTable, BiomeId, ResolvedBorderRequirement, int) : String
@@ -62,8 +62,8 @@ enum Kind <<enum>> {
 }
 
 com.mineutze.worldgen.plan.ClusterSizeModel *--> "0..*" com.mineutze.worldgen.plan.CompiledRequirement
+com.mineutze.worldgen.plan.ClusterSizeModel *--> "0..*" com.mineutze.worldgen.plan.ShapeRule
 com.mineutze.worldgen.plan.ClusterSizeModel --> "0..*" com.mineutze.worldgen.biomegraph.BiomeId
-com.mineutze.worldgen.plan.ClusterSizeModel --> com.mineutze.worldgen.plan.ShapeRule
 com.mineutze.worldgen.plan.ClusterSizeModel ..> com.mineutze.worldgen.plan.AnyOf
 com.mineutze.worldgen.plan.ClusterSizeModel ..> com.mineutze.worldgen.plan.RawRuleTable
 com.mineutze.worldgen.plan.ClusterSizeModel ..> com.mineutze.worldgen.plan.ResolvedBorderRequirement

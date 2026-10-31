@@ -37,6 +37,7 @@ class ToroidalSizedPatternGenerator {
   - {static} STUCK_PAIRS_IN_FAILURE_MESSAGE : int
   ~ {static} generate(RawRuleTable, ToroidalGrid, ClusterSizeModel, long, int) : Generated
   ~ {static} generate(RawRuleTable, ToroidalGrid, ClusterSizeModel, long, long, int, ToroidalSizedLocalSearch.Schedule, int) : Generated
+  ~ {static} minimumCellsOfAllBiomes(RawRuleTable, ClusterSizeModel) : long
   ~ {static} baseSeedOf(long) : long
   - {static} failureMessage(RawRuleTable, ToroidalGrid, ClusterSizeModel, long, long, int, ParallelSeedSearch.Outcome) : String
 }
@@ -48,6 +49,7 @@ class Generated <<record>> {
 
 com.mineutze.worldgen.plan.Generated *--> com.mineutze.worldgen.biomegraph.BiomeId
 com.mineutze.worldgen.plan.Generated *--> com.mineutze.worldgen.plan.ToroidalPos
+com.mineutze.worldgen.plan.ToroidalSizedPatternGenerator ..> com.mineutze.worldgen.plan.AdjacencyReport
 com.mineutze.worldgen.plan.ToroidalSizedPatternGenerator ..> com.mineutze.worldgen.biomegraph.BiomeId
 com.mineutze.worldgen.plan.ToroidalSizedPatternGenerator ..> com.mineutze.worldgen.plan.ClusterSizeModel
 com.mineutze.worldgen.plan.ToroidalSizedPatternGenerator ..> com.mineutze.worldgen.plan.Generated
@@ -55,6 +57,7 @@ com.mineutze.worldgen.plan.ToroidalSizedPatternGenerator ..> com.mineutze.worldg
 com.mineutze.worldgen.plan.ToroidalSizedPatternGenerator ..> com.mineutze.worldgen.plan.ParallelSeedSearch
 com.mineutze.worldgen.plan.ToroidalSizedPatternGenerator ..> com.mineutze.worldgen.plan.RawRuleTable
 com.mineutze.worldgen.plan.ToroidalSizedPatternGenerator ..> com.mineutze.worldgen.plan.Schedule
+com.mineutze.worldgen.plan.ToroidalSizedPatternGenerator ..> com.mineutze.worldgen.plan.SizeSlackReport
 com.mineutze.worldgen.plan.ToroidalSizedPatternGenerator ..> com.mineutze.worldgen.plan.ToroidalGrid
 com.mineutze.worldgen.plan.ToroidalSizedPatternGenerator ..> com.mineutze.worldgen.plan.ToroidalPos
 com.mineutze.worldgen.plan.ToroidalSizedPatternGenerator ..> com.mineutze.worldgen.plan.ToroidalSizedLocalSearch

@@ -38,11 +38,16 @@ class ToroidalWorldSeedReliabilityRunner {
   - {static} CSV : Path
   - {static} PATTERN_DIRECTORY : Path
   + {static} main(String[])
+  - {static} solvePattern(RawRuleTable, ToroidalGrid, ClusterSizeModel, long, int) : PatternOutcome
   - {static} processWorld(long, RawRuleTable, ToroidalGrid, HexTorusGeometry, ClusterSizeModel, int, Tally)
-  - {static} report(Tally, int, int)
+  - {static} report(Tally, int, int, int)
   - {static} percentile(List<T>, double) : T
   - {static} secondsSince(long) : double
   - {static} startCsv()
+}
+class PatternOutcome <<record>> {
+  + pattern : Map<ToroidalPos, BiomeId>
+  + patternAttempts : int
 }
 class Tally <<static>> {
   - patternsSolved : int
@@ -57,12 +62,16 @@ class Tally <<static>> {
 }
 }
 
+com.mineutze.worldgen.plan.PatternOutcome *--> com.mineutze.worldgen.biomegraph.BiomeId
+com.mineutze.worldgen.plan.PatternOutcome *--> com.mineutze.worldgen.plan.ToroidalPos
 com.mineutze.worldgen.plan.ToroidalWorldSeedReliabilityRunner --> com.mineutze.worldgen.plan.PlanSettings
 com.mineutze.worldgen.plan.ToroidalWorldSeedReliabilityRunner ..> com.mineutze.worldgen.biomegraph.BiomeGraphData
 com.mineutze.worldgen.plan.ToroidalWorldSeedReliabilityRunner ..> com.mineutze.worldgen.biomegraph.BiomeGraphJson
 com.mineutze.worldgen.plan.ToroidalWorldSeedReliabilityRunner ..> com.mineutze.worldgen.plan.ClusterSizeModel
 com.mineutze.worldgen.plan.ToroidalWorldSeedReliabilityRunner ..> com.mineutze.worldgen.plan.HexTorusGeometry
+com.mineutze.worldgen.plan.ToroidalWorldSeedReliabilityRunner ..> com.mineutze.worldgen.plan.MultigridPatternGenerator
 com.mineutze.worldgen.plan.ToroidalWorldSeedReliabilityRunner ..> com.mineutze.worldgen.plan.PatternCsv
+com.mineutze.worldgen.plan.ToroidalWorldSeedReliabilityRunner ..> com.mineutze.worldgen.plan.PatternOutcome
 com.mineutze.worldgen.plan.ToroidalWorldSeedReliabilityRunner ..> com.mineutze.worldgen.plan.RawRuleTable
 com.mineutze.worldgen.plan.ToroidalWorldSeedReliabilityRunner ..> com.mineutze.worldgen.plan.RealizationSelector
 com.mineutze.worldgen.plan.ToroidalWorldSeedReliabilityRunner ..> com.mineutze.worldgen.plan.ShapeRule

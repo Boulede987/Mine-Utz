@@ -17,6 +17,8 @@ class WorldBiomePlan {
   - geometry : HexTorusGeometry
   + {static} create(BiomeGraphData, long, int, ProgressListener) : WorldBiomePlan
   ~ {static} create(BiomeGraphData, long, int, ProgressListener, PlanSettings) : WorldBiomePlan
+  - {static} solveDirect(RawRuleTable, ToroidalGrid, PlanSettings, long, int) : PatternSolved
+  - {static} solveMultigrid(RawRuleTable, PlanSettings, long, int) : PatternSolved
   - {static} toByteRaster(int[]) : byte[]
   + {static} requireCatalogAcceptable(BiomeGraphData)
   - {static} modelOf(RawRuleTable, PlanSettings) : ClusterSizeModel
@@ -43,6 +45,11 @@ class WorldBiomePlan {
 interface ProgressListener <<interface>> {
   + report(String) : void
 }
+class PatternSolved <<record>> {
+  + pattern : Map<ToroidalPos, BiomeId>
+  + patternAttempts : int
+  + progressMessage : String
+}
 class WrappedOffset <<record>> {
   + x : double
   + z : double
@@ -52,10 +59,14 @@ class WrappedOffset <<record>> {
 
 com.mineutze.worldgen.plan.WorldBiomePlan *--> "0..*" com.mineutze.worldgen.biomegraph.BiomeId
 com.mineutze.worldgen.plan.WorldBiomePlan *--> com.mineutze.worldgen.plan.HexTorusGeometry
+com.mineutze.worldgen.plan.PatternSolved *--> com.mineutze.worldgen.biomegraph.BiomeId
+com.mineutze.worldgen.plan.PatternSolved *--> com.mineutze.worldgen.plan.ToroidalPos
 com.mineutze.worldgen.plan.WorldBiomePlan ..> com.mineutze.worldgen.biomegraph.BiomeGraphData
 com.mineutze.worldgen.plan.WorldBiomePlan ..> com.mineutze.worldgen.biomegraph.BiomeGraphJson
 com.mineutze.worldgen.plan.WorldBiomePlan ..> com.mineutze.worldgen.plan.BlockPosition
 com.mineutze.worldgen.plan.WorldBiomePlan ..> com.mineutze.worldgen.plan.ClusterSizeModel
+com.mineutze.worldgen.plan.WorldBiomePlan ..> com.mineutze.worldgen.plan.MultigridPatternGenerator
+com.mineutze.worldgen.plan.WorldBiomePlan ..> com.mineutze.worldgen.plan.PatternSolved
 com.mineutze.worldgen.plan.WorldBiomePlan ..> com.mineutze.worldgen.plan.PlanSettings
 com.mineutze.worldgen.plan.WorldBiomePlan ..> com.mineutze.worldgen.plan.PlanSnapshot
 com.mineutze.worldgen.plan.WorldBiomePlan ..> com.mineutze.worldgen.plan.ProgressListener

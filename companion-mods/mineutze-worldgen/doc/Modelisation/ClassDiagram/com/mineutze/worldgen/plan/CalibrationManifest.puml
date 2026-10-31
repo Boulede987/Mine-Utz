@@ -1,0 +1,60 @@
+@startuml CalibrationManifest
+
+skinparam classAttributeIconSize 0
+skinparam shadowing false
+
+skinparam class {
+  BackgroundColor<<interface>> #D6EAF8
+  BorderColor<<interface>> #2E86C1
+}
+skinparam class {
+  BackgroundColor<<abstract>> #E8DAEF
+  BorderColor<<abstract>> #8E44AD
+}
+skinparam class {
+  BackgroundColor #D5F5E3
+  BorderColor #27AE60
+}
+skinparam class {
+  BackgroundColor<<record>> #FCF3CF
+  BorderColor<<record>> #B7950B
+}
+skinparam class {
+  BackgroundColor<<static>> #a7faa0
+  BorderColor<<static>> #38d610
+}
+skinparam class {
+  BackgroundColor<<enum>> #F5B7B1
+  BorderColor<<enum>> #C0392B
+}
+
+namespace com.mineutze.worldgen.plan {
+class CalibrationManifest {
+  - groups : Group[*]
+  ~ {static} load() : CalibrationManifest
+  - {static} readResource() : String
+  - {static} parseGroups(String) : List<Group>
+  - {static} parseGroup(Map<String, Object>) : Group
+  - {static} parseConstant(Map<String, Object>) : RecordedConstant
+}
+class RecordedConstant <<record>> {
+  + owner : String
+  + field : String
+  + recordedValue : Object
+}
+class Group <<record>> {
+  + name : String
+  + description : String
+  + constants : RecordedConstant[*]
+  + validatedOn : String
+  + validatedAgainstCatalogFingerprint : String
+  + verifiedByGradleTasks : String[*]
+  + decisionsEntry : String
+  + evidenceSummary : String
+}
+}
+
+com.mineutze.worldgen.plan.CalibrationManifest *--> "0..*" com.mineutze.worldgen.plan.Group
+com.mineutze.worldgen.plan.Group *--> "0..*" com.mineutze.worldgen.plan.RecordedConstant
+
+@enduml

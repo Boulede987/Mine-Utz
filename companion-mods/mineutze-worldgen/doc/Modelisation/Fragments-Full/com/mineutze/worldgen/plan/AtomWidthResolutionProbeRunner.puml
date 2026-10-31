@@ -1,0 +1,41 @@
+namespace com.mineutze.worldgen.plan {
+class AtomWidthResolutionProbeRunner {
+  - {static} PROBE_GRID_SIZE : int
+  - {static} PROBE_ATOM_WIDTH_BLOCKS : double
+  - {static} PROBE_STEPS_PER_SEED : long
+  - {static} PROBE_MAX_SEEDS : int
+  - {static} CANDIDATES : ScheduleCandidate[*]
+  + {static} main(String[])
+  - {static} runCandidate(RawRuleTable, ToroidalGrid, ClusterSizeModel, ScheduleCandidate, int) : List<SeedResult>
+  - {static} runSeed(RawRuleTable, ToroidalGrid, ClusterSizeModel, ScheduleCandidate, long, int) : SeedResult
+  - {static} secondsSince(long) : double
+  - {static} reportComparison(Map<String, List<SeedResult>>)
+  - {static} reportSeedRow(int, Map<String, List<SeedResult>>)
+  - {static} appendSeedCost(StringBuilder, String, SeedResult)
+  - {static} reportAverageCost(Map<String, List<SeedResult>>)
+}
+class ScheduleCandidate <<record>> {
+  + label : String
+  + schedule : ToroidalSizedLocalSearch.Schedule
+}
+class SeedResult <<record>> {
+  + worldSeed : long
+  + solved : boolean
+  + bestCost : int
+  + seconds : double
+}
+}
+
+com.mineutze.worldgen.plan.ScheduleCandidate *--> com.mineutze.worldgen.plan.Schedule
+com.mineutze.worldgen.plan.ScheduleCandidate *--> com.mineutze.worldgen.plan.ToroidalSizedLocalSearch
+com.mineutze.worldgen.plan.AtomWidthResolutionProbeRunner ..> com.mineutze.worldgen.biomegraph.BiomeGraphData
+com.mineutze.worldgen.plan.AtomWidthResolutionProbeRunner ..> com.mineutze.worldgen.biomegraph.BiomeGraphJson
+com.mineutze.worldgen.plan.AtomWidthResolutionProbeRunner ..> com.mineutze.worldgen.plan.ClusterSizeModel
+com.mineutze.worldgen.plan.AtomWidthResolutionProbeRunner ..> com.mineutze.worldgen.plan.ParallelSeedSearch
+com.mineutze.worldgen.plan.AtomWidthResolutionProbeRunner ..> com.mineutze.worldgen.plan.PlanSettings
+com.mineutze.worldgen.plan.AtomWidthResolutionProbeRunner ..> com.mineutze.worldgen.plan.RawRuleTable
+com.mineutze.worldgen.plan.AtomWidthResolutionProbeRunner ..> com.mineutze.worldgen.plan.ScheduleCandidate
+com.mineutze.worldgen.plan.AtomWidthResolutionProbeRunner ..> com.mineutze.worldgen.plan.SeedResult
+com.mineutze.worldgen.plan.AtomWidthResolutionProbeRunner ..> com.mineutze.worldgen.plan.ShapeRule
+com.mineutze.worldgen.plan.AtomWidthResolutionProbeRunner ..> com.mineutze.worldgen.plan.ToroidalGrid
+com.mineutze.worldgen.plan.AtomWidthResolutionProbeRunner ..> com.mineutze.worldgen.plan.ToroidalSizedPatternGenerator

@@ -1,0 +1,9 @@
+namespace com.mineutze.worldgen.plan {
+class ProductionFailureModel <<record>> {
+  + coarseAttemptsPerWorld : int
+  + refinementAttemptsPerWorld : int
+  ~ {static} fromProduction(PlanSettings) : ProductionFailureModel
+  - {static} atLeastOneSuccess(double, int) : double
+  - {static} requireRate(String, double)
+}
+}

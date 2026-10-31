@@ -1,0 +1,66 @@
+@startuml ThinBeachShapeExperimentRunner
+
+skinparam classAttributeIconSize 0
+skinparam shadowing false
+
+skinparam class {
+  BackgroundColor<<interface>> #D6EAF8
+  BorderColor<<interface>> #2E86C1
+}
+skinparam class {
+  BackgroundColor<<abstract>> #E8DAEF
+  BorderColor<<abstract>> #8E44AD
+}
+skinparam class {
+  BackgroundColor #D5F5E3
+  BorderColor #27AE60
+}
+skinparam class {
+  BackgroundColor<<record>> #FCF3CF
+  BorderColor<<record>> #B7950B
+}
+skinparam class {
+  BackgroundColor<<static>> #a7faa0
+  BorderColor<<static>> #38d610
+}
+skinparam class {
+  BackgroundColor<<enum>> #F5B7B1
+  BorderColor<<enum>> #C0392B
+}
+
+namespace com.mineutze.worldgen.plan {
+class ThinBeachShapeExperimentRunner {
+  - {static} WORLD_SEED : long
+  - {static} BEACH : BiomeId
+  - {static} EXPERIMENT_BEACH_MIN_WIDTH_BLOCKS : int
+  - {static} FLOOR_RATIO : double
+  - {static} OUTPUT_DIRECTORY : Path
+  + {static} main(String[])
+  - {static} widenBeachMinimum(BiomeGraphData) : BiomeGraphData
+  - {static} widenIfBeach(NodeData) : NodeData
+  - {static} run(String, RawRuleTable, ToroidalGrid, ClusterSizeModel, int)
+  - {static} tightestBoundingBoxCluster(List<List<ToroidalPos>>) : List<ToroidalPos>
+  - {static} boundingBoxArea(List<ToroidalPos>) : long
+  - {static} pixelBounds(List<ToroidalPos>) : int[]
+  - {static} reportBeachShape(String, ToroidalGrid, Map<ToroidalPos, BiomeId>) : List<List<ToroidalPos>>
+  - {static} perimeterOf(ToroidalGrid, List<ToroidalPos>) : int
+  - {static} fillClusterShapes(ToroidalGrid, Map<ToroidalPos, BiomeId>, int[], int[], BiomeId[], List<List<ToroidalPos>>)
+  - {static} exportCrop(Path, List<ToroidalPos>, Path)
+}
+}
+
+com.mineutze.worldgen.plan.ThinBeachShapeExperimentRunner ..> com.mineutze.worldgen.biomegraph.BiomeGraphData
+com.mineutze.worldgen.plan.ThinBeachShapeExperimentRunner ..> com.mineutze.worldgen.biomegraph.BiomeGraphJson
+com.mineutze.worldgen.plan.ThinBeachShapeExperimentRunner ..> com.mineutze.worldgen.biomegraph.BiomeId
+com.mineutze.worldgen.plan.ThinBeachShapeExperimentRunner ..> com.mineutze.worldgen.plan.ClusterSizeModel
+com.mineutze.worldgen.plan.ThinBeachShapeExperimentRunner ..> com.mineutze.worldgen.biomegraph.NodeData
+com.mineutze.worldgen.plan.ThinBeachShapeExperimentRunner ..> com.mineutze.worldgen.plan.PatternClusters
+com.mineutze.worldgen.plan.ThinBeachShapeExperimentRunner ..> com.mineutze.worldgen.plan.PlanSettings
+com.mineutze.worldgen.plan.ThinBeachShapeExperimentRunner ..> com.mineutze.worldgen.plan.RawRuleTable
+com.mineutze.worldgen.plan.ThinBeachShapeExperimentRunner ..> com.mineutze.worldgen.plan.ShapeRule
+com.mineutze.worldgen.plan.ThinBeachShapeExperimentRunner ..> com.mineutze.worldgen.plan.ToroidalGrid
+com.mineutze.worldgen.plan.ThinBeachShapeExperimentRunner ..> com.mineutze.worldgen.plan.ToroidalPatternPngExporter
+com.mineutze.worldgen.plan.ThinBeachShapeExperimentRunner ..> com.mineutze.worldgen.plan.ToroidalPos
+com.mineutze.worldgen.plan.ThinBeachShapeExperimentRunner ..> com.mineutze.worldgen.plan.ToroidalSizedPatternGenerator
+
+@enduml

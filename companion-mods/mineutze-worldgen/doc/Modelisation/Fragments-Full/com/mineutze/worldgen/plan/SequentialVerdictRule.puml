@@ -1,0 +1,21 @@
+namespace com.mineutze.worldgen.plan {
+class SequentialVerdictRule {
+  - {static} CERTAIN : double
+  - model : ProductionFailureModel
+  - budget : FeasibilityBudget
+  - {static} everyRenderWorked(StageEvidence) : boolean
+  - lowerRate(StageEvidence) : double
+  - upperRate(StageEvidence) : double
+}
+enum Deadline <<enum>> {
+  REACHED
+  NOT_REACHED
+}
+}
+
+com.mineutze.worldgen.plan.SequentialVerdictRule --> com.mineutze.worldgen.plan.FeasibilityBudget
+com.mineutze.worldgen.plan.SequentialVerdictRule --> com.mineutze.worldgen.plan.ProductionFailureModel
+com.mineutze.worldgen.plan.SequentialVerdictRule ..> com.mineutze.worldgen.plan.BinomialConfidence
+com.mineutze.worldgen.plan.SequentialVerdictRule ..> com.mineutze.worldgen.plan.Deadline
+com.mineutze.worldgen.plan.SequentialVerdictRule ..> com.mineutze.worldgen.plan.FeasibilityVerdict
+com.mineutze.worldgen.plan.SequentialVerdictRule ..> com.mineutze.worldgen.plan.StageEvidence

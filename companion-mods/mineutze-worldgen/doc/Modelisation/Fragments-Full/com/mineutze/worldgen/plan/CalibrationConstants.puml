@@ -1,0 +1,15 @@
+namespace com.mineutze.worldgen.plan {
+class CalibrationConstants {
+  ~ {static} allGroups() : Map<String, Map<String, Object>>
+  - {static} identityAndSizeSearchGroup() : Map<String, Object>
+  - {static} shapeAndRealizationGroup() : Map<String, Object>
+  - {static} multigridRefinementGroup() : Map<String, Object>
+  - {static} boxed(double[]) : List<Double>
+}
+}
+
+com.mineutze.worldgen.plan.CalibrationConstants ..> com.mineutze.worldgen.biomegraph.BiomeId
+com.mineutze.worldgen.plan.CalibrationConstants ..> com.mineutze.worldgen.plan.PlanSettings
+com.mineutze.worldgen.plan.CalibrationConstants ..> com.mineutze.worldgen.plan.RealizationSelector
+com.mineutze.worldgen.plan.CalibrationConstants ..> com.mineutze.worldgen.plan.ToroidalSizedLocalSearch
+com.mineutze.worldgen.plan.CalibrationConstants ..> com.mineutze.worldgen.plan.ToroidalSizedPatternGenerator

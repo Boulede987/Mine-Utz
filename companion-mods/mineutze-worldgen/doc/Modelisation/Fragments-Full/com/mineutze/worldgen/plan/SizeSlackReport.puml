@@ -1,0 +1,21 @@
+namespace com.mineutze.worldgen.plan {
+class SizeSlackReport {
+  ~ {static} LINES_SHOWN : int
+  ~ {static} of(RawRuleTable, ToroidalGrid, ClusterSizeModel, Map<ToroidalPos, BiomeId>) : String
+  - {static} lineOf(ClusterSizeModel, BiomeId, List<Integer>) : Line
+}
+class Line <<record>> {
+  + slack : int
+  + rangeWidth : int
+  + text : String
+}
+}
+
+com.mineutze.worldgen.plan.SizeSlackReport ..> com.mineutze.worldgen.biomegraph.BiomeId
+com.mineutze.worldgen.plan.SizeSlackReport ..> com.mineutze.worldgen.plan.ClusterSizeModel
+com.mineutze.worldgen.plan.SizeSlackReport ..> com.mineutze.worldgen.plan.Line
+com.mineutze.worldgen.plan.SizeSlackReport ..> com.mineutze.worldgen.plan.PatternClusters
+com.mineutze.worldgen.plan.SizeSlackReport ..> com.mineutze.worldgen.plan.RawRuleTable
+com.mineutze.worldgen.plan.SizeSlackReport ..> com.mineutze.worldgen.plan.ToroidalGrid
+com.mineutze.worldgen.plan.SizeSlackReport ..> com.mineutze.worldgen.plan.ToroidalPos
+com.mineutze.worldgen.plan.SizeSlackReport ..> com.mineutze.worldgen.plan.ToroidalSizedLocalSearch

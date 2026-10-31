@@ -1,0 +1,28 @@
+namespace com.mineutze.worldgen.plan {
+class CalibrationManifest {
+  - groups : Group[*]
+  ~ {static} load() : CalibrationManifest
+  - {static} readResource() : String
+  - {static} parseGroups(String) : List<Group>
+  - {static} parseGroup(Map<String, Object>) : Group
+  - {static} parseConstant(Map<String, Object>) : RecordedConstant
+}
+class RecordedConstant <<record>> {
+  + owner : String
+  + field : String
+  + recordedValue : Object
+}
+class Group <<record>> {
+  + name : String
+  + description : String
+  + constants : RecordedConstant[*]
+  + validatedOn : String
+  + validatedAgainstCatalogFingerprint : String
+  + verifiedByGradleTasks : String[*]
+  + decisionsEntry : String
+  + evidenceSummary : String
+}
+}
+
+com.mineutze.worldgen.plan.CalibrationManifest *--> "0..*" com.mineutze.worldgen.plan.Group
+com.mineutze.worldgen.plan.Group *--> "0..*" com.mineutze.worldgen.plan.RecordedConstant

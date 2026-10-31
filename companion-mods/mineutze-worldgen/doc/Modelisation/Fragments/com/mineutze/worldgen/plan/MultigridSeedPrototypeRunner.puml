@@ -1,0 +1,49 @@
+namespace com.mineutze.worldgen.plan {
+class MultigridSeedPrototypeRunner {
+  - {static} COARSE_GRID_SIZE : int
+  - {static} COARSE_ATOM_WIDTH_BLOCKS : double
+  - {static} FINE_GRID_SIZE : int
+  - {static} FINE_ATOM_WIDTH_BLOCKS : double
+  - {static} AGGREGATION_FACTOR : int
+  - {static} REFINEMENT_STEPS : long
+  - {static} MAX_REFINEMENT_ATTEMPTS : int
+  - {static} REFINEMENT_SCHEDULE : ToroidalSizedLocalSearch.Schedule
+  - {static} OUTPUT_DIRECTORY : Path
+  - {static} BEACH : BiomeId
+  - {static} BEACH_FLOOR_RATIO : double
+  + {static} main(String[])
+  - {static} runSeed(RawRuleTable, ToroidalGrid, ToroidalGrid, ClusterSizeModel, ClusterSizeModel, long, int) : SeedResult
+  - {static} exportPictures(RawRuleTable, ToroidalGrid, ToroidalGrid, long, Map<ToroidalPos, BiomeId>, Map<ToroidalPos, BiomeId>, Map<ToroidalPos, BiomeId>)
+  - {static} exportBeachZoom(ToroidalGrid, Map<ToroidalPos, BiomeId>, Path, long)
+  - {static} beachClustersOf(ToroidalGrid, Map<ToroidalPos, BiomeId>) : List<List<ToroidalPos>>
+  - {static} tightestBoundingBoxCluster(List<List<ToroidalPos>>) : List<ToroidalPos>
+  - {static} boundingBoxArea(List<ToroidalPos>) : long
+  - {static} pixelBounds(List<ToroidalPos>) : int[]
+  - {static} exportCrop(Path, List<ToroidalPos>, Path)
+  - {static} refineWithRetries(RawRuleTable, ToroidalGrid, ClusterSizeModel, long, Map<ToroidalPos, BiomeId>) : RefinementOutcome
+  - {static} upsampleToFineSeed(ToroidalGrid, ToroidalGrid, Map<ToroidalPos, BiomeId>) : Map<ToroidalPos, BiomeId>
+  - {static} assignUpsampledCell(Map<ToroidalPos, BiomeId>, ToroidalGrid, Map<ToroidalPos, BiomeId>, ToroidalPos)
+  - {static} reportSummary(List<SeedResult>)
+  - {static} reportSeedLine(SeedResult)
+  - {static} coarseModel(RawRuleTable) : ClusterSizeModel
+  - {static} fineModel(RawRuleTable) : ClusterSizeModel
+  - {static} secondsSince(long) : double
+}
+class RefinementOutcome <<record>> {
+  + solved : boolean
+  + attemptsUsed : int
+  + bestCost : int
+  + assignment : Map<ToroidalPos, BiomeId>
+}
+class SeedResult <<record>> {
+  + worldSeed : long
+  + coarseSeconds : double
+  + seededCost : int
+  + refinement : RefinementOutcome
+  + refineSeconds : double
+}
+}
+
+com.mineutze.worldgen.plan.RefinementOutcome *--> com.mineutze.worldgen.biomegraph.BiomeId
+com.mineutze.worldgen.plan.RefinementOutcome *--> com.mineutze.worldgen.plan.ToroidalPos
+com.mineutze.worldgen.plan.SeedResult *--> com.mineutze.worldgen.plan.RefinementOutcome

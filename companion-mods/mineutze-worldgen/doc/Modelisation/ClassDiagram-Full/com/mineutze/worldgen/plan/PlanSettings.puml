@@ -39,10 +39,23 @@ class PlanSettings <<record>> {
   + patternStepsPerAttempt : long
   + maxPatternAttempts : int
   + patternSchedule : ToroidalSizedLocalSearch.Schedule
+  + fineResolution : FineResolution
+}
+class FineResolution <<record>> {
+  + gridSize : int
+  + atomWidthBlocks : double
+  + refinementStepsPerAttempt : long
+  + maxRefinementAttempts : int
+  + refinementSchedule : ToroidalSizedLocalSearch.Schedule
+  + shapeFloorRatios : Map<BiomeId, Double>
 }
 }
 
+com.mineutze.worldgen.plan.PlanSettings *--> com.mineutze.worldgen.plan.FineResolution
 com.mineutze.worldgen.plan.PlanSettings *--> com.mineutze.worldgen.plan.Schedule
 com.mineutze.worldgen.plan.PlanSettings *--> com.mineutze.worldgen.plan.ToroidalSizedLocalSearch
+com.mineutze.worldgen.plan.FineResolution *--> com.mineutze.worldgen.biomegraph.BiomeId
+com.mineutze.worldgen.plan.FineResolution *--> com.mineutze.worldgen.plan.Schedule
+com.mineutze.worldgen.plan.FineResolution *--> com.mineutze.worldgen.plan.ToroidalSizedLocalSearch
 
 @enduml

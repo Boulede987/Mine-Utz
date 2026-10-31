@@ -1,0 +1,8 @@
+namespace com.mineutze.worldgen.plan {
+class CalibrationReportRunner {
+  + {static} main(String[])
+  - {static} reportGroup(CalibrationManifest.Group, Map<String, Object>, String)
+  - {static} fingerprintStatus(CalibrationManifest.Group, String) : String
+  - {static} reportConstant(CalibrationManifest.RecordedConstant, Map<String, Object>)
+}
+}

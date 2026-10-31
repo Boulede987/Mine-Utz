@@ -37,6 +37,7 @@ class ToroidalSizedPatternGenerator {
   - {static} STUCK_PAIRS_IN_FAILURE_MESSAGE : int
   ~ {static} generate(RawRuleTable, ToroidalGrid, ClusterSizeModel, long, int) : Generated
   ~ {static} generate(RawRuleTable, ToroidalGrid, ClusterSizeModel, long, long, int, ToroidalSizedLocalSearch.Schedule, int) : Generated
+  ~ {static} minimumCellsOfAllBiomes(RawRuleTable, ClusterSizeModel) : long
   ~ {static} baseSeedOf(long) : long
   - {static} failureMessage(RawRuleTable, ToroidalGrid, ClusterSizeModel, long, long, int, ParallelSeedSearch.Outcome) : String
 }

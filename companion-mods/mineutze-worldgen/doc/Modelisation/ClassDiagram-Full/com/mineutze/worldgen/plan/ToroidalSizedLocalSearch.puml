@@ -30,13 +30,13 @@ skinparam class {
 
 namespace com.mineutze.worldgen.plan {
 class ToroidalSizedLocalSearch {
-  - {static} MISSING_BIOME_COST : int
-  - {static} NUCLEATION_PROBABILITY : double
-  - {static} MISSING_NUCLEATION_SHARE : double
-  - {static} BEST_TRACKING_INTERVAL_STEPS : int
-  - {static} ACCEPTANCE_TABLE_SIZE : int
-  - {static} SCHEDULE_LEVELS : int
-  - {static} FOCUS_PROBABILITY : double
+  ~ {static} MISSING_BIOME_COST : int
+  ~ {static} NUCLEATION_PROBABILITY : double
+  ~ {static} MISSING_NUCLEATION_SHARE : double
+  ~ {static} BEST_TRACKING_INTERVAL_STEPS : int
+  ~ {static} ACCEPTANCE_TABLE_SIZE : int
+  ~ {static} SCHEDULE_LEVELS : int
+  ~ {static} FOCUS_PROBABILITY : double
   ~ {static} DEFAULT_RELABEL_PROBABILITY : double
   ~ {static} DEFAULT_TEMPERATURE : double
   ~ {static} search(RawRuleTable, ToroidalGrid, ClusterSizeModel, long, long) : Result
@@ -44,7 +44,9 @@ class ToroidalSizedLocalSearch {
   ~ {static} search(RawRuleTable, ToroidalGrid, ClusterSizeModel, long, long, Schedule) : Result
   ~ {static} search(RawRuleTable, ToroidalGrid, ClusterSizeModel, long, long, Schedule, BooleanSupplier) : Result
   ~ {static} search(RawRuleTable, ToroidalGrid, ClusterSizeModel, long, long, Schedule, BooleanSupplier, double) : Result
+  ~ {static} searchFromSeed(RawRuleTable, ToroidalGrid, ClusterSizeModel, long, Map<ToroidalPos, BiomeId>, long, Schedule, BooleanSupplier, double) : Result
   ~ {static} cost(RawRuleTable, ToroidalGrid, ClusterSizeModel, Map<ToroidalPos, BiomeId>) : int
+  ~ {static} biomesOnIllegalEdges(RawRuleTable, ToroidalGrid, Map<ToroidalPos, BiomeId>) : Set<BiomeId>
   ~ {static} illegalPairCounts(RawRuleTable, ToroidalGrid, Map<ToroidalPos, BiomeId>) : Map<String, Integer>
   - {static} tallyIllegalPairsFromCell(RawRuleTable, ToroidalGrid, Map<ToroidalPos, BiomeId>, Map<String, Integer>, Map.Entry<ToroidalPos, BiomeId>)
   ~ {static} breakdown(RawRuleTable, ToroidalGrid, ClusterSizeModel, Map<ToroidalPos, BiomeId>) : Breakdown
@@ -53,7 +55,7 @@ class ToroidalSizedLocalSearch {
   - {static} sumClusterViolations(RawRuleTable, ToroidalGrid, ClusterSizeModel, Map<ToroidalPos, BiomeId>) : int
   - {static} countMissingBiomes(RawRuleTable, Map<ToroidalPos, BiomeId>) : int
   - {static} borderShortfallOf(RawRuleTable, BiomeId, Map<BiomeId, Integer>) : int
-  - {static} thinCellsOf(ToroidalGrid, ClusterSizeModel, Set<ToroidalPos>) : int
+  - {static} thinCellsOf(ToroidalGrid, ClusterSizeModel, BiomeId, Set<ToroidalPos>) : int
   - {static} isOutsideAnyTriangle(ToroidalGrid, Set<ToroidalPos>, ToroidalPos) : boolean
   - {static} addIfFlowerCenter(ToroidalGrid, Set<ToroidalPos>, Map<ToroidalPos, Integer>, Deque<ToroidalPos>, ToroidalPos)
   - {static} expandFlowerReach(ToroidalGrid, Set<ToroidalPos>, Map<ToroidalPos, Integer>, Deque<ToroidalPos>, int, ToroidalPos)
@@ -123,11 +125,15 @@ class Search <<static>> {
   - seenBiomeStamp : int[*]
   - seenBiomes : int[*]
   - seenBiomeGeneration : int
+  - runFrom(long) : Result
   - trackBestAndCheckStop(long, int, int[]) : TrackResult
   - failIfBookkeepingDrifted()
   - validateBiomeCountAndCheckMissing(int, int[]) : boolean
   - solved(long) : Result
   - initializeFromRandomVoronoi()
+  - initializeFrom(Map<ToroidalPos, BiomeId>)
+  - assignSeededCell(Map<ToroidalPos, BiomeId>, int)
+  - recomputeUsesAndMissing()
   - assignNearestSeedBiome(int[], int[], int, int)
   - isBiomeMissing(int) : boolean
   - torusDistance(ToroidalPos, ToroidalPos) : int

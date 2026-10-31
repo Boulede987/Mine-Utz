@@ -1,0 +1,12 @@
+namespace com.mineutze.worldgen.plan {
+class SizeSlackReport {
+  ~ {static} LINES_SHOWN : int
+  ~ {static} of(RawRuleTable, ToroidalGrid, ClusterSizeModel, Map<ToroidalPos, BiomeId>) : String
+  - {static} lineOf(ClusterSizeModel, BiomeId, List<Integer>) : Line
+}
+class Line <<record>> {
+  + slack : int
+  + rangeWidth : int
+  + text : String
+}
+}

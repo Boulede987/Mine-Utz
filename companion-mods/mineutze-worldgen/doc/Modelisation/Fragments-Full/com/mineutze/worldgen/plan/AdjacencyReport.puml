@@ -1,0 +1,15 @@
+namespace com.mineutze.worldgen.plan {
+class AdjacencyReport {
+  ~ {static} ABSENT_NAMES_SHOWN : int
+  ~ {static} of(RawRuleTable, ToroidalGrid, Map<ToroidalPos, BiomeId>) : String
+  - {static} edgeCountsByBiome(ToroidalGrid, Map<ToroidalPos, BiomeId>) : Map<BiomeId, Map<BiomeId, Integer>>
+  - {static} lineOf(RawRuleTable, BiomeId, Map<BiomeId, Integer>, Set<BiomeId>) : String
+  - {static} absentText(List<BiomeId>) : String
+}
+}
+
+com.mineutze.worldgen.plan.AdjacencyReport ..> com.mineutze.worldgen.biomegraph.BiomeId
+com.mineutze.worldgen.plan.AdjacencyReport ..> com.mineutze.worldgen.plan.RawRuleTable
+com.mineutze.worldgen.plan.AdjacencyReport ..> com.mineutze.worldgen.plan.ToroidalGrid
+com.mineutze.worldgen.plan.AdjacencyReport ..> com.mineutze.worldgen.plan.ToroidalPos
+com.mineutze.worldgen.plan.AdjacencyReport ..> com.mineutze.worldgen.plan.ToroidalSizedLocalSearch

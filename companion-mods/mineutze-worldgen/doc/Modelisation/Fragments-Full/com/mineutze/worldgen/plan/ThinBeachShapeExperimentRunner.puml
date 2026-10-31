@@ -1,0 +1,34 @@
+namespace com.mineutze.worldgen.plan {
+class ThinBeachShapeExperimentRunner {
+  - {static} WORLD_SEED : long
+  - {static} BEACH : BiomeId
+  - {static} EXPERIMENT_BEACH_MIN_WIDTH_BLOCKS : int
+  - {static} FLOOR_RATIO : double
+  - {static} OUTPUT_DIRECTORY : Path
+  + {static} main(String[])
+  - {static} widenBeachMinimum(BiomeGraphData) : BiomeGraphData
+  - {static} widenIfBeach(NodeData) : NodeData
+  - {static} run(String, RawRuleTable, ToroidalGrid, ClusterSizeModel, int)
+  - {static} tightestBoundingBoxCluster(List<List<ToroidalPos>>) : List<ToroidalPos>
+  - {static} boundingBoxArea(List<ToroidalPos>) : long
+  - {static} pixelBounds(List<ToroidalPos>) : int[]
+  - {static} reportBeachShape(String, ToroidalGrid, Map<ToroidalPos, BiomeId>) : List<List<ToroidalPos>>
+  - {static} perimeterOf(ToroidalGrid, List<ToroidalPos>) : int
+  - {static} fillClusterShapes(ToroidalGrid, Map<ToroidalPos, BiomeId>, int[], int[], BiomeId[], List<List<ToroidalPos>>)
+  - {static} exportCrop(Path, List<ToroidalPos>, Path)
+}
+}
+
+com.mineutze.worldgen.plan.ThinBeachShapeExperimentRunner ..> com.mineutze.worldgen.biomegraph.BiomeGraphData
+com.mineutze.worldgen.plan.ThinBeachShapeExperimentRunner ..> com.mineutze.worldgen.biomegraph.BiomeGraphJson
+com.mineutze.worldgen.plan.ThinBeachShapeExperimentRunner ..> com.mineutze.worldgen.biomegraph.BiomeId
+com.mineutze.worldgen.plan.ThinBeachShapeExperimentRunner ..> com.mineutze.worldgen.plan.ClusterSizeModel
+com.mineutze.worldgen.plan.ThinBeachShapeExperimentRunner ..> com.mineutze.worldgen.biomegraph.NodeData
+com.mineutze.worldgen.plan.ThinBeachShapeExperimentRunner ..> com.mineutze.worldgen.plan.PatternClusters
+com.mineutze.worldgen.plan.ThinBeachShapeExperimentRunner ..> com.mineutze.worldgen.plan.PlanSettings
+com.mineutze.worldgen.plan.ThinBeachShapeExperimentRunner ..> com.mineutze.worldgen.plan.RawRuleTable
+com.mineutze.worldgen.plan.ThinBeachShapeExperimentRunner ..> com.mineutze.worldgen.plan.ShapeRule
+com.mineutze.worldgen.plan.ThinBeachShapeExperimentRunner ..> com.mineutze.worldgen.plan.ToroidalGrid
+com.mineutze.worldgen.plan.ThinBeachShapeExperimentRunner ..> com.mineutze.worldgen.plan.ToroidalPatternPngExporter
+com.mineutze.worldgen.plan.ThinBeachShapeExperimentRunner ..> com.mineutze.worldgen.plan.ToroidalPos
+com.mineutze.worldgen.plan.ThinBeachShapeExperimentRunner ..> com.mineutze.worldgen.plan.ToroidalSizedPatternGenerator

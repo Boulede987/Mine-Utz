@@ -1,0 +1,11 @@
+namespace com.mineutze.worldgen.plan {
+class Evidence <<record>> {
+  + coarse : StageEvidence
+  + refinement : StageEvidence
+  + realization : StageEvidence
+  ~ {static} EMPTY : Evidence
+  - {static} updated(StageEvidence, AttemptResult) : StageEvidence
+}
+}
+
+com.mineutze.worldgen.plan.Evidence *--> com.mineutze.worldgen.plan.StageEvidence

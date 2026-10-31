@@ -1,0 +1,59 @@
+@startuml AttemptResult
+
+skinparam classAttributeIconSize 0
+skinparam shadowing false
+
+skinparam class {
+  BackgroundColor<<interface>> #D6EAF8
+  BorderColor<<interface>> #2E86C1
+}
+skinparam class {
+  BackgroundColor<<abstract>> #E8DAEF
+  BorderColor<<abstract>> #8E44AD
+}
+skinparam class {
+  BackgroundColor #D5F5E3
+  BorderColor #27AE60
+}
+skinparam class {
+  BackgroundColor<<record>> #FCF3CF
+  BorderColor<<record>> #B7950B
+}
+skinparam class {
+  BackgroundColor<<static>> #a7faa0
+  BorderColor<<static>> #38d610
+}
+skinparam class {
+  BackgroundColor<<enum>> #F5B7B1
+  BorderColor<<enum>> #C0392B
+}
+
+namespace com.mineutze.worldgen.plan {
+class AttemptResult <<record>> {
+  + stage : Stage
+  + solved : boolean
+  + failedCost : OptionalInt
+  + solvedPattern : Optional<Map<ToroidalPos, BiomeId>>
+  + closestState : Optional<Map<ToroidalPos, BiomeId>>
+  + renderFailureReason : Optional<String>
+  + duration : Duration
+  ~ {static} ofSearch(Stage, ToroidalSizedLocalSearch.Result, Duration) : AttemptResult
+  ~ {static} rendered(Duration) : AttemptResult
+  ~ {static} renderFailed(String, Duration) : AttemptResult
+  - {static} requireRenderShape(boolean, OptionalInt, Optional<Map<ToroidalPos, BiomeId>>, Optional<Map<ToroidalPos, BiomeId>>, Optional<String>)
+  - {static} requireSearchShape(Stage, boolean, OptionalInt, Optional<Map<ToroidalPos, BiomeId>>, Optional<String>)
+}
+enum Stage <<enum>> {
+  COARSE
+  REFINEMENT
+  REALIZATION
+}
+}
+
+com.mineutze.worldgen.plan.AttemptResult *--> com.mineutze.worldgen.biomegraph.BiomeId
+com.mineutze.worldgen.plan.AttemptResult *--> com.mineutze.worldgen.plan.Stage
+com.mineutze.worldgen.plan.AttemptResult *--> com.mineutze.worldgen.plan.ToroidalPos
+com.mineutze.worldgen.plan.AttemptResult ..> com.mineutze.worldgen.plan.Result
+com.mineutze.worldgen.plan.AttemptResult ..> com.mineutze.worldgen.plan.ToroidalSizedLocalSearch
+
+@enduml

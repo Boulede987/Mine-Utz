@@ -1,0 +1,10 @@
+namespace com.mineutze.worldgen.plan {
+class BinomialConfidence {
+  - {static} BISECTION_STEPS : int
+  ~ {static} lowerBound(int, int, double) : double
+  ~ {static} upperBound(int, int, double) : double
+  - {static} requireValid(int, int, double)
+  - {static} bisect(DoubleUnaryOperator) : double
+  - {static} cumulativeProbability(int, int, double) : double
+}
+}

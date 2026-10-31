@@ -8,11 +8,16 @@ class ToroidalWorldSeedReliabilityRunner {
   - {static} CSV : Path
   - {static} PATTERN_DIRECTORY : Path
   + {static} main(String[])
+  - {static} solvePattern(RawRuleTable, ToroidalGrid, ClusterSizeModel, long, int) : PatternOutcome
   - {static} processWorld(long, RawRuleTable, ToroidalGrid, HexTorusGeometry, ClusterSizeModel, int, Tally)
-  - {static} report(Tally, int, int)
+  - {static} report(Tally, int, int, int)
   - {static} percentile(List<T>, double) : T
   - {static} secondsSince(long) : double
   - {static} startCsv()
+}
+class PatternOutcome <<record>> {
+  + pattern : Map<ToroidalPos, BiomeId>
+  + patternAttempts : int
 }
 class Tally <<static>> {
   - patternsSolved : int
@@ -26,3 +31,6 @@ class Tally <<static>> {
   - realizationFailures : Long[*]
 }
 }
+
+com.mineutze.worldgen.plan.PatternOutcome *--> com.mineutze.worldgen.biomegraph.BiomeId
+com.mineutze.worldgen.plan.PatternOutcome *--> com.mineutze.worldgen.plan.ToroidalPos

@@ -1,0 +1,13 @@
+namespace com.mineutze.worldgen.plan {
+class FeasibilityBudget <<record>> {
+  + wallTime : Duration
+  + threads : int
+  + maxWorldFailureProbability : double
+  + confidence : double
+  - {static} EDITOR_WALL_TIME : Duration
+  - {static} EDITOR_MAX_WORLD_FAILURE_PROBABILITY : double
+  - {static} EDITOR_CONFIDENCE : double
+  + {static} EDITOR_DEFAULT : FeasibilityBudget
+  - {static} requireOpenUnitInterval(String, double)
+}
+}

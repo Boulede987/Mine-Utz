@@ -8,6 +8,7 @@ class RealizationSelector {
   ~ {static} REALIZED_BORDER_FRACTION : double
   - {static} WORLD_SEED_SALT : long
   ~ {static} select(RawRuleTable, ToroidalGrid, Map<ToroidalPos, BiomeId>, HexTorusGeometry, long, PlanSettings) : Selection
+  ~ {static} trySelect(RawRuleTable, ToroidalGrid, Map<ToroidalPos, BiomeId>, HexTorusGeometry, long, PlanSettings, StringBuilder) : Optional<Selection>
   - {static} tryStrengthCandidate(RawRuleTable, ToroidalGrid, Map<ToroidalPos, BiomeId>, HexTorusGeometry, List<BiomeId>, PatternClusters, int, double, long, double, int, StringBuilder) : Optional<Selection>
   - {static} warpOfStrength(HexTorusGeometry, long, double) : DivergenceFreeWarp
   ~ {static} passes(BiomeMapVerifier.Report) : boolean

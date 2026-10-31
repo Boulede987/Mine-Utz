@@ -1,0 +1,72 @@
+namespace com.mineutze.worldgen.plan {
+class FeasibilityEstimator {
+  - {static} ESTIMATE_WORLD_SEED : long
+  - {static} PROGRESS_EVERY_ATTEMPTS : int
+  - {static} NANOS_PER_SECOND : double
+  + {static} estimate(BiomeGraphData, FeasibilityBudget, WorldBiomePlan.ProgressListener) : FeasibilityVerdict
+  ~ {static} estimate(BiomeGraphData, PlanSettings, FeasibilityBudget, WorldBiomePlan.ProgressListener) : FeasibilityVerdict
+}
+class CatalogRejected <<static>> {
+}
+class Stages <<record>> {
+  + table : RawRuleTable
+  + coarseGrid : ToroidalGrid
+  + coarseModel : ClusterSizeModel
+  + fineGrid : Optional<ToroidalGrid>
+  + fineModel : Optional<ClusterSizeModel>
+  + renderGrid : ToroidalGrid
+  + renderGeometry : HexTorusGeometry
+  ~ {static} of(BiomeGraphData, PlanSettings) : Stages
+  - {static} readCatalog(Supplier<T>) : T
+  - {static} requireRoomForEveryBiome(RawRuleTable, ToroidalGrid, ClusterSizeModel)
+}
+class EstimationRun <<static>> {
+  - stages : Stages
+  - settings : PlanSettings
+  - budget : FeasibilityBudget
+  - progress : WorldBiomePlan.ProgressListener
+  - startNanos : long
+  - deadlineNanos : long
+  - rule : SequentialVerdictRule
+  - pool : IndependentAttemptPool<AttemptResult>
+  - stopRequested : AtomicBoolean
+  - fineSeedsAwaitingRefinement : Map<ToroidalPos, BiomeId>[*]
+  - patternsAwaitingRender : Map<ToroidalPos, BiomeId>[*]
+  - coarseBaseSeed : long
+  - refinementBaseSeed : long
+  - refinementAttemptsPerPattern : int
+  - evidence : Evidence
+  - nextCoarseIndex : long
+  - nextRefinementIndex : long
+  - nextRenderIndex : long
+  - renderInFlight : boolean
+  - closestCoarseFailure : Optional<AttemptResult>
+  - firstRenderFailure : Optional<String>
+  - step() : Optional<FeasibilityVerdict.Outcome>
+  - recordCoarse(AttemptResult)
+  - recordRefinement(AttemptResult)
+  - recordRender(AttemptResult)
+  - keepIfClosest(AttemptResult)
+  - reportProgressPeriodically()
+  - submitNextWork()
+  - submitCoarse()
+  - submitRefinement(Map<ToroidalPos, BiomeId>)
+  - submitRender(Map<ToroidalPos, BiomeId>)
+  - runCoarseAttempt(long) : AttemptResult
+  - runRefinementAttempt(Map<ToroidalPos, BiomeId>, long) : AttemptResult
+  - runRenderAttempt(Map<ToroidalPos, BiomeId>, long) : AttemptResult
+  - verdictOf(FeasibilityVerdict.Outcome) : FeasibilityVerdict
+  - describeCoarseFailure(AttemptResult) : String
+  - elapsed() : Duration
+  + close()
+}
+}
+
+com.mineutze.worldgen.plan.CatalogRejected --|> RuntimeException
+com.mineutze.worldgen.plan.EstimationRun ..|> AutoCloseable
+com.mineutze.worldgen.plan.Stages *--> com.mineutze.worldgen.plan.ClusterSizeModel
+com.mineutze.worldgen.plan.Stages *--> com.mineutze.worldgen.plan.HexTorusGeometry
+com.mineutze.worldgen.plan.Stages *--> com.mineutze.worldgen.plan.RawRuleTable
+com.mineutze.worldgen.plan.Stages *--> com.mineutze.worldgen.plan.ToroidalGrid
+com.mineutze.worldgen.plan.EstimationRun *--> com.mineutze.worldgen.plan.IndependentAttemptPool
+com.mineutze.worldgen.plan.EstimationRun *--> com.mineutze.worldgen.plan.SequentialVerdictRule

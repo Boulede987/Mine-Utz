@@ -1,0 +1,70 @@
+@startuml MultigridPatternGenerator
+
+skinparam classAttributeIconSize 0
+skinparam shadowing false
+
+skinparam class {
+  BackgroundColor<<interface>> #D6EAF8
+  BorderColor<<interface>> #2E86C1
+}
+skinparam class {
+  BackgroundColor<<abstract>> #E8DAEF
+  BorderColor<<abstract>> #8E44AD
+}
+skinparam class {
+  BackgroundColor #D5F5E3
+  BorderColor #27AE60
+}
+skinparam class {
+  BackgroundColor<<record>> #FCF3CF
+  BorderColor<<record>> #B7950B
+}
+skinparam class {
+  BackgroundColor<<static>> #a7faa0
+  BorderColor<<static>> #38d610
+}
+skinparam class {
+  BackgroundColor<<enum>> #F5B7B1
+  BorderColor<<enum>> #C0392B
+}
+
+namespace com.mineutze.worldgen.plan {
+class MultigridPatternGenerator {
+  ~ {static} generate(RawRuleTable, PlanSettings, long, int) : Generated
+  ~ {static} fineSeedOf(Map<ToroidalPos, BiomeId>, PlanSettings) : Map<ToroidalPos, BiomeId>
+  ~ {static} coarseModelOf(RawRuleTable, PlanSettings) : ClusterSizeModel
+  ~ {static} fineModelOf(RawRuleTable, PlanSettings) : ClusterSizeModel
+  - {static} aggregationFactorOf(ToroidalGrid, ToroidalGrid) : int
+  - {static} upsampleToFineSeed(ToroidalGrid, ToroidalGrid, Map<ToroidalPos, BiomeId>, int) : Map<ToroidalPos, BiomeId>
+  - {static} assignUpsampledCell(Map<ToroidalPos, BiomeId>, ToroidalGrid, Map<ToroidalPos, BiomeId>, ToroidalPos, int)
+  - {static} refineWithRetries(RawRuleTable, ToroidalGrid, ClusterSizeModel, long, Map<ToroidalPos, BiomeId>, PlanSettings.FineResolution) : RefinementResult
+}
+class Generated <<record>> {
+  + pattern : Map<ToroidalPos, BiomeId>
+  + coarseAttempts : int
+  + refinementAttempts : int
+}
+class RefinementResult <<record>> {
+  + pattern : Map<ToroidalPos, BiomeId>
+  + attemptsUsed : int
+}
+}
+
+com.mineutze.worldgen.plan.Generated *--> com.mineutze.worldgen.biomegraph.BiomeId
+com.mineutze.worldgen.plan.Generated *--> com.mineutze.worldgen.plan.ToroidalPos
+com.mineutze.worldgen.plan.RefinementResult *--> com.mineutze.worldgen.biomegraph.BiomeId
+com.mineutze.worldgen.plan.RefinementResult *--> com.mineutze.worldgen.plan.ToroidalPos
+com.mineutze.worldgen.plan.MultigridPatternGenerator ..> com.mineutze.worldgen.biomegraph.BiomeId
+com.mineutze.worldgen.plan.MultigridPatternGenerator ..> com.mineutze.worldgen.plan.ClusterSizeModel
+com.mineutze.worldgen.plan.MultigridPatternGenerator ..> com.mineutze.worldgen.plan.FineResolution
+com.mineutze.worldgen.plan.MultigridPatternGenerator ..> com.mineutze.worldgen.plan.Generated
+com.mineutze.worldgen.plan.MultigridPatternGenerator ..> com.mineutze.worldgen.plan.PlanSettings
+com.mineutze.worldgen.plan.MultigridPatternGenerator ..> com.mineutze.worldgen.plan.RawRuleTable
+com.mineutze.worldgen.plan.MultigridPatternGenerator ..> com.mineutze.worldgen.plan.RefinementResult
+com.mineutze.worldgen.plan.MultigridPatternGenerator ..> com.mineutze.worldgen.plan.ShapeRule
+com.mineutze.worldgen.plan.MultigridPatternGenerator ..> com.mineutze.worldgen.plan.ToroidalGrid
+com.mineutze.worldgen.plan.MultigridPatternGenerator ..> com.mineutze.worldgen.plan.ToroidalPos
+com.mineutze.worldgen.plan.MultigridPatternGenerator ..> com.mineutze.worldgen.plan.ToroidalSizedLocalSearch
+com.mineutze.worldgen.plan.MultigridPatternGenerator ..> com.mineutze.worldgen.plan.ToroidalSizedPatternGenerator
+
+@enduml

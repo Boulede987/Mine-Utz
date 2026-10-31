@@ -1,0 +1,27 @@
+namespace com.mineutze.worldgen.plan {
+class AttemptResult <<record>> {
+  + stage : Stage
+  + solved : boolean
+  + failedCost : OptionalInt
+  + solvedPattern : Optional<Map<ToroidalPos, BiomeId>>
+  + closestState : Optional<Map<ToroidalPos, BiomeId>>
+  + renderFailureReason : Optional<String>
+  + duration : Duration
+  ~ {static} ofSearch(Stage, ToroidalSizedLocalSearch.Result, Duration) : AttemptResult
+  ~ {static} rendered(Duration) : AttemptResult
+  ~ {static} renderFailed(String, Duration) : AttemptResult
+  - {static} requireRenderShape(boolean, OptionalInt, Optional<Map<ToroidalPos, BiomeId>>, Optional<Map<ToroidalPos, BiomeId>>, Optional<String>)
+  - {static} requireSearchShape(Stage, boolean, OptionalInt, Optional<Map<ToroidalPos, BiomeId>>, Optional<String>)
+}
+enum Stage <<enum>> {
+  COARSE
+  REFINEMENT
+  REALIZATION
+}
+}
+
+com.mineutze.worldgen.plan.AttemptResult *--> com.mineutze.worldgen.biomegraph.BiomeId
+com.mineutze.worldgen.plan.AttemptResult *--> com.mineutze.worldgen.plan.Stage
+com.mineutze.worldgen.plan.AttemptResult *--> com.mineutze.worldgen.plan.ToroidalPos
+com.mineutze.worldgen.plan.AttemptResult ..> com.mineutze.worldgen.plan.Result
+com.mineutze.worldgen.plan.AttemptResult ..> com.mineutze.worldgen.plan.ToroidalSizedLocalSearch

@@ -1,0 +1,17 @@
+namespace com.mineutze.worldgen.plan {
+class CalibrationReportRunner {
+  + {static} main(String[])
+  - {static} reportGroup(CalibrationManifest.Group, Map<String, Object>, String)
+  - {static} fingerprintStatus(CalibrationManifest.Group, String) : String
+  - {static} reportConstant(CalibrationManifest.RecordedConstant, Map<String, Object>)
+}
+}
+
+com.mineutze.worldgen.plan.CalibrationReportRunner ..> com.mineutze.worldgen.biomegraph.BiomeGraphData
+com.mineutze.worldgen.plan.CalibrationReportRunner ..> com.mineutze.worldgen.biomegraph.BiomeGraphJson
+com.mineutze.worldgen.plan.CalibrationReportRunner ..> com.mineutze.worldgen.plan.CalibrationConstants
+com.mineutze.worldgen.plan.CalibrationReportRunner ..> com.mineutze.worldgen.plan.CalibrationManifest
+com.mineutze.worldgen.plan.CalibrationReportRunner ..> com.mineutze.worldgen.plan.Group
+com.mineutze.worldgen.plan.CalibrationReportRunner ..> com.mineutze.worldgen.plan.RawRuleTable
+com.mineutze.worldgen.plan.CalibrationReportRunner ..> com.mineutze.worldgen.plan.RecordedConstant
+com.mineutze.worldgen.plan.CalibrationReportRunner ..> com.mineutze.worldgen.plan.WorldBiomePlan
