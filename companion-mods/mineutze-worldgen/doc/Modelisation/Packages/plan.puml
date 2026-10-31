@@ -66,33 +66,6 @@ class SeedResult <<record>> {
   + bestCost : int
   + seconds : double
 }
-class AttemptResult <<record>> {
-  + stage : Stage
-  + solved : boolean
-  + failedCost : OptionalInt
-  + solvedPattern : Optional<Map<ToroidalPos, BiomeId>>
-  + closestState : Optional<Map<ToroidalPos, BiomeId>>
-  + renderFailureReason : Optional<String>
-  + duration : Duration
-  ~ {static} ofSearch(Stage, ToroidalSizedLocalSearch.Result, Duration) : AttemptResult
-  ~ {static} rendered(Duration) : AttemptResult
-  ~ {static} renderFailed(String, Duration) : AttemptResult
-  - {static} requireRenderShape(boolean, OptionalInt, Optional<Map<ToroidalPos, BiomeId>>, Optional<Map<ToroidalPos, BiomeId>>, Optional<String>)
-  - {static} requireSearchShape(Stage, boolean, OptionalInt, Optional<Map<ToroidalPos, BiomeId>>, Optional<String>)
-}
-enum Stage <<enum>> {
-  COARSE
-  REFINEMENT
-  REALIZATION
-}
-class BinomialConfidence {
-  - {static} BISECTION_STEPS : int
-  ~ {static} lowerBound(int, int, double) : double
-  ~ {static} upperBound(int, int, double) : double
-  - {static} requireValid(int, int, double)
-  - {static} bisect(DoubleUnaryOperator) : double
-  - {static} cumulativeProbability(int, int, double) : double
-}
 class BiomeMap {
   - size : int
   - biomeIndices : int[*]
@@ -350,111 +323,6 @@ class Settings <<record>> {
   + roughness : double
   + flowSteps : int
 }
-class Evidence <<record>> {
-  + coarse : StageEvidence
-  + refinement : StageEvidence
-  + realization : StageEvidence
-  ~ {static} EMPTY : Evidence
-  - {static} updated(StageEvidence, AttemptResult) : StageEvidence
-}
-class FeasibilityBudget <<record>> {
-  + wallTime : Duration
-  + threads : int
-  + maxWorldFailureProbability : double
-  + confidence : double
-  - {static} EDITOR_WALL_TIME : Duration
-  - {static} EDITOR_MAX_WORLD_FAILURE_PROBABILITY : double
-  - {static} EDITOR_CONFIDENCE : double
-  + {static} EDITOR_DEFAULT : FeasibilityBudget
-  - {static} requireOpenUnitInterval(String, double)
-}
-class FeasibilityEstimator {
-  - {static} ESTIMATE_WORLD_SEED : long
-  - {static} PROGRESS_EVERY_ATTEMPTS : int
-  - {static} NANOS_PER_SECOND : double
-  + {static} estimate(BiomeGraphData, FeasibilityBudget, WorldBiomePlan.ProgressListener) : FeasibilityVerdict
-  ~ {static} estimate(BiomeGraphData, PlanSettings, FeasibilityBudget, WorldBiomePlan.ProgressListener) : FeasibilityVerdict
-}
-class CatalogRejected <<static>> {
-}
-class Stages <<record>> {
-  + table : RawRuleTable
-  + coarseGrid : ToroidalGrid
-  + coarseModel : ClusterSizeModel
-  + fineGrid : Optional<ToroidalGrid>
-  + fineModel : Optional<ClusterSizeModel>
-  + renderGrid : ToroidalGrid
-  + renderGeometry : HexTorusGeometry
-  ~ {static} of(BiomeGraphData, PlanSettings) : Stages
-  - {static} readCatalog(Supplier<T>) : T
-  - {static} requireRoomForEveryBiome(RawRuleTable, ToroidalGrid, ClusterSizeModel)
-}
-class EstimationRun <<static>> {
-  - stages : Stages
-  - settings : PlanSettings
-  - budget : FeasibilityBudget
-  - progress : WorldBiomePlan.ProgressListener
-  - startNanos : long
-  - deadlineNanos : long
-  - rule : SequentialVerdictRule
-  - pool : IndependentAttemptPool<AttemptResult>
-  - stopRequested : AtomicBoolean
-  - fineSeedsAwaitingRefinement : Map<ToroidalPos, BiomeId>[*]
-  - patternsAwaitingRender : Map<ToroidalPos, BiomeId>[*]
-  - coarseBaseSeed : long
-  - refinementBaseSeed : long
-  - refinementAttemptsPerPattern : int
-  - evidence : Evidence
-  - nextCoarseIndex : long
-  - nextRefinementIndex : long
-  - nextRenderIndex : long
-  - renderInFlight : boolean
-  - closestCoarseFailure : Optional<AttemptResult>
-  - firstRenderFailure : Optional<String>
-  - step() : Optional<FeasibilityVerdict.Outcome>
-  - recordCoarse(AttemptResult)
-  - recordRefinement(AttemptResult)
-  - recordRender(AttemptResult)
-  - keepIfClosest(AttemptResult)
-  - reportProgressPeriodically()
-  - submitNextWork()
-  - submitCoarse()
-  - submitRefinement(Map<ToroidalPos, BiomeId>)
-  - submitRender(Map<ToroidalPos, BiomeId>)
-  - runCoarseAttempt(long) : AttemptResult
-  - runRefinementAttempt(Map<ToroidalPos, BiomeId>, long) : AttemptResult
-  - runRenderAttempt(Map<ToroidalPos, BiomeId>, long) : AttemptResult
-  - verdictOf(FeasibilityVerdict.Outcome) : FeasibilityVerdict
-  - describeCoarseFailure(AttemptResult) : String
-  - elapsed() : Duration
-  + close()
-}
-class FeasibilityVerdict <<record>> {
-  + outcome : Outcome
-  + evidence : Evidence
-  + worldFailureLowerBound : double
-  + certifiedWorldFailureUpperBound : double
-  + elapsed : Duration
-  + rejection : Optional<String>
-  + closestFailureReport : Optional<String>
-  + renderFailureReport : Optional<String>
-  - {static} CERTAIN_FAILURE : double
-  - {static} PERCENT_PER_UNIT : double
-  - {static} SMALLEST_SHOWN_PERCENT : double
-  - {static} MILLIS_PER_SECOND : double
-  - {static} RENDER_CAVEAT : String
-  ~ {static} rejected(String, Duration) : FeasibilityVerdict
-  + summary() : String
-  - headline() : String
-  - evidenceLine() : String
-  - {static} percent(double) : String
-  - {static} requireProbability(String, double)
-}
-enum Outcome <<enum>> {
-  PASS
-  FAIL
-  BORDERLINE
-}
 class HexTorusGeometry {
   - width : int
   - height : int
@@ -462,15 +330,6 @@ class HexTorusGeometry {
   - cellWidth : double
   - rowHeight : double
   ~ {static} areaOfHexagonWidth(double) : double
-}
-class IndependentAttemptPool<T> {
-  - executor : ExecutorService
-  - completions : CompletionService<T>
-  - running : int
-  + close()
-  - {static} daemonThread(Runnable) : Thread
-  - pollFor(Duration) : Future<T>
-  - {static} resultOf(Future<R>) : R
 }
 class MultigridPatternGenerator {
   ~ {static} generate(RawRuleTable, PlanSettings, long, int) : Generated
@@ -603,13 +462,6 @@ class PlanSnapshot <<record>> {
   + rasterSize : int
   + raster : byte[*]
 }
-class ProductionFailureModel <<record>> {
-  + coarseAttemptsPerWorld : int
-  + refinementAttemptsPerWorld : int
-  ~ {static} fromProduction(PlanSettings) : ProductionFailureModel
-  - {static} atLeastOneSuccess(double, int) : double
-  - {static} requireRate(String, double)
-}
 class RawRuleTable {
   - {static} LEGAL_GROUP_NAME : String
   - allBiomeIds : BiomeId[*]
@@ -690,18 +542,6 @@ class AnyOf <<record>> {
   + parts : ResolvedBorderRequirement[*]
   + toString() : String
 }
-class SequentialVerdictRule {
-  - {static} CERTAIN : double
-  - model : ProductionFailureModel
-  - budget : FeasibilityBudget
-  - {static} everyRenderWorked(StageEvidence) : boolean
-  - lowerRate(StageEvidence) : double
-  - upperRate(StageEvidence) : double
-}
-enum Deadline <<enum>> {
-  REACHED
-  NOT_REACHED
-}
 class ShapeRule <<record>> {
   + perimeterRatio : double
   + minPerimeterRatio : double
@@ -736,13 +576,6 @@ class SolveStatistics {
   - trialCount : int
   - solvedSteps : long[*]
   - solvedWithin(long) : int
-}
-class StageEvidence <<record>> {
-  + trials : int
-  + successes : int
-  + closestFailedCost : OptionalInt
-  ~ {static} EMPTY : StageEvidence
-  - {static} lowerOf(OptionalInt, OptionalInt) : OptionalInt
 }
 class ThinBeachShapeExperimentRunner {
   - {static} WORLD_SEED : long
@@ -1087,15 +920,179 @@ class LookupResult <<record>> {
   + mismatch : boolean
   + different : boolean
 }
+class AttemptResult <<record>> {
+  + stage : Stage
+  + solved : boolean
+  + failedCost : OptionalInt
+  + solvedPattern : Optional<Map<ToroidalPos, BiomeId>>
+  + closestState : Optional<Map<ToroidalPos, BiomeId>>
+  + renderFailureReason : Optional<String>
+  + duration : Duration
+  ~ {static} ofSearch(Stage, ToroidalSizedLocalSearch.Result, Duration) : AttemptResult
+  ~ {static} rendered(Duration) : AttemptResult
+  ~ {static} renderFailed(String, Duration) : AttemptResult
+  - {static} requireRenderShape(boolean, OptionalInt, Optional<Map<ToroidalPos, BiomeId>>, Optional<Map<ToroidalPos, BiomeId>>, Optional<String>)
+  - {static} requireSearchShape(Stage, boolean, OptionalInt, Optional<Map<ToroidalPos, BiomeId>>, Optional<String>)
+}
+enum Stage <<enum>> {
+  COARSE
+  REFINEMENT
+  REALIZATION
+}
+class BinomialConfidence {
+  - {static} BISECTION_STEPS : int
+  ~ {static} lowerBound(int, int, double) : double
+  ~ {static} upperBound(int, int, double) : double
+  - {static} requireValid(int, int, double)
+  - {static} bisect(DoubleUnaryOperator) : double
+  - {static} cumulativeProbability(int, int, double) : double
+}
+class Evidence <<record>> {
+  + coarse : StageEvidence
+  + refinement : StageEvidence
+  + realization : StageEvidence
+  ~ {static} EMPTY : Evidence
+  - {static} updated(StageEvidence, AttemptResult) : StageEvidence
+}
+class FeasibilityBudget <<record>> {
+  + wallTime : Duration
+  + threads : int
+  + maxWorldFailureProbability : double
+  + confidence : double
+  - {static} EDITOR_WALL_TIME : Duration
+  - {static} EDITOR_MAX_WORLD_FAILURE_PROBABILITY : double
+  - {static} EDITOR_CONFIDENCE : double
+  + {static} EDITOR_DEFAULT : FeasibilityBudget
+  - {static} requireOpenUnitInterval(String, double)
+}
+class FeasibilityEstimator {
+  - {static} ESTIMATE_WORLD_SEED : long
+  - {static} PROGRESS_EVERY_ATTEMPTS : int
+  - {static} NANOS_PER_SECOND : double
+  + {static} estimate(BiomeGraphData, FeasibilityBudget, WorldBiomePlan.ProgressListener) : FeasibilityVerdict
+  ~ {static} estimate(BiomeGraphData, PlanSettings, FeasibilityBudget, WorldBiomePlan.ProgressListener) : FeasibilityVerdict
+}
+class CatalogRejected <<static>> {
+}
+class Stages <<record>> {
+  + table : RawRuleTable
+  + coarseGrid : ToroidalGrid
+  + coarseModel : ClusterSizeModel
+  + fineGrid : Optional<ToroidalGrid>
+  + fineModel : Optional<ClusterSizeModel>
+  + renderGrid : ToroidalGrid
+  + renderGeometry : HexTorusGeometry
+  ~ {static} of(BiomeGraphData, PlanSettings) : Stages
+  - {static} readCatalog(Supplier<T>) : T
+  - {static} requireRoomForEveryBiome(RawRuleTable, ToroidalGrid, ClusterSizeModel)
+}
+class EstimationRun <<static>> {
+  - stages : Stages
+  - settings : PlanSettings
+  - budget : FeasibilityBudget
+  - progress : WorldBiomePlan.ProgressListener
+  - startNanos : long
+  - deadlineNanos : long
+  - rule : SequentialVerdictRule
+  - pool : IndependentAttemptPool<AttemptResult>
+  - stopRequested : AtomicBoolean
+  - fineSeedsAwaitingRefinement : Map<ToroidalPos, BiomeId>[*]
+  - patternsAwaitingRender : Map<ToroidalPos, BiomeId>[*]
+  - coarseBaseSeed : long
+  - refinementBaseSeed : long
+  - refinementAttemptsPerPattern : int
+  - evidence : Evidence
+  - nextCoarseIndex : long
+  - nextRefinementIndex : long
+  - nextRenderIndex : long
+  - renderInFlight : boolean
+  - closestCoarseFailure : Optional<AttemptResult>
+  - firstRenderFailure : Optional<String>
+  - step() : Optional<FeasibilityVerdict.Outcome>
+  - recordCoarse(AttemptResult)
+  - recordRefinement(AttemptResult)
+  - recordRender(AttemptResult)
+  - keepIfClosest(AttemptResult)
+  - reportProgressPeriodically()
+  - submitNextWork()
+  - submitCoarse()
+  - submitRefinement(Map<ToroidalPos, BiomeId>)
+  - submitRender(Map<ToroidalPos, BiomeId>)
+  - runCoarseAttempt(long) : AttemptResult
+  - runRefinementAttempt(Map<ToroidalPos, BiomeId>, long) : AttemptResult
+  - runRenderAttempt(Map<ToroidalPos, BiomeId>, long) : AttemptResult
+  - verdictOf(FeasibilityVerdict.Outcome) : FeasibilityVerdict
+  - describeCoarseFailure(AttemptResult) : String
+  - elapsed() : Duration
+  + close()
+}
+class FeasibilityVerdict <<record>> {
+  + outcome : Outcome
+  + evidence : Evidence
+  + worldFailureLowerBound : double
+  + certifiedWorldFailureUpperBound : double
+  + elapsed : Duration
+  + rejection : Optional<String>
+  + closestFailureReport : Optional<String>
+  + renderFailureReport : Optional<String>
+  - {static} CERTAIN_FAILURE : double
+  - {static} PERCENT_PER_UNIT : double
+  - {static} SMALLEST_SHOWN_PERCENT : double
+  - {static} MILLIS_PER_SECOND : double
+  - {static} RENDER_CAVEAT : String
+  ~ {static} rejected(String, Duration) : FeasibilityVerdict
+  + summary() : String
+  - headline() : String
+  - evidenceLine() : String
+  - {static} percent(double) : String
+  - {static} requireProbability(String, double)
+}
+enum Outcome <<enum>> {
+  PASS
+  FAIL
+  BORDERLINE
+}
+class IndependentAttemptPool<T> {
+  - executor : ExecutorService
+  - completions : CompletionService<T>
+  - running : int
+  + close()
+  - {static} daemonThread(Runnable) : Thread
+  - pollFor(Duration) : Future<T>
+  - {static} resultOf(Future<R>) : R
+}
+class ProductionFailureModel <<record>> {
+  + coarseAttemptsPerWorld : int
+  + refinementAttemptsPerWorld : int
+  ~ {static} fromProduction(PlanSettings) : ProductionFailureModel
+  - {static} atLeastOneSuccess(double, int) : double
+  - {static} requireRate(String, double)
+}
+class SequentialVerdictRule {
+  - {static} CERTAIN : double
+  - model : ProductionFailureModel
+  - budget : FeasibilityBudget
+  - {static} everyRenderWorked(StageEvidence) : boolean
+  - lowerRate(StageEvidence) : double
+  - upperRate(StageEvidence) : double
+}
+enum Deadline <<enum>> {
+  REACHED
+  NOT_REACHED
+}
+class StageEvidence <<record>> {
+  + trials : int
+  + successes : int
+  + closestFailedCost : OptionalInt
+  ~ {static} EMPTY : StageEvidence
+  - {static} lowerOf(OptionalInt, OptionalInt) : OptionalInt
+}
 }
 class com.mineutze.worldgen.biomegraph.BiomeId <<external>> [[biomegraph.svg]] {
 }
 
 com.mineutze.worldgen.plan.ScheduleCandidate *--> com.mineutze.worldgen.plan.Schedule
 com.mineutze.worldgen.plan.ScheduleCandidate *--> com.mineutze.worldgen.plan.ToroidalSizedLocalSearch
-com.mineutze.worldgen.plan.AttemptResult *--> com.mineutze.worldgen.biomegraph.BiomeId
-com.mineutze.worldgen.plan.AttemptResult *--> com.mineutze.worldgen.plan.Stage
-com.mineutze.worldgen.plan.AttemptResult *--> com.mineutze.worldgen.plan.ToroidalPos
 com.mineutze.worldgen.plan.AreaViolation *--> com.mineutze.worldgen.biomegraph.BiomeId
 com.mineutze.worldgen.plan.BorderShortfall *--> com.mineutze.worldgen.biomegraph.BiomeId
 com.mineutze.worldgen.plan.Report *--> "0..*" com.mineutze.worldgen.plan.AreaViolation
@@ -1106,18 +1103,6 @@ com.mineutze.worldgen.plan.CalibrationManifest *--> "0..*" com.mineutze.worldgen
 com.mineutze.worldgen.plan.Group *--> "0..*" com.mineutze.worldgen.plan.RecordedConstant
 com.mineutze.worldgen.plan.ClusterSizeModel *--> "0..*" com.mineutze.worldgen.plan.CompiledRequirement
 com.mineutze.worldgen.plan.ClusterSizeModel *--> "0..*" com.mineutze.worldgen.plan.ShapeRule
-com.mineutze.worldgen.plan.Evidence *--> com.mineutze.worldgen.plan.StageEvidence
-com.mineutze.worldgen.plan.CatalogRejected --|> RuntimeException
-com.mineutze.worldgen.plan.EstimationRun ..|> AutoCloseable
-com.mineutze.worldgen.plan.Stages *--> com.mineutze.worldgen.plan.ClusterSizeModel
-com.mineutze.worldgen.plan.Stages *--> com.mineutze.worldgen.plan.HexTorusGeometry
-com.mineutze.worldgen.plan.Stages *--> com.mineutze.worldgen.plan.RawRuleTable
-com.mineutze.worldgen.plan.Stages *--> com.mineutze.worldgen.plan.ToroidalGrid
-com.mineutze.worldgen.plan.EstimationRun *--> com.mineutze.worldgen.plan.IndependentAttemptPool
-com.mineutze.worldgen.plan.EstimationRun *--> com.mineutze.worldgen.plan.SequentialVerdictRule
-com.mineutze.worldgen.plan.FeasibilityVerdict *--> com.mineutze.worldgen.plan.Evidence
-com.mineutze.worldgen.plan.FeasibilityVerdict *--> com.mineutze.worldgen.plan.Outcome
-com.mineutze.worldgen.plan.IndependentAttemptPool ..|> AutoCloseable
 com.mineutze.worldgen.plan.Generated *--> com.mineutze.worldgen.biomegraph.BiomeId
 com.mineutze.worldgen.plan.Generated *--> com.mineutze.worldgen.plan.ToroidalPos
 com.mineutze.worldgen.plan.RefinementResult *--> com.mineutze.worldgen.biomegraph.BiomeId
@@ -1157,5 +1142,20 @@ com.mineutze.worldgen.plan.WorldBiomePlan *--> "0..*" com.mineutze.worldgen.biom
 com.mineutze.worldgen.plan.WorldBiomePlan *--> com.mineutze.worldgen.plan.HexTorusGeometry
 com.mineutze.worldgen.plan.PatternSolved *--> com.mineutze.worldgen.biomegraph.BiomeId
 com.mineutze.worldgen.plan.PatternSolved *--> com.mineutze.worldgen.plan.ToroidalPos
+com.mineutze.worldgen.plan.AttemptResult *--> com.mineutze.worldgen.biomegraph.BiomeId
+com.mineutze.worldgen.plan.AttemptResult *--> com.mineutze.worldgen.plan.Stage
+com.mineutze.worldgen.plan.AttemptResult *--> com.mineutze.worldgen.plan.ToroidalPos
+com.mineutze.worldgen.plan.Evidence *--> com.mineutze.worldgen.plan.StageEvidence
+com.mineutze.worldgen.plan.CatalogRejected --|> RuntimeException
+com.mineutze.worldgen.plan.EstimationRun ..|> AutoCloseable
+com.mineutze.worldgen.plan.Stages *--> com.mineutze.worldgen.plan.ClusterSizeModel
+com.mineutze.worldgen.plan.Stages *--> com.mineutze.worldgen.plan.HexTorusGeometry
+com.mineutze.worldgen.plan.Stages *--> com.mineutze.worldgen.plan.RawRuleTable
+com.mineutze.worldgen.plan.Stages *--> com.mineutze.worldgen.plan.ToroidalGrid
+com.mineutze.worldgen.plan.EstimationRun *--> com.mineutze.worldgen.plan.IndependentAttemptPool
+com.mineutze.worldgen.plan.EstimationRun *--> com.mineutze.worldgen.plan.SequentialVerdictRule
+com.mineutze.worldgen.plan.FeasibilityVerdict *--> com.mineutze.worldgen.plan.Evidence
+com.mineutze.worldgen.plan.FeasibilityVerdict *--> com.mineutze.worldgen.plan.Outcome
+com.mineutze.worldgen.plan.IndependentAttemptPool ..|> AutoCloseable
 
 @enduml
