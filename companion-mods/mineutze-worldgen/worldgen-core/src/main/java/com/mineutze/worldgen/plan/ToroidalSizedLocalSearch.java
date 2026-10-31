@@ -3,6 +3,9 @@ package com.mineutze.worldgen.plan;
 import com.mineutze.worldgen.biomegraph.BiomeId;
 
 import java.util.ArrayDeque;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.Collections;
 import java.util.Deque;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -186,6 +189,34 @@ final class ToroidalSizedLocalSearch {
         }
     }
 
+    /** One same-biome cluster as the verifier sees it; {@code violation} = its share of {@link Breakdown#clusterViolation}. Edges sorted by biome name: stable order across JVM runs (Map.copyOf would not be). */
+    record ClusterFacts(BiomeId biome, int cellCount, int perimeter, Map<BiomeId, Integer> edgesToBiome, int borderShortfall, int thinCells, int violation) {
+        ClusterFacts {
+            Map<BiomeId, Integer> sorted = new TreeMap<>(Comparator.comparing(BiomeId::toString));
+            sorted.putAll(edgesToBiome);
+            edgesToBiome = Collections.unmodifiableMap(sorted);
+        }
+    }
+
+    /** Every cluster of {@code assignment}, with what the verifier measures on it. */
+    static List<ClusterFacts> clusterFacts(RawRuleTable table, ToroidalGrid grid, ClusterSizeModel model, Map<ToroidalPos, BiomeId> assignment) {
+        List<ClusterFacts> facts = new ArrayList<>();
+        Set<ToroidalPos> visited = new HashSet<>();
+        for (ToroidalPos start : assignment.keySet()) {
+            if (!visited.contains(start)) {
+                facts.add(factsOf(table, grid, model, exploreCluster(grid, assignment, start, visited)));
+            }
+        }
+        return facts;
+    }
+
+    private static ClusterFacts factsOf(RawRuleTable table, ToroidalGrid grid, ClusterSizeModel model, ExploredCluster cluster) {
+        int thinCells = thinCellsOf(grid, model, cluster.biome(), cluster.cells());
+        int borderShortfall = borderShortfallOf(table, cluster.biome(), cluster.edgesToBiome());
+        int violation = model.violation(cluster.biome(), cluster.cells().size(), thinCells, cluster.perimeter(), borderShortfall);
+        return new ClusterFacts(cluster.biome(), cluster.cells().size(), cluster.perimeter(), cluster.edgesToBiome(), borderShortfall, thinCells, violation);
+    }
+
     /** Independent, map-based recomputation of everything wrong with {@code assignment} - shares no bookkeeping with the search, so it is what the search's own accounting is checked against. */
     static Breakdown breakdown(RawRuleTable table, ToroidalGrid grid, ClusterSizeModel model, Map<ToroidalPos, BiomeId> assignment) {
         int illegalEdges = countIllegalEdges(table, grid, assignment);
@@ -227,18 +258,7 @@ final class ToroidalSizedLocalSearch {
     }
 
     private static int sumClusterViolations(RawRuleTable table, ToroidalGrid grid, ClusterSizeModel model, Map<ToroidalPos, BiomeId> assignment) {
-        int clusterViolation = 0;
-        Set<ToroidalPos> visited = new HashSet<>();
-        for (ToroidalPos start : assignment.keySet()) {
-            if (visited.contains(start)) {
-                continue;
-            }
-            ExploredCluster cluster = exploreCluster(grid, assignment, start, visited);
-            int thinCells = thinCellsOf(grid, model, cluster.biome(), cluster.cells());
-            int borderShortfall = borderShortfallOf(table, cluster.biome(), cluster.edgesToBiome());
-            clusterViolation += model.violation(cluster.biome(), cluster.cells().size(), thinCells, cluster.perimeter(), borderShortfall);
-        }
-        return clusterViolation;
+        return clusterFacts(table, grid, model, assignment).stream().mapToInt(ClusterFacts::violation).sum();
     }
 
     private static int countMissingBiomes(RawRuleTable table, Map<ToroidalPos, BiomeId> assignment) {
