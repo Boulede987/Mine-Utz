@@ -6,6 +6,28 @@ run `./gradlew :worldgen-core:calibrationReport` to read it, or `./gradlew :worl
 enforce it (`CalibrationManifestTest` fails loud on drift). This log stays the history (context,
 alternatives considered, evidence at the time) - it does not track current validity on its own.
 
+## 2026-10-31 — Graph tool moves to its own `worldgen-tooling` module
+
+**Context:** The proof-based verdict needs Choco. The mod jar bundled ALL of `worldgen-core`'s compiled
+code (root `build.gradle` `jar { from project(':worldgen-core').sourceSets.main.output }`), graph editor
+and feasibility estimator included. User requirement: Choco is for the graph tool only - players never
+download it, it is never distributed with the mod.
+
+**Decision:** New Gradle subproject `worldgen-tooling` (depends on `worldgen-core` + Choco; the mod never
+depends on it) holds the graph editor (`tooling.graphedit`) and the feasibility code. Root build's
+`verifyModJarHasNoTooling` (wired into `check`, `deployMod`, `deployToDevTest`) fails if the mod jar holds
+`org/chocosolver/**`, `com/mineutze/worldgen/tooling/**` or any class compiled by `worldgen-tooling`, or
+if Choco is on the mod runtime classpath. Feasibility classes keep package `com.mineutze.worldgen.plan`
+(split package, user choice) so they reuse the solver's package-private API without widening
+`worldgen-core`.
+
+**Alternatives considered:** separate source set inside `worldgen-core` (lighter, but separation rests on
+configuration inside the module the mod bundles); public facade in `worldgen-core` (widens the mod's API
+for a tool).
+
+**Known gap:** split package works on a plain classpath only; breaks if `worldgen-core` becomes a JPMS
+module. Editor JavaExec tasks run with `worldgen-core` as working directory (graph file path is relative).
+
 ## 2026-10-31 — Editor Solve check becomes a statistical feasibility verdict
 
 **Context:** Old Solve check = full `WorldBiomePlan.create` on 4 fixed seeds. Measured 21.5 min (12
