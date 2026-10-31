@@ -38,6 +38,17 @@ final class RealizationSelector {
 
     /** {@code settings} supplies the candidate strengths (strongest first), the raster resolution and the size tolerance; the biome order is always {@code table.allBiomeIds()}, so it is not a separate parameter. */
     static Selection select(RawRuleTable table, ToroidalGrid grid, Map<ToroidalPos, BiomeId> pattern, HexTorusGeometry geometry, long worldSeed, PlanSettings settings) {
+        StringBuilder attempts = new StringBuilder();
+        return trySelect(table, grid, pattern, geometry, worldSeed, settings, attempts).orElseThrow(() -> new IllegalStateException(
+            "RealizationSelector: no strength produced a valid map for world seed " + worldSeed + " on a " + grid.width() + "x" + grid.height() + " torus ("
+                + settings.rasterSamplesPerSide() + " samples per side, tolerance " + settings.sizeToleranceOfMinimum() + " of the minimum). Attempts:" + attempts
+        ));
+    }
+
+    /** As {@link #select}, but empty when no strength passes - caller decides. Why each strength failed appended to {@code attempts}. No candidate strengths: IllegalArgumentException. */
+    static Optional<Selection> trySelect(
+        RawRuleTable table, ToroidalGrid grid, Map<ToroidalPos, BiomeId> pattern, HexTorusGeometry geometry, long worldSeed, PlanSettings settings, StringBuilder attempts
+    ) {
         double[] strengthsStrongestFirst = settings.warpStrengthsStrongestFirst();
         if (strengthsStrongestFirst.length == 0) {
             throw new IllegalArgumentException("RealizationSelector: needs at least one candidate strength");
@@ -47,19 +58,15 @@ final class RealizationSelector {
         List<BiomeId> biomeOrder = table.allBiomeIds();
         PatternClusters clusters = PatternClusters.of(grid, pattern);
         long warpSeed = new SplittableRandom(worldSeed ^ WORLD_SEED_SALT).nextLong();
-        StringBuilder attempts = new StringBuilder();
         for (int index = 0; index < strengthsStrongestFirst.length; index++) {
             Optional<Selection> selection = tryStrengthCandidate(
                 table, grid, pattern, geometry, biomeOrder, clusters, samplesPerSide, toleranceOfMinimum, warpSeed, strengthsStrongestFirst[index], index, attempts
             );
             if (selection.isPresent()) {
-                return selection.get();
+                return selection;
             }
         }
-        throw new IllegalStateException(
-            "RealizationSelector: no strength produced a valid map for world seed " + worldSeed + " on a " + grid.width() + "x" + grid.height() + " torus ("
-                + samplesPerSide + " samples per side, tolerance " + toleranceOfMinimum + " of the minimum). Attempts:" + attempts
-        );
+        return Optional.empty();
     }
 
     private static Optional<Selection> tryStrengthCandidate(

@@ -43,14 +43,24 @@ final class MultigridPatternGenerator {
 
         ToroidalGrid fineGrid = new ToroidalGrid(fine.gridSize(), fine.gridSize());
         ClusterSizeModel fineModel = fineModelOf(table, settings);
-        int aggregationFactor = aggregationFactorOf(coarseGrid, fineGrid);
-        Map<ToroidalPos, BiomeId> seed = upsampleToFineSeed(fineGrid, coarseGrid, coarseSolved.pattern(), aggregationFactor);
+        Map<ToroidalPos, BiomeId> seed = fineSeedOf(coarseSolved.pattern(), settings);
 
         RefinementResult refined = refineWithRetries(table, fineGrid, fineModel, worldSeed, seed, fine);
         return new Generated(refined.pattern(), coarseSolved.seedIndex() + 1, refined.attemptsUsed());
     }
 
-    private static ClusterSizeModel coarseModelOf(RawRuleTable table, PlanSettings settings) {
+    /** Coarse solution upsampled onto fine grid: each fine cell inherits its coarse parent's biome. */
+    static Map<ToroidalPos, BiomeId> fineSeedOf(Map<ToroidalPos, BiomeId> coarseSolution, PlanSettings settings) {
+        PlanSettings.FineResolution fine = settings.fineResolution();
+        if (fine == null) {
+            throw new IllegalArgumentException("MultigridPatternGenerator: settings has no fineResolution configured");
+        }
+        ToroidalGrid coarseGrid = new ToroidalGrid(settings.gridSize(), settings.gridSize());
+        ToroidalGrid fineGrid = new ToroidalGrid(fine.gridSize(), fine.gridSize());
+        return upsampleToFineSeed(fineGrid, coarseGrid, coarseSolution, aggregationFactorOf(coarseGrid, fineGrid));
+    }
+
+    static ClusterSizeModel coarseModelOf(RawRuleTable table, PlanSettings settings) {
         return new ClusterSizeModel(table, settings.atomWidthBlocks(), new ShapeRule(settings.perimeterRatio(), Integer.MAX_VALUE, Integer.MAX_VALUE, 2));
     }
 
