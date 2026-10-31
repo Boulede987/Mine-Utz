@@ -111,6 +111,30 @@ class FeasibilityCheckTest {
     }
 
     @Test
+    void anUnprovenVerdictRanksWhatBlockedTheFailedAttempts() {
+        FeasibilityVerdict verdict = check(SOLVABLE, NO_ATTEMPT_CAN_SOLVE, FEW_SECONDS);
+
+        TightnessRanking ranking = verdict.tightness().orElseThrow().coarse();
+        assertTrue(ranking.failedAttempts() > 0, verdict.summary());
+        assertFalse(ranking.entries().isEmpty(), verdict.summary());
+    }
+
+    @Test
+    void anUnprovenSummaryLabelsTheRankingAsAMeasurement() {
+        FeasibilityVerdict verdict = check(SOLVABLE, NO_ATTEMPT_CAN_SOLVE, FEW_SECONDS);
+
+        assertTrue(verdict.summary().contains("still broke"), verdict.summary());
+        assertTrue(verdict.summary().contains("measured"), verdict.summary());
+    }
+
+    @Test
+    void aFeasibleVerdictHasNoRanking() {
+        FeasibilityVerdict verdict = check(SOLVABLE, SMALL_MULTIGRID, ONE_MINUTE);
+
+        assertTrue(verdict.tightness().isEmpty(), verdict.summary());
+    }
+
+    @Test
     void anUnprovenCheckStopsAtTheDeadline() {
         FeasibilityVerdict verdict = check(SOLVABLE, NO_ATTEMPT_CAN_SOLVE, FEW_SECONDS);
 

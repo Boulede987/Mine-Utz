@@ -8,6 +8,7 @@ import java.util.Deque;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.SplittableRandom;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -18,7 +19,11 @@ import java.util.concurrent.atomic.AtomicBoolean;
  */
 final class WorldSearch implements AutoCloseable {
 
-    record Outcome(Optional<BuiltWorld> builtWorld, Evidence evidence) {
+    record Outcome(Optional<BuiltWorld> builtWorld, Evidence evidence, StageTightness tightness) {
+    }
+
+    /** Obstacles computed on the worker thread, so the caller only merges counts and refills threads at once. */
+    private record FinishedAttempt(AttemptResult result, Set<Obstacle> obstacles) {
     }
 
     private static final long SEARCH_WORLD_SEED = 0x6A3F_19C2_D04E_7B85L;
@@ -33,7 +38,7 @@ final class WorldSearch implements AutoCloseable {
     private final WorldBiomePlan.ProgressListener progress;
     private final long startNanos;
     private final long deadlineNanos;
-    private final IndependentAttemptPool<AttemptResult> pool;
+    private final IndependentAttemptPool<FinishedAttempt> pool;
     private final AtomicBoolean stopRequested = new AtomicBoolean();
     private final Deque<Map<ToroidalPos, BiomeId>> fineSeedsAwaitingRefinement = new ArrayDeque<>();
     private final Deque<Map<ToroidalPos, BiomeId>> patternsAwaitingRender = new ArrayDeque<>();
@@ -47,6 +52,8 @@ final class WorldSearch implements AutoCloseable {
     private long nextRenderIndex;
     private boolean renderInFlight;
     private Optional<BuiltWorld> builtWorld = Optional.empty();
+    private final TightnessTally coarseTightness = new TightnessTally();
+    private final TightnessTally refinementTightness = new TightnessTally();
 
     WorldSearch(SolveStages stages, PlanSettings settings, int threads, WorldBiomePlan.ProgressListener progress, long startNanos, long deadlineNanos) {
         this.stages = stages;
@@ -72,7 +79,7 @@ final class WorldSearch implements AutoCloseable {
             searchOver = step();
         }
         stopRequested.set(true);
-        return new Outcome(builtWorld, evidence);
+        return new Outcome(builtWorld, evidence, new StageTightness(coarseTightness.ranking(), refinementTightness.ranking()));
     }
 
     /** Waits for one attempt or the deadline, records it, refills its thread. True once a world is built or time is up. */
@@ -82,7 +89,7 @@ final class WorldSearch implements AutoCloseable {
             recordAlreadyFinished();
             return true;
         }
-        Optional<AttemptResult> finished = pool.takeCompleted(Duration.ofNanos(remainingNanos));
+        Optional<FinishedAttempt> finished = pool.takeCompleted(Duration.ofNanos(remainingNanos));
         if (finished.isEmpty()) {
             return false;
         }
@@ -96,29 +103,31 @@ final class WorldSearch implements AutoCloseable {
 
     /** At the deadline: attempts that finished in time still count - one of them may be the world. */
     private void recordAlreadyFinished() {
-        Optional<AttemptResult> finished = pool.running() > 0 ? pool.takeCompleted(Duration.ZERO) : Optional.empty();
+        Optional<FinishedAttempt> finished = pool.running() > 0 ? pool.takeCompleted(Duration.ZERO) : Optional.empty();
         while (finished.isPresent() && builtWorld.isEmpty()) {
             record(finished.get());
             finished = pool.running() > 0 ? pool.takeCompleted(Duration.ZERO) : Optional.empty();
         }
     }
 
-    private void record(AttemptResult result) {
+    private void record(FinishedAttempt finished) {
+        AttemptResult result = finished.result();
         evidence = evidence.with(result);
         progress.report(String.format(
             Locale.ROOT, "%s attempt %s in %.1f s (at %d s)", result.stage(), result.solved() ? "solved" : "failed", result.duration().toNanos() / NANOS_PER_SECOND,
             elapsed().toSeconds()
         ));
         switch (result.stage()) {
-            case COARSE -> recordCoarse(result);
-            case REFINEMENT -> result.solvedPattern().ifPresent(this::queueForRender);
+            case COARSE -> recordCoarse(result, finished.obstacles());
+            case REFINEMENT -> recordRefinement(result, finished.obstacles());
             case REALIZATION -> recordRender(result);
         }
         reportProgressPeriodically();
     }
 
-    private void recordCoarse(AttemptResult result) {
+    private void recordCoarse(AttemptResult result, Set<Obstacle> obstacles) {
         if (!result.solved()) {
+            coarseTightness.add(obstacles);
             return;
         }
         Map<ToroidalPos, BiomeId> pattern = result.solvedPattern().orElseThrow();
@@ -130,6 +139,14 @@ final class WorldSearch implements AutoCloseable {
         for (int attempt = 0; attempt < refinementAttemptsPerPattern; attempt++) {
             fineSeedsAwaitingRefinement.add(fineSeed);
         }
+    }
+
+    private void recordRefinement(AttemptResult result, Set<Obstacle> obstacles) {
+        if (result.solved()) {
+            queueForRender(result.solvedPattern().orElseThrow());
+            return;
+        }
+        refinementTightness.add(obstacles);
     }
 
     private void queueForRender(Map<ToroidalPos, BiomeId> pattern) {
@@ -181,33 +198,40 @@ final class WorldSearch implements AutoCloseable {
         pool.submit(() -> runRenderAttempt(pattern, worldSeed));
     }
 
-    private AttemptResult runCoarseAttempt(long seed) {
+    private FinishedAttempt runCoarseAttempt(long seed) {
         long start = System.nanoTime();
         ToroidalSizedLocalSearch.Result result = ToroidalSizedLocalSearch.search(
             stages.table(), stages.coarseGrid(), stages.coarseModel(), seed, settings.patternStepsPerAttempt(), settings.patternSchedule(), stopRequested::get
         );
-        return AttemptResult.ofSearch(AttemptResult.Stage.COARSE, result, Duration.ofNanos(System.nanoTime() - start));
+        AttemptResult attempt = AttemptResult.ofSearch(AttemptResult.Stage.COARSE, result, Duration.ofNanos(System.nanoTime() - start));
+        return new FinishedAttempt(attempt, obstaclesOf(attempt, stages.coarseGrid(), stages.coarseModel()));
     }
 
-    private AttemptResult runRefinementAttempt(Map<ToroidalPos, BiomeId> fineSeed, long seed) {
+    private FinishedAttempt runRefinementAttempt(Map<ToroidalPos, BiomeId> fineSeed, long seed) {
         long start = System.nanoTime();
         PlanSettings.FineResolution fine = settings.fineResolution();
         ToroidalSizedLocalSearch.Result result = ToroidalSizedLocalSearch.searchFromSeed(
             stages.table(), stages.fineGrid().orElseThrow(), stages.fineModel().orElseThrow(), seed, fineSeed, fine.refinementStepsPerAttempt(), fine.refinementSchedule(),
             stopRequested::get, ToroidalSizedLocalSearch.DEFAULT_RELABEL_PROBABILITY
         );
-        return AttemptResult.ofSearch(AttemptResult.Stage.REFINEMENT, result, Duration.ofNanos(System.nanoTime() - start));
+        AttemptResult attempt = AttemptResult.ofSearch(AttemptResult.Stage.REFINEMENT, result, Duration.ofNanos(System.nanoTime() - start));
+        return new FinishedAttempt(attempt, obstaclesOf(attempt, stages.fineGrid().orElseThrow(), stages.fineModel().orElseThrow()));
     }
 
-    private AttemptResult runRenderAttempt(Map<ToroidalPos, BiomeId> pattern, long worldSeed) {
+    private Set<Obstacle> obstaclesOf(AttemptResult attempt, ToroidalGrid grid, ClusterSizeModel model) {
+        return attempt.closestState().map(closest -> ObstacleFinder.of(stages.table(), grid, model, closest)).orElse(Set.of());
+    }
+
+    private FinishedAttempt runRenderAttempt(Map<ToroidalPos, BiomeId> pattern, long worldSeed) {
         long start = System.nanoTime();
         StringBuilder whyStrengthsFailed = new StringBuilder();
         Optional<RealizationSelector.Selection> selection = RealizationSelector.trySelect(
             stages.table(), stages.renderGrid(), pattern, stages.renderGeometry(), worldSeed, settings, whyStrengthsFailed
         );
         Duration duration = Duration.ofNanos(System.nanoTime() - start);
-        return selection.map(chosen -> AttemptResult.rendered(pattern, chosen.map(), duration))
+        AttemptResult attempt = selection.map(chosen -> AttemptResult.rendered(pattern, chosen.map(), duration))
             .orElseGet(() -> AttemptResult.renderFailed("world seed " + worldSeed + ":" + whyStrengthsFailed, duration));
+        return new FinishedAttempt(attempt, Set.of());
     }
 
     private Duration elapsed() {

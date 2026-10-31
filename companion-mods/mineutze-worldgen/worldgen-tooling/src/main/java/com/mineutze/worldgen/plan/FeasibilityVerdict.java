@@ -13,7 +13,7 @@ import java.util.Optional;
  */
 public record FeasibilityVerdict(
     Outcome outcome, Optional<InfeasibilityProof> proof, Optional<BuiltWorld> builtWorld, Evidence evidence, Optional<ReliabilityEstimate> reliability,
-    double targetWorldFailure, Duration elapsed
+    Optional<StageTightness> tightness, double targetWorldFailure, Duration elapsed
 ) {
 
     public enum Outcome {
@@ -25,6 +25,7 @@ public record FeasibilityVerdict(
     private static final double PERCENT_PER_UNIT = 100.0;
     private static final double SMALLEST_SHOWN_PERCENT = 0.001;
     private static final double MILLIS_PER_SECOND = 1000.0;
+    private static final int OBSTACLES_SHOWN = 10;
 
     public FeasibilityVerdict {
         Objects.requireNonNull(outcome, "outcome");
@@ -32,6 +33,7 @@ public record FeasibilityVerdict(
         Objects.requireNonNull(builtWorld, "builtWorld");
         Objects.requireNonNull(evidence, "evidence");
         Objects.requireNonNull(reliability, "reliability");
+        Objects.requireNonNull(tightness, "tightness");
         Objects.requireNonNull(elapsed, "elapsed");
         boolean feasible = outcome == Outcome.FEASIBLE;
         if ((outcome == Outcome.INFEASIBLE) != proof.isPresent() || feasible != builtWorld.isPresent() || (!feasible && reliability.isPresent())) {
@@ -40,21 +42,25 @@ public record FeasibilityVerdict(
                     + ", proof present=" + proof.isPresent() + ", world present=" + builtWorld.isPresent() + ", reliability present=" + reliability.isPresent()
             );
         }
+        if ((outcome == Outcome.UNPROVEN) != tightness.isPresent()) {
+            throw new IllegalArgumentException("FeasibilityVerdict: UNPROVEN carries exactly a tightness ranking, other outcomes none; got " + outcome
+                + ", ranking present=" + tightness.isPresent());
+        }
         if (!(targetWorldFailure > 0.0 && targetWorldFailure < 1.0) || elapsed.isNegative()) {
             throw new IllegalArgumentException("FeasibilityVerdict: target must be strictly between 0 and 1, elapsed not negative; got " + targetWorldFailure + ", " + elapsed);
         }
     }
 
     static FeasibilityVerdict infeasible(InfeasibilityProof proof, Evidence evidence, double targetWorldFailure, Duration elapsed) {
-        return new FeasibilityVerdict(Outcome.INFEASIBLE, Optional.of(proof), Optional.empty(), evidence, Optional.empty(), targetWorldFailure, elapsed);
+        return new FeasibilityVerdict(Outcome.INFEASIBLE, Optional.of(proof), Optional.empty(), evidence, Optional.empty(), Optional.empty(), targetWorldFailure, elapsed);
     }
 
     static FeasibilityVerdict feasible(BuiltWorld world, Evidence evidence, ReliabilityEstimate reliability, double targetWorldFailure, Duration elapsed) {
-        return new FeasibilityVerdict(Outcome.FEASIBLE, Optional.empty(), Optional.of(world), evidence, Optional.of(reliability), targetWorldFailure, elapsed);
+        return new FeasibilityVerdict(Outcome.FEASIBLE, Optional.empty(), Optional.of(world), evidence, Optional.of(reliability), Optional.empty(), targetWorldFailure, elapsed);
     }
 
-    static FeasibilityVerdict unproven(Evidence evidence, double targetWorldFailure, Duration elapsed) {
-        return new FeasibilityVerdict(Outcome.UNPROVEN, Optional.empty(), Optional.empty(), evidence, Optional.empty(), targetWorldFailure, elapsed);
+    static FeasibilityVerdict unproven(Evidence evidence, StageTightness tightness, double targetWorldFailure, Duration elapsed) {
+        return new FeasibilityVerdict(Outcome.UNPROVEN, Optional.empty(), Optional.empty(), evidence, Optional.empty(), Optional.of(tightness), targetWorldFailure, elapsed);
     }
 
     public String summary() {
@@ -95,7 +101,26 @@ public record FeasibilityVerdict(
     }
 
     private String unprovenSummary() {
-        return "UNPROVEN: no world built and no contradiction found in " + seconds() + " s.\n" + attemptsLine();
+        StageTightness stages = tightness.orElseThrow();
+        return "UNPROVEN: no world built and no contradiction found in " + seconds() + " s.\n" + attemptsLine() + tightnessLines("coarse", stages.coarse())
+            + tightnessLines("refinement", stages.refinement());
+    }
+
+    /** Co-occurrence in closest states, not cause: worded as what the states still broke, never what stopped them. */
+    private static String tightnessLines(String stage, TightnessRanking ranking) {
+        if (ranking.failedAttempts() == 0) {
+            return "";
+        }
+        if (ranking.entries().isEmpty()) {
+            return "\nNo law identified in the closest states of the " + ranking.failedAttempts() + " failed " + stage + " attempts.";
+        }
+        StringBuilder lines = new StringBuilder("\nLaws the closest states of the " + ranking.failedAttempts() + " failed " + stage + " attempts still broke (measured, not a proof):");
+        ranking.entries().stream().limit(OBSTACLES_SHOWN).forEach(ranked -> lines.append("\n  - ").append(ranked.obstacle().describe()).append(": still broke in ")
+            .append(ranked.attemptsBroken()).append(" of ").append(ranking.failedAttempts()));
+        if (ranking.entries().size() > OBSTACLES_SHOWN) {
+            lines.append("\n  (").append(ranking.entries().size() - OBSTACLES_SHOWN).append(" more)");
+        }
+        return lines.toString();
     }
 
     private String attemptsLine() {

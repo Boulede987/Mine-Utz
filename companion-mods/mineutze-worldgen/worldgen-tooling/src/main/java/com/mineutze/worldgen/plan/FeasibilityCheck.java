@@ -38,7 +38,7 @@ public final class FeasibilityCheck {
             outcome = search.run();
         }
         if (outcome.builtWorld().isEmpty()) {
-            return FeasibilityVerdict.unproven(outcome.evidence(), budget.maxWorldFailureProbability(), elapsedSince(startNanos));
+            return FeasibilityVerdict.unproven(outcome.evidence(), outcome.tightness(), budget.maxWorldFailureProbability(), elapsedSince(startNanos));
         }
         ReliabilityEstimate reliability = ReliabilityEstimate.of(outcome.evidence(), ProductionFailureModel.fromProduction(settings), budget.confidence());
         return FeasibilityVerdict.feasible(outcome.builtWorld().get(), outcome.evidence(), reliability, budget.maxWorldFailureProbability(), elapsedSince(startNanos));
