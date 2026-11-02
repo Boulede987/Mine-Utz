@@ -1,0 +1,8 @@
+namespace com.mineutze.worldgen.plan {
+class LoosenedGraph <<record>> {
+  + label : String
+  + catalog : BiomeGraphData
+}
+}
+
+com.mineutze.worldgen.plan.LoosenedGraph *--> com.mineutze.worldgen.biomegraph.BiomeGraphData

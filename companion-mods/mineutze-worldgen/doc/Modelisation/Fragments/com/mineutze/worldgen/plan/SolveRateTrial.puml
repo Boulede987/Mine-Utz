@@ -1,0 +1,45 @@
+namespace com.mineutze.worldgen.plan {
+class SolveRateTrial {
+  ~ {static} BASELINE_LABEL : String
+  - {static} TRIAL_WORLD_SEED : long
+  - settings : PlanSettings
+  - threads : int
+  - wallTime : Duration
+  - boundConfidence : double
+  ~ {static} improves(double, double) : boolean
+  - resultsOf(Arm, List<Arm>) : List<ArmResult>
+  - resultOf(Arm, boolean, double) : ArmResult
+}
+class Arm <<static>> {
+  - label : String
+  - stages : Optional<SolveStages>
+  - rejection : Optional<String>
+  - evidence : StageEvidence
+  - submitted : int
+  ~ {static} of(String, BiomeGraphData, PlanSettings) : Arm
+}
+class AttemptOutcome <<record>> {
+  + arm : Arm
+  + solved : boolean
+  + cost : int
+  + durationNanos : long
+}
+class Run {
+  - runnable : Arm[*]
+  - deadlineNanos : long
+  - baseSeed : long
+  - stopRequested : AtomicBoolean
+  - pool : IndependentAttemptPool<AttemptOutcome>
+  - longestAttemptNanos : long
+  - nextArmToTry : int
+  - awaitOne(WorldBiomePlan.ProgressListener) : boolean
+  - startingAnotherFitsBeforeDeadline() : boolean
+  - submitNext()
+  - leastSubmitted() : Arm
+  - attempt(Arm, long) : AttemptOutcome
+  + close()
+}
+}
+
+com.mineutze.worldgen.plan.Run ..|> AutoCloseable
+com.mineutze.worldgen.plan.AttemptOutcome *--> com.mineutze.worldgen.plan.Arm

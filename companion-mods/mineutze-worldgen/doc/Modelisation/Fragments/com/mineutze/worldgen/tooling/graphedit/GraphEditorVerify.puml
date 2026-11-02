@@ -1,0 +1,7 @@
+namespace com.mineutze.worldgen.tooling.graphedit {
+class GraphEditorVerify {
+  - {static} EXIT_NO_RANKING : int
+  - {static} EXIT_CRASH : int
+  + {static} main(String[])
+}
+}

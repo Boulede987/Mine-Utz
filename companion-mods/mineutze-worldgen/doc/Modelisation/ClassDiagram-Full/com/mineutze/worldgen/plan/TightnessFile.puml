@@ -1,0 +1,67 @@
+@startuml TightnessFile
+
+skinparam classAttributeIconSize 0
+skinparam shadowing false
+
+skinparam class {
+  BackgroundColor<<interface>> #D6EAF8
+  BorderColor<<interface>> #2E86C1
+}
+skinparam class {
+  BackgroundColor<<abstract>> #E8DAEF
+  BorderColor<<abstract>> #8E44AD
+}
+skinparam class {
+  BackgroundColor #D5F5E3
+  BorderColor #27AE60
+}
+skinparam class {
+  BackgroundColor<<record>> #FCF3CF
+  BorderColor<<record>> #B7950B
+}
+skinparam class {
+  BackgroundColor<<static>> #a7faa0
+  BorderColor<<static>> #38d610
+}
+skinparam class {
+  BackgroundColor<<enum>> #F5B7B1
+  BorderColor<<enum>> #C0392B
+}
+
+namespace com.mineutze.worldgen.plan {
+class TightnessFile {
+  ~ {static} write(Path, TightnessRanking, BiomeGraphData)
+  ~ {static} read(Path, BiomeGraphData) : TightnessRanking
+  - {static} parse(Path) : Map<String, Object>
+  - {static} toJson(RankedObstacle) : Map<String, Object>
+  - {static} putLaw(Map<String, Object>, GraphLaw)
+  - {static} putKind(Map<String, Object>, String, BiomeId)
+  - {static} fromJson(Map<String, Object>, RawRuleTable) : RankedObstacle
+  - {static} requiredBorderOf(BiomeId, RawRuleTable) : Obstacle
+  - {static} biomeOf(Object) : BiomeId
+  - {static} asMap(Object) : Map<String, Object>
+  - {static} listOf(Object) : List<?>
+  - {static} stringOf(Object) : String
+  - {static} intOf(Object) : int
+}
+}
+
+com.mineutze.worldgen.plan.TightnessFile ..> com.mineutze.worldgen.biomegraph.BiomeGraphData
+com.mineutze.worldgen.plan.TightnessFile ..> com.mineutze.worldgen.biomegraph.BiomeId
+com.mineutze.worldgen.plan.TightnessFile ..> com.mineutze.worldgen.plan.GraphLaw
+com.mineutze.worldgen.plan.TightnessFile ..> com.mineutze.worldgen.plan.IllegalPairLaw
+com.mineutze.worldgen.plan.TightnessFile ..> com.mineutze.worldgen.plan.LawObstacle
+com.mineutze.worldgen.plan.TightnessFile ..> com.mineutze.worldgen.biomegraph.MinimalJson
+com.mineutze.worldgen.plan.TightnessFile ..> com.mineutze.worldgen.plan.MissingBiome
+com.mineutze.worldgen.plan.TightnessFile ..> com.mineutze.worldgen.plan.Obstacle
+com.mineutze.worldgen.plan.TightnessFile ..> com.mineutze.worldgen.plan.RankedObstacle
+com.mineutze.worldgen.plan.TightnessFile ..> com.mineutze.worldgen.plan.RankingUnavailable
+com.mineutze.worldgen.plan.TightnessFile ..> com.mineutze.worldgen.plan.RawRuleTable
+com.mineutze.worldgen.plan.TightnessFile ..> com.mineutze.worldgen.plan.RequiredBorderLaw
+com.mineutze.worldgen.plan.TightnessFile ..> com.mineutze.worldgen.plan.ResolvedBorderRequirement
+com.mineutze.worldgen.plan.TightnessFile ..> com.mineutze.worldgen.plan.ShapeLimit
+com.mineutze.worldgen.plan.TightnessFile ..> com.mineutze.worldgen.plan.SizeRangeLaw
+com.mineutze.worldgen.plan.TightnessFile ..> com.mineutze.worldgen.plan.TightnessRanking
+com.mineutze.worldgen.plan.TightnessFile ..> com.mineutze.worldgen.plan.WorldBiomePlan
+
+@enduml

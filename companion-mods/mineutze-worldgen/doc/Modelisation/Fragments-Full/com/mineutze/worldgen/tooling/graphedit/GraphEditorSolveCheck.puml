@@ -6,6 +6,7 @@ class GraphEditorSolveCheck {
   - {static} EXIT_CRASH : int
   + {static} main(String[])
   - {static} checkSavedGraph() : int
+  - {static} saveRankingAfterVerdict(FeasibilityVerdict, BiomeGraphData)
   - {static} printVerdict(FeasibilityVerdict)
   - {static} writeWorldPicture(BuiltWorld)
   - {static} exitCodeOf(FeasibilityVerdict.Outcome) : int
@@ -20,3 +21,4 @@ com.mineutze.worldgen.tooling.graphedit.GraphEditorSolveCheck ..> com.mineutze.w
 com.mineutze.worldgen.tooling.graphedit.GraphEditorSolveCheck ..> com.mineutze.worldgen.plan.FeasibilityVerdict
 com.mineutze.worldgen.tooling.graphedit.GraphEditorSolveCheck ..> com.mineutze.worldgen.tooling.graphedit.GraphEditorFiles
 com.mineutze.worldgen.tooling.graphedit.GraphEditorSolveCheck ..> com.mineutze.worldgen.plan.Outcome
+com.mineutze.worldgen.tooling.graphedit.GraphEditorSolveCheck ..> com.mineutze.worldgen.plan.TightnessVerify

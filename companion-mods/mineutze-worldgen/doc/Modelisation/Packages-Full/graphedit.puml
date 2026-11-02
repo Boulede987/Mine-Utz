@@ -37,6 +37,7 @@ namespace com.mineutze.worldgen.tooling.graphedit {
 class GraphEditorFiles {
   ~ {static} DATA_FILE : Path
   ~ {static} VERDICT_WORLD_PICTURE : Path
+  ~ {static} TIGHTNESS_RANKING : Path
 }
 class GraphEditorServer {
   - {static} DEFAULT_PORT : int
@@ -49,9 +50,15 @@ class GraphEditorSolveCheck {
   - {static} EXIT_CRASH : int
   + {static} main(String[])
   - {static} checkSavedGraph() : int
+  - {static} saveRankingAfterVerdict(FeasibilityVerdict, BiomeGraphData)
   - {static} printVerdict(FeasibilityVerdict)
   - {static} writeWorldPicture(BuiltWorld)
   - {static} exitCodeOf(FeasibilityVerdict.Outcome) : int
+}
+class GraphEditorVerify {
+  - {static} EXIT_NO_RANKING : int
+  - {static} EXIT_CRASH : int
+  + {static} main(String[])
 }
 class GraphValidation {
   - {static} MIN_LEGAL_NEIGHBORS : int
@@ -84,7 +91,11 @@ class com.mineutze.worldgen.plan.FeasibilityVerdict <<external>> [[plan.svg]] {
 }
 class com.mineutze.worldgen.plan.Outcome <<external>> [[plan.svg]] {
 }
+class com.mineutze.worldgen.plan.RankingUnavailable <<external>> [[plan.svg]] {
+}
 class com.mineutze.worldgen.plan.RawRuleTable <<external>> [[plan.svg]] {
+}
+class com.mineutze.worldgen.plan.TightnessVerify <<external>> [[plan.svg]] {
 }
 class com.mineutze.worldgen.plan.WorldBiomePlan <<external>> [[plan.svg]] {
 }
@@ -98,6 +109,12 @@ com.mineutze.worldgen.tooling.graphedit.GraphEditorSolveCheck ..> com.mineutze.w
 com.mineutze.worldgen.tooling.graphedit.GraphEditorSolveCheck ..> com.mineutze.worldgen.plan.FeasibilityVerdict
 com.mineutze.worldgen.tooling.graphedit.GraphEditorSolveCheck ..> com.mineutze.worldgen.tooling.graphedit.GraphEditorFiles
 com.mineutze.worldgen.tooling.graphedit.GraphEditorSolveCheck ..> com.mineutze.worldgen.plan.Outcome
+com.mineutze.worldgen.tooling.graphedit.GraphEditorSolveCheck ..> com.mineutze.worldgen.plan.TightnessVerify
+com.mineutze.worldgen.tooling.graphedit.GraphEditorVerify ..> com.mineutze.worldgen.biomegraph.BiomeGraphData
+com.mineutze.worldgen.tooling.graphedit.GraphEditorVerify ..> com.mineutze.worldgen.biomegraph.BiomeGraphJson
+com.mineutze.worldgen.tooling.graphedit.GraphEditorVerify ..> com.mineutze.worldgen.tooling.graphedit.GraphEditorFiles
+com.mineutze.worldgen.tooling.graphedit.GraphEditorVerify ..> com.mineutze.worldgen.plan.RankingUnavailable
+com.mineutze.worldgen.tooling.graphedit.GraphEditorVerify ..> com.mineutze.worldgen.plan.TightnessVerify
 com.mineutze.worldgen.tooling.graphedit.GraphValidation ..> com.mineutze.worldgen.biomegraph.BiomeGraph
 com.mineutze.worldgen.tooling.graphedit.GraphValidation ..> com.mineutze.worldgen.biomegraph.BiomeGraphData
 com.mineutze.worldgen.tooling.graphedit.GraphValidation ..> com.mineutze.worldgen.biomegraph.BiomeGraphJson

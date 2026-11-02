@@ -931,6 +931,12 @@ class LookupResult <<record>> {
   + mismatch : boolean
   + different : boolean
 }
+class ArmResult <<record>> {
+  + label : String
+  + evidence : Optional<StageEvidence>
+  + rejection : Optional<String>
+  + improves : boolean
+}
 class AttemptResult <<record>> {
   + stage : Stage
   + solved : boolean
@@ -1143,6 +1149,22 @@ class LawObstacle <<record>> {
   + law : GraphLaw
   + describe() : String
 }
+class LoosenedGraph <<record>> {
+  + label : String
+  + catalog : BiomeGraphData
+}
+class Loosening {
+  - {static} MIN_WIDTH_FACTOR : double
+  - {static} MAX_WIDTH_FACTOR : double
+  - {static} DEFAULT_BLEND_WIDTH_BLOCKS : int
+  ~ {static} of(Obstacle, BiomeGraphData) : Optional<LoosenedGraph>
+  - {static} legalize(IllegalPairLaw, BiomeGraphData) : LoosenedGraph
+  - {static} mostCommonBlendWidth(BiomeGraphData) : int
+  - {static} widen(BiomeId, BiomeGraphData) : LoosenedGraph
+  - {static} dropRequirement(BiomeId, BiomeGraphData) : LoosenedGraph
+  - {static} nodeOf(BiomeId, BiomeGraphData) : NodeData
+  - {static} withNode(BiomeId, BiomeGraphData, UnaryOperator<NodeData>) : BiomeGraphData
+}
 class MissingBiome <<record>> {
   + biome : BiomeId
   + describe() : String
@@ -1169,6 +1191,8 @@ class ProductionFailureModel <<record>> {
 class RankedObstacle <<record>> {
   + obstacle : Obstacle
   + attemptsBroken : int
+}
+class RankingUnavailable {
 }
 class ReliabilityEstimate <<record>> {
   + worldFailureLow : double
@@ -1199,6 +1223,46 @@ class SizeRangeLaw <<record>> {
   + maxCells : int
   + describe() : String
 }
+class SolveRateTrial {
+  ~ {static} BASELINE_LABEL : String
+  - {static} TRIAL_WORLD_SEED : long
+  - settings : PlanSettings
+  - threads : int
+  - wallTime : Duration
+  - boundConfidence : double
+  ~ {static} improves(double, double) : boolean
+  - resultsOf(Arm, List<Arm>) : List<ArmResult>
+  - resultOf(Arm, boolean, double) : ArmResult
+}
+class Arm <<static>> {
+  - label : String
+  - stages : Optional<SolveStages>
+  - rejection : Optional<String>
+  - evidence : StageEvidence
+  - submitted : int
+  ~ {static} of(String, BiomeGraphData, PlanSettings) : Arm
+}
+class AttemptOutcome <<record>> {
+  + arm : Arm
+  + solved : boolean
+  + cost : int
+  + durationNanos : long
+}
+class Run {
+  - runnable : Arm[*]
+  - deadlineNanos : long
+  - baseSeed : long
+  - stopRequested : AtomicBoolean
+  - pool : IndependentAttemptPool<AttemptOutcome>
+  - longestAttemptNanos : long
+  - nextArmToTry : int
+  - awaitOne(WorldBiomePlan.ProgressListener) : boolean
+  - startingAnotherFitsBeforeDeadline() : boolean
+  - submitNext()
+  - leastSubmitted() : Arm
+  - attempt(Arm, long) : AttemptOutcome
+  + close()
+}
 class SolveStages <<record>> {
   + table : RawRuleTable
   + coarseGrid : ToroidalGrid
@@ -1222,6 +1286,21 @@ class StageTightness <<record>> {
   + coarse : TightnessRanking
   + refinement : TightnessRanking
 }
+class TightnessFile {
+  ~ {static} write(Path, TightnessRanking, BiomeGraphData)
+  ~ {static} read(Path, BiomeGraphData) : TightnessRanking
+  - {static} parse(Path) : Map<String, Object>
+  - {static} toJson(RankedObstacle) : Map<String, Object>
+  - {static} putLaw(Map<String, Object>, GraphLaw)
+  - {static} putKind(Map<String, Object>, String, BiomeId)
+  - {static} fromJson(Map<String, Object>, RawRuleTable) : RankedObstacle
+  - {static} requiredBorderOf(BiomeId, RawRuleTable) : Obstacle
+  - {static} biomeOf(Object) : BiomeId
+  - {static} asMap(Object) : Map<String, Object>
+  - {static} listOf(Object) : List<?>
+  - {static} stringOf(Object) : String
+  - {static} intOf(Object) : int
+}
 class TightnessRanking <<record>> {
   + entries : RankedObstacle[*]
   + failedAttempts : int
@@ -1229,6 +1308,19 @@ class TightnessRanking <<record>> {
 class TightnessTally {
   - attemptsBrokenByObstacle : Map<Obstacle, Integer>
   - failedAttempts : int
+}
+class TightnessVerify {
+  + {static} EDITOR_VERIFY_TIME : Duration
+  - {static} LOOSENINGS_TRIED : int
+  - {static} BOUND_CONFIDENCE : double
+  - {static} PERCENT_PER_UNIT : double
+  + {static} saveRanking(Path, FeasibilityVerdict, BiomeGraphData)
+  + {static} verify(Path, BiomeGraphData, int, WorldBiomePlan.ProgressListener) : String
+  ~ {static} verify(Path, BiomeGraphData, PlanSettings, Duration, int, WorldBiomePlan.ProgressListener) : String
+  - {static} sortObstacle(RankedObstacle, BiomeGraphData, List<LoosenedGraph>, List<String>)
+  - {static} report(List<ArmResult>) : String
+  - {static} skippedLine(List<String>) : String
+  - {static} lineOf(ArmResult) : String
 }
 class WorldSearch {
   - {static} SEARCH_WORLD_SEED : long
@@ -1283,6 +1375,8 @@ class FinishedAttempt <<record>> {
   + result : AttemptResult
   + obstacles : Obstacle[*]
 }
+}
+class com.mineutze.worldgen.biomegraph.BiomeGraphData <<external>> [[biomegraph.svg]] {
 }
 class com.mineutze.worldgen.biomegraph.BiomeId <<external>> [[biomegraph.svg]] {
 }
@@ -1339,6 +1433,7 @@ com.mineutze.worldgen.plan.WorldBiomePlan *--> "0..*" com.mineutze.worldgen.biom
 com.mineutze.worldgen.plan.WorldBiomePlan *--> com.mineutze.worldgen.plan.HexTorusGeometry
 com.mineutze.worldgen.plan.PatternSolved *--> com.mineutze.worldgen.biomegraph.BiomeId
 com.mineutze.worldgen.plan.PatternSolved *--> com.mineutze.worldgen.plan.ToroidalPos
+com.mineutze.worldgen.plan.ArmResult *--> com.mineutze.worldgen.plan.StageEvidence
 com.mineutze.worldgen.plan.AttemptResult *--> com.mineutze.worldgen.biomegraph.BiomeId
 com.mineutze.worldgen.plan.AttemptResult *--> com.mineutze.worldgen.plan.BiomeMap
 com.mineutze.worldgen.plan.AttemptResult *--> com.mineutze.worldgen.plan.Stage
@@ -1364,9 +1459,11 @@ com.mineutze.worldgen.plan.InfeasibilityProof *--> "0..*" com.mineutze.worldgen.
 com.mineutze.worldgen.plan.LawConflict *--> "0..*" com.mineutze.worldgen.plan.GraphLaw
 com.mineutze.worldgen.plan.LawObstacle ..|> com.mineutze.worldgen.plan.Obstacle
 com.mineutze.worldgen.plan.LawObstacle *--> com.mineutze.worldgen.plan.GraphLaw
+com.mineutze.worldgen.plan.LoosenedGraph *--> com.mineutze.worldgen.biomegraph.BiomeGraphData
 com.mineutze.worldgen.plan.MissingBiome ..|> com.mineutze.worldgen.plan.Obstacle
 com.mineutze.worldgen.plan.MissingBiome *--> com.mineutze.worldgen.biomegraph.BiomeId
 com.mineutze.worldgen.plan.RankedObstacle *--> com.mineutze.worldgen.plan.Obstacle
+com.mineutze.worldgen.plan.RankingUnavailable --|> RuntimeException
 com.mineutze.worldgen.plan.RequiredBorderLaw ..|> com.mineutze.worldgen.plan.GraphLaw
 com.mineutze.worldgen.plan.RequiredBorderLaw *--> com.mineutze.worldgen.biomegraph.BiomeId
 com.mineutze.worldgen.plan.RequiredBorderLaw *--> com.mineutze.worldgen.plan.ResolvedBorderRequirement
@@ -1374,6 +1471,8 @@ com.mineutze.worldgen.plan.ShapeLimit ..|> com.mineutze.worldgen.plan.Obstacle
 com.mineutze.worldgen.plan.ShapeLimit *--> com.mineutze.worldgen.biomegraph.BiomeId
 com.mineutze.worldgen.plan.SizeRangeLaw ..|> com.mineutze.worldgen.plan.GraphLaw
 com.mineutze.worldgen.plan.SizeRangeLaw *--> com.mineutze.worldgen.biomegraph.BiomeId
+com.mineutze.worldgen.plan.Run ..|> AutoCloseable
+com.mineutze.worldgen.plan.AttemptOutcome *--> com.mineutze.worldgen.plan.Arm
 com.mineutze.worldgen.plan.SolveStages *--> com.mineutze.worldgen.plan.ClusterSizeModel
 com.mineutze.worldgen.plan.SolveStages *--> com.mineutze.worldgen.plan.HexTorusGeometry
 com.mineutze.worldgen.plan.SolveStages *--> com.mineutze.worldgen.plan.RawRuleTable

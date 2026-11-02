@@ -1,0 +1,14 @@
+namespace com.mineutze.worldgen.plan {
+class Loosening {
+  - {static} MIN_WIDTH_FACTOR : double
+  - {static} MAX_WIDTH_FACTOR : double
+  - {static} DEFAULT_BLEND_WIDTH_BLOCKS : int
+  ~ {static} of(Obstacle, BiomeGraphData) : Optional<LoosenedGraph>
+  - {static} legalize(IllegalPairLaw, BiomeGraphData) : LoosenedGraph
+  - {static} mostCommonBlendWidth(BiomeGraphData) : int
+  - {static} widen(BiomeId, BiomeGraphData) : LoosenedGraph
+  - {static} dropRequirement(BiomeId, BiomeGraphData) : LoosenedGraph
+  - {static} nodeOf(BiomeId, BiomeGraphData) : NodeData
+  - {static} withNode(BiomeId, BiomeGraphData, UnaryOperator<NodeData>) : BiomeGraphData
+}
+}

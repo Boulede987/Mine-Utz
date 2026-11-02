@@ -1,0 +1,15 @@
+namespace com.mineutze.worldgen.plan {
+class TightnessVerify {
+  + {static} EDITOR_VERIFY_TIME : Duration
+  - {static} LOOSENINGS_TRIED : int
+  - {static} BOUND_CONFIDENCE : double
+  - {static} PERCENT_PER_UNIT : double
+  + {static} saveRanking(Path, FeasibilityVerdict, BiomeGraphData)
+  + {static} verify(Path, BiomeGraphData, int, WorldBiomePlan.ProgressListener) : String
+  ~ {static} verify(Path, BiomeGraphData, PlanSettings, Duration, int, WorldBiomePlan.ProgressListener) : String
+  - {static} sortObstacle(RankedObstacle, BiomeGraphData, List<LoosenedGraph>, List<String>)
+  - {static} report(List<ArmResult>) : String
+  - {static} skippedLine(List<String>) : String
+  - {static} lineOf(ArmResult) : String
+}
+}

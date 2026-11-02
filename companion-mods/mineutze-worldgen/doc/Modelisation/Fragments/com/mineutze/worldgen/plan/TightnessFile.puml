@@ -1,0 +1,17 @@
+namespace com.mineutze.worldgen.plan {
+class TightnessFile {
+  ~ {static} write(Path, TightnessRanking, BiomeGraphData)
+  ~ {static} read(Path, BiomeGraphData) : TightnessRanking
+  - {static} parse(Path) : Map<String, Object>
+  - {static} toJson(RankedObstacle) : Map<String, Object>
+  - {static} putLaw(Map<String, Object>, GraphLaw)
+  - {static} putKind(Map<String, Object>, String, BiomeId)
+  - {static} fromJson(Map<String, Object>, RawRuleTable) : RankedObstacle
+  - {static} requiredBorderOf(BiomeId, RawRuleTable) : Obstacle
+  - {static} biomeOf(Object) : BiomeId
+  - {static} asMap(Object) : Map<String, Object>
+  - {static} listOf(Object) : List<?>
+  - {static} stringOf(Object) : String
+  - {static} intOf(Object) : int
+}
+}

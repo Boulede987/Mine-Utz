@@ -1,0 +1,55 @@
+@startuml Loosening
+
+skinparam classAttributeIconSize 0
+skinparam shadowing false
+
+skinparam class {
+  BackgroundColor<<interface>> #D6EAF8
+  BorderColor<<interface>> #2E86C1
+}
+skinparam class {
+  BackgroundColor<<abstract>> #E8DAEF
+  BorderColor<<abstract>> #8E44AD
+}
+skinparam class {
+  BackgroundColor #D5F5E3
+  BorderColor #27AE60
+}
+skinparam class {
+  BackgroundColor<<record>> #FCF3CF
+  BorderColor<<record>> #B7950B
+}
+skinparam class {
+  BackgroundColor<<static>> #a7faa0
+  BorderColor<<static>> #38d610
+}
+skinparam class {
+  BackgroundColor<<enum>> #F5B7B1
+  BorderColor<<enum>> #C0392B
+}
+
+namespace com.mineutze.worldgen.plan {
+class Loosening {
+  - {static} MIN_WIDTH_FACTOR : double
+  - {static} MAX_WIDTH_FACTOR : double
+  - {static} DEFAULT_BLEND_WIDTH_BLOCKS : int
+  ~ {static} of(Obstacle, BiomeGraphData) : Optional<LoosenedGraph>
+  - {static} legalize(IllegalPairLaw, BiomeGraphData) : LoosenedGraph
+  - {static} mostCommonBlendWidth(BiomeGraphData) : int
+  - {static} widen(BiomeId, BiomeGraphData) : LoosenedGraph
+  - {static} dropRequirement(BiomeId, BiomeGraphData) : LoosenedGraph
+  - {static} nodeOf(BiomeId, BiomeGraphData) : NodeData
+  - {static} withNode(BiomeId, BiomeGraphData, UnaryOperator<NodeData>) : BiomeGraphData
+}
+}
+
+com.mineutze.worldgen.plan.Loosening ..> com.mineutze.worldgen.biomegraph.BiomeGraphData
+com.mineutze.worldgen.plan.Loosening ..> com.mineutze.worldgen.biomegraph.BiomeId
+com.mineutze.worldgen.plan.Loosening ..> com.mineutze.worldgen.biomegraph.EdgeData
+com.mineutze.worldgen.plan.Loosening ..> com.mineutze.worldgen.plan.IllegalPairLaw
+com.mineutze.worldgen.plan.Loosening ..> com.mineutze.worldgen.plan.LawObstacle
+com.mineutze.worldgen.plan.Loosening ..> com.mineutze.worldgen.plan.LoosenedGraph
+com.mineutze.worldgen.plan.Loosening ..> com.mineutze.worldgen.biomegraph.NodeData
+com.mineutze.worldgen.plan.Loosening ..> com.mineutze.worldgen.plan.Obstacle
+
+@enduml

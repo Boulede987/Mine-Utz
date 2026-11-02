@@ -1,0 +1,6 @@
+namespace com.mineutze.worldgen.plan {
+class RankingUnavailable {
+}
+}
+
+com.mineutze.worldgen.plan.RankingUnavailable --|> RuntimeException

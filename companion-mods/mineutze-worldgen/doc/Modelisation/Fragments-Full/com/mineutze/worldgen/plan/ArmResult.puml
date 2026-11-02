@@ -1,0 +1,10 @@
+namespace com.mineutze.worldgen.plan {
+class ArmResult <<record>> {
+  + label : String
+  + evidence : Optional<StageEvidence>
+  + rejection : Optional<String>
+  + improves : boolean
+}
+}
+
+com.mineutze.worldgen.plan.ArmResult *--> com.mineutze.worldgen.plan.StageEvidence
