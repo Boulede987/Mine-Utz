@@ -34,6 +34,14 @@ tasks.register('graphEditorSolveCheck', JavaExec) {
     workingDir = coreDir
 }
 
+tasks.register('graphEditorVerify', JavaExec) {
+    group = 'verification'
+    description = 'The graph editor Verify button - after an UNPROVEN Solve check, measures the coarse solve rate of the graph as is against its top 3 loosenings, up to 10 minutes. Run with: ./gradlew :worldgen-tooling:graphEditorVerify'
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'com.mineutze.worldgen.tooling.graphedit.GraphEditorVerify'
+    workingDir = coreDir
+}
+
 repositories {
     mavenCentral()
 }

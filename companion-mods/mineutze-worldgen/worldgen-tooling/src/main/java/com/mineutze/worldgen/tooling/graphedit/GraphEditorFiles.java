@@ -22,6 +22,9 @@ final class GraphEditorFiles {
     /** Solve check writes the world it built here; the editor serves it. */
     static final Path VERDICT_WORLD_PICTURE = Path.of("build", "graph-editor", "verdict-world.png");
 
+    /** Solve check saves its coarse ranking here when UNPROVEN; the Verify run reads it. */
+    static final Path TIGHTNESS_RANKING = Path.of("build", "graph-editor", "tightness.json");
+
     private GraphEditorFiles() {
     }
 }

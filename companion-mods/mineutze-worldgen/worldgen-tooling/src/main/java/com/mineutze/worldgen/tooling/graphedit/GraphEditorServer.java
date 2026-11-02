@@ -26,6 +26,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * Graph editor vertical slice (2026-09-14, real user request - see DECISIONS.md same
@@ -90,6 +91,7 @@ public final class GraphEditorServer {
         server.createContext("/api/tests", GraphEditorServer::handleRunTests);
         server.createContext("/api/solvecheck", GraphEditorServer::handleSolveCheck);
         server.createContext("/api/verdictworld", GraphEditorServer::serveVerdictWorld);
+        server.createContext("/api/verify", GraphEditorServer::handleVerify);
         server.createContext("/api/requirement", GraphEditorServer::handleSetRequirement);
         server.createContext("/api/groups", GraphEditorServer::handleSaveGroup);
         server.createContext("/api/groups/remove", GraphEditorServer::handleRemoveGroup);
@@ -335,6 +337,11 @@ public final class GraphEditorServer {
         runGradleTaskAndRespond(exchange, List.of("../gradlew.bat", ":worldgen-tooling:graphEditorSolveCheck"));
     }
 
+    /** Verify run (up to 10 min): reads the ranking the last UNPROVEN Solve check saved. */
+    private static void handleVerify(HttpExchange exchange) throws IOException {
+        runGradleTaskAndRespond(exchange, List.of("../gradlew.bat", ":worldgen-tooling:graphEditorVerify"));
+    }
+
     /**
      * Sets the border requirement of ONE biome from its text, blank clearing it. A text that cannot be read, or that names a group or biome that does not exist, is refused
      * by validation and not saved; a requirement the generator could never meet is saved and shown as an error. Re-validates before saving, like every mutation here.
@@ -452,6 +459,18 @@ public final class GraphEditorServer {
      * exist in one place.
      */
     private static void runGradleTaskAndRespond(HttpExchange exchange, List<String> command) throws IOException {
+        if (!GRADLE_RUN_IN_PROGRESS.compareAndSet(false, true)) {
+            respondJson(exchange, 409, MinimalJson.writeObject(Map.of("exitCode", -1, "output", "Another run is still in progress; each one uses every core - wait for it to finish.")));
+            return;
+        }
+        try {
+            runGradleTaskWhileHoldingTheGate(exchange, command);
+        } finally {
+            GRADLE_RUN_IN_PROGRESS.set(false);
+        }
+    }
+
+    private static void runGradleTaskWhileHoldingTheGate(HttpExchange exchange, List<String> command) throws IOException {
         Process process;
         try {
             process = startGradleProcess(command);
@@ -637,9 +656,10 @@ public final class GraphEditorServer {
           <div id="warnings"></div>
 
           <h3>Tests</h3>
-          <button onclick="runTests(false)">Run quick check (BiomeGraphTest)</button>
-          <button onclick="runTests(true)">Run full worldgen-core suite</button>
-          <button onclick="runSolveCheck()">Solve check (feasibility verdict, up to 2 min)</button>
+          <button class="gradleRun" onclick="runTests(false)">Run quick check (BiomeGraphTest)</button>
+          <button class="gradleRun" onclick="runTests(true)">Run full worldgen-core suite</button>
+          <button class="gradleRun" onclick="runSolveCheck()">Solve check (feasibility verdict, up to 2 min)</button>
+          <button class="gradleRun" onclick="runVerify()">Verify (measures the top loosenings after an UNPROVEN check, up to 10 min)</button>
           <div id="testStatus"></div>
           <div id="testReportLinks"></div>
           <pre id="testOutput"></pre>
@@ -1015,17 +1035,25 @@ public final class GraphEditorServer {
           await runGradleTaskAndRender('/api/tests?scope=' + (full ? 'full' : 'quick'));
         }
 
+        async function runVerify() {
+          await runGradleTaskAndRender('/api/verify');
+        }
+
         async function runSolveCheck() {
           await runGradleTaskAndRender('/api/solvecheck');
         }
 
         function statusLabelOf(result) {
           const exitLabel = 'Exit code ' + result.exitCode + (result.exitCode === 0 ? ' (PASS)' : ' (FAIL)');
-          const verdictMatch = result.output.match(/^VERDICT: (FEASIBLE|INFEASIBLE|UNPROVEN|CRASH)$/m);
-          if (!verdictMatch) return exitLabel;
-          const verdict = verdictMatch[1];
-          const exitAgrees = (verdict === 'FEASIBLE') === (result.exitCode === 0);
-          return exitAgrees ? verdict : verdict + ' but ' + exitLabel;
+          const statusMatch = result.output.match(/^(VERDICT|VERIFY): (FEASIBLE|INFEASIBLE|UNPROVEN|MEASURED|NO RANKING|CRASH)$/m);
+          if (!statusMatch) return exitLabel;
+          const status = statusMatch[2];
+          const exitAgrees = (status === 'FEASIBLE' || status === 'MEASURED') === (result.exitCode === 0);
+          return exitAgrees ? status : status + ' but ' + exitLabel;
+        }
+
+        function setGradleButtonsEnabled(enabled) {
+          document.querySelectorAll('button.gradleRun').forEach(button => button.disabled = !enabled);
         }
 
         function showVerdictWorld(built) {
@@ -1038,8 +1066,14 @@ public final class GraphEditorServer {
           document.getElementById('testStatus').textContent = 'Running...';
           document.getElementById('testReportLinks').innerHTML = '';
           document.getElementById('testOutput').textContent = '';
-          const response = await fetch(endpoint);
-          const result = await response.json();
+          setGradleButtonsEnabled(false);
+          let result;
+          try {
+            const response = await fetch(endpoint);
+            result = await response.json();
+          } finally {
+            setGradleButtonsEnabled(true);
+          }
           document.getElementById('testStatus').textContent = statusLabelOf(result);
           document.getElementById('testOutput').textContent = result.output;
           showVerdictWorld(/^WORLD_PICTURE: /m.test(result.output));
@@ -1061,6 +1095,9 @@ public final class GraphEditorServer {
         </body>
         </html>
         """;
+
+    /** One gradle run at a time: tests, Solve check and Verify each use every core, overlapping runs starve each other. */
+    private static final AtomicBoolean GRADLE_RUN_IN_PROGRESS = new AtomicBoolean();
 
     private GraphEditorServer() {
     }

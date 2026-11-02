@@ -6,6 +6,7 @@ import com.mineutze.worldgen.plan.BuiltWorld;
 import com.mineutze.worldgen.plan.FeasibilityBudget;
 import com.mineutze.worldgen.plan.FeasibilityCheck;
 import com.mineutze.worldgen.plan.FeasibilityVerdict;
+import com.mineutze.worldgen.plan.TightnessVerify;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -32,7 +33,7 @@ final class GraphEditorSolveCheck {
         int exitCode;
         try {
             exitCode = checkSavedGraph();
-        } catch (IOException | RuntimeException crash) {
+        } catch (IOException | RuntimeException | Error crash) {
             System.out.println("VERDICT: CRASH");
             System.out.println("Solve check crashed (graph " + GraphEditorFiles.DATA_FILE.toAbsolutePath() + ", picture " + GraphEditorFiles.VERDICT_WORLD_PICTURE.toAbsolutePath() + "):");
             crash.printStackTrace(System.out);
@@ -45,12 +46,23 @@ final class GraphEditorSolveCheck {
 
     private static int checkSavedGraph() throws IOException {
         Files.deleteIfExists(GraphEditorFiles.VERDICT_WORLD_PICTURE);
+        Files.deleteIfExists(GraphEditorFiles.TIGHTNESS_RANKING);
         BiomeGraphData catalog = BiomeGraphJson.load(GraphEditorFiles.DATA_FILE);
         System.out.println("Solve check of " + GraphEditorFiles.DATA_FILE.toAbsolutePath() + ": " + catalog.nodes().size() + " biomes.");
         FeasibilityVerdict verdict = FeasibilityCheck.check(catalog, FeasibilityBudget.EDITOR_DEFAULT, message -> System.out.println("  " + message));
         verdict.builtWorld().ifPresent(GraphEditorSolveCheck::writeWorldPicture);
         printVerdict(verdict);
+        saveRankingAfterVerdict(verdict, catalog);
         return exitCodeOf(verdict.outcome());
+    }
+
+    /** After the verdict line: a failed save must not hide the verdict - Verify then says no ranking was saved. */
+    private static void saveRankingAfterVerdict(FeasibilityVerdict verdict, BiomeGraphData catalog) {
+        try {
+            TightnessVerify.saveRanking(GraphEditorFiles.TIGHTNESS_RANKING, verdict, catalog);
+        } catch (RuntimeException failure) {
+            System.out.println("RANKING NOT SAVED (" + GraphEditorFiles.TIGHTNESS_RANKING.toAbsolutePath() + "): " + failure);
+        }
     }
 
     private static void printVerdict(FeasibilityVerdict verdict) {
