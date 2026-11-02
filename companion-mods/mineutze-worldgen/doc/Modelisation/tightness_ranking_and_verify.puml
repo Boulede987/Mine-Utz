@@ -1,0 +1,45 @@
+@startuml tightness_ranking_and_verify
+title Explain tight graphs - ranking (in Solve check) [4] and Verify run [5]
+
+partition "ranking, inside WorldSearch (no extra time) [4]" {
+  start
+  :failed coarse or refinement attempt arrives
+  with its closest state (lowest cost reached);
+  :ObstacleFinder: laws that state leaves violated
+  - illegal pair touching -> that IllegalPairLaw
+  - patch outside its cell range -> its SizeRangeLaw
+  - patch short of its required border -> its RequiredBorderLaw
+  - biome absent -> MissingBiome
+  - patch over perimeter / thickness limit -> ShapeLimit;
+  :TightnessTally: +1 per obstacle
+  (each counted once per attempt);
+  if (search ends UNPROVEN?) then (yes)
+    :verdict lists top obstacles:
+    "blocked N of M failed attempts"
+    labelled as measurement, not proof;
+  else (FEASIBLE / INFEASIBLE)
+    :no ranking shown;
+  endif
+  stop
+}
+
+partition "Verify run (button, up to 10 min) [5]" {
+  start
+  :read ranking file written by the last Solve check;
+  if (graph fingerprint changed since?) then (yes)
+    :fail loud: run the Solve check again;
+    stop
+  endif
+  :arms = baseline graph + one loosened copy per
+  top-3 loosenable obstacle
+  (pair -> legal, size range -> widened, border -> dropped,
+  ShapeLimit / MissingBiome skipped, said so);
+  :run production coarse attempts, arms interleaved
+  on every thread, until 10 min;
+  :per arm: solved k of n, exact confidence range;
+  :arm "improves" only if its low bound
+  is above the baseline's high bound;
+  :report table: baseline vs each loosening;
+  stop
+}
+@enduml

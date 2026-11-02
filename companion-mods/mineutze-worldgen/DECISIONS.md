@@ -6,6 +6,32 @@ run `./gradlew :worldgen-core:calibrationReport` to read it, or `./gradlew :worl
 enforce it (`CalibrationManifestTest` fails loud on drift). This log stays the history (context,
 alternatives considered, evidence at the time) - it does not track current validity on its own.
 
+## 2026-11-02 — Verify run measures whether loosening the top-ranked laws helps
+
+**Context:** the tightness ranking (entry below) is co-occurrence, not cause. User requirement: an optional Verify
+run, up to 10 min, that loosens the top laws and reports measured solve rates before vs after.
+
+**Decision:** the Solve check saves its coarse ranking (`TightnessFile`, keyed by graph fingerprint - reading it for
+a changed graph fails loud). `TightnessVerify` takes the top 3 loosenable obstacles (`Loosening`: illegal pair ->
+legal with the graph's usual blend width, size range -> min -20% / max +25% width, required border -> dropped; shape
+limits and missing biomes named as skipped) and `SolveRateTrial` runs production coarse attempts for the graph as is
+and each copy, arms taking turns on every thread, same seed sequence for every arm (common random numbers). An arm
+IMPROVES only if its low bound is above the graph-as-is high bound, each bound one-sided 97.5% (printed range =
+two-sided 95%; a false IMPROVES needs both to miss: < 5% per loosening). In-flight attempts are drained at the
+deadline, not dropped (dropping would drop mostly failures and flatter every rate). Editor: Verify button,
+`:worldgen-tooling:graphEditorVerify`. `TightnessVerify` is the public entry so ranking types stay package-private.
+
+**Evidence (2026-11-02, WIP graph, 12 threads, 606 s):** graph as is solved 1 of 62 coarse attempts (0.1%..7.4%);
+ocean/savanna legal 9 of 62 (7.8%..24.0%), warm_ocean/windswept_gravelly_hills legal 9 of 62 (7.8%..24.0%),
+ocean/wooded_badlands legal 13 of 62 (12.9%..31.3%) - all three IMPROVE at the (then mislabelled, 90%) range. Re-run
+after the review fixes (594 s, true 95% ranges): as is 1 of 64 (0.0%..8.4%); ocean/savanna 10 of 64 (7.8%..26.9%),
+warm_ocean/windswept_gravelly_hills 9 of 63 (6.7%..25.4%), ocean/wooded_badlands 13 of 63 (11.5%..32.7%) IMPROVES. Same
+~15% solve rates as before; at the stricter test only the strongest separates within 10 min. Evidence the ranking
+points at laws whose loosening raises the solve rate.
+
+**Known gap:** arms are loosened one at a time (no combinations); coarse stage only (refinement / render rates not
+compared); 95% separation needs a large effect to show within 10 min.
+
 ## 2026-10-31 — UNPROVEN verdicts rank what blocked the failed attempts
 
 **Context:** Tight-but-feasible graphs (the current WIP graph solves ~1 coarse attempt in 100) end UNPROVEN in 2 min
