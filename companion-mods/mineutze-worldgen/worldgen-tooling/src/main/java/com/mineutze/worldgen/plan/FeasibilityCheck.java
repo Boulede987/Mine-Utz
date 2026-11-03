@@ -41,7 +41,13 @@ public final class FeasibilityCheck {
             return FeasibilityVerdict.unproven(outcome.evidence(), outcome.tightness(), budget.maxWorldFailureProbability(), elapsedSince(startNanos));
         }
         ReliabilityEstimate reliability = ReliabilityEstimate.of(outcome.evidence(), ProductionFailureModel.fromProduction(settings), budget.confidence());
-        return FeasibilityVerdict.feasible(outcome.builtWorld().get(), outcome.evidence(), reliability, budget.maxWorldFailureProbability(), elapsedSince(startNanos));
+        Optional<StageTightness> tightness = Optional.of(outcome.tightness()).filter(FeasibilityCheck::anyAttemptFailed);
+        return FeasibilityVerdict.feasible(outcome.builtWorld().get(), outcome.evidence(), reliability, tightness, budget.maxWorldFailureProbability(), elapsedSince(startNanos));
+    }
+
+    /** A FEASIBLE graph can still fail attempts (its production reliability): those get ranked too. */
+    static boolean anyAttemptFailed(StageTightness tightness) {
+        return tightness.coarse().failedAttempts() > 0 || tightness.refinement().failedAttempts() > 0;
     }
 
     /** Present only on a proven contradiction; UNKNOWN (solver time limit) is never a proof. */

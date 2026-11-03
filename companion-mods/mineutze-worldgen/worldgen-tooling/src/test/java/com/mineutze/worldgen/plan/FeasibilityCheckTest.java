@@ -7,7 +7,10 @@ import org.junit.jupiter.api.io.TempDir;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+import java.util.OptionalInt;
 
 import static com.mineutze.worldgen.plan.ToroidalTestTables.A;
 import static com.mineutze.worldgen.plan.ToroidalTestTables.B;
@@ -16,6 +19,7 @@ import static com.mineutze.worldgen.plan.ToroidalTestTables.fullyLegalCatalog;
 import static com.mineutze.worldgen.plan.ToroidalTestTables.noLegalTriangleCatalog;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class FeasibilityCheckTest {
@@ -127,11 +131,44 @@ class FeasibilityCheckTest {
         assertTrue(verdict.summary().contains("measured"), verdict.summary());
     }
 
-    @Test
-    void aFeasibleVerdictHasNoRanking() {
-        FeasibilityVerdict verdict = check(SOLVABLE, SMALL_MULTIGRID, ONE_MINUTE);
+    private static TightnessRanking noFailures() {
+        return new TightnessRanking(List.of(), 0);
+    }
 
-        assertTrue(verdict.tightness().isEmpty(), verdict.summary());
+    /** A FEASIBLE graph can still fail attempts (production reliability): those failures are ranked too. */
+    @Test
+    void aCoarseFailureKeepsTheRanking() {
+        assertTrue(FeasibilityCheck.anyAttemptFailed(new StageTightness(new TightnessRanking(List.of(), 1), noFailures())));
+    }
+
+    @Test
+    void aRefinementFailureKeepsTheRanking() {
+        assertTrue(FeasibilityCheck.anyAttemptFailed(new StageTightness(noFailures(), new TightnessRanking(List.of(), 1))));
+    }
+
+    @Test
+    void noFailureKeepsNoRanking() {
+        assertFalse(FeasibilityCheck.anyAttemptFailed(new StageTightness(noFailures(), noFailures())));
+    }
+
+    @Test
+    void aFeasibleSummaryListsTheLawsItsFailedAttemptsBroke() {
+        BuiltWorld world = new BuiltWorld(Map.of(), new BiomeMap(1, new int[] {0}, new int[] {0}, List.of(A), 1.0, 1.0), 1);
+        TightnessRanking coarse = new TightnessRanking(List.of(new RankedObstacle(new LawObstacle(new IllegalPairLaw(A, B)), 3)), 4);
+        StageTightness tightness = new StageTightness(coarse, new TightnessRanking(List.of(), 0));
+        Evidence evidence = new Evidence(new StageEvidence(5, 1, OptionalInt.empty()), StageEvidence.EMPTY, new StageEvidence(1, 1, OptionalInt.empty()));
+
+        FeasibilityVerdict verdict = FeasibilityVerdict.feasible(world, evidence, new ReliabilityEstimate(0.0, 0.2), Optional.of(tightness), 0.01, Duration.ofSeconds(1));
+
+        assertTrue(verdict.summary().contains(new IllegalPairLaw(A, B).describe() + ": still broke in 3 of 4"), verdict.summary());
+    }
+
+    @Test
+    void anInfeasibleVerdictNeverCarriesARanking() {
+        StageTightness tightness = new StageTightness(new TightnessRanking(List.of(), 1), new TightnessRanking(List.of(), 0));
+
+        assertThrows(IllegalArgumentException.class, () -> new FeasibilityVerdict(FeasibilityVerdict.Outcome.INFEASIBLE, Optional.of(InfeasibilityProof.rejectedByGenerator("no")),
+            Optional.empty(), Evidence.EMPTY, Optional.empty(), Optional.of(tightness), 0.01, Duration.ZERO));
     }
 
     @Test

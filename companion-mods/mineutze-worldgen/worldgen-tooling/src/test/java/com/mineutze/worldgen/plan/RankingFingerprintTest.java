@@ -9,11 +9,17 @@ class RankingFingerprintTest {
 
     @Test
     void sameContentSameFingerprint() {
-        assertEquals(RankingFingerprint.of("{\"ranking\": 1}"), RankingFingerprint.of("{\"ranking\": 1}"));
+        assertEquals(RankingFingerprint.of("{\"ranking\": 1}", "graph 1"), RankingFingerprint.of("{\"ranking\": 1}", "graph 1"));
     }
 
     @Test
     void editedRankingChangesTheFingerprint() {
-        assertNotEquals(RankingFingerprint.of("{\"ranking\": 1}"), RankingFingerprint.of("{\"ranking\": 2}"));
+        assertNotEquals(RankingFingerprint.of("{\"ranking\": 1}", "graph 1"), RankingFingerprint.of("{\"ranking\": 2}", "graph 1"));
+    }
+
+    /** After a graph edit the same rank can mean another law (laws the edit changed drop out). */
+    @Test
+    void editedGraphChangesTheFingerprint() {
+        assertNotEquals(RankingFingerprint.of("{\"ranking\": 1}", "graph 1"), RankingFingerprint.of("{\"ranking\": 1}", "graph 2"));
     }
 }

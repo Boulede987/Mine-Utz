@@ -15,17 +15,17 @@ class RankingViewTest {
 
     @Test
     void refusesRanksOutOfSequence() {
-        assertThrows(IllegalArgumentException.class, () -> new RankingView(List.of(choice(1), choice(3)), 5, "abc"));
+        assertThrows(IllegalArgumentException.class, () -> new RankingView(List.of(choice(1), choice(3)), 5, "abc", true, 0));
     }
 
     @Test
     void refusesABlankFingerprint() {
-        assertThrows(IllegalArgumentException.class, () -> new RankingView(List.of(choice(1)), 5, " "));
+        assertThrows(IllegalArgumentException.class, () -> new RankingView(List.of(choice(1)), 5, " ", true, 0));
     }
 
     @Test
     void refusesNegativeFailedAttempts() {
-        assertThrows(IllegalArgumentException.class, () -> new RankingView(List.of(choice(1)), -1, "abc"));
+        assertThrows(IllegalArgumentException.class, () -> new RankingView(List.of(choice(1)), -1, "abc", true, 0));
     }
 
     @Test

@@ -9,12 +9,12 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import static com.mineutze.worldgen.plan.ToroidalTestTables.A;
 import static com.mineutze.worldgen.plan.ToroidalTestTables.B;
 import static com.mineutze.worldgen.plan.ToroidalTestTables.C;
-import static com.mineutze.worldgen.plan.ToroidalTestTables.fullyLegalCatalog;
 import static com.mineutze.worldgen.plan.ToroidalTestTables.noLegalTriangleCatalog;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -135,16 +135,31 @@ class TightnessVerifyTest {
         assertEquals(Optional.empty(), shape.loosening());
     }
 
-    /** Edited graph: ranking measured on the old version must be refused. */
+    /** Edited graph: list kept, minus laws the edit changed, marked as counted on the previous version. */
     @Test
-    void choicesRefuseARankingSavedForAnEarlierGraphVersion(@TempDir Path folder) {
+    void choicesAfterAnEditKeepWhatTheGraphStillStates(@TempDir Path folder) {
         Path file = folder.resolve("tightness.json");
         writeRanking(file);
-        BiomeGraphData edited = fullyLegalCatalog(500, 800, A, B, C);
+        BiomeGraphData withAcLegal = GraphEdits.withLegalPair(NEVER_SOLVES, A, C);
 
-        RankingUnavailable refused = assertThrows(RankingUnavailable.class, () -> TightnessVerify.choices(file, edited));
+        RankingView view = TightnessVerify.choices(file, withAcLegal);
 
-        assertTrue(refused.getMessage().contains("different version of the graph"), refused.getMessage());
+        assertFalse(view.measuredOnThisGraph());
+        assertEquals(1, view.removedByEdits());
+        assertEquals(List.of(new ShapeLimit(A).describe(), new IllegalPairLaw(B, C).describe()), view.choices().stream().map(RankingChoice::law).toList());
+    }
+
+    /** Picks made before an edit: rank 2 meant A/C, now it means B/C. */
+    @Test
+    void checkPicksRefusesPicksMadeBeforeAnEdit(@TempDir Path folder) {
+        Path file = folder.resolve("tightness.json");
+        writeRanking(file);
+        String beforeEdit = TightnessVerify.choices(file, NEVER_SOLVES).fingerprint();
+        BiomeGraphData withAcLegal = GraphEdits.withLegalPair(NEVER_SOLVES, A, C);
+
+        IllegalArgumentException refused = assertThrows(IllegalArgumentException.class, () -> TightnessVerify.checkPicks(file, withAcLegal, List.of(2), beforeEdit));
+
+        assertTrue(refused.getMessage().contains("ranking changed"), refused.getMessage());
     }
 
     @Test
@@ -152,7 +167,7 @@ class TightnessVerifyTest {
         Path file = folder.resolve("tightness.json");
         writeRanking(file);
 
-        assertEquals(RankingFingerprint.of(Files.readString(file)), TightnessVerify.choices(file, NEVER_SOLVES).fingerprint());
+        assertEquals(RankingFingerprint.of(Files.readString(file), WorldBiomePlan.fingerprintOf(NEVER_SOLVES)), TightnessVerify.choices(file, NEVER_SOLVES).fingerprint());
     }
 
     @Test
@@ -233,12 +248,26 @@ class TightnessVerifyTest {
     }
 
     @Test
-    void savesARankingOnlyForAnUnprovenVerdict(@TempDir Path folder) {
+    void savesNoRankingForAnInfeasibleVerdict(@TempDir Path folder) {
         Path file = folder.resolve("tightness.json");
         FeasibilityVerdict infeasible = FeasibilityVerdict.infeasible(InfeasibilityProof.rejectedByGenerator("no"), Evidence.EMPTY, 0.01, Duration.ZERO);
 
         TightnessVerify.saveRanking(file, infeasible, NEVER_SOLVES);
 
         assertFalse(Files.exists(file));
+    }
+
+    /** FEASIBLE short of perfect: its failures are what Verify can improve. */
+    @Test
+    void savesTheRankingOfAFeasibleVerdictWithFailedAttempts(@TempDir Path folder) {
+        Path file = folder.resolve("tightness.json");
+        BuiltWorld world = new BuiltWorld(Map.of(), new BiomeMap(1, new int[] {0}, new int[] {0}, List.of(A), 1.0, 1.0), 1);
+        TightnessRanking coarse = new TightnessRanking(List.of(new RankedObstacle(new LawObstacle(new IllegalPairLaw(A, C)), 2)), 3);
+        FeasibilityVerdict feasible = FeasibilityVerdict.feasible(world, Evidence.EMPTY, new ReliabilityEstimate(0.0, 0.2),
+            Optional.of(new StageTightness(coarse, new TightnessRanking(List.of(), 0))), 0.01, Duration.ZERO);
+
+        TightnessVerify.saveRanking(file, feasible, NEVER_SOLVES);
+
+        assertEquals(coarse, TightnessFile.read(file, NEVER_SOLVES));
     }
 }

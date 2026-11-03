@@ -10,12 +10,21 @@ import java.nio.file.Files;
 import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
-/** Coarse Solve check ranking for Verify. Fingerprint-keyed: another graph's laws may be gone. Written atomically: a Verify never reads half a file. */
+/**
+ * Coarse Solve check ranking for Verify, keyed by graph fingerprint: read on an edited graph, only laws the graph still
+ * states are kept. Written atomically: a Verify never reads half a file.
+ */
 final class TightnessFile {
+
+    private static final String REQUIRED_BORDER_KIND = "requiredBorder";
+    /** Required border key (resolved member biomes included), so a later edit to it or to a group it names can be seen. */
+    private static final String REQUIREMENT_KEY = "requirement";
 
     private TightnessFile() {
     }
@@ -43,24 +52,48 @@ final class TightnessFile {
     /** File read once: the fingerprint covers exactly the bytes the ranking was parsed from. */
     static SavedRanking readSaved(Path file, BiomeGraphData catalog) {
         String text = readText(file);
-        return new SavedRanking(rankingFrom(parse(text, file), file, catalog), RankingFingerprint.of(text));
+        Map<String, Object> json = parse(text, file);
+        String graphFingerprint = WorldBiomePlan.fingerprintOf(catalog);
+        String fingerprint = RankingFingerprint.of(text, graphFingerprint);
+        List<?> stored = listOf(json.get("obstacles"));
+        int failedAttempts = intOf(json.get("failedAttempts"));
+        RawRuleTable table = RawRuleTable.from(catalog);
+        if (graphFingerprint.equals(stringOf(json.get("fingerprint")))) {
+            List<RankedObstacle> entries = stored.stream().map(entry -> fromJson(asMap(entry), table)).toList();
+            return new SavedRanking(new TightnessRanking(entries, failedAttempts), fingerprint, true, 0);
+        }
+        List<RankedObstacle> stillStated = stillStatedOn(catalog, table, stored, file);
+        return new SavedRanking(new TightnessRanking(stillStated, failedAttempts), fingerprint, false, stored.size() - stillStated.size());
     }
 
-    private static TightnessRanking rankingFrom(Map<String, Object> json, Path file, BiomeGraphData catalog) {
-        String fingerprint = WorldBiomePlan.fingerprintOf(catalog);
-        if (!fingerprint.equals(stringOf(json.get("fingerprint")))) {
-            throw new RankingUnavailable("The saved ranking (" + file.toAbsolutePath() + ") is for a different version of the graph: run the Solve check again on the current graph");
+    /** Same settings as the editor's Solve check, which wrote the ranking. */
+    private static List<RankedObstacle> stillStatedOn(BiomeGraphData catalog, RawRuleTable table, List<?> stored, Path file) {
+        StatedLaws stated = StatedLaws.of(catalog, PlanSettings.DEFAULT);
+        List<RankedObstacle> kept = new ArrayList<>();
+        for (Object entry : stored) {
+            onEditedGraph(asMap(entry), table, file).filter(ranked -> stated.states(ranked.obstacle())).ifPresent(kept::add);
         }
-        RawRuleTable table = RawRuleTable.from(catalog);
-        List<RankedObstacle> entries = listOf(json.get("obstacles")).stream().map(entry -> fromJson(asMap(entry), table)).toList();
-        return new TightnessRanking(entries, intOf(json.get("failedAttempts")));
+        return kept;
+    }
+
+    /** Empty: a required border the edit changed or removed, seen by its stored text. */
+    private static Optional<RankedObstacle> onEditedGraph(Map<String, Object> json, RawRuleTable table, Path file) {
+        if (!REQUIRED_BORDER_KIND.equals(stringOf(json.get("kind")))) {
+            return Optional.of(fromJson(json, table));
+        }
+        if (!(json.get(REQUIREMENT_KEY) instanceof String storedText)) {
+            throw new RankingUnavailable("The saved ranking (" + file.toAbsolutePath() + ") predates stored required-border texts and the graph changed since: run the Solve check again");
+        }
+        BiomeId biome = biomeOf(json.get("biome"));
+        return table.requirementOf(biome).filter(current -> requirementKey(current).equals(storedText))
+            .map(current -> new RankedObstacle(new LawObstacle(new RequiredBorderLaw(biome, current)), intOf(json.get("attemptsBroken"))));
     }
 
     private static String readText(Path file) {
         try {
             return Files.readString(file);
         } catch (NoSuchFileException missing) {
-            throw new RankingUnavailable("No saved ranking at " + file.toAbsolutePath() + ": run the Solve check first (it saves one when it ends UNPROVEN)");
+            throw new RankingUnavailable("No saved ranking at " + file.toAbsolutePath() + ": run the Solve check first (it saves one whenever an attempt failed)");
         } catch (IOException failure) {
             throw new UncheckedIOException("TightnessFile: cannot read " + file.toAbsolutePath(), failure);
         }
@@ -97,7 +130,10 @@ final class TightnessFile {
                 json.put("minCells", size.minCells());
                 json.put("maxCells", size.maxCells());
             }
-            case RequiredBorderLaw border -> putKind(json, "requiredBorder", border.biome());
+            case RequiredBorderLaw border -> {
+                putKind(json, REQUIRED_BORDER_KIND, border.biome());
+                json.put(REQUIREMENT_KEY, requirementKey(border.requirement()));
+            }
         }
     }
 
@@ -110,12 +146,21 @@ final class TightnessFile {
         Obstacle obstacle = switch (stringOf(json.get("kind"))) {
             case "illegalPair" -> new LawObstacle(new IllegalPairLaw(biomeOf(json.get("first")), biomeOf(json.get("second"))));
             case "sizeRange" -> new LawObstacle(new SizeRangeLaw(biomeOf(json.get("biome")), intOf(json.get("minCells")), intOf(json.get("maxCells"))));
-            case "requiredBorder" -> requiredBorderOf(biomeOf(json.get("biome")), table);
+            case REQUIRED_BORDER_KIND -> requiredBorderOf(biomeOf(json.get("biome")), table);
             case "missingBiome" -> new MissingBiome(biomeOf(json.get("biome")));
             case "shapeLimit" -> new ShapeLimit(biomeOf(json.get("biome")));
             default -> throw new IllegalStateException("TightnessFile: unknown obstacle kind " + json.get("kind"));
         };
         return new RankedObstacle(obstacle, intOf(json.get("attemptsBroken")));
+    }
+
+    /** Own canonical form, not the display print: a print tweak must not read as an edit; members resolved, so group edits show. */
+    private static String requirementKey(ResolvedBorderRequirement requirement) {
+        return switch (requirement) {
+            case ResolvedBorderRequirement.Share share -> "share(" + share.biomes().stream().map(BiomeId::toString).sorted().toList() + ">=" + share.minEdges() + ")";
+            case ResolvedBorderRequirement.AllOf all -> "all(" + all.parts().stream().map(TightnessFile::requirementKey).toList() + ")";
+            case ResolvedBorderRequirement.AnyOf any -> "any(" + any.parts().stream().map(TightnessFile::requirementKey).toList() + ")";
+        };
     }
 
     private static Obstacle requiredBorderOf(BiomeId biome, RawRuleTable table) {

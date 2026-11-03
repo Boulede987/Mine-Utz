@@ -22,12 +22,12 @@ public final class TightnessVerify {
     private TightnessVerify() {
     }
 
-    /** Coarse ranking of an UNPROVEN verdict; nothing for other outcomes. */
+    /** Coarse ranking whenever attempts failed (UNPROVEN, or FEASIBLE short of perfect); nothing otherwise. */
     public static void saveRanking(Path file, FeasibilityVerdict verdict, BiomeGraphData catalog) {
         verdict.tightness().ifPresent(stages -> TightnessFile.write(file, stages.coarse(), catalog));
     }
 
-    /** @throws RankingUnavailable no ranking saved, or saved for another version of the graph */
+    /** On an edited graph: entries it no longer states removed. @throws RankingUnavailable no usable ranking saved */
     public static RankingView choices(Path rankingFile, BiomeGraphData catalog) {
         SavedRanking saved = TightnessFile.readSaved(rankingFile, catalog);
         List<RankedObstacle> entries = saved.ranking().entries();
@@ -35,7 +35,7 @@ public final class TightnessVerify {
         for (int index = 0; index < entries.size(); index++) {
             choices.add(choiceAt(index, entries.get(index), catalog));
         }
-        return new RankingView(choices, saved.ranking().failedAttempts(), saved.fingerprint());
+        return new RankingView(choices, saved.ranking().failedAttempts(), saved.fingerprint(), saved.measuredOnThisGraph(), saved.removedByEdits());
     }
 
     private static RankingChoice choiceAt(int index, RankedObstacle ranked, BiomeGraphData catalog) {
@@ -46,7 +46,7 @@ public final class TightnessVerify {
     /**
      * @throws IllegalArgumentException picks refused (none, over MAX_PICKS, duplicate, outside the ranking, not
      *     loosenable), or picked on another ranking than the saved one (a newer Solve check replaced it)
-     * @throws RankingUnavailable no ranking saved, or saved for another version of the graph
+     * @throws RankingUnavailable no usable ranking saved
      */
     public static void checkPicks(Path rankingFile, BiomeGraphData catalog, List<Integer> ranks, String pickedOn) {
         picksOn(TightnessFile.readSaved(rankingFile, catalog), catalog, ranks, pickedOn);
@@ -67,7 +67,7 @@ public final class TightnessVerify {
         return VerifyPicks.of(saved.ranking(), catalog, ranks);
     }
 
-    /** @throws RankingUnavailable no ranking saved, or saved for another version of the graph */
+    /** @throws RankingUnavailable no usable ranking saved */
     public static String verify(Path rankingFile, BiomeGraphData catalog, int threads, WorldBiomePlan.ProgressListener progress) {
         return verify(rankingFile, catalog, PlanSettings.DEFAULT, EDITOR_VERIFY_TIME, threads, progress);
     }

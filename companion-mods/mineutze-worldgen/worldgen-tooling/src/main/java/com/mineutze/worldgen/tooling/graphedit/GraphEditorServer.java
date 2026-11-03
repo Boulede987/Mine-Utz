@@ -382,6 +382,8 @@ public final class GraphEditorServer {
         json.put("choices", view.choices().stream().map(GraphEditorServer::choiceJson).toList());
         json.put("failedAttempts", view.failedAttempts());
         json.put("fingerprint", view.fingerprint());
+        json.put("measuredOnThisGraph", view.measuredOnThisGraph());
+        json.put("removedByEdits", view.removedByEdits());
         json.put("maxPicks", TightnessVerify.MAX_PICKS);
         respondJson(exchange, 200, MinimalJson.writeObject(json));
     }
@@ -1088,7 +1090,6 @@ public final class GraphEditorServer {
         let rankingFingerprint = null;
         let maxPicks = 0;
         let rankingRequest = 0;
-        let runInProgress = false;
 
         async function runVerify() {
           if (rankingFingerprint === null) {
@@ -1122,22 +1123,20 @@ public final class GraphEditorServer {
         }
 
         function showNoRanking(panel, reason) {
-          panel.innerHTML = '';
-          const message = document.createElement('div');
-          message.textContent = 'No ranking to pick from: ' + reason;
-          const rerun = document.createElement('button');
-          rerun.className = 'gradleRun';
-          rerun.textContent = 'Rerun Solve check';
-          rerun.onclick = runSolveCheck;
-          rerun.disabled = runInProgress;
-          panel.appendChild(message);
-          panel.appendChild(rerun);
+          panel.textContent = 'No ranking to pick from: ' + reason;
+        }
+
+        function editedGraphNote(ranking) {
+          if (ranking.measuredOnThisGraph) return '';
+          const removed = ranking.removedByEdits === 0 ? '' : '; ' + ranking.removedByEdits + ' no longer stated by the graph, removed';
+          return ' - counted at the last Solve check, before later edits' + removed;
         }
 
         function renderRanking(panel, ranking) {
           panel.innerHTML = '';
           const caption = document.createElement('div');
-          caption.textContent = 'Laws the ' + ranking.failedAttempts + ' failed attempts still broke (measured, not cause). Tick up to ' + maxPicks + ' for Verify:';
+          caption.textContent = 'Laws the ' + ranking.failedAttempts + ' failed attempts still broke (measured, not cause)' + editedGraphNote(ranking)
+            + '. Tick up to ' + maxPicks + ' for Verify (it measures the current graph):';
           panel.appendChild(caption);
           const table = document.createElement('table');
           table.innerHTML = '<tr><th></th><th>#</th><th>Law</th><th>Broke</th><th>Verify would</th></tr>';
@@ -1283,7 +1282,6 @@ public final class GraphEditorServer {
         }
 
         function setRunning(running) {
-          runInProgress = running;
           setGradleButtonsEnabled(!running);
           document.getElementById('stopRun').disabled = !running || stopRequested;
         }

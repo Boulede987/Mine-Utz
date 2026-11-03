@@ -42,9 +42,9 @@ public record FeasibilityVerdict(
                     + ", proof present=" + proof.isPresent() + ", world present=" + builtWorld.isPresent() + ", reliability present=" + reliability.isPresent()
             );
         }
-        if ((outcome == Outcome.UNPROVEN) != tightness.isPresent()) {
-            throw new IllegalArgumentException("FeasibilityVerdict: UNPROVEN carries exactly a tightness ranking, other outcomes none; got " + outcome
-                + ", ranking present=" + tightness.isPresent());
+        if ((outcome == Outcome.UNPROVEN && tightness.isEmpty()) || (outcome == Outcome.INFEASIBLE && tightness.isPresent())) {
+            throw new IllegalArgumentException("FeasibilityVerdict: UNPROVEN always carries a tightness ranking, FEASIBLE may (failed attempts), INFEASIBLE never; got "
+                + outcome + ", ranking present=" + tightness.isPresent());
         }
         if (!(targetWorldFailure > 0.0 && targetWorldFailure < 1.0) || elapsed.isNegative()) {
             throw new IllegalArgumentException("FeasibilityVerdict: target must be strictly between 0 and 1, elapsed not negative; got " + targetWorldFailure + ", " + elapsed);
@@ -55,8 +55,8 @@ public record FeasibilityVerdict(
         return new FeasibilityVerdict(Outcome.INFEASIBLE, Optional.of(proof), Optional.empty(), evidence, Optional.empty(), Optional.empty(), targetWorldFailure, elapsed);
     }
 
-    static FeasibilityVerdict feasible(BuiltWorld world, Evidence evidence, ReliabilityEstimate reliability, double targetWorldFailure, Duration elapsed) {
-        return new FeasibilityVerdict(Outcome.FEASIBLE, Optional.empty(), Optional.of(world), evidence, Optional.of(reliability), Optional.empty(), targetWorldFailure, elapsed);
+    static FeasibilityVerdict feasible(BuiltWorld world, Evidence evidence, ReliabilityEstimate reliability, Optional<StageTightness> tightness, double targetWorldFailure, Duration elapsed) {
+        return new FeasibilityVerdict(Outcome.FEASIBLE, Optional.empty(), Optional.of(world), evidence, Optional.of(reliability), tightness, targetWorldFailure, elapsed);
     }
 
     static FeasibilityVerdict unproven(Evidence evidence, StageTightness tightness, double targetWorldFailure, Duration elapsed) {
@@ -73,7 +73,8 @@ public record FeasibilityVerdict(
 
     private String feasibleSummary() {
         BuiltWorld world = builtWorld.orElseThrow();
-        return "FEASIBLE: built a world after " + world.attemptsUntilBuilt() + " attempts, in " + seconds() + " s.\n" + attemptsLine() + reliabilityLine();
+        return "FEASIBLE: built a world after " + world.attemptsUntilBuilt() + " attempts, in " + seconds() + " s.\n" + attemptsLine() + reliabilityLine()
+            + tightness.map(stages -> tightnessLines("coarse", stages.coarse()) + tightnessLines("refinement", stages.refinement())).orElse("");
     }
 
     private static String infeasibleSummary(InfeasibilityProof proof) {
