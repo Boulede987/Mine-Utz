@@ -7,6 +7,10 @@ import com.mineutze.worldgen.biomegraph.BiomeGraphData.NodeData;
 import com.mineutze.worldgen.biomegraph.BiomeGraphJson;
 import com.mineutze.worldgen.biomegraph.BorderRequirement;
 import com.mineutze.worldgen.biomegraph.MinimalJson;
+import com.mineutze.worldgen.plan.RankingChoice;
+import com.mineutze.worldgen.plan.RankingUnavailable;
+import com.mineutze.worldgen.plan.RankingView;
+import com.mineutze.worldgen.plan.TightnessVerify;
 import com.mineutze.worldgen.tooling.graphedit.GraphValidation.ValidationResult;
 
 import com.sun.net.httpserver.HttpExchange;
@@ -92,6 +96,7 @@ public final class GraphEditorServer {
         server.createContext("/api/solvecheck", GraphEditorServer::handleSolveCheck);
         server.createContext("/api/verdictworld", GraphEditorServer::serveVerdictWorld);
         server.createContext("/api/verify", GraphEditorServer::handleVerify);
+        server.createContext("/api/ranking", GraphEditorServer::handleRanking);
         server.createContext("/api/run", GraphEditorServer::handleRunStatus);
         server.createContext("/api/run/stop", GraphEditorServer::handleRunStop);
         server.createContext("/api/requirement", GraphEditorServer::handleSetRequirement);
@@ -339,9 +344,65 @@ public final class GraphEditorServer {
         startGradleTaskAndRespond(exchange, "Solve check", List.of("../gradlew.bat", ":worldgen-tooling:graphEditorSolveCheck"));
     }
 
-    /** Verify run (up to 10 min): reads the ranking the last UNPROVEN Solve check saved. */
+    /** POST {ranks, fingerprint}: picks checked here first, so a refused pick never costs a gradle start. */
     private static void handleVerify(HttpExchange exchange) throws IOException {
-        startGradleTaskAndRespond(exchange, "Verify", List.of("../gradlew.bat", ":worldgen-tooling:graphEditorVerify"));
+        if (!"POST".equals(exchange.getRequestMethod())) {
+            respond(exchange, 405, "text/plain; charset=utf-8", "POST only".getBytes(StandardCharsets.UTF_8));
+            return;
+        }
+        Optional<BiomeGraphData> catalog = loadGraphOrAnswer500(exchange);
+        if (catalog.isEmpty()) {
+            return;
+        }
+        VerifyRequest request;
+        try {
+            request = VerifyRequest.parse(readBody(exchange));
+            TightnessVerify.checkPicks(GraphEditorFiles.TIGHTNESS_RANKING, catalog.get(), request.ranks(), request.fingerprint());
+        } catch (IllegalArgumentException | RankingUnavailable refused) {
+            respondJson(exchange, 400, MinimalJson.writeObject(Map.of("started", false, "error", refused.getMessage())));
+            return;
+        }
+        startGradleTaskAndRespond(exchange, "Verify", List.of("../gradlew.bat", ":worldgen-tooling:graphEditorVerify", request.gradleArgument()));
+    }
+
+    /** Saved ranking as a pick list; {"none": reason} when there is none for this graph. */
+    private static void handleRanking(HttpExchange exchange) throws IOException {
+        Optional<BiomeGraphData> catalog = loadGraphOrAnswer500(exchange);
+        if (catalog.isEmpty()) {
+            return;
+        }
+        RankingView view;
+        try {
+            view = TightnessVerify.choices(GraphEditorFiles.TIGHTNESS_RANKING, catalog.get());
+        } catch (RankingUnavailable missing) {
+            respondJson(exchange, 200, MinimalJson.writeObject(Map.of("none", missing.getMessage())));
+            return;
+        }
+        Map<String, Object> json = new LinkedHashMap<>();
+        json.put("choices", view.choices().stream().map(GraphEditorServer::choiceJson).toList());
+        json.put("failedAttempts", view.failedAttempts());
+        json.put("fingerprint", view.fingerprint());
+        json.put("maxPicks", TightnessVerify.MAX_PICKS);
+        respondJson(exchange, 200, MinimalJson.writeObject(json));
+    }
+
+    /** Graph file unreadable or invalid: the page shows why instead of a dropped connection. */
+    private static Optional<BiomeGraphData> loadGraphOrAnswer500(HttpExchange exchange) throws IOException {
+        try {
+            return Optional.of(BiomeGraphJson.load(GraphEditorFiles.DATA_FILE));
+        } catch (RuntimeException loadFailure) {
+            respondJson(exchange, 500, MinimalJson.writeObject(Map.of("started", false, "error", "Could not load the graph " + GraphEditorFiles.DATA_FILE.toAbsolutePath() + ": " + loadFailure)));
+            return Optional.empty();
+        }
+    }
+
+    private static Map<String, Object> choiceJson(RankingChoice choice) {
+        Map<String, Object> json = new LinkedHashMap<>();
+        json.put("rank", choice.rank());
+        json.put("law", choice.law());
+        json.put("attemptsBroken", choice.attemptsBroken());
+        choice.loosening().ifPresent(loosening -> json.put("loosening", loosening));
+        return json;
     }
 
     /**
@@ -558,6 +619,9 @@ public final class GraphEditorServer {
           circle.focused { fill: #e83; r: 9; }
           line { stroke: #999; stroke-width: 1; }
           text { font-size: 10px; pointer-events: none; }
+          #rankingPanel table { border-collapse: collapse; font-size: 12px; margin: 6px 0; }
+          #rankingPanel td, #rankingPanel th { border: 1px solid #ccc; padding: 2px 4px; text-align: left; }
+          #rankingPanel tr.cannotLoosen { color: #888; }
           .warning { background: #fff3cd; border: 1px solid #d4a72c; padding: 6px; margin: 4px 0; font-size: 13px; }
           .error { background: #f8d7da; border: 1px solid #d33; padding: 6px; margin: 4px 0; font-size: 13px; }
           .ok { background: #d4edda; border: 1px solid #3a3; padding: 6px; margin: 4px 0; font-size: 13px; }
@@ -640,8 +704,9 @@ public final class GraphEditorServer {
           <button class="gradleRun" onclick="runTests(false)">Run quick check (BiomeGraphTest)</button>
           <button class="gradleRun" onclick="runTests(true)">Run full worldgen-core suite</button>
           <button class="gradleRun" onclick="runSolveCheck()">Solve check (feasibility verdict, up to 2 min)</button>
-          <button class="gradleRun" onclick="runVerify()">Verify (measures the top loosenings after an UNPROVEN check, up to 10 min)</button>
+          <button class="gradleRun" onclick="runVerify()">Verify (measures the ticked loosenings below, up to 10 min)</button>
           <button id="stopRun" onclick="stopRun()" disabled>Stop</button>
+          <div id="rankingPanel"></div>
           <div id="testStatus"></div>
           <div id="testReportLinks"></div>
           <pre id="testOutput"></pre>
@@ -1017,8 +1082,79 @@ public final class GraphEditorServer {
           await startRunAndPoll('/api/tests?scope=' + (full ? 'full' : 'quick'));
         }
 
+        // Ranking pick list: Verify measures the ticked laws. Top loosenable ones start ticked, cap from the server.
+        let rankingFingerprint = null;
+        let maxPicks = 0;
+
         async function runVerify() {
-          await startRunAndPoll('/api/verify');
+          if (rankingFingerprint === null) {
+            document.getElementById('testStatus').textContent = 'No ranking loaded: run a Solve check first (Verify measures laws from its ranking).';
+            return;
+          }
+          const ranks = [...document.querySelectorAll('#rankingPanel input:checked')].map(box => Number(box.value));
+          await startRunAndPoll('/api/verify', { method: 'POST', body: JSON.stringify({ ranks: ranks, fingerprint: rankingFingerprint }) });
+        }
+
+        async function loadRanking() {
+          const panel = document.getElementById('rankingPanel');
+          try {
+            const ranking = await fetchJson('/api/ranking');
+            if (ranking.none) {
+              rankingFingerprint = null;
+              panel.textContent = 'No ranking to pick from: ' + ranking.none;
+              return;
+            }
+            rankingFingerprint = ranking.fingerprint;
+            maxPicks = ranking.maxPicks;
+            renderRanking(panel, ranking);
+          } catch (failure) {
+            rankingFingerprint = null;
+            panel.textContent = 'Could not load the ranking: ' + failure.message;
+          }
+        }
+
+        function renderRanking(panel, ranking) {
+          panel.innerHTML = '';
+          const caption = document.createElement('div');
+          caption.textContent = 'Laws the ' + ranking.failedAttempts + ' failed attempts still broke (measured, not cause). Tick up to ' + maxPicks + ' for Verify:';
+          panel.appendChild(caption);
+          const table = document.createElement('table');
+          table.innerHTML = '<tr><th></th><th>#</th><th>Law</th><th>Broke</th><th>Verify would</th></tr>';
+          let ticked = 0;
+          ranking.choices.forEach(choice => {
+            const startTicked = choice.loosening !== undefined && ticked < maxPicks;
+            if (startTicked) ticked++;
+            table.appendChild(rankingRow(choice, ranking.failedAttempts, startTicked));
+          });
+          panel.appendChild(table);
+        }
+
+        function rankingRow(choice, failedAttempts, startTicked) {
+          const row = document.createElement('tr');
+          const box = document.createElement('input');
+          box.type = 'checkbox';
+          box.value = choice.rank;
+          box.checked = startTicked;
+          box.disabled = choice.loosening === undefined;
+          box.onchange = () => refuseOverCap(box);
+          if (box.disabled) row.className = 'cannotLoosen';
+          const cells = [String(choice.rank), choice.law, choice.attemptsBroken + ' of ' + failedAttempts, choice.loosening === undefined ? "can't be loosened" : choice.loosening];
+          const boxCell = document.createElement('td');
+          boxCell.appendChild(box);
+          row.appendChild(boxCell);
+          cells.forEach(text => {
+            const cell = document.createElement('td');
+            cell.textContent = text;
+            row.appendChild(cell);
+          });
+          return row;
+        }
+
+        function refuseOverCap(box) {
+          if (box.checked && document.querySelectorAll('#rankingPanel input:checked').length > maxPicks) {
+            box.checked = false;
+            document.getElementById('testStatus').textContent = 'Verify measures at most ' + maxPicks + ' laws per run (10 min shared): untick one first.';
+          }
         }
 
         async function runSolveCheck() {
@@ -1027,7 +1163,7 @@ public final class GraphEditorServer {
 
         function statusLabelOf(result) {
           const exitLabel = 'Exit code ' + result.exitCode + (result.exitCode === 0 ? ' (PASS)' : ' (FAIL)');
-          const statusMatch = result.output.match(/^(VERDICT|VERIFY): (FEASIBLE|INFEASIBLE|UNPROVEN|MEASURED|NO RANKING|CRASH)$/m);
+          const statusMatch = result.output.match(/^(VERDICT|VERIFY): (FEASIBLE|INFEASIBLE|UNPROVEN|MEASURED|NO RANKING|REFUSED|CRASH)$/m);
           if (!statusMatch) return exitLabel;
           const status = statusMatch[2];
           const exitAgrees = (status === 'FEASIBLE' || status === 'MEASURED') === (result.exitCode === 0);
@@ -1060,10 +1196,10 @@ public final class GraphEditorServer {
           return body;
         }
 
-        async function startRunAndPoll(endpoint) {
+        async function startRunAndPoll(endpoint, options) {
           setRunning(true);
           try {
-            const started = await fetchJson(endpoint);
+            const started = await fetchJson(endpoint, options);
             if (!started.started) {
               document.getElementById('testStatus').textContent = started.output;
               setRunning(false);
@@ -1133,6 +1269,7 @@ public final class GraphEditorServer {
         function showRunResult(snapshot) {
           const result = { exitCode: snapshot.exitCode, output: runOutput };
           document.getElementById('testStatus').textContent = snapshot.stopped ? 'STOPPED' : statusLabelOf(result);
+          if (snapshot.label === 'Solve check') loadRanking();
           showVerdictWorld(!snapshot.stopped && /^WORLD_PICTURE: /m.test(runOutput));
           const linksDiv = document.getElementById('testReportLinks');
           const reportUrls = [...new Set(runOutput.match(/file:\\/\\/\\/\\S+\\.(html|txt)/g) || [])];
@@ -1160,6 +1297,7 @@ public final class GraphEditorServer {
         }
 
         pollRun();
+        loadRanking();
         loadGraph();
         </script>
         </body>

@@ -4,6 +4,8 @@ import com.mineutze.worldgen.biomegraph.BiomeGraphData;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import java.io.UncheckedIOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 
@@ -67,6 +69,25 @@ class TightnessFileTest {
         IllegalStateException failure = assertThrows(IllegalStateException.class, () -> TightnessFile.read(file, CATALOG));
 
         assertTrue(failure.getMessage().contains("tightness.json"), failure.getMessage());
+    }
+
+    /** Fingerprint and ranking come from one read: they cannot describe two different files. */
+    @Test
+    void theSavedFingerprintCoversTheBytesItWasReadFrom(@TempDir Path folder) throws Exception {
+        Path file = folder.resolve("tightness.json");
+        TightnessFile.write(file, everyKind(), CATALOG);
+
+        SavedRanking saved = TightnessFile.readSaved(file, CATALOG);
+
+        assertEquals(RankingFingerprint.of(Files.readString(file)), saved.fingerprint());
+        assertEquals(everyKind(), saved.ranking());
+    }
+
+    @Test
+    void anUnreadableFileFailsLoudNamingTheFile(@TempDir Path folder) {
+        UncheckedIOException failure = assertThrows(UncheckedIOException.class, () -> TightnessFile.readSaved(folder, CATALOG));
+
+        assertTrue(failure.getMessage().contains(folder.toAbsolutePath().toString()), failure.getMessage());
     }
 
     @Test

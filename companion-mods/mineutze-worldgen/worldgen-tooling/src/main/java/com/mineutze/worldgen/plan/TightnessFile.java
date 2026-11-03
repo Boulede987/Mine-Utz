@@ -37,7 +37,16 @@ final class TightnessFile {
     }
 
     static TightnessRanking read(Path file, BiomeGraphData catalog) {
-        Map<String, Object> json = parse(file);
+        return readSaved(file, catalog).ranking();
+    }
+
+    /** File read once: the fingerprint covers exactly the bytes the ranking was parsed from. */
+    static SavedRanking readSaved(Path file, BiomeGraphData catalog) {
+        String text = readText(file);
+        return new SavedRanking(rankingFrom(parse(text, file), file, catalog), RankingFingerprint.of(text));
+    }
+
+    private static TightnessRanking rankingFrom(Map<String, Object> json, Path file, BiomeGraphData catalog) {
         String fingerprint = WorldBiomePlan.fingerprintOf(catalog);
         if (!fingerprint.equals(stringOf(json.get("fingerprint")))) {
             throw new RankingUnavailable("The saved ranking (" + file.toAbsolutePath() + ") is for a different version of the graph: run the Solve check again on the current graph");
@@ -47,15 +56,17 @@ final class TightnessFile {
         return new TightnessRanking(entries, intOf(json.get("failedAttempts")));
     }
 
-    private static Map<String, Object> parse(Path file) {
-        String text;
+    private static String readText(Path file) {
         try {
-            text = Files.readString(file);
+            return Files.readString(file);
         } catch (NoSuchFileException missing) {
             throw new RankingUnavailable("No saved ranking at " + file.toAbsolutePath() + ": run the Solve check first (it saves one when it ends UNPROVEN)");
         } catch (IOException failure) {
             throw new UncheckedIOException("TightnessFile: cannot read " + file.toAbsolutePath(), failure);
         }
+    }
+
+    private static Map<String, Object> parse(String text, Path file) {
         try {
             return asMap(MinimalJson.parse(text));
         } catch (IllegalArgumentException | IndexOutOfBoundsException corrupt) {
