@@ -32,6 +32,7 @@ namespace com.mineutze.worldgen.plan {
 class FeasibilityCheck {
   + {static} check(BiomeGraphData, FeasibilityBudget, WorldBiomePlan.ProgressListener) : FeasibilityVerdict
   ~ {static} check(BiomeGraphData, PlanSettings, FeasibilityBudget, WorldBiomePlan.ProgressListener) : FeasibilityVerdict
+  ~ {static} anyAttemptFailed(StageTightness) : boolean
   - {static} proveImpossible(SolveStages, PlanSettings, long, WorldBiomePlan.ProgressListener) : Optional<InfeasibilityProof>
   - {static} elapsedSince(long) : Duration
 }

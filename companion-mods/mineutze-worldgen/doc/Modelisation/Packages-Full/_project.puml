@@ -1318,6 +1318,7 @@ class FeasibilityBudget <<record>> {
 class FeasibilityCheck {
   + {static} check(BiomeGraphData, FeasibilityBudget, WorldBiomePlan.ProgressListener) : FeasibilityVerdict
   ~ {static} check(BiomeGraphData, PlanSettings, FeasibilityBudget, WorldBiomePlan.ProgressListener) : FeasibilityVerdict
+  ~ {static} anyAttemptFailed(StageTightness) : boolean
   - {static} proveImpossible(SolveStages, PlanSettings, long, WorldBiomePlan.ProgressListener) : Optional<InfeasibilityProof>
   - {static} elapsedSince(long) : Duration
 }
@@ -1335,7 +1336,7 @@ class FeasibilityVerdict <<record>> {
   - {static} MILLIS_PER_SECOND : double
   - {static} OBSTACLES_SHOWN : int
   ~ {static} infeasible(InfeasibilityProof, Evidence, double, Duration) : FeasibilityVerdict
-  ~ {static} feasible(BuiltWorld, Evidence, ReliabilityEstimate, double, Duration) : FeasibilityVerdict
+  ~ {static} feasible(BuiltWorld, Evidence, ReliabilityEstimate, Optional<StageTightness>, double, Duration) : FeasibilityVerdict
   ~ {static} unproven(Evidence, StageTightness, double, Duration) : FeasibilityVerdict
   + summary() : String
   - feasibleSummary() : String
@@ -1443,7 +1444,7 @@ class RankingChoice <<record>> {
   + loosening : Optional<String>
 }
 class RankingFingerprint {
-  ~ {static} of(String) : String
+  ~ {static} of(String, String) : String
   - {static} sha256() : MessageDigest
 }
 class RankingUnavailable {
@@ -1452,6 +1453,8 @@ class RankingView <<record>> {
   + choices : RankingChoice[*]
   + failedAttempts : int
   + fingerprint : String
+  + measuredOnThisGraph : boolean
+  + removedByEdits : int
   - {static} requireRank(RankingChoice, int)
 }
 class ReliabilityEstimate <<record>> {
@@ -1470,6 +1473,8 @@ class RequiredBorderLaw <<record>> {
 class SavedRanking <<record>> {
   + ranking : TightnessRanking
   + fingerprint : String
+  + measuredOnThisGraph : boolean
+  + removedByEdits : int
 }
 class ShapeLimit <<record>> {
   + biome : BiomeId
@@ -1550,17 +1555,28 @@ class StageTightness <<record>> {
   + coarse : TightnessRanking
   + refinement : TightnessRanking
 }
+class StatedLaws {
+  - table : RawRuleTable
+  - laws : GraphLaw[*]
+  - biomes : BiomeId[*]
+  ~ {static} of(BiomeGraphData, PlanSettings) : StatedLaws
+  - states(GraphLaw) : boolean
+}
 class TightnessFile {
+  - {static} REQUIRED_BORDER_KIND : String
+  - {static} REQUIREMENT_KEY : String
   ~ {static} write(Path, TightnessRanking, BiomeGraphData)
   ~ {static} read(Path, BiomeGraphData) : TightnessRanking
   ~ {static} readSaved(Path, BiomeGraphData) : SavedRanking
-  - {static} rankingFrom(Map<String, Object>, Path, BiomeGraphData) : TightnessRanking
+  - {static} stillStatedOn(BiomeGraphData, RawRuleTable, List<?>, Path) : List<RankedObstacle>
+  - {static} onEditedGraph(Map<String, Object>, RawRuleTable, Path) : Optional<RankedObstacle>
   - {static} readText(Path) : String
   - {static} parse(String, Path) : Map<String, Object>
   - {static} toJson(RankedObstacle) : Map<String, Object>
   - {static} putLaw(Map<String, Object>, GraphLaw)
   - {static} putKind(Map<String, Object>, String, BiomeId)
   - {static} fromJson(Map<String, Object>, RawRuleTable) : RankedObstacle
+  - {static} requirementKey(ResolvedBorderRequirement) : String
   - {static} requiredBorderOf(BiomeId, RawRuleTable) : Obstacle
   - {static} biomeOf(Object) : BiomeId
   - {static} asMap(Object) : Map<String, Object>
@@ -2190,6 +2206,7 @@ com.mineutze.worldgen.plan.FeasibilityCheck ..> com.mineutze.worldgen.plan.Produ
 com.mineutze.worldgen.plan.FeasibilityCheck ..> com.mineutze.worldgen.plan.ProgressListener
 com.mineutze.worldgen.plan.FeasibilityCheck ..> com.mineutze.worldgen.plan.ReliabilityEstimate
 com.mineutze.worldgen.plan.FeasibilityCheck ..> com.mineutze.worldgen.plan.SolveStages
+com.mineutze.worldgen.plan.FeasibilityCheck ..> com.mineutze.worldgen.plan.StageTightness
 com.mineutze.worldgen.plan.FeasibilityCheck ..> com.mineutze.worldgen.plan.WorldBiomePlan
 com.mineutze.worldgen.plan.FeasibilityCheck ..> com.mineutze.worldgen.plan.WorldSearch
 com.mineutze.worldgen.plan.FeasibilityVerdict *--> com.mineutze.worldgen.plan.BuiltWorld
@@ -2290,6 +2307,15 @@ com.mineutze.worldgen.plan.SolveStages ..> com.mineutze.worldgen.plan.MultigridP
 com.mineutze.worldgen.plan.SolveStages ..> com.mineutze.worldgen.plan.PlanSettings
 com.mineutze.worldgen.plan.SolveStages ..> com.mineutze.worldgen.plan.ToroidalSizedPatternGenerator
 com.mineutze.worldgen.plan.StageTightness *--> com.mineutze.worldgen.plan.TightnessRanking
+com.mineutze.worldgen.plan.StatedLaws --> "0..*" com.mineutze.worldgen.biomegraph.BiomeId
+com.mineutze.worldgen.plan.StatedLaws --> "0..*" com.mineutze.worldgen.plan.GraphLaw
+com.mineutze.worldgen.plan.StatedLaws --> com.mineutze.worldgen.plan.RawRuleTable
+com.mineutze.worldgen.plan.StatedLaws ..> com.mineutze.worldgen.biomegraph.BiomeGraphData
+com.mineutze.worldgen.plan.StatedLaws ..> com.mineutze.worldgen.plan.GraphLaws
+com.mineutze.worldgen.plan.StatedLaws ..> com.mineutze.worldgen.plan.IllegalPairLaw
+com.mineutze.worldgen.plan.StatedLaws ..> com.mineutze.worldgen.plan.MultigridPatternGenerator
+com.mineutze.worldgen.plan.StatedLaws ..> com.mineutze.worldgen.plan.PlanSettings
+com.mineutze.worldgen.plan.StatedLaws ..> com.mineutze.worldgen.plan.RankingUnavailable
 com.mineutze.worldgen.plan.TightnessFile ..> com.mineutze.worldgen.biomegraph.BiomeGraphData
 com.mineutze.worldgen.plan.TightnessFile ..> com.mineutze.worldgen.biomegraph.BiomeId
 com.mineutze.worldgen.plan.TightnessFile ..> com.mineutze.worldgen.plan.GraphLaw
@@ -2298,6 +2324,7 @@ com.mineutze.worldgen.plan.TightnessFile ..> com.mineutze.worldgen.plan.LawObsta
 com.mineutze.worldgen.plan.TightnessFile ..> com.mineutze.worldgen.biomegraph.MinimalJson
 com.mineutze.worldgen.plan.TightnessFile ..> com.mineutze.worldgen.plan.MissingBiome
 com.mineutze.worldgen.plan.TightnessFile ..> com.mineutze.worldgen.plan.Obstacle
+com.mineutze.worldgen.plan.TightnessFile ..> com.mineutze.worldgen.plan.PlanSettings
 com.mineutze.worldgen.plan.TightnessFile ..> com.mineutze.worldgen.plan.RankedObstacle
 com.mineutze.worldgen.plan.TightnessFile ..> com.mineutze.worldgen.plan.RankingFingerprint
 com.mineutze.worldgen.plan.TightnessFile ..> com.mineutze.worldgen.plan.RankingUnavailable
@@ -2307,6 +2334,7 @@ com.mineutze.worldgen.plan.TightnessFile ..> com.mineutze.worldgen.plan.Resolved
 com.mineutze.worldgen.plan.TightnessFile ..> com.mineutze.worldgen.plan.SavedRanking
 com.mineutze.worldgen.plan.TightnessFile ..> com.mineutze.worldgen.plan.ShapeLimit
 com.mineutze.worldgen.plan.TightnessFile ..> com.mineutze.worldgen.plan.SizeRangeLaw
+com.mineutze.worldgen.plan.TightnessFile ..> com.mineutze.worldgen.plan.StatedLaws
 com.mineutze.worldgen.plan.TightnessFile ..> com.mineutze.worldgen.plan.TightnessRanking
 com.mineutze.worldgen.plan.TightnessFile ..> com.mineutze.worldgen.plan.WorldBiomePlan
 com.mineutze.worldgen.plan.TightnessRanking *--> "0..*" com.mineutze.worldgen.plan.RankedObstacle

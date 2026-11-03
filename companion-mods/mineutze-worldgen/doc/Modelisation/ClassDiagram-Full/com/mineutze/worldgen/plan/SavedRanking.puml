@@ -32,6 +32,8 @@ namespace com.mineutze.worldgen.plan {
 class SavedRanking <<record>> {
   + ranking : TightnessRanking
   + fingerprint : String
+  + measuredOnThisGraph : boolean
+  + removedByEdits : int
 }
 }
 

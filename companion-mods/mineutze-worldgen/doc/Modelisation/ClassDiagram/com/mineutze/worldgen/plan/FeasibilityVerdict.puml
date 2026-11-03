@@ -43,7 +43,7 @@ class FeasibilityVerdict <<record>> {
   - {static} MILLIS_PER_SECOND : double
   - {static} OBSTACLES_SHOWN : int
   ~ {static} infeasible(InfeasibilityProof, Evidence, double, Duration) : FeasibilityVerdict
-  ~ {static} feasible(BuiltWorld, Evidence, ReliabilityEstimate, double, Duration) : FeasibilityVerdict
+  ~ {static} feasible(BuiltWorld, Evidence, ReliabilityEstimate, Optional<StageTightness>, double, Duration) : FeasibilityVerdict
   ~ {static} unproven(Evidence, StageTightness, double, Duration) : FeasibilityVerdict
   + summary() : String
   - feasibleSummary() : String

@@ -2,6 +2,7 @@ namespace com.mineutze.worldgen.plan {
 class FeasibilityCheck {
   + {static} check(BiomeGraphData, FeasibilityBudget, WorldBiomePlan.ProgressListener) : FeasibilityVerdict
   ~ {static} check(BiomeGraphData, PlanSettings, FeasibilityBudget, WorldBiomePlan.ProgressListener) : FeasibilityVerdict
+  ~ {static} anyAttemptFailed(StageTightness) : boolean
   - {static} proveImpossible(SolveStages, PlanSettings, long, WorldBiomePlan.ProgressListener) : Optional<InfeasibilityProof>
   - {static} elapsedSince(long) : Duration
 }
@@ -23,5 +24,6 @@ com.mineutze.worldgen.plan.FeasibilityCheck ..> com.mineutze.worldgen.plan.Produ
 com.mineutze.worldgen.plan.FeasibilityCheck ..> com.mineutze.worldgen.plan.ProgressListener
 com.mineutze.worldgen.plan.FeasibilityCheck ..> com.mineutze.worldgen.plan.ReliabilityEstimate
 com.mineutze.worldgen.plan.FeasibilityCheck ..> com.mineutze.worldgen.plan.SolveStages
+com.mineutze.worldgen.plan.FeasibilityCheck ..> com.mineutze.worldgen.plan.StageTightness
 com.mineutze.worldgen.plan.FeasibilityCheck ..> com.mineutze.worldgen.plan.WorldBiomePlan
 com.mineutze.worldgen.plan.FeasibilityCheck ..> com.mineutze.worldgen.plan.WorldSearch

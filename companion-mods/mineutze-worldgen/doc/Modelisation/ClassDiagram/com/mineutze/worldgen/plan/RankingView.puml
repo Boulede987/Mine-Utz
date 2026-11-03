@@ -33,6 +33,8 @@ class RankingView <<record>> {
   + choices : RankingChoice[*]
   + failedAttempts : int
   + fingerprint : String
+  + measuredOnThisGraph : boolean
+  + removedByEdits : int
   - {static} requireRank(RankingChoice, int)
 }
 }

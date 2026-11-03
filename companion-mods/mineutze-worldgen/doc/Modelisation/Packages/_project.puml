@@ -1318,6 +1318,7 @@ class FeasibilityBudget <<record>> {
 class FeasibilityCheck {
   + {static} check(BiomeGraphData, FeasibilityBudget, WorldBiomePlan.ProgressListener) : FeasibilityVerdict
   ~ {static} check(BiomeGraphData, PlanSettings, FeasibilityBudget, WorldBiomePlan.ProgressListener) : FeasibilityVerdict
+  ~ {static} anyAttemptFailed(StageTightness) : boolean
   - {static} proveImpossible(SolveStages, PlanSettings, long, WorldBiomePlan.ProgressListener) : Optional<InfeasibilityProof>
   - {static} elapsedSince(long) : Duration
 }
@@ -1335,7 +1336,7 @@ class FeasibilityVerdict <<record>> {
   - {static} MILLIS_PER_SECOND : double
   - {static} OBSTACLES_SHOWN : int
   ~ {static} infeasible(InfeasibilityProof, Evidence, double, Duration) : FeasibilityVerdict
-  ~ {static} feasible(BuiltWorld, Evidence, ReliabilityEstimate, double, Duration) : FeasibilityVerdict
+  ~ {static} feasible(BuiltWorld, Evidence, ReliabilityEstimate, Optional<StageTightness>, double, Duration) : FeasibilityVerdict
   ~ {static} unproven(Evidence, StageTightness, double, Duration) : FeasibilityVerdict
   + summary() : String
   - feasibleSummary() : String
@@ -1443,7 +1444,7 @@ class RankingChoice <<record>> {
   + loosening : Optional<String>
 }
 class RankingFingerprint {
-  ~ {static} of(String) : String
+  ~ {static} of(String, String) : String
   - {static} sha256() : MessageDigest
 }
 class RankingUnavailable {
@@ -1452,6 +1453,8 @@ class RankingView <<record>> {
   + choices : RankingChoice[*]
   + failedAttempts : int
   + fingerprint : String
+  + measuredOnThisGraph : boolean
+  + removedByEdits : int
   - {static} requireRank(RankingChoice, int)
 }
 class ReliabilityEstimate <<record>> {
@@ -1470,6 +1473,8 @@ class RequiredBorderLaw <<record>> {
 class SavedRanking <<record>> {
   + ranking : TightnessRanking
   + fingerprint : String
+  + measuredOnThisGraph : boolean
+  + removedByEdits : int
 }
 class ShapeLimit <<record>> {
   + biome : BiomeId
@@ -1550,17 +1555,28 @@ class StageTightness <<record>> {
   + coarse : TightnessRanking
   + refinement : TightnessRanking
 }
+class StatedLaws {
+  - table : RawRuleTable
+  - laws : GraphLaw[*]
+  - biomes : BiomeId[*]
+  ~ {static} of(BiomeGraphData, PlanSettings) : StatedLaws
+  - states(GraphLaw) : boolean
+}
 class TightnessFile {
+  - {static} REQUIRED_BORDER_KIND : String
+  - {static} REQUIREMENT_KEY : String
   ~ {static} write(Path, TightnessRanking, BiomeGraphData)
   ~ {static} read(Path, BiomeGraphData) : TightnessRanking
   ~ {static} readSaved(Path, BiomeGraphData) : SavedRanking
-  - {static} rankingFrom(Map<String, Object>, Path, BiomeGraphData) : TightnessRanking
+  - {static} stillStatedOn(BiomeGraphData, RawRuleTable, List<?>, Path) : List<RankedObstacle>
+  - {static} onEditedGraph(Map<String, Object>, RawRuleTable, Path) : Optional<RankedObstacle>
   - {static} readText(Path) : String
   - {static} parse(String, Path) : Map<String, Object>
   - {static} toJson(RankedObstacle) : Map<String, Object>
   - {static} putLaw(Map<String, Object>, GraphLaw)
   - {static} putKind(Map<String, Object>, String, BiomeId)
   - {static} fromJson(Map<String, Object>, RawRuleTable) : RankedObstacle
+  - {static} requirementKey(ResolvedBorderRequirement) : String
   - {static} requiredBorderOf(BiomeId, RawRuleTable) : Obstacle
   - {static} biomeOf(Object) : BiomeId
   - {static} asMap(Object) : Map<String, Object>
