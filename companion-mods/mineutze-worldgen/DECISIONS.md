@@ -6,6 +6,22 @@ run `./gradlew :worldgen-core:calibrationReport` to read it, or `./gradlew :worl
 enforce it (`CalibrationManifestTest` fails loud on drift). This log stays the history (context,
 alternatives considered, evidence at the time) - it does not track current validity on its own.
 
+## 2026-11-03 — Rank failures of FEASIBLE graphs too; the pick list survives edits
+
+**Context:** increment 8 (clear the list on every edit, rerun on demand) was rejected after use: a duplicate Solve check
+button, a 2 min rerun per edit, and a FEASIBLE graph with failures (coarse 5 of 14, seed failure up to 21.9%) got no
+list at all because only UNPROVEN verdicts kept the ranking.
+
+**Decision:** any verdict except INFEASIBLE keeps the ranking when attempts failed, so production reliability can be
+improved with Verify. On an edited graph the saved ranking is filtered, not refused: `StatedLaws` (same coarse size
+model as the Solve check) keeps ranked laws the graph still states; pairs by legality, sizes and borders by equality,
+borders compared by stored text. Counts stay from the previous version and are labelled so; Verify always measures the
+current graph, so its results stay measurements. The pick fingerprint includes the graph version: after an edit a rank
+can name another law. Supersedes "The Verify pick list follows graph edits, rerun on demand" below.
+
+**Evidence:** see STATE increment 9 Implement (current graph: 7 laws listed for a FEASIBLE verdict; one edit removed
+exactly the edited pair).
+
 ## 2026-11-03 — The Verify pick list follows graph edits, rerun on demand
 
 **Context:** after a graph edit the page kept showing the ranking measured on the previous graph; Verify then refused it.
