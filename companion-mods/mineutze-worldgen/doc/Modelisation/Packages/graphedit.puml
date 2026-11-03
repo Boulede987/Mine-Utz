@@ -58,6 +58,16 @@ class GraphEditorFiles {
   ~ {static} VERDICT_WORLD_PICTURE : Path
   ~ {static} TIGHTNESS_RANKING : Path
 }
+class GraphEditorReliability {
+  - {static} EXIT_MET : int
+  - {static} EXIT_NOT_MET : int
+  - {static} EXIT_UNDECIDED : int
+  - {static} EXIT_CRASH : int
+  + {static} main(String[])
+  ~ {static} requestFrom(String[]) : ReliabilityRequest
+  - {static} measureSavedGraph(ReliabilityRequest) : int
+  - {static} rankingSavedAfterVerdict(ReliabilityReport, BiomeGraphData) : boolean
+}
 class GraphEditorServer {
   - {static} DEFAULT_PORT : int
   + {static} main(String[])
@@ -93,6 +103,15 @@ class ValidationResult <<record>> {
   + constructs : boolean
   + constructionError : String
   + errors : String[*]
+}
+class ReliabilityRequest <<record>> {
+  + minutes : int
+  - {static} FEWEST_MINUTES : int
+  - {static} MOST_MINUTES : int
+  - {static} MINUTES_KEY : String
+  - {static} GRADLE_ARGS_PREFIX : String
+  ~ {static} parse(String) : ReliabilityRequest
+  ~ {static} fromArgument(String) : ReliabilityRequest
 }
 class RunSnapshot <<record>> {
   + runNumber : int

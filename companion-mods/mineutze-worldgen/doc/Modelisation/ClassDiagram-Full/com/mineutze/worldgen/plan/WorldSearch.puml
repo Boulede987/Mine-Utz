@@ -34,6 +34,9 @@ class WorldSearch {
   - {static} PROGRESS_EVERY_ATTEMPTS : int
   - {static} MOST_PATTERNS_AWAITING_RENDER : int
   - {static} NANOS_PER_SECOND : double
+  - {static} DRAIN_POLL : Duration
+  - {static} LONGEST_QUIET : Duration
+  - {static} DRAIN_GRACE : Duration
   - stages : SolveStages
   - settings : PlanSettings
   - threads : int
@@ -47,21 +50,28 @@ class WorldSearch {
   - coarseBaseSeed : long
   - refinementBaseSeed : long
   - refinementAttemptsPerPattern : int
+  - end : SearchEnd
+  - evidenceSoFar : Consumer<Evidence>
   - evidence : Evidence
   - nextCoarseIndex : long
   - nextRefinementIndex : long
   - nextRenderIndex : long
   - renderInFlight : boolean
+  - lastProgressNanos : long
   - builtWorld : Optional<BuiltWorld>
   - coarseTightness : TightnessTally
   - refinementTightness : TightnessTally
   - step() : boolean
   - recordAlreadyFinished()
+  - drainRunning()
+  - abandonRunning()
   - recordCoarse(AttemptResult, Set<Obstacle>)
   - recordRefinement(AttemptResult, Set<Obstacle>)
   - queueForRender(Map<ToroidalPos, BiomeId>)
   - recordRender(AttemptResult)
   - reportProgressPeriodically()
+  - reportIfQuietTooLong()
+  - reportProgress()
   - submitNextWork()
   - submitCoarse()
   - submitRefinement(Map<ToroidalPos, BiomeId>)
@@ -77,6 +87,10 @@ class Outcome <<record>> {
   + builtWorld : Optional<BuiltWorld>
   + evidence : Evidence
   + tightness : StageTightness
+}
+enum SearchEnd <<enum>> {
+  FIRST_WORLD
+  DEADLINE
 }
 class FinishedAttempt <<record>> {
   + result : AttemptResult
@@ -95,6 +109,7 @@ com.mineutze.worldgen.plan.FinishedAttempt *--> "0..*" com.mineutze.worldgen.pla
 com.mineutze.worldgen.plan.WorldSearch --> com.mineutze.worldgen.plan.Evidence
 com.mineutze.worldgen.plan.WorldSearch --> com.mineutze.worldgen.plan.PlanSettings
 com.mineutze.worldgen.plan.WorldSearch --> com.mineutze.worldgen.plan.ProgressListener
+com.mineutze.worldgen.plan.WorldSearch --> com.mineutze.worldgen.plan.SearchEnd
 com.mineutze.worldgen.plan.WorldSearch --> com.mineutze.worldgen.plan.SolveStages
 com.mineutze.worldgen.plan.WorldSearch --> com.mineutze.worldgen.plan.WorldBiomePlan
 com.mineutze.worldgen.plan.WorldSearch ..> com.mineutze.worldgen.plan.AttemptResult

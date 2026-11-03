@@ -1099,11 +1099,11 @@ class FeasibilityVerdict <<record>> {
   - {static} infeasibleSummary(InfeasibilityProof) : String
   - {static} appendConflict(StringBuilder, int, LawConflict)
   - unprovenSummary() : String
-  - {static} tightnessLines(String, TightnessRanking) : String
+  ~ {static} tightnessLines(String, TightnessRanking) : String
   - attemptsLine() : String
   - reliabilityLine() : String
   - seconds() : String
-  - {static} percent(double) : String
+  ~ {static} percent(double) : String
 }
 enum Outcome <<enum>> {
   FEASIBLE
@@ -1216,10 +1216,32 @@ class RankingView <<record>> {
 class ReliabilityEstimate <<record>> {
   + worldFailureLow : double
   + worldFailureHigh : double
+  + drivingStage : AttemptResult.Stage
   - {static} CERTAIN : double
   ~ {static} of(Evidence, ProductionFailureModel, double) : ReliabilityEstimate
   - {static} lowerRate(StageEvidence, double) : double
   - {static} upperRate(StageEvidence, double) : double
+}
+class ReliabilityReport <<record>> {
+  + verdict : ReliabilityVerdict
+  + estimate : ReliabilityEstimate
+  + evidence : Evidence
+  + tightness : StageTightness
+  + targetWorldFailure : double
+  + elapsed : Duration
+  - {static} MILLIS_PER_SECOND : double
+  + summary() : String
+  ~ {static} rangeLine(ReliabilityEstimate, double, ReliabilityVerdict) : String
+}
+class ReliabilityRun {
+  + {static} run(BiomeGraphData, Duration, int, WorldBiomePlan.ProgressListener) : ReliabilityReport
+  ~ {static} run(BiomeGraphData, PlanSettings, FeasibilityBudget, Duration, int, WorldBiomePlan.ProgressListener) : ReliabilityReport
+  - {static} rangeSoFar(Evidence, ProductionFailureModel, FeasibilityBudget) : String
+}
+enum ReliabilityVerdict <<enum>> {
+  MET
+  NOT_MET
+  UNDECIDED
 }
 class RequiredBorderLaw <<record>> {
   + biome : BiomeId
@@ -1322,6 +1344,7 @@ class TightnessFile {
   - {static} REQUIRED_BORDER_KIND : String
   - {static} REQUIREMENT_KEY : String
   ~ {static} write(Path, TightnessRanking, BiomeGraphData)
+  ~ {static} delete(Path)
   ~ {static} read(Path, BiomeGraphData) : TightnessRanking
   ~ {static} readSaved(Path, BiomeGraphData) : SavedRanking
   - {static} stillStatedOn(BiomeGraphData, RawRuleTable, List<?>, Path) : List<RankedObstacle>
@@ -1354,6 +1377,7 @@ class TightnessVerify {
   - {static} BOUND_CONFIDENCE : double
   - {static} PERCENT_PER_UNIT : double
   + {static} saveRanking(Path, FeasibilityVerdict, BiomeGraphData)
+  + {static} saveRanking(Path, ReliabilityReport, BiomeGraphData)
   + {static} choices(Path, BiomeGraphData) : RankingView
   - {static} choiceAt(int, RankedObstacle, BiomeGraphData) : RankingChoice
   + {static} checkPicks(Path, BiomeGraphData, List<Integer>, String)
@@ -1383,6 +1407,9 @@ class WorldSearch {
   - {static} PROGRESS_EVERY_ATTEMPTS : int
   - {static} MOST_PATTERNS_AWAITING_RENDER : int
   - {static} NANOS_PER_SECOND : double
+  - {static} DRAIN_POLL : Duration
+  - {static} LONGEST_QUIET : Duration
+  - {static} DRAIN_GRACE : Duration
   - stages : SolveStages
   - settings : PlanSettings
   - threads : int
@@ -1396,21 +1423,28 @@ class WorldSearch {
   - coarseBaseSeed : long
   - refinementBaseSeed : long
   - refinementAttemptsPerPattern : int
+  - end : SearchEnd
+  - evidenceSoFar : Consumer<Evidence>
   - evidence : Evidence
   - nextCoarseIndex : long
   - nextRefinementIndex : long
   - nextRenderIndex : long
   - renderInFlight : boolean
+  - lastProgressNanos : long
   - builtWorld : Optional<BuiltWorld>
   - coarseTightness : TightnessTally
   - refinementTightness : TightnessTally
   - step() : boolean
   - recordAlreadyFinished()
+  - drainRunning()
+  - abandonRunning()
   - recordCoarse(AttemptResult, Set<Obstacle>)
   - recordRefinement(AttemptResult, Set<Obstacle>)
   - queueForRender(Map<ToroidalPos, BiomeId>)
   - recordRender(AttemptResult)
   - reportProgressPeriodically()
+  - reportIfQuietTooLong()
+  - reportProgress()
   - submitNextWork()
   - submitCoarse()
   - submitRefinement(Map<ToroidalPos, BiomeId>)
@@ -1426,6 +1460,10 @@ class Outcome <<record>> {
   + builtWorld : Optional<BuiltWorld>
   + evidence : Evidence
   + tightness : StageTightness
+}
+enum SearchEnd <<enum>> {
+  FIRST_WORLD
+  DEADLINE
 }
 class FinishedAttempt <<record>> {
   + result : AttemptResult
@@ -1887,10 +1925,29 @@ com.mineutze.worldgen.plan.ProductionFailureModel ..> com.mineutze.worldgen.plan
 com.mineutze.worldgen.plan.RankedObstacle *--> com.mineutze.worldgen.plan.Obstacle
 com.mineutze.worldgen.plan.RankingUnavailable --|> RuntimeException
 com.mineutze.worldgen.plan.RankingView *--> "0..*" com.mineutze.worldgen.plan.RankingChoice
+com.mineutze.worldgen.plan.ReliabilityEstimate *--> com.mineutze.worldgen.plan.AttemptResult
+com.mineutze.worldgen.plan.ReliabilityEstimate *--> com.mineutze.worldgen.plan.Stage
 com.mineutze.worldgen.plan.ReliabilityEstimate ..> com.mineutze.worldgen.plan.BinomialConfidence
 com.mineutze.worldgen.plan.ReliabilityEstimate ..> com.mineutze.worldgen.plan.Evidence
 com.mineutze.worldgen.plan.ReliabilityEstimate ..> com.mineutze.worldgen.plan.ProductionFailureModel
 com.mineutze.worldgen.plan.ReliabilityEstimate ..> com.mineutze.worldgen.plan.StageEvidence
+com.mineutze.worldgen.plan.ReliabilityReport *--> com.mineutze.worldgen.plan.Evidence
+com.mineutze.worldgen.plan.ReliabilityReport *--> com.mineutze.worldgen.plan.ReliabilityEstimate
+com.mineutze.worldgen.plan.ReliabilityReport *--> com.mineutze.worldgen.plan.ReliabilityVerdict
+com.mineutze.worldgen.plan.ReliabilityReport *--> com.mineutze.worldgen.plan.StageTightness
+com.mineutze.worldgen.plan.ReliabilityReport ..> com.mineutze.worldgen.plan.FeasibilityVerdict
+com.mineutze.worldgen.plan.ReliabilityRun ..> com.mineutze.worldgen.biomegraph.BiomeGraphData
+com.mineutze.worldgen.plan.ReliabilityRun ..> com.mineutze.worldgen.plan.Evidence
+com.mineutze.worldgen.plan.ReliabilityRun ..> com.mineutze.worldgen.plan.FeasibilityBudget
+com.mineutze.worldgen.plan.ReliabilityRun ..> com.mineutze.worldgen.plan.PlanSettings
+com.mineutze.worldgen.plan.ReliabilityRun ..> com.mineutze.worldgen.plan.ProductionFailureModel
+com.mineutze.worldgen.plan.ReliabilityRun ..> com.mineutze.worldgen.plan.ProgressListener
+com.mineutze.worldgen.plan.ReliabilityRun ..> com.mineutze.worldgen.plan.ReliabilityEstimate
+com.mineutze.worldgen.plan.ReliabilityRun ..> com.mineutze.worldgen.plan.ReliabilityReport
+com.mineutze.worldgen.plan.ReliabilityRun ..> com.mineutze.worldgen.plan.ReliabilityVerdict
+com.mineutze.worldgen.plan.ReliabilityRun ..> com.mineutze.worldgen.plan.SolveStages
+com.mineutze.worldgen.plan.ReliabilityRun ..> com.mineutze.worldgen.plan.WorldBiomePlan
+com.mineutze.worldgen.plan.ReliabilityRun ..> com.mineutze.worldgen.plan.WorldSearch
 com.mineutze.worldgen.plan.RequiredBorderLaw ..|> com.mineutze.worldgen.plan.GraphLaw
 com.mineutze.worldgen.plan.RequiredBorderLaw *--> com.mineutze.worldgen.biomegraph.BiomeId
 com.mineutze.worldgen.plan.RequiredBorderLaw *--> com.mineutze.worldgen.plan.ResolvedBorderRequirement
@@ -1971,6 +2028,7 @@ com.mineutze.worldgen.plan.TightnessVerify ..> com.mineutze.worldgen.plan.Progre
 com.mineutze.worldgen.plan.TightnessVerify ..> com.mineutze.worldgen.plan.RankedObstacle
 com.mineutze.worldgen.plan.TightnessVerify ..> com.mineutze.worldgen.plan.RankingChoice
 com.mineutze.worldgen.plan.TightnessVerify ..> com.mineutze.worldgen.plan.RankingView
+com.mineutze.worldgen.plan.TightnessVerify ..> com.mineutze.worldgen.plan.ReliabilityReport
 com.mineutze.worldgen.plan.TightnessVerify ..> com.mineutze.worldgen.plan.SavedRanking
 com.mineutze.worldgen.plan.TightnessVerify ..> com.mineutze.worldgen.plan.SolveRateTrial
 com.mineutze.worldgen.plan.TightnessVerify ..> com.mineutze.worldgen.plan.StageEvidence
@@ -1994,6 +2052,7 @@ com.mineutze.worldgen.plan.FinishedAttempt *--> "0..*" com.mineutze.worldgen.pla
 com.mineutze.worldgen.plan.WorldSearch --> com.mineutze.worldgen.plan.Evidence
 com.mineutze.worldgen.plan.WorldSearch --> com.mineutze.worldgen.plan.PlanSettings
 com.mineutze.worldgen.plan.WorldSearch --> com.mineutze.worldgen.plan.ProgressListener
+com.mineutze.worldgen.plan.WorldSearch --> com.mineutze.worldgen.plan.SearchEnd
 com.mineutze.worldgen.plan.WorldSearch --> com.mineutze.worldgen.plan.SolveStages
 com.mineutze.worldgen.plan.WorldSearch --> com.mineutze.worldgen.plan.WorldBiomePlan
 com.mineutze.worldgen.plan.WorldSearch ..> com.mineutze.worldgen.plan.AttemptResult

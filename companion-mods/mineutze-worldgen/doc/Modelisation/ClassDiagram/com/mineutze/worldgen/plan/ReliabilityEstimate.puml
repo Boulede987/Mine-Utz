@@ -32,6 +32,7 @@ namespace com.mineutze.worldgen.plan {
 class ReliabilityEstimate <<record>> {
   + worldFailureLow : double
   + worldFailureHigh : double
+  + drivingStage : AttemptResult.Stage
   - {static} CERTAIN : double
   ~ {static} of(Evidence, ProductionFailureModel, double) : ReliabilityEstimate
   - {static} lowerRate(StageEvidence, double) : double
@@ -39,5 +40,7 @@ class ReliabilityEstimate <<record>> {
 }
 }
 
+com.mineutze.worldgen.plan.ReliabilityEstimate *--> com.mineutze.worldgen.plan.AttemptResult
+com.mineutze.worldgen.plan.ReliabilityEstimate *--> com.mineutze.worldgen.plan.Stage
 
 @enduml

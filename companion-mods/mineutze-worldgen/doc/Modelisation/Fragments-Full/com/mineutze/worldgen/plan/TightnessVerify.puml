@@ -5,6 +5,7 @@ class TightnessVerify {
   - {static} BOUND_CONFIDENCE : double
   - {static} PERCENT_PER_UNIT : double
   + {static} saveRanking(Path, FeasibilityVerdict, BiomeGraphData)
+  + {static} saveRanking(Path, ReliabilityReport, BiomeGraphData)
   + {static} choices(Path, BiomeGraphData) : RankingView
   - {static} choiceAt(int, RankedObstacle, BiomeGraphData) : RankingChoice
   + {static} checkPicks(Path, BiomeGraphData, List<Integer>, String)
@@ -30,6 +31,7 @@ com.mineutze.worldgen.plan.TightnessVerify ..> com.mineutze.worldgen.plan.Progre
 com.mineutze.worldgen.plan.TightnessVerify ..> com.mineutze.worldgen.plan.RankedObstacle
 com.mineutze.worldgen.plan.TightnessVerify ..> com.mineutze.worldgen.plan.RankingChoice
 com.mineutze.worldgen.plan.TightnessVerify ..> com.mineutze.worldgen.plan.RankingView
+com.mineutze.worldgen.plan.TightnessVerify ..> com.mineutze.worldgen.plan.ReliabilityReport
 com.mineutze.worldgen.plan.TightnessVerify ..> com.mineutze.worldgen.plan.SavedRanking
 com.mineutze.worldgen.plan.TightnessVerify ..> com.mineutze.worldgen.plan.SolveRateTrial
 com.mineutze.worldgen.plan.TightnessVerify ..> com.mineutze.worldgen.plan.StageEvidence

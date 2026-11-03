@@ -1,0 +1,19 @@
+namespace com.mineutze.worldgen.plan {
+class ReliabilityReport <<record>> {
+  + verdict : ReliabilityVerdict
+  + estimate : ReliabilityEstimate
+  + evidence : Evidence
+  + tightness : StageTightness
+  + targetWorldFailure : double
+  + elapsed : Duration
+  - {static} MILLIS_PER_SECOND : double
+  + summary() : String
+  ~ {static} rangeLine(ReliabilityEstimate, double, ReliabilityVerdict) : String
+}
+}
+
+com.mineutze.worldgen.plan.ReliabilityReport *--> com.mineutze.worldgen.plan.Evidence
+com.mineutze.worldgen.plan.ReliabilityReport *--> com.mineutze.worldgen.plan.ReliabilityEstimate
+com.mineutze.worldgen.plan.ReliabilityReport *--> com.mineutze.worldgen.plan.ReliabilityVerdict
+com.mineutze.worldgen.plan.ReliabilityReport *--> com.mineutze.worldgen.plan.StageTightness
+com.mineutze.worldgen.plan.ReliabilityReport ..> com.mineutze.worldgen.plan.FeasibilityVerdict

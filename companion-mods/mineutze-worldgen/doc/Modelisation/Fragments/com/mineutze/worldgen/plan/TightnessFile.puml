@@ -3,6 +3,7 @@ class TightnessFile {
   - {static} REQUIRED_BORDER_KIND : String
   - {static} REQUIREMENT_KEY : String
   ~ {static} write(Path, TightnessRanking, BiomeGraphData)
+  ~ {static} delete(Path)
   ~ {static} read(Path, BiomeGraphData) : TightnessRanking
   ~ {static} readSaved(Path, BiomeGraphData) : SavedRanking
   - {static} stillStatedOn(BiomeGraphData, RawRuleTable, List<?>, Path) : List<RankedObstacle>

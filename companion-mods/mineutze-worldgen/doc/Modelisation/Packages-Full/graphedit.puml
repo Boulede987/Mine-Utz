@@ -58,6 +58,16 @@ class GraphEditorFiles {
   ~ {static} VERDICT_WORLD_PICTURE : Path
   ~ {static} TIGHTNESS_RANKING : Path
 }
+class GraphEditorReliability {
+  - {static} EXIT_MET : int
+  - {static} EXIT_NOT_MET : int
+  - {static} EXIT_UNDECIDED : int
+  - {static} EXIT_CRASH : int
+  + {static} main(String[])
+  ~ {static} requestFrom(String[]) : ReliabilityRequest
+  - {static} measureSavedGraph(ReliabilityRequest) : int
+  - {static} rankingSavedAfterVerdict(ReliabilityReport, BiomeGraphData) : boolean
+}
 class GraphEditorServer {
   - {static} DEFAULT_PORT : int
   + {static} main(String[])
@@ -93,6 +103,15 @@ class ValidationResult <<record>> {
   + constructs : boolean
   + constructionError : String
   + errors : String[*]
+}
+class ReliabilityRequest <<record>> {
+  + minutes : int
+  - {static} FEWEST_MINUTES : int
+  - {static} MOST_MINUTES : int
+  - {static} MINUTES_KEY : String
+  - {static} GRADLE_ARGS_PREFIX : String
+  ~ {static} parse(String) : ReliabilityRequest
+  ~ {static} fromArgument(String) : ReliabilityRequest
 }
 class RunSnapshot <<record>> {
   + runNumber : int
@@ -149,12 +168,23 @@ class com.mineutze.worldgen.plan.RankingUnavailable <<external>> [[plan.svg]] {
 }
 class com.mineutze.worldgen.plan.RawRuleTable <<external>> [[plan.svg]] {
 }
+class com.mineutze.worldgen.plan.ReliabilityReport <<external>> [[plan.svg]] {
+}
+class com.mineutze.worldgen.plan.ReliabilityRun <<external>> [[plan.svg]] {
+}
 class com.mineutze.worldgen.plan.TightnessVerify <<external>> [[plan.svg]] {
 }
 class com.mineutze.worldgen.plan.WorldBiomePlan <<external>> [[plan.svg]] {
 }
 
 com.mineutze.worldgen.tooling.graphedit.CurrentRun ..> com.mineutze.worldgen.tooling.graphedit.GradleRun
+com.mineutze.worldgen.tooling.graphedit.GraphEditorReliability ..> com.mineutze.worldgen.biomegraph.BiomeGraphData
+com.mineutze.worldgen.tooling.graphedit.GraphEditorReliability ..> com.mineutze.worldgen.biomegraph.BiomeGraphJson
+com.mineutze.worldgen.tooling.graphedit.GraphEditorReliability ..> com.mineutze.worldgen.tooling.graphedit.GraphEditorFiles
+com.mineutze.worldgen.tooling.graphedit.GraphEditorReliability ..> com.mineutze.worldgen.plan.ReliabilityReport
+com.mineutze.worldgen.tooling.graphedit.GraphEditorReliability ..> com.mineutze.worldgen.tooling.graphedit.ReliabilityRequest
+com.mineutze.worldgen.tooling.graphedit.GraphEditorReliability ..> com.mineutze.worldgen.plan.ReliabilityRun
+com.mineutze.worldgen.tooling.graphedit.GraphEditorReliability ..> com.mineutze.worldgen.plan.TightnessVerify
 com.mineutze.worldgen.tooling.graphedit.GraphEditorServer ..> com.mineutze.worldgen.tooling.graphedit.CurrentRun
 com.mineutze.worldgen.tooling.graphedit.GraphEditorServer ..> com.mineutze.worldgen.tooling.graphedit.GraphEditorFiles
 com.mineutze.worldgen.tooling.graphedit.GraphEditorSolveCheck ..> com.mineutze.worldgen.biomegraph.BiomeGraphData
@@ -180,6 +210,7 @@ com.mineutze.worldgen.tooling.graphedit.GraphValidation ..> com.mineutze.worldge
 com.mineutze.worldgen.tooling.graphedit.GraphValidation ..> com.mineutze.worldgen.plan.RawRuleTable
 com.mineutze.worldgen.tooling.graphedit.GraphValidation ..> com.mineutze.worldgen.tooling.graphedit.ValidationResult
 com.mineutze.worldgen.tooling.graphedit.GraphValidation ..> com.mineutze.worldgen.plan.WorldBiomePlan
+com.mineutze.worldgen.tooling.graphedit.ReliabilityRequest ..> com.mineutze.worldgen.biomegraph.MinimalJson
 com.mineutze.worldgen.tooling.graphedit.RunSnapshot ..> com.mineutze.worldgen.tooling.graphedit.GradleRun
 com.mineutze.worldgen.tooling.graphedit.VerifyRequest ..> com.mineutze.worldgen.biomegraph.MinimalJson
 

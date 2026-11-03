@@ -1,0 +1,12 @@
+namespace com.mineutze.worldgen.tooling.graphedit {
+class GraphEditorReliability {
+  - {static} EXIT_MET : int
+  - {static} EXIT_NOT_MET : int
+  - {static} EXIT_UNDECIDED : int
+  - {static} EXIT_CRASH : int
+  + {static} main(String[])
+  ~ {static} requestFrom(String[]) : ReliabilityRequest
+  - {static} measureSavedGraph(ReliabilityRequest) : int
+  - {static} rankingSavedAfterVerdict(ReliabilityReport, BiomeGraphData) : boolean
+}
+}

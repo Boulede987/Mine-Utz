@@ -1,0 +1,13 @@
+namespace com.mineutze.worldgen.tooling.graphedit {
+class ReliabilityRequest <<record>> {
+  + minutes : int
+  - {static} FEWEST_MINUTES : int
+  - {static} MOST_MINUTES : int
+  - {static} MINUTES_KEY : String
+  - {static} GRADLE_ARGS_PREFIX : String
+  ~ {static} parse(String) : ReliabilityRequest
+  ~ {static} fromArgument(String) : ReliabilityRequest
+}
+}
+
+com.mineutze.worldgen.tooling.graphedit.ReliabilityRequest ..> com.mineutze.worldgen.biomegraph.MinimalJson

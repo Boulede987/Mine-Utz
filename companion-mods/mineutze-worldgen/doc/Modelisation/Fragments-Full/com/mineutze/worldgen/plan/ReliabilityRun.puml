@@ -1,0 +1,20 @@
+namespace com.mineutze.worldgen.plan {
+class ReliabilityRun {
+  + {static} run(BiomeGraphData, Duration, int, WorldBiomePlan.ProgressListener) : ReliabilityReport
+  ~ {static} run(BiomeGraphData, PlanSettings, FeasibilityBudget, Duration, int, WorldBiomePlan.ProgressListener) : ReliabilityReport
+  - {static} rangeSoFar(Evidence, ProductionFailureModel, FeasibilityBudget) : String
+}
+}
+
+com.mineutze.worldgen.plan.ReliabilityRun ..> com.mineutze.worldgen.biomegraph.BiomeGraphData
+com.mineutze.worldgen.plan.ReliabilityRun ..> com.mineutze.worldgen.plan.Evidence
+com.mineutze.worldgen.plan.ReliabilityRun ..> com.mineutze.worldgen.plan.FeasibilityBudget
+com.mineutze.worldgen.plan.ReliabilityRun ..> com.mineutze.worldgen.plan.PlanSettings
+com.mineutze.worldgen.plan.ReliabilityRun ..> com.mineutze.worldgen.plan.ProductionFailureModel
+com.mineutze.worldgen.plan.ReliabilityRun ..> com.mineutze.worldgen.plan.ProgressListener
+com.mineutze.worldgen.plan.ReliabilityRun ..> com.mineutze.worldgen.plan.ReliabilityEstimate
+com.mineutze.worldgen.plan.ReliabilityRun ..> com.mineutze.worldgen.plan.ReliabilityReport
+com.mineutze.worldgen.plan.ReliabilityRun ..> com.mineutze.worldgen.plan.ReliabilityVerdict
+com.mineutze.worldgen.plan.ReliabilityRun ..> com.mineutze.worldgen.plan.SolveStages
+com.mineutze.worldgen.plan.ReliabilityRun ..> com.mineutze.worldgen.plan.WorldBiomePlan
+com.mineutze.worldgen.plan.ReliabilityRun ..> com.mineutze.worldgen.plan.WorldSearch

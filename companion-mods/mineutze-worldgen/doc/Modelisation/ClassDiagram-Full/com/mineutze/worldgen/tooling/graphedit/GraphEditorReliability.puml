@@ -1,0 +1,52 @@
+@startuml GraphEditorReliability
+
+skinparam classAttributeIconSize 0
+skinparam shadowing false
+
+skinparam class {
+  BackgroundColor<<interface>> #D6EAF8
+  BorderColor<<interface>> #2E86C1
+}
+skinparam class {
+  BackgroundColor<<abstract>> #E8DAEF
+  BorderColor<<abstract>> #8E44AD
+}
+skinparam class {
+  BackgroundColor #D5F5E3
+  BorderColor #27AE60
+}
+skinparam class {
+  BackgroundColor<<record>> #FCF3CF
+  BorderColor<<record>> #B7950B
+}
+skinparam class {
+  BackgroundColor<<static>> #a7faa0
+  BorderColor<<static>> #38d610
+}
+skinparam class {
+  BackgroundColor<<enum>> #F5B7B1
+  BorderColor<<enum>> #C0392B
+}
+
+namespace com.mineutze.worldgen.tooling.graphedit {
+class GraphEditorReliability {
+  - {static} EXIT_MET : int
+  - {static} EXIT_NOT_MET : int
+  - {static} EXIT_UNDECIDED : int
+  - {static} EXIT_CRASH : int
+  + {static} main(String[])
+  ~ {static} requestFrom(String[]) : ReliabilityRequest
+  - {static} measureSavedGraph(ReliabilityRequest) : int
+  - {static} rankingSavedAfterVerdict(ReliabilityReport, BiomeGraphData) : boolean
+}
+}
+
+com.mineutze.worldgen.tooling.graphedit.GraphEditorReliability ..> com.mineutze.worldgen.biomegraph.BiomeGraphData
+com.mineutze.worldgen.tooling.graphedit.GraphEditorReliability ..> com.mineutze.worldgen.biomegraph.BiomeGraphJson
+com.mineutze.worldgen.tooling.graphedit.GraphEditorReliability ..> com.mineutze.worldgen.tooling.graphedit.GraphEditorFiles
+com.mineutze.worldgen.tooling.graphedit.GraphEditorReliability ..> com.mineutze.worldgen.plan.ReliabilityReport
+com.mineutze.worldgen.tooling.graphedit.GraphEditorReliability ..> com.mineutze.worldgen.tooling.graphedit.ReliabilityRequest
+com.mineutze.worldgen.tooling.graphedit.GraphEditorReliability ..> com.mineutze.worldgen.plan.ReliabilityRun
+com.mineutze.worldgen.tooling.graphedit.GraphEditorReliability ..> com.mineutze.worldgen.plan.TightnessVerify
+
+@enduml

@@ -1,0 +1,20 @@
+namespace com.mineutze.worldgen.tooling.graphedit {
+class GraphEditorReliability {
+  - {static} EXIT_MET : int
+  - {static} EXIT_NOT_MET : int
+  - {static} EXIT_UNDECIDED : int
+  - {static} EXIT_CRASH : int
+  + {static} main(String[])
+  ~ {static} requestFrom(String[]) : ReliabilityRequest
+  - {static} measureSavedGraph(ReliabilityRequest) : int
+  - {static} rankingSavedAfterVerdict(ReliabilityReport, BiomeGraphData) : boolean
+}
+}
+
+com.mineutze.worldgen.tooling.graphedit.GraphEditorReliability ..> com.mineutze.worldgen.biomegraph.BiomeGraphData
+com.mineutze.worldgen.tooling.graphedit.GraphEditorReliability ..> com.mineutze.worldgen.biomegraph.BiomeGraphJson
+com.mineutze.worldgen.tooling.graphedit.GraphEditorReliability ..> com.mineutze.worldgen.tooling.graphedit.GraphEditorFiles
+com.mineutze.worldgen.tooling.graphedit.GraphEditorReliability ..> com.mineutze.worldgen.plan.ReliabilityReport
+com.mineutze.worldgen.tooling.graphedit.GraphEditorReliability ..> com.mineutze.worldgen.tooling.graphedit.ReliabilityRequest
+com.mineutze.worldgen.tooling.graphedit.GraphEditorReliability ..> com.mineutze.worldgen.plan.ReliabilityRun
+com.mineutze.worldgen.tooling.graphedit.GraphEditorReliability ..> com.mineutze.worldgen.plan.TightnessVerify
