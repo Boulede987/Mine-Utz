@@ -6,6 +6,27 @@ run `./gradlew :worldgen-core:calibrationReport` to read it, or `./gradlew :worl
 enforce it (`CalibrationManifestTest` fails loud on drift). This log stays the history (context,
 alternatives considered, evidence at the time) - it does not track current validity on its own.
 
+## 2026-11-03 — Verify measures the laws the user picks from the ranking
+
+**Context:** Verify measured the top 3 loosenable laws of the ranking. The ranking is co-occurrence, not cause, and the
+user wants to choose which loosenings to measure (ones they would accept in the world), not only the top 3.
+
+**Decision:** the editor shows the whole saved ranking as a pick list (`GET /api/ranking`, `TightnessVerify.choices`):
+attempts broken, and how Verify would loosen each law or "can't be loosened". Top 3 loosenable start ticked. Cap 3 picks
+per run, 10 min unchanged (user, 2026-11-03: each pick keeps ~60 attempts, ranges as tight as before). `POST /api/verify`
+sends the ranks and the SHA-256 fingerprint of the ranking file they were picked on; the server checks them
+(`VerifyPicks`: 1-3, no duplicate, inside the ranking, loosenable; fingerprint = file still the one shown) before any gradle
+start, and passes them as `--args=4,5,6`. Picks are ranks, not law names, so the fingerprint is what keeps a rank from
+meaning another law after a newer Solve check. The Verify run gets the fingerprint too (`--args=4,5,6:<fingerprint>`)
+and checks it against the ranking it reads (`VERIFY: REFUSED` on mismatch): two editors share the ranking file, so it
+can change between the server's check and the run. `graphEditorVerify` without arguments keeps measuring the top 3.
+
+**Evidence (2026-11-03, WIP graph, smoke run on a real editor):** ranking of 70 laws (67 loosenable); every refusal answered
+400 with its reason and started no run. Picked ranks 4-6 (9 min 51 s): graph as is 1 of 61 (0.0%..8.8%);
+lukewarm_ocean/plains legal 1 of 61 (0.0%..8.8%); lukewarm_ocean/windswept_gravelly_hills legal 22 of 61 (24.2%..49.4%)
+IMPROVES; ocean/savanna_plateau legal 10 of 60 (8.3%..28.5%). Rank 5 beats every top-3 loosening measured before
+(best was 13 of 63): rank order is not impact order, which is why picking matters.
+
 ## 2026-11-02 — Long editor checks stream their output and can be stopped
 
 **Context:** the Solve check (~2 min), Verify (10 min) and full test suite showed nothing until they ended, and could
