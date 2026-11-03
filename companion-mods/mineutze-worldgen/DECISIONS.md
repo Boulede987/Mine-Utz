@@ -6,6 +6,15 @@ run `./gradlew :worldgen-core:calibrationReport` to read it, or `./gradlew :worl
 enforce it (`CalibrationManifestTest` fails loud on drift). This log stays the history (context,
 alternatives considered, evidence at the time) - it does not track current validity on its own.
 
+## 2026-11-03 — The Verify pick list follows graph edits, rerun on demand
+
+**Context:** after a graph edit the page kept showing the ranking measured on the previous graph; Verify then refused it.
+
+**Decision:** the page reloads the ranking after every successful edit; the server already refuses a ranking saved for
+another graph version, so the panel shows why plus a "Rerun Solve check" button. The user chose a button over an automatic
+rerun (2026-11-03): a 2 min all-core run should not start while several edits are still being made. Carrying the old
+list over (dropping removed laws, keeping old counts) was offered and declined: its counts would describe another graph.
+
 ## 2026-11-03 — Verify measures the laws the user picks from the ranking
 
 **Context:** Verify measured the top 3 loosenable laws of the ranking. The ranking is co-occurrence, not cause, and the
