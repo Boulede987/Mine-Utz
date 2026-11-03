@@ -5,4 +5,5 @@ class GraphEditorServer {
 }
 }
 
+com.mineutze.worldgen.tooling.graphedit.GraphEditorServer ..> com.mineutze.worldgen.tooling.graphedit.CurrentRun
 com.mineutze.worldgen.tooling.graphedit.GraphEditorServer ..> com.mineutze.worldgen.tooling.graphedit.GraphEditorFiles

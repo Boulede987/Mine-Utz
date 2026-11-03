@@ -34,6 +34,25 @@ skinparam class {
 }
 
 namespace com.mineutze.worldgen.tooling.graphedit {
+class CurrentRun {
+  - current : Optional<GradleRun>
+  ~ start(String, List<String>) : Optional<GradleRun>
+  ~ current() : Optional<GradleRun>
+}
+class GradleRun {
+  - {static} NEXT_NUMBER : AtomicInteger
+  - number : int
+  - label : String
+  - process : Process
+  - lines : String[*]
+  - stopped : AtomicBoolean
+  - exitCode : OptionalInt
+  ~ {static} start(String, List<String>) : GradleRun
+  - readUntilExit()
+  - copyOutputLines()
+  - awaitExit() : int
+  - recordFailure(String, Throwable)
+}
 class GraphEditorFiles {
   ~ {static} DATA_FILE : Path
   ~ {static} VERDICT_WORLD_PICTURE : Path
@@ -71,6 +90,23 @@ class ValidationResult <<record>> {
   + constructs : boolean
   + constructionError : String
   + errors : String[*]
+}
+class RunSnapshot <<record>> {
+  + runNumber : int
+  + label : String
+  + newLines : String[*]
+  + nextIndex : int
+  + exitCode : OptionalInt
+  + stopped : boolean
+  ~ {static} of(GradleRun, int) : RunSnapshot
+}
+class RunStatusQuery <<record>> {
+  + runNumber : OptionalInt
+  + fromIndex : int
+  - {static} RUN_KEY : String
+  - {static} FROM_KEY : String
+  ~ {static} parse(String) : RunStatusQuery
+  - {static} numberIn(String[], String) : int
 }
 }
 

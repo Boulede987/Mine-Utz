@@ -1,0 +1,16 @@
+namespace com.mineutze.worldgen.tooling.graphedit {
+class GradleRun {
+  - {static} NEXT_NUMBER : AtomicInteger
+  - number : int
+  - label : String
+  - process : Process
+  - lines : String[*]
+  - stopped : AtomicBoolean
+  - exitCode : OptionalInt
+  ~ {static} start(String, List<String>) : GradleRun
+  - readUntilExit()
+  - copyOutputLines()
+  - awaitExit() : int
+  - recordFailure(String, Throwable)
+}
+}

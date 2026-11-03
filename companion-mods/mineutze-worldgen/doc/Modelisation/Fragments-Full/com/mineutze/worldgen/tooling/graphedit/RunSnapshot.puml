@@ -1,0 +1,13 @@
+namespace com.mineutze.worldgen.tooling.graphedit {
+class RunSnapshot <<record>> {
+  + runNumber : int
+  + label : String
+  + newLines : String[*]
+  + nextIndex : int
+  + exitCode : OptionalInt
+  + stopped : boolean
+  ~ {static} of(GradleRun, int) : RunSnapshot
+}
+}
+
+com.mineutze.worldgen.tooling.graphedit.RunSnapshot ..> com.mineutze.worldgen.tooling.graphedit.GradleRun

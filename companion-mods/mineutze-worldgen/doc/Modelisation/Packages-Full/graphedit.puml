@@ -34,6 +34,25 @@ skinparam class {
 }
 
 namespace com.mineutze.worldgen.tooling.graphedit {
+class CurrentRun {
+  - current : Optional<GradleRun>
+  ~ start(String, List<String>) : Optional<GradleRun>
+  ~ current() : Optional<GradleRun>
+}
+class GradleRun {
+  - {static} NEXT_NUMBER : AtomicInteger
+  - number : int
+  - label : String
+  - process : Process
+  - lines : String[*]
+  - stopped : AtomicBoolean
+  - exitCode : OptionalInt
+  ~ {static} start(String, List<String>) : GradleRun
+  - readUntilExit()
+  - copyOutputLines()
+  - awaitExit() : int
+  - recordFailure(String, Throwable)
+}
 class GraphEditorFiles {
   ~ {static} DATA_FILE : Path
   ~ {static} VERDICT_WORLD_PICTURE : Path
@@ -72,6 +91,23 @@ class ValidationResult <<record>> {
   + constructionError : String
   + errors : String[*]
 }
+class RunSnapshot <<record>> {
+  + runNumber : int
+  + label : String
+  + newLines : String[*]
+  + nextIndex : int
+  + exitCode : OptionalInt
+  + stopped : boolean
+  ~ {static} of(GradleRun, int) : RunSnapshot
+}
+class RunStatusQuery <<record>> {
+  + runNumber : OptionalInt
+  + fromIndex : int
+  - {static} RUN_KEY : String
+  - {static} FROM_KEY : String
+  ~ {static} parse(String) : RunStatusQuery
+  - {static} numberIn(String[], String) : int
+}
 }
 class com.mineutze.worldgen.biomegraph.BiomeGraph <<external>> [[biomegraph.svg]] {
 }
@@ -100,6 +136,8 @@ class com.mineutze.worldgen.plan.TightnessVerify <<external>> [[plan.svg]] {
 class com.mineutze.worldgen.plan.WorldBiomePlan <<external>> [[plan.svg]] {
 }
 
+com.mineutze.worldgen.tooling.graphedit.CurrentRun ..> com.mineutze.worldgen.tooling.graphedit.GradleRun
+com.mineutze.worldgen.tooling.graphedit.GraphEditorServer ..> com.mineutze.worldgen.tooling.graphedit.CurrentRun
 com.mineutze.worldgen.tooling.graphedit.GraphEditorServer ..> com.mineutze.worldgen.tooling.graphedit.GraphEditorFiles
 com.mineutze.worldgen.tooling.graphedit.GraphEditorSolveCheck ..> com.mineutze.worldgen.biomegraph.BiomeGraphData
 com.mineutze.worldgen.tooling.graphedit.GraphEditorSolveCheck ..> com.mineutze.worldgen.biomegraph.BiomeGraphJson
@@ -122,5 +160,6 @@ com.mineutze.worldgen.tooling.graphedit.GraphValidation ..> com.mineutze.worldge
 com.mineutze.worldgen.tooling.graphedit.GraphValidation ..> com.mineutze.worldgen.plan.RawRuleTable
 com.mineutze.worldgen.tooling.graphedit.GraphValidation ..> com.mineutze.worldgen.tooling.graphedit.ValidationResult
 com.mineutze.worldgen.tooling.graphedit.GraphValidation ..> com.mineutze.worldgen.plan.WorldBiomePlan
+com.mineutze.worldgen.tooling.graphedit.RunSnapshot ..> com.mineutze.worldgen.tooling.graphedit.GradleRun
 
 @enduml

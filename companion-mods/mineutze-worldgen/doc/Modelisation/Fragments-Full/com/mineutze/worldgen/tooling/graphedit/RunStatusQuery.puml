@@ -1,0 +1,10 @@
+namespace com.mineutze.worldgen.tooling.graphedit {
+class RunStatusQuery <<record>> {
+  + runNumber : OptionalInt
+  + fromIndex : int
+  - {static} RUN_KEY : String
+  - {static} FROM_KEY : String
+  ~ {static} parse(String) : RunStatusQuery
+  - {static} numberIn(String[], String) : int
+}
+}

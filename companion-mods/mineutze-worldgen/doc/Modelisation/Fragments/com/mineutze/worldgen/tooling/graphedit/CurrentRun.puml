@@ -1,0 +1,7 @@
+namespace com.mineutze.worldgen.tooling.graphedit {
+class CurrentRun {
+  - current : Optional<GradleRun>
+  ~ start(String, List<String>) : Optional<GradleRun>
+  ~ current() : Optional<GradleRun>
+}
+}
