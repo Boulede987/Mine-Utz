@@ -6,6 +6,22 @@ run `./gradlew :worldgen-core:calibrationReport` to read it, or `./gradlew :worl
 enforce it (`CalibrationManifestTest` fails loud on drift). This log stays the history (context,
 alternatives considered, evidence at the time) - it does not track current validity on its own.
 
+## 2026-11-03 — Reliability run: production attempts past the first world, range against the target
+
+**Context:** the Solve check stops at its first world; with all attempts succeeding after 35 s its seed-failure range
+was 0..30% (refinement 3 of 3 allows ~22% per attempt, 5 retries), read by the user as the graph getting worse after an
+edit. Confirming 1% with no failure needs ~460 failure-free seeds.
+
+**Decision:** a separate Reliability run (minutes box 1-120, default 10; user choice over "until decided") runs the
+Solve check's own WorldSearch in a DEADLINE mode: it keeps going after a world and, at the deadline, waits for running
+attempts (dropping them would drop mostly slow failures). It reports MET (upper <= target), NOT MET (lower > target) or
+UNDECIDED, a "so far" line every 25 attempts and at least every 30 s (Stop kills the process, so the last line is what
+remains), and saves the ranking of its failures for Verify. Both the Solve check and the run state the attempt counts
+the range rests on and which retried stage drives the upper figure.
+
+**Evidence (2026-11-03, current graph, 2 min):** coarse 6 of 12, refinement 16 of 28, render 4 of 4; 0.049%..12.542%
+UNDECIDED (vs 0..30% from the 35 s Solve check). Refinement is the weak stage (beach / snowy_beach missing).
+
 ## 2026-11-03 — Rank failures of FEASIBLE graphs too; the pick list survives edits
 
 **Context:** increment 8 (clear the list on every edit, rerun on demand) was rejected after use: a duplicate Solve check
