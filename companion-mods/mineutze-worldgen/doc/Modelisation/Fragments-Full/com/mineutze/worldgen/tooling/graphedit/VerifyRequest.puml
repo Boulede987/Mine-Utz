@@ -1,0 +1,17 @@
+namespace com.mineutze.worldgen.tooling.graphedit {
+class VerifyRequest <<record>> {
+  + ranks : Integer[*]
+  + fingerprint : String
+  - {static} RANKS_KEY : String
+  - {static} FINGERPRINT_KEY : String
+  - {static} RANK_SEPARATOR : String
+  - {static} FINGERPRINT_SEPARATOR : String
+  - {static} GRADLE_ARGS_PREFIX : String
+  ~ {static} parse(String) : VerifyRequest
+  - {static} wholeNumber(Object) : int
+  ~ {static} fromArgument(String) : VerifyRequest
+  - {static} rankIn(String, String) : int
+}
+}
+
+com.mineutze.worldgen.tooling.graphedit.VerifyRequest ..> com.mineutze.worldgen.biomegraph.MinimalJson

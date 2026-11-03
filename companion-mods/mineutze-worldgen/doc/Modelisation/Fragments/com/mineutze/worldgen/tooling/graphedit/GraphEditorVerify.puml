@@ -1,7 +1,10 @@
 namespace com.mineutze.worldgen.tooling.graphedit {
 class GraphEditorVerify {
   - {static} EXIT_NO_RANKING : int
+  - {static} EXIT_REFUSED : int
   - {static} EXIT_CRASH : int
+  ~ {static} requestFrom(String[]) : Optional<VerifyRequest>
   + {static} main(String[])
+  - {static} measure(Optional<VerifyRequest>, BiomeGraphData) : String
 }
 }

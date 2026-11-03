@@ -76,8 +76,11 @@ class GraphEditorSolveCheck {
 }
 class GraphEditorVerify {
   - {static} EXIT_NO_RANKING : int
+  - {static} EXIT_REFUSED : int
   - {static} EXIT_CRASH : int
+  ~ {static} requestFrom(String[]) : Optional<VerifyRequest>
   + {static} main(String[])
+  - {static} measure(Optional<VerifyRequest>, BiomeGraphData) : String
 }
 class GraphValidation {
   - {static} MIN_LEGAL_NEIGHBORS : int
@@ -107,6 +110,19 @@ class RunStatusQuery <<record>> {
   - {static} FROM_KEY : String
   ~ {static} parse(String) : RunStatusQuery
   - {static} numberIn(String[], String) : int
+}
+class VerifyRequest <<record>> {
+  + ranks : Integer[*]
+  + fingerprint : String
+  - {static} RANKS_KEY : String
+  - {static} FINGERPRINT_KEY : String
+  - {static} RANK_SEPARATOR : String
+  - {static} FINGERPRINT_SEPARATOR : String
+  - {static} GRADLE_ARGS_PREFIX : String
+  ~ {static} parse(String) : VerifyRequest
+  - {static} wholeNumber(Object) : int
+  ~ {static} fromArgument(String) : VerifyRequest
+  - {static} rankIn(String, String) : int
 }
 }
 

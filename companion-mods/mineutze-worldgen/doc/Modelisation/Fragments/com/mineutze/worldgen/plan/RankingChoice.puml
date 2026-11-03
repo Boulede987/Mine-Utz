@@ -1,0 +1,8 @@
+namespace com.mineutze.worldgen.plan {
+class RankingChoice <<record>> {
+  + rank : int
+  + law : String
+  + attemptsBroken : int
+  + loosening : Optional<String>
+}
+}

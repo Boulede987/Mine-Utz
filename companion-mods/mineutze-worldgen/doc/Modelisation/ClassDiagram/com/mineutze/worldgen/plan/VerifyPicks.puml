@@ -1,0 +1,47 @@
+@startuml VerifyPicks
+
+skinparam classAttributeIconSize 0
+skinparam shadowing false
+
+skinparam class {
+  BackgroundColor<<interface>> #D6EAF8
+  BorderColor<<interface>> #2E86C1
+}
+skinparam class {
+  BackgroundColor<<abstract>> #E8DAEF
+  BorderColor<<abstract>> #8E44AD
+}
+skinparam class {
+  BackgroundColor #D5F5E3
+  BorderColor #27AE60
+}
+skinparam class {
+  BackgroundColor<<record>> #FCF3CF
+  BorderColor<<record>> #B7950B
+}
+skinparam class {
+  BackgroundColor<<static>> #a7faa0
+  BorderColor<<static>> #38d610
+}
+skinparam class {
+  BackgroundColor<<enum>> #F5B7B1
+  BorderColor<<enum>> #C0392B
+}
+
+namespace com.mineutze.worldgen.plan {
+class VerifyPicks <<record>> {
+  + loosenings : LoosenedGraph[*]
+  + skipped : String[*]
+  ~ {static} MAX_PICKS : int
+  ~ {static} of(TightnessRanking, BiomeGraphData, List<Integer>) : VerifyPicks
+  ~ {static} topLoosenable(TightnessRanking, BiomeGraphData) : VerifyPicks
+  - {static} sortObstacle(RankedObstacle, BiomeGraphData, List<LoosenedGraph>, List<String>)
+  - {static} requireCountInRange(List<Integer>)
+  - {static} requireNoDuplicate(List<Integer>)
+  - {static} loosenedAt(int, TightnessRanking, BiomeGraphData) : LoosenedGraph
+}
+}
+
+com.mineutze.worldgen.plan.VerifyPicks *--> "0..*" com.mineutze.worldgen.plan.LoosenedGraph
+
+@enduml

@@ -1,0 +1,15 @@
+namespace com.mineutze.worldgen.plan {
+class VerifyPicks <<record>> {
+  + loosenings : LoosenedGraph[*]
+  + skipped : String[*]
+  ~ {static} MAX_PICKS : int
+  ~ {static} of(TightnessRanking, BiomeGraphData, List<Integer>) : VerifyPicks
+  ~ {static} topLoosenable(TightnessRanking, BiomeGraphData) : VerifyPicks
+  - {static} sortObstacle(RankedObstacle, BiomeGraphData, List<LoosenedGraph>, List<String>)
+  - {static} requireCountInRange(List<Integer>)
+  - {static} requireNoDuplicate(List<Integer>)
+  - {static} loosenedAt(int, TightnessRanking, BiomeGraphData) : LoosenedGraph
+}
+}
+
+com.mineutze.worldgen.plan.VerifyPicks *--> "0..*" com.mineutze.worldgen.plan.LoosenedGraph

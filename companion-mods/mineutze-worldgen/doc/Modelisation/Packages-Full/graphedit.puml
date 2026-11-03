@@ -76,8 +76,11 @@ class GraphEditorSolveCheck {
 }
 class GraphEditorVerify {
   - {static} EXIT_NO_RANKING : int
+  - {static} EXIT_REFUSED : int
   - {static} EXIT_CRASH : int
+  ~ {static} requestFrom(String[]) : Optional<VerifyRequest>
   + {static} main(String[])
+  - {static} measure(Optional<VerifyRequest>, BiomeGraphData) : String
 }
 class GraphValidation {
   - {static} MIN_LEGAL_NEIGHBORS : int
@@ -108,6 +111,19 @@ class RunStatusQuery <<record>> {
   ~ {static} parse(String) : RunStatusQuery
   - {static} numberIn(String[], String) : int
 }
+class VerifyRequest <<record>> {
+  + ranks : Integer[*]
+  + fingerprint : String
+  - {static} RANKS_KEY : String
+  - {static} FINGERPRINT_KEY : String
+  - {static} RANK_SEPARATOR : String
+  - {static} FINGERPRINT_SEPARATOR : String
+  - {static} GRADLE_ARGS_PREFIX : String
+  ~ {static} parse(String) : VerifyRequest
+  - {static} wholeNumber(Object) : int
+  ~ {static} fromArgument(String) : VerifyRequest
+  - {static} rankIn(String, String) : int
+}
 }
 class com.mineutze.worldgen.biomegraph.BiomeGraph <<external>> [[biomegraph.svg]] {
 }
@@ -116,6 +132,8 @@ class com.mineutze.worldgen.biomegraph.BiomeGraphData <<external>> [[biomegraph.
 class com.mineutze.worldgen.biomegraph.BiomeGraphJson <<external>> [[biomegraph.svg]] {
 }
 class com.mineutze.worldgen.biomegraph.BiomeId <<external>> [[biomegraph.svg]] {
+}
+class com.mineutze.worldgen.biomegraph.MinimalJson <<external>> [[biomegraph.svg]] {
 }
 class com.mineutze.worldgen.plan.BuiltWorld <<external>> [[plan.svg]] {
 }
@@ -153,6 +171,8 @@ com.mineutze.worldgen.tooling.graphedit.GraphEditorVerify ..> com.mineutze.world
 com.mineutze.worldgen.tooling.graphedit.GraphEditorVerify ..> com.mineutze.worldgen.tooling.graphedit.GraphEditorFiles
 com.mineutze.worldgen.tooling.graphedit.GraphEditorVerify ..> com.mineutze.worldgen.plan.RankingUnavailable
 com.mineutze.worldgen.tooling.graphedit.GraphEditorVerify ..> com.mineutze.worldgen.plan.TightnessVerify
+com.mineutze.worldgen.tooling.graphedit.GraphEditorVerify ..> com.mineutze.worldgen.tooling.graphedit.VerifyRequest
+com.mineutze.worldgen.tooling.graphedit.GraphEditorVerify ..> com.mineutze.worldgen.plan.WorldBiomePlan
 com.mineutze.worldgen.tooling.graphedit.GraphValidation ..> com.mineutze.worldgen.biomegraph.BiomeGraph
 com.mineutze.worldgen.tooling.graphedit.GraphValidation ..> com.mineutze.worldgen.biomegraph.BiomeGraphData
 com.mineutze.worldgen.tooling.graphedit.GraphValidation ..> com.mineutze.worldgen.biomegraph.BiomeGraphJson
@@ -161,5 +181,6 @@ com.mineutze.worldgen.tooling.graphedit.GraphValidation ..> com.mineutze.worldge
 com.mineutze.worldgen.tooling.graphedit.GraphValidation ..> com.mineutze.worldgen.tooling.graphedit.ValidationResult
 com.mineutze.worldgen.tooling.graphedit.GraphValidation ..> com.mineutze.worldgen.plan.WorldBiomePlan
 com.mineutze.worldgen.tooling.graphedit.RunSnapshot ..> com.mineutze.worldgen.tooling.graphedit.GradleRun
+com.mineutze.worldgen.tooling.graphedit.VerifyRequest ..> com.mineutze.worldgen.biomegraph.MinimalJson
 
 @enduml

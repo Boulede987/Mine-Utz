@@ -1,0 +1,10 @@
+namespace com.mineutze.worldgen.plan {
+class RankingView <<record>> {
+  + choices : RankingChoice[*]
+  + failedAttempts : int
+  + fingerprint : String
+  - {static} requireRank(RankingChoice, int)
+}
+}
+
+com.mineutze.worldgen.plan.RankingView *--> "0..*" com.mineutze.worldgen.plan.RankingChoice

@@ -1,13 +1,19 @@
 namespace com.mineutze.worldgen.plan {
 class TightnessVerify {
   + {static} EDITOR_VERIFY_TIME : Duration
-  - {static} LOOSENINGS_TRIED : int
+  + {static} MAX_PICKS : int
   - {static} BOUND_CONFIDENCE : double
   - {static} PERCENT_PER_UNIT : double
   + {static} saveRanking(Path, FeasibilityVerdict, BiomeGraphData)
+  + {static} choices(Path, BiomeGraphData) : RankingView
+  - {static} choiceAt(int, RankedObstacle, BiomeGraphData) : RankingChoice
+  + {static} checkPicks(Path, BiomeGraphData, List<Integer>, String)
+  + {static} verify(Path, BiomeGraphData, List<Integer>, String, int, WorldBiomePlan.ProgressListener) : String
+  ~ {static} verify(Path, BiomeGraphData, List<Integer>, String, PlanSettings, Duration, int, WorldBiomePlan.ProgressListener) : String
+  - {static} picksOn(SavedRanking, BiomeGraphData, List<Integer>, String) : VerifyPicks
   + {static} verify(Path, BiomeGraphData, int, WorldBiomePlan.ProgressListener) : String
   ~ {static} verify(Path, BiomeGraphData, PlanSettings, Duration, int, WorldBiomePlan.ProgressListener) : String
-  - {static} sortObstacle(RankedObstacle, BiomeGraphData, List<LoosenedGraph>, List<String>)
+  - {static} measure(VerifyPicks, BiomeGraphData, PlanSettings, Duration, int, WorldBiomePlan.ProgressListener) : String
   - {static} report(List<ArmResult>) : String
   - {static} skippedLine(List<String>) : String
   - {static} lineOf(ArmResult) : String

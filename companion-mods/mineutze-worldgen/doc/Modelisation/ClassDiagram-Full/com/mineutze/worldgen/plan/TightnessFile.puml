@@ -32,7 +32,10 @@ namespace com.mineutze.worldgen.plan {
 class TightnessFile {
   ~ {static} write(Path, TightnessRanking, BiomeGraphData)
   ~ {static} read(Path, BiomeGraphData) : TightnessRanking
-  - {static} parse(Path) : Map<String, Object>
+  ~ {static} readSaved(Path, BiomeGraphData) : SavedRanking
+  - {static} rankingFrom(Map<String, Object>, Path, BiomeGraphData) : TightnessRanking
+  - {static} readText(Path) : String
+  - {static} parse(String, Path) : Map<String, Object>
   - {static} toJson(RankedObstacle) : Map<String, Object>
   - {static} putLaw(Map<String, Object>, GraphLaw)
   - {static} putKind(Map<String, Object>, String, BiomeId)
@@ -55,10 +58,12 @@ com.mineutze.worldgen.plan.TightnessFile ..> com.mineutze.worldgen.biomegraph.Mi
 com.mineutze.worldgen.plan.TightnessFile ..> com.mineutze.worldgen.plan.MissingBiome
 com.mineutze.worldgen.plan.TightnessFile ..> com.mineutze.worldgen.plan.Obstacle
 com.mineutze.worldgen.plan.TightnessFile ..> com.mineutze.worldgen.plan.RankedObstacle
+com.mineutze.worldgen.plan.TightnessFile ..> com.mineutze.worldgen.plan.RankingFingerprint
 com.mineutze.worldgen.plan.TightnessFile ..> com.mineutze.worldgen.plan.RankingUnavailable
 com.mineutze.worldgen.plan.TightnessFile ..> com.mineutze.worldgen.plan.RawRuleTable
 com.mineutze.worldgen.plan.TightnessFile ..> com.mineutze.worldgen.plan.RequiredBorderLaw
 com.mineutze.worldgen.plan.TightnessFile ..> com.mineutze.worldgen.plan.ResolvedBorderRequirement
+com.mineutze.worldgen.plan.TightnessFile ..> com.mineutze.worldgen.plan.SavedRanking
 com.mineutze.worldgen.plan.TightnessFile ..> com.mineutze.worldgen.plan.ShapeLimit
 com.mineutze.worldgen.plan.TightnessFile ..> com.mineutze.worldgen.plan.SizeRangeLaw
 com.mineutze.worldgen.plan.TightnessFile ..> com.mineutze.worldgen.plan.TightnessRanking

@@ -1436,7 +1436,23 @@ class RankedObstacle <<record>> {
   + obstacle : Obstacle
   + attemptsBroken : int
 }
+class RankingChoice <<record>> {
+  + rank : int
+  + law : String
+  + attemptsBroken : int
+  + loosening : Optional<String>
+}
+class RankingFingerprint {
+  ~ {static} of(String) : String
+  - {static} sha256() : MessageDigest
+}
 class RankingUnavailable {
+}
+class RankingView <<record>> {
+  + choices : RankingChoice[*]
+  + failedAttempts : int
+  + fingerprint : String
+  - {static} requireRank(RankingChoice, int)
 }
 class ReliabilityEstimate <<record>> {
   + worldFailureLow : double
@@ -1450,6 +1466,10 @@ class RequiredBorderLaw <<record>> {
   + biome : BiomeId
   + requirement : ResolvedBorderRequirement
   + describe() : String
+}
+class SavedRanking <<record>> {
+  + ranking : TightnessRanking
+  + fingerprint : String
 }
 class ShapeLimit <<record>> {
   + biome : BiomeId
@@ -1533,7 +1553,10 @@ class StageTightness <<record>> {
 class TightnessFile {
   ~ {static} write(Path, TightnessRanking, BiomeGraphData)
   ~ {static} read(Path, BiomeGraphData) : TightnessRanking
-  - {static} parse(Path) : Map<String, Object>
+  ~ {static} readSaved(Path, BiomeGraphData) : SavedRanking
+  - {static} rankingFrom(Map<String, Object>, Path, BiomeGraphData) : TightnessRanking
+  - {static} readText(Path) : String
+  - {static} parse(String, Path) : Map<String, Object>
   - {static} toJson(RankedObstacle) : Map<String, Object>
   - {static} putLaw(Map<String, Object>, GraphLaw)
   - {static} putKind(Map<String, Object>, String, BiomeId)
@@ -1555,16 +1578,33 @@ class TightnessTally {
 }
 class TightnessVerify {
   + {static} EDITOR_VERIFY_TIME : Duration
-  - {static} LOOSENINGS_TRIED : int
+  + {static} MAX_PICKS : int
   - {static} BOUND_CONFIDENCE : double
   - {static} PERCENT_PER_UNIT : double
   + {static} saveRanking(Path, FeasibilityVerdict, BiomeGraphData)
+  + {static} choices(Path, BiomeGraphData) : RankingView
+  - {static} choiceAt(int, RankedObstacle, BiomeGraphData) : RankingChoice
+  + {static} checkPicks(Path, BiomeGraphData, List<Integer>, String)
+  + {static} verify(Path, BiomeGraphData, List<Integer>, String, int, WorldBiomePlan.ProgressListener) : String
+  ~ {static} verify(Path, BiomeGraphData, List<Integer>, String, PlanSettings, Duration, int, WorldBiomePlan.ProgressListener) : String
+  - {static} picksOn(SavedRanking, BiomeGraphData, List<Integer>, String) : VerifyPicks
   + {static} verify(Path, BiomeGraphData, int, WorldBiomePlan.ProgressListener) : String
   ~ {static} verify(Path, BiomeGraphData, PlanSettings, Duration, int, WorldBiomePlan.ProgressListener) : String
-  - {static} sortObstacle(RankedObstacle, BiomeGraphData, List<LoosenedGraph>, List<String>)
+  - {static} measure(VerifyPicks, BiomeGraphData, PlanSettings, Duration, int, WorldBiomePlan.ProgressListener) : String
   - {static} report(List<ArmResult>) : String
   - {static} skippedLine(List<String>) : String
   - {static} lineOf(ArmResult) : String
+}
+class VerifyPicks <<record>> {
+  + loosenings : LoosenedGraph[*]
+  + skipped : String[*]
+  ~ {static} MAX_PICKS : int
+  ~ {static} of(TightnessRanking, BiomeGraphData, List<Integer>) : VerifyPicks
+  ~ {static} topLoosenable(TightnessRanking, BiomeGraphData) : VerifyPicks
+  - {static} sortObstacle(RankedObstacle, BiomeGraphData, List<LoosenedGraph>, List<String>)
+  - {static} requireCountInRange(List<Integer>)
+  - {static} requireNoDuplicate(List<Integer>)
+  - {static} loosenedAt(int, TightnessRanking, BiomeGraphData) : LoosenedGraph
 }
 class WorldSearch {
   - {static} SEARCH_WORLD_SEED : long
@@ -1663,8 +1703,11 @@ class GraphEditorSolveCheck {
 }
 class GraphEditorVerify {
   - {static} EXIT_NO_RANKING : int
+  - {static} EXIT_REFUSED : int
   - {static} EXIT_CRASH : int
+  ~ {static} requestFrom(String[]) : Optional<VerifyRequest>
   + {static} main(String[])
+  - {static} measure(Optional<VerifyRequest>, BiomeGraphData) : String
 }
 class GraphValidation {
   - {static} MIN_LEGAL_NEIGHBORS : int
@@ -1694,6 +1737,19 @@ class RunStatusQuery <<record>> {
   - {static} FROM_KEY : String
   ~ {static} parse(String) : RunStatusQuery
   - {static} numberIn(String[], String) : int
+}
+class VerifyRequest <<record>> {
+  + ranks : Integer[*]
+  + fingerprint : String
+  - {static} RANKS_KEY : String
+  - {static} FINGERPRINT_KEY : String
+  - {static} RANK_SEPARATOR : String
+  - {static} FINGERPRINT_SEPARATOR : String
+  - {static} GRADLE_ARGS_PREFIX : String
+  ~ {static} parse(String) : VerifyRequest
+  - {static} wholeNumber(Object) : int
+  ~ {static} fromArgument(String) : VerifyRequest
+  - {static} rankIn(String, String) : int
 }
 }
 
@@ -2192,6 +2248,7 @@ com.mineutze.worldgen.plan.ObstacleFinder ..> com.mineutze.worldgen.plan.Toroida
 com.mineutze.worldgen.plan.ProductionFailureModel ..> com.mineutze.worldgen.plan.PlanSettings
 com.mineutze.worldgen.plan.RankedObstacle *--> com.mineutze.worldgen.plan.Obstacle
 com.mineutze.worldgen.plan.RankingUnavailable --|> RuntimeException
+com.mineutze.worldgen.plan.RankingView *--> "0..*" com.mineutze.worldgen.plan.RankingChoice
 com.mineutze.worldgen.plan.ReliabilityEstimate ..> com.mineutze.worldgen.plan.BinomialConfidence
 com.mineutze.worldgen.plan.ReliabilityEstimate ..> com.mineutze.worldgen.plan.Evidence
 com.mineutze.worldgen.plan.ReliabilityEstimate ..> com.mineutze.worldgen.plan.ProductionFailureModel
@@ -2199,6 +2256,7 @@ com.mineutze.worldgen.plan.ReliabilityEstimate ..> com.mineutze.worldgen.plan.St
 com.mineutze.worldgen.plan.RequiredBorderLaw ..|> com.mineutze.worldgen.plan.GraphLaw
 com.mineutze.worldgen.plan.RequiredBorderLaw *--> com.mineutze.worldgen.biomegraph.BiomeId
 com.mineutze.worldgen.plan.RequiredBorderLaw *--> com.mineutze.worldgen.plan.ResolvedBorderRequirement
+com.mineutze.worldgen.plan.SavedRanking *--> com.mineutze.worldgen.plan.TightnessRanking
 com.mineutze.worldgen.plan.ShapeLimit ..|> com.mineutze.worldgen.plan.Obstacle
 com.mineutze.worldgen.plan.ShapeLimit *--> com.mineutze.worldgen.biomegraph.BiomeId
 com.mineutze.worldgen.plan.SizeRangeLaw ..|> com.mineutze.worldgen.plan.GraphLaw
@@ -2241,10 +2299,12 @@ com.mineutze.worldgen.plan.TightnessFile ..> com.mineutze.worldgen.biomegraph.Mi
 com.mineutze.worldgen.plan.TightnessFile ..> com.mineutze.worldgen.plan.MissingBiome
 com.mineutze.worldgen.plan.TightnessFile ..> com.mineutze.worldgen.plan.Obstacle
 com.mineutze.worldgen.plan.TightnessFile ..> com.mineutze.worldgen.plan.RankedObstacle
+com.mineutze.worldgen.plan.TightnessFile ..> com.mineutze.worldgen.plan.RankingFingerprint
 com.mineutze.worldgen.plan.TightnessFile ..> com.mineutze.worldgen.plan.RankingUnavailable
 com.mineutze.worldgen.plan.TightnessFile ..> com.mineutze.worldgen.plan.RawRuleTable
 com.mineutze.worldgen.plan.TightnessFile ..> com.mineutze.worldgen.plan.RequiredBorderLaw
 com.mineutze.worldgen.plan.TightnessFile ..> com.mineutze.worldgen.plan.ResolvedBorderRequirement
+com.mineutze.worldgen.plan.TightnessFile ..> com.mineutze.worldgen.plan.SavedRanking
 com.mineutze.worldgen.plan.TightnessFile ..> com.mineutze.worldgen.plan.ShapeLimit
 com.mineutze.worldgen.plan.TightnessFile ..> com.mineutze.worldgen.plan.SizeRangeLaw
 com.mineutze.worldgen.plan.TightnessFile ..> com.mineutze.worldgen.plan.TightnessRanking
@@ -2256,16 +2316,24 @@ com.mineutze.worldgen.plan.TightnessVerify ..> com.mineutze.worldgen.plan.ArmRes
 com.mineutze.worldgen.plan.TightnessVerify ..> com.mineutze.worldgen.plan.BinomialConfidence
 com.mineutze.worldgen.plan.TightnessVerify ..> com.mineutze.worldgen.biomegraph.BiomeGraphData
 com.mineutze.worldgen.plan.TightnessVerify ..> com.mineutze.worldgen.plan.FeasibilityVerdict
-com.mineutze.worldgen.plan.TightnessVerify ..> com.mineutze.worldgen.plan.LoosenedGraph
 com.mineutze.worldgen.plan.TightnessVerify ..> com.mineutze.worldgen.plan.Loosening
 com.mineutze.worldgen.plan.TightnessVerify ..> com.mineutze.worldgen.plan.PlanSettings
 com.mineutze.worldgen.plan.TightnessVerify ..> com.mineutze.worldgen.plan.ProgressListener
 com.mineutze.worldgen.plan.TightnessVerify ..> com.mineutze.worldgen.plan.RankedObstacle
+com.mineutze.worldgen.plan.TightnessVerify ..> com.mineutze.worldgen.plan.RankingChoice
+com.mineutze.worldgen.plan.TightnessVerify ..> com.mineutze.worldgen.plan.RankingView
+com.mineutze.worldgen.plan.TightnessVerify ..> com.mineutze.worldgen.plan.SavedRanking
 com.mineutze.worldgen.plan.TightnessVerify ..> com.mineutze.worldgen.plan.SolveRateTrial
 com.mineutze.worldgen.plan.TightnessVerify ..> com.mineutze.worldgen.plan.StageEvidence
 com.mineutze.worldgen.plan.TightnessVerify ..> com.mineutze.worldgen.plan.TightnessFile
-com.mineutze.worldgen.plan.TightnessVerify ..> com.mineutze.worldgen.plan.TightnessRanking
+com.mineutze.worldgen.plan.TightnessVerify ..> com.mineutze.worldgen.plan.VerifyPicks
 com.mineutze.worldgen.plan.TightnessVerify ..> com.mineutze.worldgen.plan.WorldBiomePlan
+com.mineutze.worldgen.plan.VerifyPicks *--> "0..*" com.mineutze.worldgen.plan.LoosenedGraph
+com.mineutze.worldgen.plan.VerifyPicks ..> com.mineutze.worldgen.biomegraph.BiomeGraphData
+com.mineutze.worldgen.plan.VerifyPicks ..> com.mineutze.worldgen.plan.Loosening
+com.mineutze.worldgen.plan.VerifyPicks ..> com.mineutze.worldgen.plan.Obstacle
+com.mineutze.worldgen.plan.VerifyPicks ..> com.mineutze.worldgen.plan.RankedObstacle
+com.mineutze.worldgen.plan.VerifyPicks ..> com.mineutze.worldgen.plan.TightnessRanking
 com.mineutze.worldgen.plan.WorldSearch ..|> AutoCloseable
 com.mineutze.worldgen.plan.WorldSearch *--> com.mineutze.worldgen.plan.FinishedAttempt
 com.mineutze.worldgen.plan.WorldSearch *--> com.mineutze.worldgen.plan.IndependentAttemptPool
@@ -2311,6 +2379,8 @@ com.mineutze.worldgen.tooling.graphedit.GraphEditorVerify ..> com.mineutze.world
 com.mineutze.worldgen.tooling.graphedit.GraphEditorVerify ..> com.mineutze.worldgen.tooling.graphedit.GraphEditorFiles
 com.mineutze.worldgen.tooling.graphedit.GraphEditorVerify ..> com.mineutze.worldgen.plan.RankingUnavailable
 com.mineutze.worldgen.tooling.graphedit.GraphEditorVerify ..> com.mineutze.worldgen.plan.TightnessVerify
+com.mineutze.worldgen.tooling.graphedit.GraphEditorVerify ..> com.mineutze.worldgen.tooling.graphedit.VerifyRequest
+com.mineutze.worldgen.tooling.graphedit.GraphEditorVerify ..> com.mineutze.worldgen.plan.WorldBiomePlan
 com.mineutze.worldgen.tooling.graphedit.GraphValidation ..> com.mineutze.worldgen.biomegraph.BiomeGraph
 com.mineutze.worldgen.tooling.graphedit.GraphValidation ..> com.mineutze.worldgen.biomegraph.BiomeGraphData
 com.mineutze.worldgen.tooling.graphedit.GraphValidation ..> com.mineutze.worldgen.biomegraph.BiomeGraphJson
@@ -2319,5 +2389,6 @@ com.mineutze.worldgen.tooling.graphedit.GraphValidation ..> com.mineutze.worldge
 com.mineutze.worldgen.tooling.graphedit.GraphValidation ..> com.mineutze.worldgen.tooling.graphedit.ValidationResult
 com.mineutze.worldgen.tooling.graphedit.GraphValidation ..> com.mineutze.worldgen.plan.WorldBiomePlan
 com.mineutze.worldgen.tooling.graphedit.RunSnapshot ..> com.mineutze.worldgen.tooling.graphedit.GradleRun
+com.mineutze.worldgen.tooling.graphedit.VerifyRequest ..> com.mineutze.worldgen.biomegraph.MinimalJson
 
 @enduml

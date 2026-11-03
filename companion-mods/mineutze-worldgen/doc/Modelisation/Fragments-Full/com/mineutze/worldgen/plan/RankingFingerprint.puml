@@ -1,0 +1,6 @@
+namespace com.mineutze.worldgen.plan {
+class RankingFingerprint {
+  ~ {static} of(String) : String
+  - {static} sha256() : MessageDigest
+}
+}
