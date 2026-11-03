@@ -21,9 +21,18 @@ class SolveRateTrialTest {
     private static final PlanSettings SMALL_COARSE = new PlanSettings(8, 300, 1.3, new double[] {20, 0}, 208, 0.10, 3_000_000, 60, ToroidalSizedPatternGenerator.DEFAULT_SCHEDULE);
     private static final PlanSettings TINY_GRID = new PlanSettings(4, 300, 1.3, new double[] {20, 0}, 104, 0.10, 20_000, 200, ToroidalSizedPatternGenerator.DEFAULT_SCHEDULE);
     private static final Duration FEW_SECONDS = Duration.ofSeconds(4);
+    private static final int THREADS = 2;
+    private static final double CONFIDENCE = 0.95;
+    /** Exact 95% bounds separate 0/n from n/n only from n = 6 per arm; 4 s gave 3-4 under load (flaked). */
+    private static final int TRIALS_TO_SEPARATE_NONE_FROM_ALL = 6;
+    private static final Duration ENOUGH_FOR_SIX_TRIALS_PER_ARM = Duration.ofSeconds(15);
 
     private static List<ArmResult> run(PlanSettings settings, BiomeGraphData baseline, List<LoosenedGraph> arms) {
-        return new SolveRateTrial(settings, 2, FEW_SECONDS, 0.95).run(baseline, arms, message -> { });
+        return run(settings, baseline, arms, FEW_SECONDS);
+    }
+
+    private static List<ArmResult> run(PlanSettings settings, BiomeGraphData baseline, List<LoosenedGraph> arms, Duration wallTime) {
+        return new SolveRateTrial(settings, THREADS, wallTime, CONFIDENCE).run(baseline, arms, message -> { });
     }
 
     @Test
@@ -39,8 +48,10 @@ class SolveRateTrialTest {
         BiomeGraphData neverSolves = noLegalTriangleCatalog(500, 800);
         LoosenedGraph solvable = new LoosenedGraph("make every pair legal", fullyLegalCatalog(500, 800, A, B, C));
 
-        List<ArmResult> results = run(SMALL_COARSE, neverSolves, List.of(solvable));
+        List<ArmResult> results = run(SMALL_COARSE, neverSolves, List.of(solvable), ENOUGH_FOR_SIX_TRIALS_PER_ARM);
 
+        results.forEach(arm -> assertTrue(arm.evidence().orElseThrow().trials() >= TRIALS_TO_SEPARATE_NONE_FROM_ALL,
+            "setup: machine too slow for " + ENOUGH_FOR_SIX_TRIALS_PER_ARM + ", no verdict possible: " + results));
         assertTrue(results.get(1).improves(), results.toString());
         assertFalse(results.get(0).improves(), results.toString());
     }
