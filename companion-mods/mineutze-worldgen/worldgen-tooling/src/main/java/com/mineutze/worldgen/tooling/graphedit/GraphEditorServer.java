@@ -16,6 +16,7 @@ import com.sun.net.httpserver.HttpServer;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.io.UncheckedIOException;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -26,7 +27,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.Executors;
-import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * Graph editor vertical slice (2026-09-14, real user request - see DECISIONS.md same
@@ -92,6 +92,8 @@ public final class GraphEditorServer {
         server.createContext("/api/solvecheck", GraphEditorServer::handleSolveCheck);
         server.createContext("/api/verdictworld", GraphEditorServer::serveVerdictWorld);
         server.createContext("/api/verify", GraphEditorServer::handleVerify);
+        server.createContext("/api/run", GraphEditorServer::handleRunStatus);
+        server.createContext("/api/run/stop", GraphEditorServer::handleRunStop);
         server.createContext("/api/requirement", GraphEditorServer::handleSetRequirement);
         server.createContext("/api/groups", GraphEditorServer::handleSaveGroup);
         server.createContext("/api/groups/remove", GraphEditorServer::handleRemoveGroup);
@@ -325,7 +327,7 @@ public final class GraphEditorServer {
         List<String> command = fullSuite
             ? List.of("../gradlew.bat", ":worldgen-core:test")
             : List.of("../gradlew.bat", ":worldgen-core:test", "--tests", "com.mineutze.worldgen.biomegraph.BiomeGraphTest");
-        runGradleTaskAndRespond(exchange, command);
+        startGradleTaskAndRespond(exchange, fullSuite ? "full worldgen-core suite" : "quick check", command);
     }
 
     /**
@@ -334,12 +336,12 @@ public final class GraphEditorServer {
      * it solves complete worlds from THIS tool's saved data file.
      */
     private static void handleSolveCheck(HttpExchange exchange) throws IOException {
-        runGradleTaskAndRespond(exchange, List.of("../gradlew.bat", ":worldgen-tooling:graphEditorSolveCheck"));
+        startGradleTaskAndRespond(exchange, "Solve check", List.of("../gradlew.bat", ":worldgen-tooling:graphEditorSolveCheck"));
     }
 
     /** Verify run (up to 10 min): reads the ranking the last UNPROVEN Solve check saved. */
     private static void handleVerify(HttpExchange exchange) throws IOException {
-        runGradleTaskAndRespond(exchange, List.of("../gradlew.bat", ":worldgen-tooling:graphEditorVerify"));
+        startGradleTaskAndRespond(exchange, "Verify", List.of("../gradlew.bat", ":worldgen-tooling:graphEditorVerify"));
     }
 
     /**
@@ -452,69 +454,48 @@ public final class GraphEditorServer {
         respondJson(exchange, 200, resultJson(result, proposed));
     }
 
-    /**
-     * Shells out to the gradle wrapper, waits for it to finish, and responds with its
-     * exit code + full stdout - shared by every button that runs a real gradle task
-     * (tests, solve check) so the JAVA_HOME fix (see below) and process-handling only
-     * exist in one place.
-     */
-    private static void runGradleTaskAndRespond(HttpExchange exchange, List<String> command) throws IOException {
-        if (!GRADLE_RUN_IN_PROGRESS.compareAndSet(false, true)) {
-            respondJson(exchange, 409, MinimalJson.writeObject(Map.of("exitCode", -1, "output", "Another run is still in progress; each one uses every core - wait for it to finish.")));
+    /** Answers at once; page polls /api/run for output. 409 while another run goes. */
+    private static void startGradleTaskAndRespond(HttpExchange exchange, String label, List<String> command) throws IOException {
+        Optional<GradleRun> started;
+        try {
+            started = CURRENT_RUN.start(label, command);
+        } catch (UncheckedIOException launchFailure) {
+            respondJson(exchange, 200, MinimalJson.writeObject(Map.of("started", false, "output", "Could not launch: " + launchFailure.getMessage() + " (" + launchFailure.getCause() + ")")));
             return;
         }
-        try {
-            runGradleTaskWhileHoldingTheGate(exchange, command);
-        } finally {
-            GRADLE_RUN_IN_PROGRESS.set(false);
-        }
-    }
-
-    private static void runGradleTaskWhileHoldingTheGate(HttpExchange exchange, List<String> command) throws IOException {
-        Process process;
-        try {
-            process = startGradleProcess(command);
-        } catch (IOException e) {
-            respondJson(exchange, 200, MinimalJson.writeObject(Map.of("exitCode", -1, "output", "Could not launch gradlew.bat: " + e.getMessage())));
+        if (started.isEmpty()) {
+            respondJson(exchange, 409, MinimalJson.writeObject(Map.of("started", false, "output", "Another run is still in progress; each one uses every core - wait for it or press Stop.")));
             return;
         }
-        GradleResult result = waitForGradleProcess(process);
-        Map<String, Object> json = new LinkedHashMap<>();
-        json.put("exitCode", result.exitCode());
-        json.put("output", result.output());
-        respondJson(exchange, 200, MinimalJson.writeObject(json));
+        respondJson(exchange, 200, MinimalJson.writeObject(Map.of("started", true, "label", label)));
     }
 
-    /**
-     * The gradle wrapper's own JVM-version check runs BEFORE any toolchain resolution - it
-     * uses whatever JAVA_HOME/PATH the launched process inherits, NOT this project's
-     * configured JDK 21 toolchain. A child process here does NOT inherit whatever JAVA_HOME
-     * this server's own shell happened to have set - it gets the OS/user's raw default,
-     * which can be a much older JDK (real, measured: this exact "requires JVM 17, this
-     * build uses a Java 8 JVM" failure). Fix: pass through the CURRENT JVM's own java.home -
-     * this server is itself already running under whatever JDK gradle's toolchain resolved
-     * for the graphEditor task, so it's guaranteed suitable, no hardcoded path needed.
-     */
-    private static Process startGradleProcess(List<String> command) throws IOException {
-        ProcessBuilder processBuilder = new ProcessBuilder(command).redirectErrorStream(true);
-        processBuilder.environment().put("JAVA_HOME", System.getProperty("java.home"));
-        return processBuilder.start();
-    }
-
-    private record GradleResult(int exitCode, String output) {
-    }
-
-    private static GradleResult waitForGradleProcess(Process process) throws IOException {
-        String output;
-        try (InputStream processOutput = process.getInputStream()) {
-            output = new String(processOutput.readAllBytes(), StandardCharsets.UTF_8);
+    /** Latest run's lines, finished or not; {"none": true} before any run; 400 on a bad query (see RunStatusQuery). */
+    private static void handleRunStatus(HttpExchange exchange) throws IOException {
+        Optional<GradleRun> run = CURRENT_RUN.current();
+        if (run.isEmpty()) {
+            respondJson(exchange, 200, MinimalJson.writeObject(Map.of("none", true)));
+            return;
         }
+        RunSnapshot snapshot;
         try {
-            return new GradleResult(process.waitFor(), output);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            return new GradleResult(-1, output);
+            RunStatusQuery query = RunStatusQuery.parse(exchange.getRequestURI().getRawQuery());
+            snapshot = RunSnapshot.of(run.get(), query.fromIndexIn(run.get()));
+        } catch (IllegalArgumentException badQuery) {
+            respondJson(exchange, 400, MinimalJson.writeObject(Map.of("error", badQuery.getMessage())));
+            return;
         }
+        respondJson(exchange, 200, MinimalJson.writeObject(snapshot.toJson()));
+    }
+
+    /** POST only: a GET would let any page the user opens stop a run with an image link. */
+    private static void handleRunStop(HttpExchange exchange) throws IOException {
+        if (!"POST".equals(exchange.getRequestMethod())) {
+            respond(exchange, 405, "text/plain; charset=utf-8", "POST only".getBytes(StandardCharsets.UTF_8));
+            return;
+        }
+        boolean stopping = CURRENT_RUN.current().map(GradleRun::stop).orElse(false);
+        respondJson(exchange, 200, MinimalJson.writeObject(Map.of("stopping", stopping)));
     }
 
     private static String resultJson(ValidationResult result, BiomeGraphData proposed) {
@@ -660,6 +641,7 @@ public final class GraphEditorServer {
           <button class="gradleRun" onclick="runTests(true)">Run full worldgen-core suite</button>
           <button class="gradleRun" onclick="runSolveCheck()">Solve check (feasibility verdict, up to 2 min)</button>
           <button class="gradleRun" onclick="runVerify()">Verify (measures the top loosenings after an UNPROVEN check, up to 10 min)</button>
+          <button id="stopRun" onclick="stopRun()" disabled>Stop</button>
           <div id="testStatus"></div>
           <div id="testReportLinks"></div>
           <pre id="testOutput"></pre>
@@ -1032,15 +1014,15 @@ public final class GraphEditorServer {
         }
 
         async function runTests(full) {
-          await runGradleTaskAndRender('/api/tests?scope=' + (full ? 'full' : 'quick'));
+          await startRunAndPoll('/api/tests?scope=' + (full ? 'full' : 'quick'));
         }
 
         async function runVerify() {
-          await runGradleTaskAndRender('/api/verify');
+          await startRunAndPoll('/api/verify');
         }
 
         async function runSolveCheck() {
-          await runGradleTaskAndRender('/api/solvecheck');
+          await startRunAndPoll('/api/solvecheck');
         }
 
         function statusLabelOf(result) {
@@ -1062,24 +1044,98 @@ public final class GraphEditorServer {
           if (built) picture.src = '/api/verdictworld?t=' + Date.now();
         }
 
-        async function runGradleTaskAndRender(endpoint) {
-          document.getElementById('testStatus').textContent = 'Running...';
+        // Live output: poll /api/run each second. Reload resumes same run; another tab's run replaces the view.
+        const POLL_MILLIS = 1000;
+        let shownRun = null;
+        let shownLines = 0;
+        let runOutput = '';
+        let stopRequested = false;
+
+        async function fetchJson(url, options) {
+          const response = await fetch(url, options);
+          const body = await response.json();
+          if (!response.ok && response.status !== 409) {
+            throw new Error(url + ' answered ' + response.status + ': ' + (body.error || JSON.stringify(body)));
+          }
+          return body;
+        }
+
+        async function startRunAndPoll(endpoint) {
+          setRunning(true);
+          try {
+            const started = await fetchJson(endpoint);
+            if (!started.started) {
+              document.getElementById('testStatus').textContent = started.output;
+              setRunning(false);
+              return;
+            }
+            document.getElementById('testStatus').textContent = 'Starting ' + started.label + '...';
+          } catch (failure) {
+            document.getElementById('testStatus').textContent = 'Could not start: ' + failure.message;
+            setRunning(false);
+            return;
+          }
+          pollRun();
+        }
+
+        async function pollRun() {
+          try {
+            const query = shownRun === null ? 'from=0' : 'run=' + shownRun + '&from=' + shownLines;
+            const snapshot = await fetchJson('/api/run?' + query);
+            if (snapshot.none) {
+              setRunning(false);
+              return;
+            }
+            if (applyRunSnapshot(snapshot)) return;
+          } catch (failure) {
+            document.getElementById('testStatus').textContent = 'Lost contact with the editor server, retrying every second: ' + failure.message;
+          }
+          setTimeout(pollRun, POLL_MILLIS);
+        }
+
+        /** True once the run is over. */
+        function applyRunSnapshot(snapshot) {
+          if (snapshot.run !== shownRun) resetRunView(snapshot);
+          appendRunLines(snapshot);
+          setRunning(!snapshot.finished);
+          if (snapshot.finished) {
+            showRunResult(snapshot);
+          } else if (!stopRequested) {
+            document.getElementById('testStatus').textContent = 'Running ' + snapshot.label + '...';
+          }
+          return snapshot.finished;
+        }
+
+        function resetRunView(snapshot) {
+          shownRun = snapshot.run;
+          shownLines = 0;
+          runOutput = '';
+          stopRequested = false;
           document.getElementById('testReportLinks').innerHTML = '';
           document.getElementById('testOutput').textContent = '';
-          setGradleButtonsEnabled(false);
-          let result;
-          try {
-            const response = await fetch(endpoint);
-            result = await response.json();
-          } finally {
-            setGradleButtonsEnabled(true);
-          }
-          document.getElementById('testStatus').textContent = statusLabelOf(result);
-          document.getElementById('testOutput').textContent = result.output;
-          showVerdictWorld(/^WORLD_PICTURE: /m.test(result.output));
+          showVerdictWorld(false);
+        }
 
+        function appendRunLines(snapshot) {
+          shownLines = snapshot.next;
+          if (snapshot.lines.length === 0) return;
+          runOutput += snapshot.lines.join('\\n') + '\\n';
+          const output = document.getElementById('testOutput');
+          output.textContent = runOutput;
+          output.scrollTop = output.scrollHeight;
+        }
+
+        function setRunning(running) {
+          setGradleButtonsEnabled(!running);
+          document.getElementById('stopRun').disabled = !running || stopRequested;
+        }
+
+        function showRunResult(snapshot) {
+          const result = { exitCode: snapshot.exitCode, output: runOutput };
+          document.getElementById('testStatus').textContent = snapshot.stopped ? 'STOPPED' : statusLabelOf(result);
+          showVerdictWorld(!snapshot.stopped && /^WORLD_PICTURE: /m.test(runOutput));
           const linksDiv = document.getElementById('testReportLinks');
-          const reportUrls = [...new Set(result.output.match(/file:\\/\\/\\/\\S+\\.(html|txt)/g) || [])];
+          const reportUrls = [...new Set(runOutput.match(/file:\\/\\/\\/\\S+\\.(html|txt)/g) || [])];
           reportUrls.forEach(url => {
             const link = document.createElement('a');
             link.href = url;
@@ -1090,14 +1146,27 @@ public final class GraphEditorServer {
           });
         }
 
+        async function stopRun() {
+          stopRequested = true;
+          setRunning(true);
+          document.getElementById('testStatus').textContent = 'Stopping...';
+          try {
+            await fetchJson('/api/run/stop', { method: 'POST' });
+          } catch (failure) {
+            stopRequested = false;
+            setRunning(true);
+            document.getElementById('testStatus').textContent = 'Stop failed, the run is still going: ' + failure.message;
+          }
+        }
+
+        pollRun();
         loadGraph();
         </script>
         </body>
         </html>
         """;
 
-    /** One gradle run at a time: tests, Solve check and Verify each use every core, overlapping runs starve each other. */
-    private static final AtomicBoolean GRADLE_RUN_IN_PROGRESS = new AtomicBoolean();
+    private static final CurrentRun CURRENT_RUN = new CurrentRun();
 
     private GraphEditorServer() {
     }
