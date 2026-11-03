@@ -45,6 +45,14 @@ final class TightnessFile {
         }
     }
 
+    static void delete(Path file) {
+        try {
+            Files.deleteIfExists(file);
+        } catch (IOException failure) {
+            throw new UncheckedIOException("TightnessFile: cannot delete " + file.toAbsolutePath(), failure);
+        }
+    }
+
     static TightnessRanking read(Path file, BiomeGraphData catalog) {
         return readSaved(file, catalog).ranking();
     }

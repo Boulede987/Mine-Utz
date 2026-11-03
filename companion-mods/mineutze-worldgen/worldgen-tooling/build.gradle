@@ -42,6 +42,14 @@ tasks.register('graphEditorVerify', JavaExec) {
     workingDir = coreDir
 }
 
+tasks.register('graphEditorReliability', JavaExec) {
+    group = 'verification'
+    description = 'The graph editor Reliability run - production attempts on the current graph for the given minutes (1-120), past the first world, to narrow the world-seed failure range against the 1% target. Run with: ./gradlew :worldgen-tooling:graphEditorReliability --args=10'
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'com.mineutze.worldgen.tooling.graphedit.GraphEditorReliability'
+    workingDir = coreDir
+}
+
 repositories {
     mavenCentral()
 }

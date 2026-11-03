@@ -32,6 +32,16 @@ record ProductionFailureModel(int coarseAttemptsPerWorld, int refinementAttempts
         return 1.0 - coarseSucceeds * refinementSucceeds * realizationRate;
     }
 
+    /** Odds every allowed attempt of {@code stage} fails, at per-attempt success {@code rate}. */
+    double stageFailure(AttemptResult.Stage stage, double rate) {
+        requireRate(stage.name(), rate);
+        return switch (stage) {
+            case COARSE -> 1.0 - atLeastOneSuccess(rate, coarseAttemptsPerWorld);
+            case REFINEMENT -> hasRefinementStage() ? 1.0 - atLeastOneSuccess(rate, refinementAttemptsPerWorld) : 0.0;
+            case REALIZATION -> 1.0 - rate;
+        };
+    }
+
     private static double atLeastOneSuccess(double rate, int attempts) {
         return 1.0 - Math.pow(1.0 - rate, attempts);
     }

@@ -97,6 +97,7 @@ public final class GraphEditorServer {
         server.createContext("/api/verdictworld", GraphEditorServer::serveVerdictWorld);
         server.createContext("/api/verify", GraphEditorServer::handleVerify);
         server.createContext("/api/ranking", GraphEditorServer::handleRanking);
+        server.createContext("/api/reliability", GraphEditorServer::handleReliability);
         server.createContext("/api/run", GraphEditorServer::handleRunStatus);
         server.createContext("/api/run/stop", GraphEditorServer::handleRunStop);
         server.createContext("/api/requirement", GraphEditorServer::handleSetRequirement);
@@ -363,6 +364,22 @@ public final class GraphEditorServer {
             return;
         }
         startGradleTaskAndRespond(exchange, "Verify", List.of("../gradlew.bat", ":worldgen-tooling:graphEditorVerify", request.gradleArgument()));
+    }
+
+    /** POST {minutes}: duration checked here first, so a refused request never costs a gradle start. */
+    private static void handleReliability(HttpExchange exchange) throws IOException {
+        if (!"POST".equals(exchange.getRequestMethod())) {
+            respond(exchange, 405, "text/plain; charset=utf-8", "POST only".getBytes(StandardCharsets.UTF_8));
+            return;
+        }
+        ReliabilityRequest request;
+        try {
+            request = ReliabilityRequest.parse(readBody(exchange));
+        } catch (IllegalArgumentException refused) {
+            respondJson(exchange, 400, MinimalJson.writeObject(Map.of("started", false, "error", refused.getMessage())));
+            return;
+        }
+        startGradleTaskAndRespond(exchange, "Reliability run", List.of("../gradlew.bat", ":worldgen-tooling:graphEditorReliability", request.gradleArgument()));
     }
 
     /** Saved ranking as a pick list; {"none": reason} when there is none for this graph. */
@@ -707,6 +724,8 @@ public final class GraphEditorServer {
           <button class="gradleRun" onclick="runTests(true)">Run full worldgen-core suite</button>
           <button class="gradleRun" onclick="runSolveCheck()">Solve check (feasibility verdict, up to 2 min)</button>
           <button class="gradleRun" onclick="runVerify()">Verify (measures the ticked loosenings below, up to 10 min)</button>
+          <button class="gradleRun" onclick="runReliability()">Reliability run (production attempts for the minutes set, past the first world)</button>
+          <input id="reliabilityMinutes" type="number" min="1" max="120" value="10" style="width:4em"> min
           <button id="stopRun" onclick="stopRun()" disabled>Stop</button>
           <div id="rankingPanel"></div>
           <div id="testStatus"></div>
@@ -1177,16 +1196,21 @@ public final class GraphEditorServer {
           }
         }
 
+        async function runReliability() {
+          const minutes = Number(document.getElementById('reliabilityMinutes').value);
+          await startRunAndPoll('/api/reliability', { method: 'POST', body: JSON.stringify({ minutes: minutes }) });
+        }
+
         async function runSolveCheck() {
           await startRunAndPoll('/api/solvecheck');
         }
 
         function statusLabelOf(result) {
           const exitLabel = 'Exit code ' + result.exitCode + (result.exitCode === 0 ? ' (PASS)' : ' (FAIL)');
-          const statusMatch = result.output.match(/^(VERDICT|VERIFY): (FEASIBLE|INFEASIBLE|UNPROVEN|MEASURED|NO RANKING|REFUSED|CRASH)$/m);
+          const statusMatch = result.output.match(/^(VERDICT|VERIFY|RELIABILITY): (FEASIBLE|INFEASIBLE|UNPROVEN|MEASURED|NO RANKING|REFUSED|NOT MET|MET|UNDECIDED|CRASH)$/m);
           if (!statusMatch) return exitLabel;
           const status = statusMatch[2];
-          const exitAgrees = (status === 'FEASIBLE' || status === 'MEASURED') === (result.exitCode === 0);
+          const exitAgrees = (status === 'FEASIBLE' || status === 'MEASURED' || status === 'MET') === (result.exitCode === 0);
           return exitAgrees ? status : status + ' but ' + exitLabel;
         }
 
@@ -1289,7 +1313,7 @@ public final class GraphEditorServer {
         function showRunResult(snapshot) {
           const result = { exitCode: snapshot.exitCode, output: runOutput };
           document.getElementById('testStatus').textContent = snapshot.stopped ? 'STOPPED' : statusLabelOf(result);
-          if (snapshot.label === 'Solve check') loadRanking();
+          if (snapshot.label === 'Solve check' || snapshot.label === 'Reliability run') loadRanking();
           showVerdictWorld(!snapshot.stopped && /^WORLD_PICTURE: /m.test(runOutput));
           const linksDiv = document.getElementById('testReportLinks');
           const reportUrls = [...new Set(runOutput.match(/file:\\/\\/\\/\\S+\\.(html|txt)/g) || [])];

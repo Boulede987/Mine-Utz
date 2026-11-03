@@ -11,6 +11,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.SplittableRandom;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Consumer;
 
 /**
  * Production-identical coarse / refinement / render attempts on every thread until a full world is built or the
@@ -22,6 +23,12 @@ final class WorldSearch implements AutoCloseable {
     record Outcome(Optional<BuiltWorld> builtWorld, Evidence evidence, StageTightness tightness) {
     }
 
+    /** FIRST_WORLD: the Solve check. DEADLINE: the Reliability run, which needs every attempt its time allows. */
+    enum SearchEnd {
+        FIRST_WORLD,
+        DEADLINE
+    }
+
     /** Obstacles computed on the worker thread, so the caller only merges counts and refills threads at once. */
     private record FinishedAttempt(AttemptResult result, Set<Obstacle> obstacles) {
     }
@@ -31,6 +38,10 @@ final class WorldSearch implements AutoCloseable {
     /** One render runs at a time and the first success ends the search; patterns beyond this would never be rendered. */
     private static final int MOST_PATTERNS_AWAITING_RENDER = 4;
     private static final double NANOS_PER_SECOND = 1e9;
+    private static final Duration DRAIN_POLL = Duration.ofSeconds(1);
+    private static final Duration LONGEST_QUIET = Duration.ofSeconds(30);
+    /** Longest single attempt measured on the real graph was ~67 s: 2 min lets every normal attempt finish. */
+    private static final Duration DRAIN_GRACE = Duration.ofMinutes(2);
 
     private final SolveStages stages;
     private final PlanSettings settings;
@@ -45,17 +56,28 @@ final class WorldSearch implements AutoCloseable {
     private final long coarseBaseSeed = ToroidalSizedPatternGenerator.baseSeedOf(SEARCH_WORLD_SEED);
     private final long refinementBaseSeed = new SplittableRandom(SEARCH_WORLD_SEED).nextLong();
     private final int refinementAttemptsPerPattern;
+    private final SearchEnd end;
+    private final Consumer<Evidence> evidenceSoFar;
 
     private Evidence evidence = Evidence.EMPTY;
     private long nextCoarseIndex;
     private long nextRefinementIndex;
     private long nextRenderIndex;
     private boolean renderInFlight;
+    private long lastProgressNanos = System.nanoTime();
     private Optional<BuiltWorld> builtWorld = Optional.empty();
     private final TightnessTally coarseTightness = new TightnessTally();
     private final TightnessTally refinementTightness = new TightnessTally();
 
     WorldSearch(SolveStages stages, PlanSettings settings, int threads, WorldBiomePlan.ProgressListener progress, long startNanos, long deadlineNanos) {
+        this(stages, settings, threads, progress, startNanos, deadlineNanos, SearchEnd.FIRST_WORLD, evidence -> { });
+    }
+
+    /** {@code evidenceSoFar}: called with each periodic progress line, so a stopped run still showed its range. */
+    WorldSearch(SolveStages stages, PlanSettings settings, int threads, WorldBiomePlan.ProgressListener progress, long startNanos, long deadlineNanos, SearchEnd end,
+        Consumer<Evidence> evidenceSoFar) {
+        this.end = end;
+        this.evidenceSoFar = evidenceSoFar;
         this.stages = stages;
         this.settings = settings;
         this.threads = threads;
@@ -86,15 +108,20 @@ final class WorldSearch implements AutoCloseable {
     private boolean step() {
         long remainingNanos = deadlineNanos - System.nanoTime();
         if (remainingNanos <= 0) {
-            recordAlreadyFinished();
+            if (end == SearchEnd.DEADLINE) {
+                drainRunning();
+            } else {
+                recordAlreadyFinished();
+            }
             return true;
         }
-        Optional<FinishedAttempt> finished = pool.takeCompleted(Duration.ofNanos(remainingNanos));
+        Optional<FinishedAttempt> finished = pool.takeCompleted(Duration.ofNanos(Math.min(remainingNanos, LONGEST_QUIET.toNanos())));
         if (finished.isEmpty()) {
+            reportIfQuietTooLong();
             return false;
         }
         record(finished.get());
-        if (builtWorld.isPresent()) {
+        if (builtWorld.isPresent() && end == SearchEnd.FIRST_WORLD) {
             return true;
         }
         submitNextWork();
@@ -108,6 +135,30 @@ final class WorldSearch implements AutoCloseable {
             record(finished.get());
             finished = pool.running() > 0 ? pool.takeCompleted(Duration.ZERO) : Optional.empty();
         }
+    }
+
+    /**
+     * Waits for running attempts: dropping them would drop mostly slow failures and flatter the rate. Past the grace,
+     * the rest are stopped and not counted (a stopped attempt is neither a success nor a real failure), said aloud.
+     */
+    private void drainRunning() {
+        progress.report("deadline reached: waiting up to " + DRAIN_GRACE.toSeconds() + " s for " + pool.running() + " running attempts");
+        long graceEndNanos = System.nanoTime() + DRAIN_GRACE.toNanos();
+        while (pool.running() > 0 && System.nanoTime() < graceEndNanos) {
+            pool.takeCompleted(DRAIN_POLL).ifPresentOrElse(this::record, this::reportIfQuietTooLong);
+        }
+        if (pool.running() > 0) {
+            abandonRunning();
+        }
+    }
+
+    private void abandonRunning() {
+        int abandoned = pool.running();
+        stopRequested.set(true);
+        while (pool.running() > 0) {
+            pool.takeCompleted(DRAIN_POLL);
+        }
+        progress.report(abandoned + " attempts still running after the " + DRAIN_GRACE.toSeconds() + " s grace were stopped and NOT counted");
     }
 
     private void record(FinishedAttempt finished) {
@@ -157,18 +208,33 @@ final class WorldSearch implements AutoCloseable {
 
     private void recordRender(AttemptResult result) {
         renderInFlight = false;
-        if (result.solved()) {
+        if (result.solved() && builtWorld.isEmpty()) {
             builtWorld = Optional.of(new BuiltWorld(result.solvedPattern().orElseThrow(), result.renderedMap().orElseThrow(), evidence.totalTrials()));
         }
     }
 
     private void reportProgressPeriodically() {
         if (evidence.totalTrials() % PROGRESS_EVERY_ATTEMPTS == 0) {
-            progress.report(
-                "after " + elapsed().toSeconds() + " s: coarse " + evidence.coarse().describe() + ", refinement " + evidence.refinement().describe() + ", render "
-                    + evidence.realization().describe()
-            );
+            reportProgress();
+        } else {
+            reportIfQuietTooLong();
         }
+    }
+
+    /** Also called while nothing finishes: a slow graph's run must still show a recent range when stopped. */
+    private void reportIfQuietTooLong() {
+        if (System.nanoTime() - lastProgressNanos >= LONGEST_QUIET.toNanos()) {
+            reportProgress();
+        }
+    }
+
+    private void reportProgress() {
+        lastProgressNanos = System.nanoTime();
+        progress.report(
+            "after " + elapsed().toSeconds() + " s: coarse " + evidence.coarse().describe() + ", refinement " + evidence.refinement().describe() + ", render "
+                + evidence.realization().describe()
+        );
+        evidenceSoFar.accept(evidence);
     }
 
     /** Max 1 render in flight: parallel rasterizer starves search threads (DECISIONS.md 2026-10-31). Render first - it can finish the search. */

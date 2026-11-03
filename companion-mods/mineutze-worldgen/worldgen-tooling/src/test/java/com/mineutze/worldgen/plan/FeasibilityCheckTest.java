@@ -158,7 +158,7 @@ class FeasibilityCheckTest {
         StageTightness tightness = new StageTightness(coarse, new TightnessRanking(List.of(), 0));
         Evidence evidence = new Evidence(new StageEvidence(5, 1, OptionalInt.empty()), StageEvidence.EMPTY, new StageEvidence(1, 1, OptionalInt.empty()));
 
-        FeasibilityVerdict verdict = FeasibilityVerdict.feasible(world, evidence, new ReliabilityEstimate(0.0, 0.2), Optional.of(tightness), 0.01, Duration.ofSeconds(1));
+        FeasibilityVerdict verdict = FeasibilityVerdict.feasible(world, evidence, new ReliabilityEstimate(0.0, 0.2, AttemptResult.Stage.COARSE), Optional.of(tightness), 0.01, Duration.ofSeconds(1));
 
         assertTrue(verdict.summary().contains(new IllegalPairLaw(A, B).describe() + ": still broke in 3 of 4"), verdict.summary());
     }

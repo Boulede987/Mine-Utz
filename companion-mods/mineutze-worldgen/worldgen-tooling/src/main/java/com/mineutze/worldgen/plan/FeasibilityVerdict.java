@@ -108,7 +108,7 @@ public record FeasibilityVerdict(
     }
 
     /** Co-occurrence in closest states, not cause: worded as what the states still broke, never what stopped them. */
-    private static String tightnessLines(String stage, TightnessRanking ranking) {
+    static String tightnessLines(String stage, TightnessRanking ranking) {
         if (ranking.failedAttempts() == 0) {
             return "";
         }
@@ -131,14 +131,15 @@ public record FeasibilityVerdict(
 
     private String reliabilityLine() {
         return reliability.map(estimate -> "\nProduction reliability (secondary): a world seed fails between " + percent(estimate.worldFailureLow()) + " and "
-            + percent(estimate.worldFailureHigh()) + " of the time (render not counted in the upper figure); target " + percent(targetWorldFailure) + ".").orElse("");
+            + percent(estimate.worldFailureHigh()) + " of the time (render not counted in the upper figure); target " + percent(targetWorldFailure) + ".\n"
+            + estimate.describeBasis(evidence, targetWorldFailure)).orElse("");
     }
 
     private String seconds() {
         return String.format(Locale.ROOT, "%.1f", elapsed.toMillis() / MILLIS_PER_SECOND);
     }
 
-    private static String percent(double probability) {
+    static String percent(double probability) {
         double percent = probability * PERCENT_PER_UNIT;
         if (percent > 0.0 && percent < SMALLEST_SHOWN_PERCENT) {
             return "< " + SMALLEST_SHOWN_PERCENT + "%";

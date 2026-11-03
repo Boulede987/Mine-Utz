@@ -257,13 +257,39 @@ class TightnessVerifyTest {
         assertFalse(Files.exists(file));
     }
 
+    /** Verify measures coarse attempts: refinement-only failures leave nothing to pick, and the older list goes. */
+    @Test
+    void aReliabilityRunWithoutCoarseFailuresRemovesTheOldRanking(@TempDir Path folder) {
+        Path file = folder.resolve("tightness.json");
+        writeRanking(file);
+        StageTightness refinementOnly = new StageTightness(new TightnessRanking(List.of(), 0), new TightnessRanking(List.of(), 2));
+
+        TightnessVerify.saveRanking(file, reliabilityReport(refinementOnly), NEVER_SOLVES);
+
+        assertFalse(Files.exists(file));
+    }
+
+    @Test
+    void aReliabilityRunSavesItsCoarseFailures(@TempDir Path folder) {
+        Path file = folder.resolve("tightness.json");
+        TightnessRanking coarse = new TightnessRanking(List.of(new RankedObstacle(new LawObstacle(new IllegalPairLaw(A, C)), 2)), 3);
+
+        TightnessVerify.saveRanking(file, reliabilityReport(new StageTightness(coarse, new TightnessRanking(List.of(), 0))), NEVER_SOLVES);
+
+        assertEquals(coarse, TightnessFile.read(file, NEVER_SOLVES));
+    }
+
+    private static ReliabilityReport reliabilityReport(StageTightness tightness) {
+        return new ReliabilityReport(ReliabilityVerdict.UNDECIDED, new ReliabilityEstimate(0.0, 0.2, AttemptResult.Stage.COARSE), Evidence.EMPTY, tightness, 0.01, Duration.ZERO);
+    }
+
     /** FEASIBLE short of perfect: its failures are what Verify can improve. */
     @Test
     void savesTheRankingOfAFeasibleVerdictWithFailedAttempts(@TempDir Path folder) {
         Path file = folder.resolve("tightness.json");
         BuiltWorld world = new BuiltWorld(Map.of(), new BiomeMap(1, new int[] {0}, new int[] {0}, List.of(A), 1.0, 1.0), 1);
         TightnessRanking coarse = new TightnessRanking(List.of(new RankedObstacle(new LawObstacle(new IllegalPairLaw(A, C)), 2)), 3);
-        FeasibilityVerdict feasible = FeasibilityVerdict.feasible(world, Evidence.EMPTY, new ReliabilityEstimate(0.0, 0.2),
+        FeasibilityVerdict feasible = FeasibilityVerdict.feasible(world, Evidence.EMPTY, new ReliabilityEstimate(0.0, 0.2, AttemptResult.Stage.COARSE),
             Optional.of(new StageTightness(coarse, new TightnessRanking(List.of(), 0))), 0.01, Duration.ZERO);
 
         TightnessVerify.saveRanking(file, feasible, NEVER_SOLVES);

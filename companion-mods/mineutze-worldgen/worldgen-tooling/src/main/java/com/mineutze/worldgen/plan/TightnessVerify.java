@@ -27,6 +27,18 @@ public final class TightnessVerify {
         verdict.tightness().ifPresent(stages -> TightnessFile.write(file, stages.coarse(), catalog));
     }
 
+    /**
+     * Coarse ranking of a Reliability run when coarse attempts failed (Verify measures coarse attempts; refinement failures
+     * are in the report text only); otherwise the old file is removed - it would describe a smaller, older sample.
+     */
+    public static void saveRanking(Path file, ReliabilityReport report, BiomeGraphData catalog) {
+        if (report.tightness().coarse().failedAttempts() > 0) {
+            TightnessFile.write(file, report.tightness().coarse(), catalog);
+            return;
+        }
+        TightnessFile.delete(file);
+    }
+
     /** On an edited graph: entries it no longer states removed. @throws RankingUnavailable no usable ranking saved */
     public static RankingView choices(Path rankingFile, BiomeGraphData catalog) {
         SavedRanking saved = TightnessFile.readSaved(rankingFile, catalog);
