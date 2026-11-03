@@ -6,6 +6,28 @@ run `./gradlew :worldgen-core:calibrationReport` to read it, or `./gradlew :worl
 enforce it (`CalibrationManifestTest` fails loud on drift). This log stays the history (context,
 alternatives considered, evidence at the time) - it does not track current validity on its own.
 
+## 2026-11-02 — Long editor checks stream their output and can be stopped
+
+**Context:** the Solve check (~2 min), Verify (10 min) and full test suite showed nothing until they ended, and could
+not be cancelled short of killing the editor. User requirement: lines appear while the run goes, a reload neither kills
+nor duplicates the run, a Stop button ends it.
+
+**Decision:** the server owns the run (`CurrentRun` holding the latest `GradleRun`): start endpoints answer at once
+(409 while one is going), a reader thread keeps the output line by line, the page polls `/api/run?from=N` every second
+and gets only new lines (`RunSnapshot`). On load the page asks for the current run and resumes it. `/api/run/stop`
+kills the wrapper's process tree (descendants first) and the status reads STOPPED. Polling, not server-sent events or
+websockets: one request per second from one local page is negligible and the JDK `HttpServer` handles it without
+holding a thread per client.
+
+Runs and status polls are tied to a run number: a page polling with an old index after another tab started a new run
+gets the new run from line 0 instead of a wrong slice. Stop is POST only, so another web page cannot stop a run with a
+plain link. Each run's JAVA_HOME is set to the editor's own JVM: the wrapper checks the JVM before toolchain resolution,
+on whatever JAVA_HOME the child inherits, and the OS default here was Java 8 ("requires JVM 17" failure, measured).
+
+**Evidence (2026-11-02, smoke run on a real editor):** quick check started, a second start got 409, first lines shown
+after 2.0 s, finished with exit 0 (20 lines). Solve check stopped after 20 s: status stopped, exit 1, no Solve check JVM
+left (the gradle daemon cancels the build when its client dies).
+
 ## 2026-11-02 — Verify run measures whether loosening the top-ranked laws helps
 
 **Context:** the tightness ranking (entry below) is co-occurrence, not cause. User requirement: an optional Verify
