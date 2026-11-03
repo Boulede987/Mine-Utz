@@ -14,6 +14,7 @@ import java.util.Optional;
 import static com.mineutze.worldgen.plan.ToroidalTestTables.A;
 import static com.mineutze.worldgen.plan.ToroidalTestTables.B;
 import static com.mineutze.worldgen.plan.ToroidalTestTables.C;
+import static com.mineutze.worldgen.plan.ToroidalTestTables.fullyLegalCatalog;
 import static com.mineutze.worldgen.plan.ToroidalTestTables.noLegalTriangleCatalog;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -132,6 +133,18 @@ class TightnessVerifyTest {
 
         assertTrue(shape.law().contains("shape limit"), shape.toString());
         assertEquals(Optional.empty(), shape.loosening());
+    }
+
+    /** Edited graph: ranking measured on the old version must be refused. */
+    @Test
+    void choicesRefuseARankingSavedForAnEarlierGraphVersion(@TempDir Path folder) {
+        Path file = folder.resolve("tightness.json");
+        writeRanking(file);
+        BiomeGraphData edited = fullyLegalCatalog(500, 800, A, B, C);
+
+        RankingUnavailable refused = assertThrows(RankingUnavailable.class, () -> TightnessVerify.choices(file, edited));
+
+        assertTrue(refused.getMessage().contains("different version of the graph"), refused.getMessage());
     }
 
     @Test

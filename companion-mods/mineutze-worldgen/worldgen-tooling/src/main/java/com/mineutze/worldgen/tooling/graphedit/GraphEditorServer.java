@@ -716,9 +716,11 @@ public final class GraphEditorServer {
         let graph = null;
         let focusKey = '';
 
+        /** Ranking reloads with the graph: a pick list must not outlive the graph version it measured. */
         async function loadGraph() {
           const response = await fetch('/api/graph');
           graph = await response.json();
+          loadRanking();
           populateSelectors();
           renderGraph();
           renderAdjacencyList();
@@ -1085,6 +1087,8 @@ public final class GraphEditorServer {
         // Ranking pick list: Verify measures the ticked laws. Top loosenable ones start ticked, cap from the server.
         let rankingFingerprint = null;
         let maxPicks = 0;
+        let rankingRequest = 0;
+        let runInProgress = false;
 
         async function runVerify() {
           if (rankingFingerprint === null) {
@@ -1095,22 +1099,39 @@ public final class GraphEditorServer {
           await startRunAndPoll('/api/verify', { method: 'POST', body: JSON.stringify({ ranks: ranks, fingerprint: rankingFingerprint }) });
         }
 
+        // Edits in quick succession overlap: only the latest request may draw the panel.
         async function loadRanking() {
           const panel = document.getElementById('rankingPanel');
+          const thisRequest = ++rankingRequest;
           try {
             const ranking = await fetchJson('/api/ranking');
+            if (thisRequest !== rankingRequest) return;
             if (ranking.none) {
               rankingFingerprint = null;
-              panel.textContent = 'No ranking to pick from: ' + ranking.none;
+              showNoRanking(panel, ranking.none);
               return;
             }
             rankingFingerprint = ranking.fingerprint;
             maxPicks = ranking.maxPicks;
             renderRanking(panel, ranking);
           } catch (failure) {
+            if (thisRequest !== rankingRequest) return;
             rankingFingerprint = null;
             panel.textContent = 'Could not load the ranking: ' + failure.message;
           }
+        }
+
+        function showNoRanking(panel, reason) {
+          panel.innerHTML = '';
+          const message = document.createElement('div');
+          message.textContent = 'No ranking to pick from: ' + reason;
+          const rerun = document.createElement('button');
+          rerun.className = 'gradleRun';
+          rerun.textContent = 'Rerun Solve check';
+          rerun.onclick = runSolveCheck;
+          rerun.disabled = runInProgress;
+          panel.appendChild(message);
+          panel.appendChild(rerun);
         }
 
         function renderRanking(panel, ranking) {
@@ -1262,6 +1283,7 @@ public final class GraphEditorServer {
         }
 
         function setRunning(running) {
+          runInProgress = running;
           setGradleButtonsEnabled(!running);
           document.getElementById('stopRun').disabled = !running || stopRequested;
         }
@@ -1297,7 +1319,6 @@ public final class GraphEditorServer {
         }
 
         pollRun();
-        loadRanking();
         loadGraph();
         </script>
         </body>
